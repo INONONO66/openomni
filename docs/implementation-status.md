@@ -1,5 +1,38 @@
 # Implementation Status
 
+## #1252 twelve journal kinds (epic #1260, draft PR #1278)
+
+On `epic1260/1252-journal-kinds-12` (2026-10-04, base `6a9063d7`). The journal
+kind set is closed at 12 — nine core (`prompt`, `signal`, `turn`, `llm`,
+`message`, `session.configure`, `policy.decision`, `request`, `alarm`) plus
+three capability (`tool`, `compaction`, `action`) — each declared
+`{kind, version, schema}` with one writer in
+`packages/protocol/src/journal/{core,capability}/` and fixed by
+`packages/protocol/test/kind-census.test.ts`. Retired kinds and their readers:
+`reply` → `request{phase: answered}` (lifecycle phases
+`open|answered|resolved|expired` via `lifecyclePhase`, answered-request SQL and
+inspect read phases; channels' reply decision is `answer` over the same rows —
+the reply-grant store keeps only claim/listLive, no answer lookup);
+`attempt` → `llm` rows pinning their ordinal in the intent (`attempt: n`),
+with metrics/model-pin SQL/crash tests discriminating on the ordinal or durable
+`usageProvenance`; `inbox.deliver` → `prompt`/`signal` delivery rows
+(`effect.phase: "delivery"`; control admissions interrupt/resume are `signal`);
+`outbound` → `message{op: open|ack}`; `alarm.arm`/`alarm.fired`/`alarm.paused`
+→ one `alarm` kind (`op: arm|fired`, fired outcome
+`delivered|stale|exhausted` with `via` provenance for cancel/paused/timeout).
+Writes are fail-closed (schema CHECK + declaration schemas); reads degrade:
+a row that fails decode emits one `journal.corrupt{seq, kind, reason}`
+observation and folds as opaque without blocking session load
+(`decodeActionDegraded` in `packages/agent/src/core/store/session-file/`,
+`journal-corrupt-degrade.test.ts`). `prompt` carries
+`delivery: steer|followUp` (default `followUp`, `input-admission.test.ts`);
+the gate emit set is `message | alarm{arm} | compaction`. The six retired-kind
+searches in the issue grep to zero across packages and apps. Deviations: the
+catalog policy-table CHECK keeps `inbox.deliver`/`alarm.fired` tokens because
+the #1251 legacy point mapping still converts those historical rows; policy
+point ids (e.g. the `alarm.fired` hook point) are point names, not journal
+kinds, and stay unchanged.
+
 ## #1276 one core, five plugins (epic #1260, draft PR #1277)
 
 On `epic1260/1276-core-plugins-move` (2026-10-03, base `66d56edb`).

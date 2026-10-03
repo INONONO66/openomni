@@ -133,14 +133,14 @@ export const CATALOG_SCHEMA: readonly string[] = [
   "CREATE INDEX IF NOT EXISTS idx_surface_key_session ON surface_key(session_id)",
   `CREATE TABLE IF NOT EXISTS policy (
     name TEXT NOT NULL,
-    -- Policy-row vocabulary, not the journal kind set (#1252): historical
-    -- generations keep their legacy kind tokens byte-for-byte (#1251 migration),
-    -- so the retired journal kinds stay admissible here.
+    -- Policy-row kinds are point kinds (#1251): the closed journal set plus
+    -- the two historical tokens the legacy point mapping still converts
+    -- (gate/migrate.ts). Old catalog files keep their original CREATE TABLE
+    -- (IF NOT EXISTS), so historical rows stay byte-for-byte.
     kind TEXT NOT NULL CHECK (kind IN (
       'prompt', 'signal', 'turn', 'llm', 'message', 'request', 'alarm',
       'session.configure', 'policy.decision', 'tool', 'compaction', 'action',
-      'fold.checkpoint', 'attempt', 'inbox.deliver', 'alarm.arm', 'alarm.fired',
-      'alarm.paused', 'reply', 'outbound'
+      'fold.checkpoint', 'inbox.deliver', 'alarm.fired'
     )),
     phase TEXT NOT NULL CHECK (phase IN ('pre', 'post')),
     match TEXT NOT NULL CHECK (json_valid(match)),

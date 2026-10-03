@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  Journal,
   LedgerAction,
   SessionTransition,
   type ObservationSink,
@@ -127,6 +128,42 @@ type Reads = Pick<
   | "operationChildrenPage"
   | "pendingMessages"
 >;
+
+/**
+ * Read degradation (#1252): a row that fails decode is kept verbatim on disk,
+ * emits one `journal.corrupt{seq, kind, reason}` observation and folds as
+ * opaque — its stored intent/effect text carried as plain string values. A row
+ * that cannot even shape an opaque node is skipped; one bad row never blocks
+ * session load.
+ */
+function decodeActionDegraded(
+  row: ActionSqlRow,
+  sink: ObservationSink,
+): LedgerAction.Node | undefined {
+  try {
+    return decodeAction(row);
+  } catch (cause) {
+    try {
+      sink.publish(Journal.CorruptEvent, {
+        seq: row.ordinal,
+        kind: row.kind,
+        reason: cause instanceof Error ? cause.message : String(cause),
+      });
+    } catch {
+      // Post-read observation must never block the degraded read itself.
+    }
+    try {
+      return decodeAction({
+        ...row,
+        intent: JSON.stringify(row.intent),
+        effect: JSON.stringify(row.effect),
+        revert: null,
+      });
+    } catch {
+      return undefined;
+    }
+  }
+}
 
 function decodeOne(value: ActionSqlRow | null) {
   const row = ActionSqlRow.nullable().parse(value);
@@ -489,7 +526,10 @@ export function createActions(
           )
           .all(sessionId, afterRevision, pageLimit),
       );
-      return rows.map(decodeAction);
+      return rows.flatMap((row) => {
+        const action = decodeActionDegraded(row, observationSink);
+        return action === undefined ? [] : [action];
+      });
     },
   };
 }

@@ -15,7 +15,7 @@ function record(value: unknown): Record<string, unknown> {
  * An attempt intent is the llm row pinning its attempt ordinal; an attempt
  * result is the llm row settling such an intent.
  */
-export function isAttemptIntent(action: Row): boolean {
+function isAttemptIntent(action: Row): boolean {
   return action.kind === "llm" && typeof record(action.intent.value).attempt === "number";
 }
 

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { RowBody, declare, refineField } from "../declaration.js";
 
 /** Outcome of a recovered `tool.result` row that never executed. */
-export const ToolOutcome = z.enum(["interrupted"]);
+const ToolOutcome = z.enum(["interrupted"]);
 
 export const turn = declare(
   "turn",

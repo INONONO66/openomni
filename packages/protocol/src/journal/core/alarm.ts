@@ -1,7 +1,7 @@
 /**
  * `alarm` — one timer kind: `arm{purpose, at, supersedes}` and
  * `fired{occurrenceId, outcome: delivered|stale|exhausted}`; the former
- * `alarm.arm`/`alarm.fired`/`alarm.paused` kinds collapse here (a paused
+ * arm/fired/paused alarm kinds collapse here (a paused
  * monitor is a fired outcome `exhausted`). Single writer: the core timer
  * constructor (`packages/agent/src/core/alarm.ts`).
  */

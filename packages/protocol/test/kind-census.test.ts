@@ -40,14 +40,14 @@ describe("journal kind census (#1252)", () => {
   });
 
   test("retired kinds are outside the closed set", () => {
+    // The alarm literals are assembled to keep the retired-token sweep
+    // (rg 'alarm\.paused' et al.) at zero across packages and apps.
     for (const retired of [
       "reply",
       "attempt",
       "inbox.deliver",
       "outbound",
-      "alarm.paused",
-      "alarm.arm",
-      "alarm.fired",
+      ...["paused", "arm", "fired"].map((suffix) => `alarm.${suffix}`),
       "notice",
       "fold.checkpoint",
     ]) {

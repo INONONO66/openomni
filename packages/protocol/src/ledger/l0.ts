@@ -662,8 +662,8 @@ export namespace Alarm {
   export type WatchSpec = z.infer<typeof WatchSpec>;
 
   /**
-   * Durable retry schedule carried by a kind `at` alarm. The `alarm.arm`
-   * action committing this spec IS the retry.scheduled fact: boot recovery
+   * Durable retry schedule carried by a kind `at` alarm. The `alarm` row
+   * (intent `op: arm`) committing this spec IS the retry.scheduled fact: boot recovery
    * consumes it exactly once (fenced cancel CAS) and wakes the session so the
    * open turn re-runs the model attempt.
    */
