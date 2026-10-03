@@ -34,10 +34,8 @@ export {
 export { decideSessionAdmission, requestAuthorityKernel, commitSessionRequest } from "./mailbox";
 export { createSessionRequests, decideRequestTransition, requestBindingDigest } from "./request";
 export { receivedMessageAction, receivedMessages } from "./commit";
-export { alarmAction } from "./alarm";
+export { alarmAction, armAction, firedAction, alarmDisposition, composeAlarmPurposes, AlarmComposeError, type AlarmChainReads, type AlarmDisposition, type AlarmPurposeRegistry } from "./alarm";
 export { SessionEntity, SessionEntityContext, SessionEntityLive, createSessionEntityRunTurn, type SessionKernel } from "./entity";
-export type { AlarmPurpose } from "./messages";
-export { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads } from "./alarm";
 export { makeObservationBus, observationBusLayer, scopeObservation } from "./bus";
 
 // ─── journal/store surface (formerly the Journal namespace, #1276) ───

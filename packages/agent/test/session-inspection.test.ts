@@ -317,7 +317,7 @@ function lifecycle() {
       effect: { encodingVersion: 1, value: { phase: "pending" } },
       ts: 1_000, irreversible: true,
     });
-    const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
+    const monitorFire = Alarm.occurrenceId("parent", "monitor", 1, "timer:1000");
     const woke = committed("parent", "turn");
     yield* monitorCommit(kernel, monitorWriter.fence, {
       id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm",
@@ -512,7 +512,7 @@ describe("action-based history and diagnostic projections", () => {
               ) => entry.kind,
             ),
           ).toEqual(["alarm"]);
-          const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
+          const monitorFire = Alarm.occurrenceId("parent", "monitor", 1, "timer:1000");
           expect(
             woke.map(
               (

@@ -1,18 +1,13 @@
 import { AppInvariantError } from "../invariant";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { Core } from "@openomni/agent";
-const deadlineDelivery = Core.deadlineDelivery;
 const decideRequestTransition = Core.decideRequestTransition;
 type SessionHandle = Core.SessionHandle;
 type SessionRunner = Core.SessionRunner;
-const retryDelivery = Core.retryDelivery;
 const SessionEntityContext = Core.SessionEntityContext;
 const SessionEntityLive = Core.SessionEntityLive;
-const watchFiredDelivery = Core.watchFiredDelivery;
-const watchTimeoutDelivery = Core.watchTimeoutDelivery;
 type SessionEntityPorts = Core.SessionEntityPorts;
 type SessionEntityTimerContext = Core.SessionEntityTimerContext;
-type AlarmChainReads = Core.AlarmChainReads;
 const openCatalogStore = Core.openCatalogStore;
 const openSessionStore = Core.openSessionStore;
 type LedgerHandles = Core.LedgerHandles;
@@ -224,17 +219,6 @@ export function appLedgerLayer(options: AppLedgerOptions): Layer.Layer<AppLedger
   );
 }
 
-function chainReads(context: SessionEntityTimerContext): AlarmChainReads {
-  const { kernel, authority } = context;
-  return {
-    actionById: kernel.actionById,
-    requestById: kernel.requestById,
-    resultFor: (intentId) => kernel.resultFor(authority.sessionId, intentId),
-    operationChildrenPage: (parentId, cursor) =>
-      kernel.operationChildrenPage(authority.sessionId, parentId, cursor),
-  };
-}
-
 /**
  * `Deadline` fold body: an open request expires through the pure request
  * authority under the activation's own fence — never a second fence adoption,
@@ -314,29 +298,37 @@ export interface SessionTimerHooks {
  * A watch wake without a composed watch plane acks `noop` — fail-closed.
  */
 export function sessionTimerPort(hooks: SessionTimerHooks = {}): SessionEntityPorts["timers"] {
+  // #1254 Lane 2: these inline fold guards are interim — the arm-chain guard
+  // (`Core.alarmDisposition`) takes over once retry/deadline/watch arms carry
+  // occurrence ids (S4 + the alarm capability's watch rewrite).
   return {
     retryScheduled: (context, payload) =>
-      Effect.sync(() =>
-        retryDelivery(chainReads(context), payload.alarmId).op === "run"
-          ? ("applied" as const)
-          : ("noop" as const),
-      ),
+      Effect.sync(() => {
+        const separator = payload.alarmId.lastIndexOf(":retry:");
+        if (separator <= 0) return "noop" as const;
+        const attemptId = payload.alarmId.slice(0, separator);
+        const { kernel, authority } = context;
+        if (kernel.actionById(attemptId) === undefined) return "noop" as const;
+        if (kernel.resultFor(authority.sessionId, attemptId) !== undefined) return "noop" as const;
+        return "applied" as const;
+      }),
     deadline: (context, payload) =>
-      Effect.suspend(() =>
-        deadlineDelivery(chainReads(context), payload.requestId).op === "run"
+      Effect.suspend(() => {
+        const request = context.kernel.requestById(payload.requestId);
+        return request !== undefined && request.state === "open"
           ? commitRequestDeadline(context, payload.requestId, hooks.requestDomainRevisions)
-          : Effect.succeed("noop" as const),
-      ),
+          : Effect.succeed("noop" as const);
+      }),
     watchFired: (context, payload) =>
       Effect.suspend(() =>
-        watchFiredDelivery(chainReads(context), payload.sourceKey).op === "run" &&
+        context.kernel.actionById(payload.sourceKey) === undefined &&
         hooks.watchFired !== undefined
           ? hooks.watchFired(context, payload)
           : Effect.succeed("noop" as const),
       ),
     watchTimeout: (context, payload) =>
       Effect.suspend(() =>
-        watchTimeoutDelivery(chainReads(context), payload).op === "run" &&
+        context.kernel.actionById(`${payload.watchId}:timeout:${payload.epoch}`) === undefined &&
         hooks.watchTimeout !== undefined
           ? hooks.watchTimeout(context, payload)
           : Effect.succeed("noop" as const),

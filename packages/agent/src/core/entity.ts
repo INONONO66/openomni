@@ -11,7 +11,7 @@ import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit
 import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
 import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, type ReadPage, ReadRpc, ResolveRefused, ResolveRpc, RetryAlarmBody, WatchFiredAlarmBody, WatchTimeoutAlarmBody } from "./messages";
-import { alarmAction } from "./alarm";
+import { firedAction } from "./alarm";
 import { renderReadModel } from "./read";
 
 // ─── from cluster/kernel-registry.ts (#1247) ───
@@ -407,32 +407,36 @@ function alarmOccurrence(
   const dispatch = (): Effect.Effect<SessionTimerOutcome, SessionError> => {
     switch (occurrence.purpose) {
       case "retry": {
-        const body = decodeRetryBody(JSON.parse(occurrence.body));
+        const body = decodeRetryBody(JSON.parse(occurrence.payload));
         return timers.retryScheduled(context, {
-          alarmId: body.alarmId,
+          alarmId: occurrence.alarmId,
           attempt: body.attempt,
           notBefore: occurrence.fireAt,
         });
       }
       case "deadline": {
-        const body = decodeDeadlineBody(JSON.parse(occurrence.body));
+        const body = decodeDeadlineBody(JSON.parse(occurrence.payload));
         return timers.deadline(context, {
           requestId: body.requestId,
           deadlineAt: occurrence.fireAt,
         });
       }
       case "watch.fired": {
-        const body = decodeWatchFiredBody(JSON.parse(occurrence.body));
+        const body = decodeWatchFiredBody(JSON.parse(occurrence.payload));
         return timers.watchFired(context, body);
       }
       case "watch.timeout": {
-        const body = decodeWatchTimeoutBody(JSON.parse(occurrence.body));
+        const body = decodeWatchTimeoutBody(JSON.parse(occurrence.payload));
         return timers.watchTimeout(context, {
           watchId: body.watchId,
           epoch: body.epoch,
           fireAt: occurrence.fireAt,
         });
       }
+      // #1254: an unregistered purpose folds to a recorded stale fact with
+      // zero execution (capability wake dispatch lands with plugins/alarm).
+      default:
+        return Effect.succeed("noop" as const);
     }
   };
   return Effect.gen(function* () {
@@ -485,17 +489,13 @@ function appendStaleAlarm(
           now,
           expectedRevision: row.revision,
           actions: [
-            alarmAction({
-              id,
+            firedAction({
               parentId: kernel.latestAction(authority.sessionId)?.id ?? null,
               sessionId: authority.sessionId,
-              intent: {
-                op: "fired",
-                outcome: "stale",
-                purpose: occurrence.purpose,
-                occurrenceId: occurrence.occurrenceId,
-              },
-              effect: { op: "fired", outcome: "stale", occurrenceId: occurrence.occurrenceId },
+              purpose: occurrence.purpose,
+              alarmId: occurrence.alarmId,
+              occurrenceId: occurrence.occurrenceId,
+              outcome: "stale",
               ts: now,
             }),
           ],

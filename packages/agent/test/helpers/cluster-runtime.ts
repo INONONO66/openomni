@@ -47,7 +47,6 @@ import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEnt
 
 /** Integration-helper composition root: cluster fixtures run on the real wall clock. */
 const wallClock = () => Date.now();
-import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "../../src/core/alarm";
 import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/core/run";
 import type { SessionError } from "../../src/core/failure";
 import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/core/commit";
@@ -255,26 +254,33 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
     }).pipe(Effect.orDie);
 }
 
-/** Chain-guarded alarm folds straight from `src/core/alarm` (C2/F2). */
+/** Interim timer folds (#1254 S1): the chain guard moves to the entity in S4. */
 function makeTimerPort(): SessionEntityPorts["timers"] {
-  const reads = (context: SessionEntityTimerContext): AlarmChainReads => ({
-    actionById: context.kernel.actionById,
-    requestById: context.kernel.requestById,
-    resultFor: (intentId) => context.kernel.resultFor(context.authority.sessionId, intentId),
-    operationChildrenPage: (parentId, cursor) =>
-      context.kernel.operationChildrenPage(context.authority.sessionId, parentId, cursor),
-  });
-  const outcome = (disposition: { readonly op: "run" | "skip" }) =>
-    disposition.op === "run" ? ("applied" as const) : ("noop" as const);
+  const unsettledAttempt = (context: SessionEntityTimerContext, alarmId: string): boolean => {
+    const separator = alarmId.lastIndexOf(":retry:");
+    if (separator <= 0) return false;
+    const attemptId = alarmId.slice(0, separator);
+    return (
+      context.kernel.actionById(attemptId) !== undefined &&
+      context.kernel.resultFor(context.authority.sessionId, attemptId) === undefined
+    );
+  };
+  const outcome = (run: boolean) => (run ? ("applied" as const) : ("noop" as const));
   return {
     retryScheduled: (context, payload) =>
-      Effect.sync(() => outcome(retryDelivery(reads(context), payload.alarmId))),
+      Effect.sync(() => outcome(unsettledAttempt(context, payload.alarmId))),
     deadline: (context, payload) =>
-      Effect.sync(() => outcome(deadlineDelivery(reads(context), payload.requestId))),
+      Effect.sync(() =>
+        outcome(context.kernel.requestById(payload.requestId)?.state === "open"),
+      ),
     watchFired: (context, payload) =>
-      Effect.sync(() => outcome(watchFiredDelivery(reads(context), payload.sourceKey))),
+      Effect.sync(() => outcome(context.kernel.actionById(payload.sourceKey) === undefined)),
     watchTimeout: (context, payload) =>
-      Effect.sync(() => outcome(watchTimeoutDelivery(reads(context), payload))),
+      Effect.sync(() =>
+        outcome(
+          context.kernel.actionById(`${payload.watchId}:timeout:${payload.epoch}`) === undefined,
+        ),
+      ),
   };
 }
 
@@ -418,7 +424,10 @@ export const sendDeadline = (sessionId: string, requestId: string, deadlineAt: n
   sendAlarm(sessionId, {
     occurrenceId: `${requestId}:deadline`,
     purpose: "deadline",
-    body: JSON.stringify({ requestId }),
+    alarmId: `${requestId}:deadline`,
+    armSeq: 1,
+    sourceKey: "deadline",
+    payload: JSON.stringify({ requestId }),
     fireAt: deadlineAt,
   });
 
@@ -623,8 +632,11 @@ export const sendAlarm = (
   sessionId: string,
   occurrence: {
     readonly occurrenceId: string;
-    readonly purpose: "retry" | "deadline" | "watch.fired" | "watch.timeout";
-    readonly body: string;
+    readonly purpose: string;
+    readonly alarmId: string;
+    readonly armSeq: number;
+    readonly sourceKey: string;
+    readonly payload: string;
     readonly fireAt: number;
   },
 ) =>

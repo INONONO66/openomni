@@ -1,5 +1,4 @@
 import type { Effect } from "effect";
-import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import type { CommitFailed } from "./failure";
 
 /**
@@ -8,28 +7,6 @@ import type { CommitFailed } from "./failure";
  * alarm) live in `session/alarm.ts`; the kernel takes these ports without
  * defaults.
  */
-export type AlarmSkipReason =
-  | "malformed_alarm_id"
-  | "unknown_attempt"
-  | "attempt_settled"
-  | "superseded"
-  | "unknown_request"
-  | "request_terminal"
-  | "duplicate_occurrence"
-  | "duplicate_timeout";
-
-export type AlarmDisposition =
-  | { readonly op: "run" }
-  | { readonly op: "skip"; readonly reason: AlarmSkipReason };
-
-/** Chain reads a delivery guard decides over; the entity supplies its kernel's read ports. */
-export interface AlarmChainReads {
-  actionById(id: string): LedgerAction.Node | undefined;
-  resultFor(intentId: string): LedgerAction.Node | undefined;
-  operationChildrenPage(parentId: string, cursor: number): readonly LedgerAction.Node[];
-  requestById(requestId: string): SessionTransition.Request | undefined;
-}
-
 /** `RetryScheduled` DeliverAt payload; `alarmId` = `<attemptActionId>:retry:<n>`. */
 export interface RetryRearm {
   readonly alarmId: string;

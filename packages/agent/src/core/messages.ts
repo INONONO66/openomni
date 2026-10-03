@@ -101,12 +101,8 @@ export const ResolveRpc = Rpc.make("Resolve", {
   primaryKey: (payload) => payload.inputId,
 }).annotate(ClusterSchema.Persisted, true);
 
-/** The alarm purposes the core dispatches today; #1254 owns the purpose set. */
-const AlarmPurpose = Schema.Literals(["retry", "deadline", "watch.fired", "watch.timeout"]);
-export type AlarmPurpose = typeof AlarmPurpose.Type;
-
-/** Purpose-shaped alarm bodies (canonical JSON of `AlarmRpc.body`). */
-export const RetryAlarmBody = Schema.Struct({ alarmId: Schema.String, attempt: Schema.Number });
+/** Purpose-shaped alarm payloads (canonical JSON of `AlarmOccurrence.payload`). */
+export const RetryAlarmBody = Schema.Struct({ attempt: Schema.Number });
 export const DeadlineAlarmBody = Schema.Struct({ requestId: Schema.String });
 export const WatchFiredAlarmBody = Schema.Struct({
   watchId: Schema.String,
@@ -120,8 +116,10 @@ export const WatchTimeoutAlarmBody = Schema.Struct({
 });
 
 /**
- * One alarm occurrence (#1253): `occurrenceId` is the cluster primary key and
- * the chain-guard identity; `fireAt` is the DeliverAt instant. A superseded
+ * One alarm occurrence (#1254): `occurrenceId` is the cluster primary key and
+ * the chain-guard identity; `alarmId`/`armSeq`/`sourceKey` are the minter
+ * inputs that reproduce it; `purpose` is an open string resolved against the
+ * composed purpose registry; `fireAt` is the DeliverAt instant. A superseded
  * occurrence folds to a recorded `alarm{fired, outcome: stale}` fact and never
  * wakes the loop — a stale occurrence is a fact, not a rejection.
  */
@@ -129,8 +127,12 @@ export class AlarmOccurrence extends Schema.Class<AlarmOccurrence>(
   "@openomni/agent/cluster/AlarmOccurrence",
 )({
   occurrenceId: Schema.String,
-  purpose: AlarmPurpose,
-  body: Schema.String,
+  purpose: Schema.String,
+  alarmId: Schema.String,
+  armSeq: Schema.Number,
+  sourceKey: Schema.String,
+  /** Canonical JSON of the arm's payload. */
+  payload: Schema.String,
   fireAt: Schema.Number,
 }) {
   [PrimaryKey.symbol](): string {

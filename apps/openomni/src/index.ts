@@ -22,7 +22,6 @@ const ObservationSink = Core.ObservationSink;
 const createSessionEntityRunTurn = Core.createSessionEntityRunTurn;
 const createSessionRequests = Core.createSessionRequests;
 const SessionEntity = Core.SessionEntity;
-type AlarmPurpose = Core.AlarmPurpose;
 type SessionHandle = Core.SessionHandle;
 type SessionRuntime = Core.SessionRuntime;
 const AgentFailure = Core.AgentFailure;
@@ -420,8 +419,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       sessionId: string,
       occurrence: {
         readonly occurrenceId: string;
-        readonly purpose: AlarmPurpose;
-        readonly body: string;
+        readonly purpose: string;
+        readonly alarmId: string;
+        readonly armSeq: number;
+        readonly sourceKey: string;
+        readonly payload: string;
         readonly fireAt: number;
       },
     ) => entityClient(sessionId).Alarm(occurrence).pipe(Effect.asVoid);
@@ -431,10 +433,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
           const sourceKey = watchOccurrenceKey(fire.watchId, fire.epoch, fire.sourceKey);
           return runAppEffect(
             runtime,
+            // #1254 Lane 2: interim occurrence fields — the alarm capability's
+            // watch rewrite mints these from committed arm rows.
             sendAlarm(fire.sessionId, {
               occurrenceId: sourceKey,
               purpose: "watch.fired",
-              body: JSON.stringify({
+              alarmId: fire.watchId,
+              armSeq: fire.epoch,
+              sourceKey,
+              payload: JSON.stringify({
                 watchId: fire.watchId,
                 epoch: fire.epoch,
                 sourceKey,
@@ -447,10 +454,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
         watchTimeout: (arm) =>
           runAppEffect(
             runtime,
+            // #1254 Lane 2: interim occurrence fields (see watch.fired above).
             sendAlarm(arm.sessionId, {
               occurrenceId: `${arm.watchId}:timeout:${arm.epoch}`,
               purpose: "watch.timeout",
-              body: JSON.stringify({ watchId: arm.watchId, epoch: arm.epoch }),
+              alarmId: arm.watchId,
+              armSeq: arm.epoch,
+              sourceKey: "watch.timeout",
+              payload: JSON.stringify({ watchId: arm.watchId, epoch: arm.epoch }),
               fireAt: arm.fireAt,
             }),
           ),
@@ -598,7 +609,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
               : sendAlarm(request.sessionId, {
                   occurrenceId: `${request.requestId}:deadline`,
                   purpose: "deadline",
-                  body: JSON.stringify({ requestId: request.requestId }),
+                  alarmId: `${request.requestId}:deadline`,
+                  armSeq: 0,
+                  sourceKey: "deadline",
+                  payload: JSON.stringify({ requestId: request.requestId }),
                   fireAt: request.deadline,
                 }).pipe(
                     Effect.catch((error) =>

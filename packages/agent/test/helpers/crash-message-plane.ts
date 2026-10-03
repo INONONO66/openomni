@@ -6,7 +6,6 @@ import { Inbox, LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { sessionTree } from "./session-tree";
 import type { SessionKernel } from "../../src/core/entity";
-import { watchFiredDelivery, type AlarmChainReads } from "../../src/core/alarm";
 import { CommitFailed } from "../../src/core/failure";
 import { receivedMessageAction, receivedMessages } from "../../src/core/commit";
 import { closeSessions } from "../../src/core/run";
@@ -40,14 +39,14 @@ const sessionId = "crash-session";
 const watchId = "doorbell";
 const occurrenceId = `${watchId}:fired:1`;
 
-function timerReads(kernel: SessionKernel): AlarmChainReads {
-  return {
-    actionById: kernel.actionById,
-    requestById: kernel.requestById,
-    resultFor: (id: string) => kernel.resultFor(sessionId, id),
-    operationChildrenPage: (id: string, cursor?: number) =>
-      kernel.operationChildrenPage(sessionId, id, cursor),
-  };
+/** Inline watch-occurrence dedupe (#1254 S1): a committed occurrence id no-ops. */
+function watchFiredDisposition(
+  kernel: SessionKernel,
+  occurrence: string,
+): { readonly op: "run" } | { readonly op: "skip"; readonly reason: "duplicate_occurrence" } {
+  return kernel.actionById(occurrence) === undefined
+    ? { op: "run" }
+    : { op: "skip", reason: "duplicate_occurrence" };
 }
 
 /**
@@ -72,7 +71,7 @@ function watchCut() {
     }, runtime), runtime);
     yield* handle.prompt("initialize");
     if (hibernated !== 1) throw new Error("session did not hibernate before the watch fired");
-    if (watchFiredDelivery(timerReads(kernel), occurrenceId).op !== "run")
+    if (watchFiredDisposition(kernel, occurrenceId).op !== "run")
       throw new Error("fresh occurrence must be admitted");
     const row = kernel.row(sessionId);
     if (row.fenceOwner === null) throw new Error("hibernated session lost its pinned writer");
@@ -138,8 +137,8 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
       return { kind: "result" as const, text: "received" };
     });
     // Zero re-fire: the committed occurrence makes every redelivery a chain-guarded no-op.
-    const redelivery = watchFiredDelivery(timerReads(kernel), occurrenceId);
-    if (watch && JSON.stringify(watchFiredDelivery(timerReads(kernel), occurrenceId)) !== JSON.stringify(redelivery))
+    const redelivery = watchFiredDisposition(kernel, occurrenceId);
+    if (watch && JSON.stringify(watchFiredDisposition(kernel, occurrenceId)) !== JSON.stringify(redelivery))
       throw new Error("watch redelivery must stay a stable no-op");
     yield* withSessionServices(reactivateSession(sessionId, runner, runtime), runtime);
     if (!watch) yield* withSessionServices(reactivateSession("parent", receiver, runtime), runtime);

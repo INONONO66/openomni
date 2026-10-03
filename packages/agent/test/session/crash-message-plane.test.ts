@@ -13,7 +13,7 @@ import * as SessionHandleStore from "../../src/core/store/fence";
 import { LedgerAction, type Message, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { renderAnchorText } from "../../src/plugins/compaction/summary";
-import { retryDelivery, type AlarmChainReads } from "../../src/core/alarm";
+import { alarmDisposition } from "../../src/core/alarm";
 import { closeSessions } from "../../src/core/run";
 import { reactivateSession } from "../helpers/wake-session";
 import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../../src/inspect/history";
@@ -394,15 +394,44 @@ function recoverRetryAlarm(witness: Witness) {
   expect(pendingInbox()).toEqual([]);
   // Redelivered RetryScheduled: the settled attempt makes the delivery a chain-
   // guarded no-op; a second delivery no-ops identically (never a cancel CAS).
-  const kernel = isolatedLedger().kernel;
-  const reads: AlarmChainReads = {
-    actionById: kernel.actionById,
-    requestById: kernel.requestById,
-    resultFor: (id) => kernel.resultFor(sessionId, id),
-    operationChildrenPage: (id, cursor) => kernel.operationChildrenPage(sessionId, id, cursor),
+  // #1254: the legacy-shape retry arm carries no occurrence chain, so the one
+  // chain guard skips the redelivery (zero execution), idempotently. Reads
+  // scan the real committed chain for new-shape arm/fired rows.
+  const alarmRows = () => actions().filter((action) => action.kind === "alarm");
+  const reads = {
+    latestArm: (chain: string) => {
+      const arm = alarmRows()
+        .filter((action) => {
+          const intent = intentOf(action);
+          return intent.op === "arm" && intent.alarmId === chain;
+        })
+        .at(-1);
+      if (arm === undefined) return undefined;
+      const occurrence = effectOf(arm).occurrenceId;
+      const at = intentOf(arm).at;
+      return {
+        occurrenceId: typeof occurrence === "string" ? occurrence : "",
+        at: typeof at === "number" ? at : null,
+      };
+    },
+    settled: (occurrence: string) =>
+      alarmRows().some((action) => {
+        const intent = intentOf(action);
+        return (
+          intent.op === "fired" &&
+          intent.occurrenceId === occurrence &&
+          (intent.outcome === "delivered" || intent.outcome === "exhausted")
+        );
+      }),
   };
-  expect(retryDelivery(reads, alarmId)).toEqual({ op: "skip", reason: "attempt_settled" });
-  expect(retryDelivery(reads, alarmId)).toEqual({ op: "skip", reason: "attempt_settled" });
+  expect(alarmDisposition(reads, { alarmId, occurrenceId: alarmId })).toEqual({
+    op: "skip",
+    reason: "unknown",
+  });
+  expect(alarmDisposition(reads, { alarmId, occurrenceId: alarmId })).toEqual({
+    op: "skip",
+    reason: "unknown",
+  });
   expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(pendingInbox()).toEqual([]);

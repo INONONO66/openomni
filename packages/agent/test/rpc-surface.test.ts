@@ -224,7 +224,10 @@ test("alarm(retry) replaces RetryScheduled: live attempt applies, unknown occurr
     sendAlarm(sessionId, {
       occurrenceId: "op:attempt:1:retry:1",
       purpose: "retry",
-      body: JSON.stringify({ alarmId: "op:attempt:1:retry:1", attempt: 1 }),
+      alarmId: "op:attempt:1:retry:1",
+      armSeq: 1,
+      sourceKey: "retry",
+      payload: JSON.stringify({ attempt: 1 }),
       fireAt: Date.now() - 1000,
     }),
   );
@@ -234,7 +237,10 @@ test("alarm(retry) replaces RetryScheduled: live attempt applies, unknown occurr
     sendAlarm(sessionId, {
       occurrenceId: "missing:retry:1",
       purpose: "retry",
-      body: JSON.stringify({ alarmId: "missing:retry:1", attempt: 1 }),
+      alarmId: "missing:retry:1",
+      armSeq: 1,
+      sourceKey: "retry",
+      payload: JSON.stringify({ attempt: 1 }),
       fireAt: Date.now() - 1000,
     }),
   );
@@ -260,14 +266,20 @@ test("alarm(deadline) replaces Deadline: open request applies, unknown request f
       const open = yield* sendAlarm(sessionId, {
         occurrenceId: "req-deadline:deadline",
         purpose: "deadline",
-        body: JSON.stringify({ requestId: "req-deadline" }),
+        alarmId: "req-deadline:deadline",
+        armSeq: 1,
+        sourceKey: "deadline",
+        payload: JSON.stringify({ requestId: "req-deadline" }),
         fireAt: Date.now() - 1000,
       });
       expect(open.outcome).toBe("delivered");
       const unknown = yield* sendAlarm(sessionId, {
         occurrenceId: "missing:deadline",
         purpose: "deadline",
-        body: JSON.stringify({ requestId: "missing" }),
+        alarmId: "missing:deadline",
+        armSeq: 1,
+        sourceKey: "deadline",
+        payload: JSON.stringify({ requestId: "missing" }),
         fireAt: Date.now() - 1000,
       });
       expect(unknown.outcome).toBe("stale");
@@ -285,7 +297,10 @@ test("alarm(watch.fired/watch.timeout) replace WatchFired/WatchTimeout with chai
       const fired = yield* sendAlarm(sessionId, {
         occurrenceId: "watch-occ-1",
         purpose: "watch.fired",
-        body: JSON.stringify({ watchId: "w1", epoch: 1, sourceKey: "watch-occ-1", batch: "[]" }),
+        alarmId: "w1",
+        armSeq: 1,
+        sourceKey: "watch-occ-1",
+        payload: JSON.stringify({ watchId: "w1", epoch: 1, sourceKey: "watch-occ-1", batch: "[]" }),
         fireAt: Date.now() - 1000,
       });
       expect(fired.outcome).toBe("delivered");
@@ -293,7 +308,10 @@ test("alarm(watch.fired/watch.timeout) replace WatchFired/WatchTimeout with chai
       const supersededFired = yield* sendAlarm(sessionId, {
         occurrenceId: "watch-occ-2",
         purpose: "watch.fired",
-        body: JSON.stringify({
+        alarmId: "w1",
+        armSeq: 1,
+        sourceKey: `${sessionId}:materialize`,
+        payload: JSON.stringify({
           watchId: "w1",
           epoch: 1,
           sourceKey: `${sessionId}:materialize`,
@@ -305,7 +323,10 @@ test("alarm(watch.fired/watch.timeout) replace WatchFired/WatchTimeout with chai
       const timeout = yield* sendAlarm(sessionId, {
         occurrenceId: "w1:timeout:1",
         purpose: "watch.timeout",
-        body: JSON.stringify({ watchId: "w1", epoch: 1 }),
+        alarmId: "w1",
+        armSeq: 1,
+        sourceKey: "watch.timeout",
+        payload: JSON.stringify({ watchId: "w1", epoch: 1 }),
         fireAt: Date.now() - 1000,
       });
       expect(timeout.outcome).toBe("delivered");
@@ -321,7 +342,10 @@ test("alarm(watch.fired/watch.timeout) replace WatchFired/WatchTimeout with chai
     sendAlarm(sessionId, {
       occurrenceId: "watch-occ-2",
       purpose: "watch.fired",
-      body: JSON.stringify({
+      alarmId: "w1",
+      armSeq: 1,
+      sourceKey: `${sessionId}:materialize`,
+      payload: JSON.stringify({
         watchId: "w1",
         epoch: 1,
         sourceKey: `${sessionId}:materialize`,

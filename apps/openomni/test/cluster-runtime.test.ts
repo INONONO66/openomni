@@ -150,19 +150,28 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
           const retry = yield* entity.Alarm({
             occurrenceId: "missing-alarm:retry:1",
             purpose: "retry",
-            body: JSON.stringify({ alarmId: "missing-alarm", attempt: 1 }),
+            alarmId: "missing-alarm:retry:1",
+            armSeq: 1,
+            sourceKey: "retry",
+            payload: JSON.stringify({ attempt: 1 }),
             fireAt: Date.now(),
           });
           const deadline = yield* entity.Alarm({
             occurrenceId: "missing-request:deadline",
             purpose: "deadline",
-            body: JSON.stringify({ requestId: "missing-request" }),
+            alarmId: "missing-request:deadline",
+            armSeq: 1,
+            sourceKey: "deadline",
+            payload: JSON.stringify({ requestId: "missing-request" }),
             fireAt: Date.now(),
           });
           const fired = yield* entity.Alarm({
             occurrenceId: "missing-watch:1:missing-source",
             purpose: "watch.fired",
-            body: JSON.stringify({
+            alarmId: "missing-watch",
+            armSeq: 1,
+            sourceKey: "missing-watch:1:missing-source",
+            payload: JSON.stringify({
               watchId: "missing-watch",
               epoch: 1,
               sourceKey: "missing-watch:1:missing-source",
@@ -173,7 +182,10 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
           const timeout = yield* entity.Alarm({
             occurrenceId: "missing-watch:timeout:1",
             purpose: "watch.timeout",
-            body: JSON.stringify({ watchId: "missing-watch", epoch: 1 }),
+            alarmId: "missing-watch",
+            armSeq: 1,
+            sourceKey: "watch.timeout",
+            payload: JSON.stringify({ watchId: "missing-watch", epoch: 1 }),
             fireAt: Date.now(),
           });
           return { first, replay, retry, deadline, fired, timeout };

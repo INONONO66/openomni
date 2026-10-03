@@ -682,9 +682,19 @@ export namespace Alarm {
     .strict();
   export type RetrySchedule = z.infer<typeof RetrySchedule>;
 
-  /** Deterministic committed occurrence identity for one transport delivery. */
-  export function occurrenceId(id: string, epoch: number, sourceKey: string): string {
-    return canonicalDigest(["alarm.occurrence", id, epoch, sourceKey]);
+  /**
+   * Deterministic committed occurrence identity (#1254): minted from the arm
+   * row's journal sequence inside the same session transaction. `sessionId`
+   * keeps a fork from accepting its parent's key; `sourceKey` is the short
+   * fixed scheduling-source identifier (`retry`, `deadline`, `cron`, ...).
+   */
+  export function occurrenceId(
+    sessionId: string,
+    alarmId: string,
+    armSeq: number,
+    sourceKey: string,
+  ): string {
+    return canonicalDigest(["alarm.occurrence", sessionId, alarmId, armSeq, sourceKey]);
   }
 }
 
