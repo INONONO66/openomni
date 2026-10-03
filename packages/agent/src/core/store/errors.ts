@@ -118,6 +118,7 @@ export type LedgerError =
   | CommitRefused
   | PolicyGenerationRefused
   | SchemaRefused
+  | CatalogVersionRefused
   | StorageUnavailable
   | CorruptRecord
   | AgentFailure;

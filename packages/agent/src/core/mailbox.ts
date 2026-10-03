@@ -25,7 +25,7 @@ type AdmissionError = SessionError;
  * The capability journal kinds the kernel composes built-in (#1252): `tool`
  * and `compaction` ship with the core loop; `action` arrives with its plugin.
  */
-export const BUILTIN_CAPABILITY_KINDS: readonly string[] = Object.freeze(["tool", "compaction"]);
+const BUILTIN_CAPABILITY_KINDS: readonly string[] = Object.freeze(["tool", "compaction"]);
 
 interface AdmissionSnapshot {
   readonly row: LedgerSession.Row;

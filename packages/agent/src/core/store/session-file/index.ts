@@ -136,13 +136,9 @@ type Reads = Pick<
  * that cannot even shape an opaque node is skipped; one bad row never blocks
  * session load.
  */
-function reportCorruptRow(row: ActionSqlRow, sink: ObservationSink, cause: unknown): void {
+function reportCorruptRow(row: ActionSqlRow, sink: ObservationSink, reason: string): void {
   try {
-    sink.publish(Journal.CorruptEvent, {
-      seq: row.ordinal,
-      kind: row.kind,
-      reason: cause instanceof Error ? cause.message : String(cause),
-    });
+    sink.publish(Journal.CorruptEvent, { seq: row.ordinal, kind: row.kind, reason });
   } catch {
     // Post-read observation must never block the degraded read itself.
   }
@@ -155,7 +151,7 @@ function decodeActionDegraded(
   try {
     return decodeAction(row);
   } catch (cause) {
-    reportCorruptRow(row, sink, cause);
+    reportCorruptRow(row, sink, cause instanceof Error ? cause.message : String(cause));
     try {
       return decodeAction({
         ...row,
@@ -184,7 +180,7 @@ function decodeOneDegraded(
   try {
     return decodeAction(row);
   } catch (cause) {
-    reportCorruptRow(row, sink, cause);
+    reportCorruptRow(row, sink, cause instanceof Error ? cause.message : String(cause));
     return undefined;
   }
 }
@@ -194,7 +190,7 @@ function decodeRowsDegraded(values: ActionSqlRow[], sink: ObservationSink): Ledg
     try {
       return [decodeAction(row)];
     } catch (cause) {
-      reportCorruptRow(row, sink, cause);
+      reportCorruptRow(row, sink, cause instanceof Error ? cause.message : String(cause));
       return [];
     }
   });
@@ -632,7 +628,7 @@ export function bootstrapStoreDatabase(db: Database, schema: readonly string[]):
   }).immediate();
 }
 
-export function openStoreDatabase(path: string, schema: readonly string[]): Database {
+function openStoreDatabase(path: string, schema: readonly string[]): Database {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   let bootstrapped = false;
