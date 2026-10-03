@@ -85,6 +85,22 @@ export class LedgerInvariant extends Data.TaggedError("LedgerInvariant")<{
   readonly cause?: Error;
 }> {}
 
+/**
+ * Catalog schemaVersion fence (#1252): a catalog file whose `user_version`
+ * marker is greater than this build's `CATALOG_SCHEMA_VERSION` was written by
+ * newer code. It opens read-only: reads work, Deliver (fence rotation) and
+ * fork (session indexing) are refused with this error, bytes stay untouched.
+ */
+export class CatalogVersionRefused extends Data.TaggedError("CatalogVersionRefused")<{
+  readonly fileVersion: number;
+  readonly codeVersion: number;
+  readonly operation: "indexSession" | "rotateFence";
+}> {
+  override get message(): string {
+    return `catalog schemaVersion ${this.fileVersion} is newer than this build (${this.codeVersion}); ${this.operation} refused — catalog is read-only`;
+  }
+}
+
 /** An incoherent reply-grant projection row observed by the SQLite adapter. */
 export class ReplyGrantProjectionError extends Error {
   readonly code = "incoherent_reply_grant";
