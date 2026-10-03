@@ -69,9 +69,13 @@ export function createPtyAdapter(options: PtyAdapterOptions): PtyAdapter {
       if (paneId === undefined || record.paneId === paneId) record.poisoned = reason;
     }
   }
+  // Production daemons share the user's DEFAULT tmux server: names outside
+  // the protocol grammar (e.g. `tmux new -s UPPER`) must stay invisible, or
+  // one foreign session poisons every host-side PtyListResult decode.
+  const conforming = (name: string): boolean =>
+    name !== PTY_CONTROL_SESSION && Machine.PtySessionName.safeParse(name).success;
   const listNames = (ctl: PtyControl): Effect.Effect<string[], MachineError> =>
-    Effect.map(ctl.command('list-sessions -F "#{session_name}"'), (lines) =>
-      lines.filter((name) => name.length > 0 && name !== PTY_CONTROL_SESSION));
+    Effect.map(ctl.command('list-sessions -F "#{session_name}"'), (lines) => lines.filter(conforming));
   const discover = (ctl: PtyControl): Effect.Effect<void, MachineError> =>
     Effect.map(listNames(ctl), (names) => {
       for (const name of names) {
@@ -172,6 +176,9 @@ export function createPtyAdapter(options: PtyAdapterOptions): PtyAdapter {
   function open(request: Machine.PtyOpenRequest): Effect.Effect<Machine.PtyOpenResult, MachineError> {
     return Effect.suspend(() => {
       if (!available || request.name === PTY_CONTROL_SESSION) return Effect.succeed<Machine.PtyOpenResult>(ptyNotAvailable);
+      // The wire schema already rejects non-conforming names; this guard keeps
+      // direct adapter use typed instead of colliding with a foreign session.
+      if (!conforming(request.name)) return Effect.succeed<Machine.PtyOpenResult>(ptyNotFound);
       return Effect.gen(function* () {
         const ctl = yield* ensureControl;
         const existing = yield* resolve(ctl, request.name);

@@ -215,6 +215,27 @@ describe("pty.session over real tmux", () => {
     await run(adapter.shutdown());
   }, 30_000);
 
+  test("a foreign session named outside the protocol grammar stays invisible and typed (#1273 r1 F1)", async () => {
+    const adapter = await openAdapter("gen-grammar");
+    okOpen(await run(adapter.open({ name: "conforming", cwd: "/" })));
+    // A user names a session the protocol grammar forbids (uppercase).
+    expect(tmuxCli("new-session", "-d", "-s", "UPPER-Case", "-x", "80", "-y", "24").exitCode).toBe(0);
+    const listed = await run(adapter.list({}));
+    if (listed.status !== "ok") throw new Error(`list refused: ${listed.reason}`);
+    // The host-side wire decode must survive: the result parses as-is.
+    expect(Machine.PtyListResult.parse(listed).status).toBe("ok");
+    expect(listed.sessions.map((session) => session.name)).toEqual(["conforming"]);
+    // Addressing the non-conforming name is a typed refusal, never a decode
+    // failure and never a collision with the user's session.
+    expect(await run(adapter.open({ name: "UPPER-Case", cwd: "/" }))).toEqual({ status: "refused", reason: "pty_not_found" });
+    expect(await run(adapter.read({ name: "UPPER-Case" }))).toEqual({ status: "refused", reason: "pty_not_found" });
+    // The user's session was neither registered, linked, nor killed.
+    expect(tmuxCli("has-session", "-t", "=UPPER-Case").exitCode).toBe(0);
+    expect(tmuxCli("kill-session", "-t", "=UPPER-Case").exitCode).toBe(0);
+    await run(adapter.close({ name: "conforming" }));
+    await run(adapter.shutdown());
+  }, 30_000);
+
   test("a missing tmux binary withholds the capability and every call refuses pty_not_available", async () => {
     const adapter = createPtyAdapter({
       id: () => "gen-missing",
