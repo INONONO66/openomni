@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { Alarm } from "@openomni/protocol";
+import { Alarm, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";
 import {
   AlarmWakeError,
@@ -70,15 +70,19 @@ export class WatchRefused extends Schema.TaggedError<WatchRefused>(
   reason: Schema.String,
 }) {}
 
+/**
+ * Exactly the `AlarmWakeContext.prompt` signature Lane 4 lands in S4 (origin
+ * `alarm` is fixed by the core); the injection swap is then one line.
+ */
+export type AlarmPromptVerb = (input: {
+  readonly content: string;
+  readonly payload?: PlainObject;
+}) => Effect.Effect<{ readonly seq: number }, AlarmWakeError>;
+
 /** What the wake handlers need from the app: a prompt appender and the native-source closer. */
 export interface WatchWakeDeps {
-  /** Appends one `prompt{origin: "alarm"}` through the app's admission path. */
-  readonly prompt: (input: {
-    readonly sessionId: string;
-    readonly content: string;
-    readonly fired: AlarmFired;
-    readonly now: number;
-  }) => Effect.Effect<void, AlarmWakeError>;
+  // #1254 S4: ctx.prompt
+  readonly prompt: AlarmPromptVerb;
   /** Fire-and-forget close of the process-local native source. */
   readonly close: (watchId: string) => void;
 }
@@ -140,7 +144,7 @@ function monitorHit(deps: WatchWakeDeps): AlarmPurposeHandler {
       const hit = payload.hit;
       if (hit === undefined)
         return yield* new AlarmWakeError({ purpose: fired.purpose, reason: "missing_hit" });
-      yield* deps.prompt({ sessionId: ctx.sessionId, content: hit.content, fired, now: ctx.now });
+      yield* deps.prompt({ content: hit.content, payload: { watchId: fired.alarmId, detail: hit.detail } });
       if (hit.terminal) {
         yield* retire(ctx, fired, fired.alarmId, fired.occurrenceId, "fired");
         deps.close(fired.alarmId);
@@ -172,10 +176,8 @@ function monitorTimeout(deps: WatchWakeDeps): AlarmPurposeHandler {
     Effect.gen(function* () {
       const payload = yield* parsePayload(WatchTimeoutPayload, fired);
       yield* deps.prompt({
-        sessionId: ctx.sessionId,
         content: JSON.stringify({ watchId: payload.watchId, reason: "timeout" }),
-        fired,
-        now: ctx.now,
+        payload: { watchId: payload.watchId, reason: "timeout" },
       });
       const latest = ctx.reads.latestArm(payload.watchId);
       if (latest !== undefined && latest.at !== null)
@@ -204,7 +206,10 @@ export type WatchVerb = (input: {
   ArmRefused | WatchRefused
 >;
 
-export function createWatchVerb(arm: ArmVerb, deps: WatchInstallDeps): WatchVerb {
+export function createWatchVerb(
+  armFor: (sessionId: string) => ArmVerb,
+  deps: WatchInstallDeps,
+): WatchVerb {
   return (input) =>
     Effect.gen(function* () {
       const parsed = Alarm.WatchSpec.safeParse(input.spec);
@@ -213,6 +218,7 @@ export function createWatchVerb(arm: ArmVerb, deps: WatchInstallDeps): WatchVerb
           reason: parsed.error.issues[0]?.message ?? "invalid watch spec",
         });
       const spec = parsed.data;
+      const arm = armFor(input.sessionId);
       const main = yield* arm({
         purpose: MONITOR_HIT,
         at: input.now,

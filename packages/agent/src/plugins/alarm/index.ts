@@ -21,6 +21,7 @@ export {
   WatchHitPayload,
   WatchRefused,
   watchPurposes,
+  type AlarmPromptVerb,
   type AlarmPurposeDeclaration,
   type AlarmPurposeHandler,
   type WatchInstallDeps,
@@ -56,8 +57,8 @@ export type ComposePurposesVerb<E> = (input: {
 export interface AlarmCapabilityOptions<E> {
   readonly bundles: readonly AlarmBundlePurposes[];
   readonly compose: ComposePurposesVerb<E>;
-  /** The app's committing arm verb; the capability only guards and delegates. */
-  readonly arm: ArmVerb;
+  /** The app's committing arm verb, session-scoped; the capability only guards and delegates. */
+  readonly arm: (sessionId: string) => ArmVerb;
   readonly watch: WatchInstallDeps;
 }
 
@@ -67,7 +68,10 @@ export interface AlarmCapabilityDefinition extends AlarmCapability {
   readonly points: readonly ["alarm.fired"];
   /** purpose -> owning bundle; the core's reserved purposes map to "core". */
   readonly registry: ReadonlyMap<string, string>;
-  readonly verbs: { readonly arm: ArmVerb; readonly watch: WatchVerb };
+  readonly verbs: {
+    readonly arm: (sessionId: string) => ArmVerb;
+    readonly watch: WatchVerb;
+  };
 }
 
 /** Reserved and unregistered purposes are typed arm refusals, never appends. */
@@ -114,7 +118,7 @@ export function alarmCapability<E>(
               )
             : handler({ fired, ctx });
         };
-        const arm = guardArm(registry, options.arm);
+        const arm = (sessionId: string) => guardArm(registry, options.arm(sessionId));
         return {
           name: "alarm" as const,
           points: ["alarm.fired"] as const,

@@ -70,14 +70,15 @@ const spec: Alarm.WatchSpec = {
 
 interface PromptCall {
   readonly content: string;
-  readonly purpose: string;
 }
 
 function wakeDeps(prompts: PromptCall[], closed: string[]): WatchWakeDeps {
   return {
-    prompt: ({ content, fired: wake }) =>
+    // #1254 S4: ctx.prompt
+    prompt: ({ content }) =>
       Effect.sync(() => {
-        prompts.push({ content, purpose: wake.purpose });
+        prompts.push({ content });
+        return { seq: prompts.length };
       }),
     close: (watchId) => closed.push(watchId),
   };
@@ -104,7 +105,7 @@ function capability(input: {
         })),
       ],
       compose: composeAlarmPurposes,
-      arm: input.arm,
+      arm: () => input.arm,
       watch: {
         install: ({ watchId }) =>
           Effect.sync(() => {
@@ -125,7 +126,7 @@ describe("purpose registry through composeAlarmPurposes", () => {
         },
       ],
       compose: composeAlarmPurposes,
-      arm: stubArm([]),
+      arm: () => stubArm([]),
       watch: { install: () => Effect.void },
     });
     const error = Effect.runSync(Effect.flip(build));
@@ -147,7 +148,7 @@ describe("purpose registry through composeAlarmPurposes", () => {
         },
       ],
       compose: composeAlarmPurposes,
-      arm: stubArm([]),
+      arm: () => stubArm([]),
       watch: { install: () => Effect.void },
     });
     const error = Effect.runSync(Effect.flip(build));
@@ -184,7 +185,7 @@ describe("wake dispatch", () => {
       ),
     );
     expect(outcome).toBe("delivered");
-    expect(prompts).toEqual([{ content: "line one", purpose: MONITOR_HIT }]);
+    expect(prompts).toEqual([{ content: "line one" }]);
   });
 
   test("an unregistered purpose is a typed wake failure with zero handler calls", () => {
@@ -427,7 +428,7 @@ describe("verbs", () => {
     const refused = (purpose: string) =>
       Effect.runSync(
         Effect.flip(
-          definition.verbs.arm({ purpose, at: 1, payload: {}, sourceKey: "monitor" }),
+          definition.verbs.arm("session-1")({ purpose, at: 1, payload: {}, sourceKey: "monitor" }),
         ),
       );
     expect(refused("retry").code).toBe("reserved_purpose");
@@ -435,7 +436,7 @@ describe("verbs", () => {
     expect(refused("reminder.due").code).toBe("unknown_purpose");
     expect(calls).toEqual([]);
     const accepted = Effect.runSync(
-      definition.verbs.arm({
+      definition.verbs.arm("session-1")({
         purpose: MONITOR_HIT,
         at: 2,
         payload: {},
