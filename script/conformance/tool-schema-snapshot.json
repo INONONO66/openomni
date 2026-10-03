@@ -279,7 +279,7 @@
   },
   {
     "name": "monitor",
-    "description": "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
+    "description": "Watch command output in a PTY, a machine terminal session, or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -323,6 +323,37 @@
                         }
                       },
                       "required": ["kind", "command"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "terminal"
+                        },
+                        "machine": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "session": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "filter": {
+                          "type": "string"
+                        },
+                        "persistent": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "timeout_ms": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["kind", "machine", "session"],
                       "additionalProperties": false
                     },
                     {
