@@ -145,9 +145,11 @@ typed). Handles, events and codemode are transport-blind: a machine is the
 same machine on either door, and if one bind fails startup fails with the
 other listener released.
 
-Trust is mutual key pinning, not PKI: the daemon JSON pins the host's key
-(`hostPublicKey`), the host pins the daemon's key through the REQUIRED
-`Enrollment.publicKey` (sha256 over SPKI DER, 64 lowercase hex). On TCP, an
+Trust is certificate- and key-pinned, not public PKI: the daemon JSON carries
+the host's certificate PEM (`hostCertificate`) — the TLS chain must validate
+against it and the presented key must carry its fingerprint — while the host
+pins the daemon's key through the REQUIRED `Enrollment.publicKey` (sha256
+over SPKI DER, 64 lowercase hex). On TCP, an
 offered machineId whose presented key differs from the enrollment pin is
 refused `peer_key_mismatch` before admission, and a pin-mismatched intruder
 never displaces a valid attachment. Unix connections carry no peer key; the
