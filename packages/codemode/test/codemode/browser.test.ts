@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -42,18 +42,31 @@ function chromiumExecutable(): string {
 
 const base = mkdtempSync(join(tmpdir(), "oc-browser-"));
 const outside = mkdtempSync(join(tmpdir(), "oc-browser-outside-"));
-const profiles = { shared: join(base, "shared"), headed: join(base, "headed"), closing: join(base, "closing") };
+const profiles = {
+  shared: join(base, "shared"),
+  headed: join(base, "headed"),
+  noDisplay: join(base, "no-display"),
+  closing: join(base, "closing"),
+};
 const socketPath = join(tmpdir(), `oc-${crypto.randomUUID()}.sock`);
 const capabilities = ["kernel.py", "pty.session"];
-let mode: ReturnType<typeof createCodemode>;
-let host: Awaited<ReturnType<typeof createMachineHost>>;
-let daemon: Awaited<ReturnType<typeof attachMachineDaemon>>;
+let mode: ReturnType<typeof createCodemode> | undefined;
+let host: Awaited<ReturnType<typeof createMachineHost>> | undefined;
+let daemon: Awaited<ReturnType<typeof attachMachineDaemon>> | undefined;
 // The daemon-side codemode hosts the interpreter that cells actually run in;
 // closing it is what ends the driver (production: daemon shutdown).
-let kernelSide: ReturnType<typeof createCodemode>;
+let kernelSide: ReturnType<typeof createCodemode> | undefined;
+
+/** Narrowed access for tests; a failed beforeAll keeps its own error singular. */
+function harness() {
+  if (!mode || !host || !daemon || !kernelSide) throw new Error("browser harness unavailable: the beforeAll prerequisite failed");
+  return { mode, host, daemon, kernelSide };
+}
+
+let executable = "";
 
 beforeAll(async () => {
-  chromiumExecutable();
+  executable = chromiumExecutable();
   for (const dir of Object.values(profiles)) mkdirSync(dir);
   host = await createMachineHost({
     listen: { unix: socketPath },
@@ -68,7 +81,7 @@ beforeAll(async () => {
     }),
     events: silent,
     now: () => 2,
-    callTool: (call) => mode.callTool(call),
+    callTool: (call) => harness().mode.callTool(call),
   });
   mode = createCodemode({ machines: host });
   kernelSide = createCodemode();
@@ -89,21 +102,24 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await mode.close();
-  await daemon.close();
-  host.close();
+  // When beforeAll failed its prerequisite probe, nothing below was created;
+  // optional access keeps that single clear error as the only failure.
+  await mode?.close();
+  await daemon?.close();
+  host?.close();
   Bun.spawnSync(["tmux", "-L", TMUX_SOCKET, "kill-server"]);
   rmSync(base, { recursive: true, force: true });
   rmSync(outside, { recursive: true, force: true });
 });
 
-function raisedError(result: Awaited<ReturnType<typeof mode.cell.run>>): string {
+type Harness = ReturnType<typeof harness>;
+function raisedError(result: Awaited<ReturnType<Harness["mode"]["cell"]["run"]>>): string {
   expect(result.status).toBe("raised");
   return result.status === "raised" ? result.error : "";
 }
 
 async function listedSessions(): Promise<readonly string[]> {
-  const listed = await host.get("M").pty.list();
+  const listed = await harness().host.get("M").pty.list();
   expect(listed.status).toBe("ok");
   return listed.status === "ok" ? listed.sessions.map((entry) => entry.name) : [];
 }
@@ -111,6 +127,7 @@ async function listedSessions(): Promise<readonly string[]> {
 test(
   "launches Chromium in a pty.session, connects over CDP, and advances past an occupied default port",
   async () => {
+    const { mode, host } = harness();
     // Occupying 9222 forces the documented probe-and-advance behavior; if some
     // other process already holds it the launch must advance just the same.
     let occupied: { stop(closeActiveConnections?: boolean): void } | undefined;
@@ -156,6 +173,7 @@ test(
 test(
   "reuses the live client for the same machine and profile instead of launching twice",
   async () => {
+    const { mode } = harness();
     const result = await mode.cell.run(
       `browser("M", profile_dir=${JSON.stringify(profiles.shared)}) is client`,
       "browser",
@@ -170,6 +188,7 @@ test(
 test(
   "a Chromium killed behind the client's back surfaces browser_lost with the terminal transcript",
   async () => {
+    const { mode, host } = harness();
     // Stop Chromium behind the client's back via the pid retained in the
     // session output (this build ignores CDP Browser.close and hangup signals).
     const view = await host.get("M").pty.read(sessionOf(profiles.shared), {});
@@ -191,6 +210,7 @@ test(
 test.if(process.platform === "darwin" || Boolean(process.env.DISPLAY))(
   "headless=False launches a headed Chromium and close() ends its session",
   async () => {
+    const { mode } = harness();
     const result = await mode.cell.run(
       [
         `headed = browser("M", headless=False, profile_dir=${JSON.stringify(profiles.headed)})`,
@@ -210,6 +230,7 @@ test.if(process.platform === "darwin" || Boolean(process.env.DISPLAY))(
 test(
   "a profile_dir outside every export refuses with path_escapes_export before Chromium starts",
   async () => {
+    const { mode } = harness();
     const error = raisedError(
       await mode.cell.run(`browser("M", profile_dir=${JSON.stringify(join(outside, "profile"))})`, "browser", {
         timeoutMs: CELL_TIMEOUT_MS,
@@ -224,6 +245,7 @@ test(
 test(
   "a missing Chromium executable refuses typed and tears the owned session down (4b)",
   async () => {
+    const { mode } = harness();
     const error = raisedError(
       await mode.cell.run(
         [
@@ -246,9 +268,32 @@ test(
   CELL_TIMEOUT_MS,
 );
 
+test.if(process.platform === "linux")(
+  "a headed launch without a usable display refuses typed before readiness and tears the session down",
+  async () => {
+    const { mode } = harness();
+    // The wrapper clears the display variables inside the pty.session, so the
+    // headed launch exercises the no-display branch regardless of the runner.
+    const wrapper = join(base, "no-display-chromium.sh");
+    writeFileSync(wrapper, `#!/bin/sh\nunset DISPLAY WAYLAND_DISPLAY\nexec '${executable}' "$@"\n`, { mode: 0o755 });
+    const error = raisedError(
+      await mode.cell.run(
+        `browser("M", headless=False, profile_dir=${JSON.stringify(profiles.noDisplay)}, executable_path=${JSON.stringify(wrapper)})`,
+        "browser",
+        { timeoutMs: CELL_TIMEOUT_MS },
+      ),
+    );
+    expect(error).toContain("browser_lost");
+    expect(error).toContain("before the DevTools readiness line");
+    expect(await listedSessions()).not.toContain(sessionOf(profiles.noDisplay));
+  },
+  CELL_TIMEOUT_MS,
+);
+
 test(
   "closing the interpreter ends Chromium and its tmux session without deleting the profile",
   async () => {
+    const { mode, host, kernelSide } = harness();
     const launched = await mode.cell.run(
       `browser("M", profile_dir=${JSON.stringify(profiles.closing)}).is_connected()`,
       "browser",
