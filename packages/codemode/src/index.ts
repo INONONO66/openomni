@@ -157,33 +157,39 @@ export function createCodemode(options: Options) {
       });
     }
     /** Persistent terminals (#1273): named tmux sessions over the same handle. */
-    function dispatchPtyOp(call: Machine.ToolCall): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
-      const args = <Shape extends z.ZodType>(schema: Shape, operation: string): Effect.Effect<z.output<Shape>, Failure> =>
-        Effect.try({ try: () => schema.parse(call.arguments), catch: decodeCodeFailure(`${operation}.arguments`) });
+    function ptyArgs<Shape extends z.ZodType>(call: Machine.ToolCall, schema: Shape, operation: string): Effect.Effect<z.output<Shape>, Failure> {
+      return Effect.try({ try: () => schema.parse(call.arguments), catch: decodeCodeFailure(`${operation}.arguments`) });
+    }
+    function dispatchPtyIo(call: Machine.ToolCall): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
       return Effect.gen(function* () {
         if (call.name === "codemode.ptyOpen") {
-          const input = yield* args(PtyOpenInput, "ptyOpen");
+          const input = yield* ptyArgs(call, PtyOpenInput, "ptyOpen");
           return { status: "completed", value: yield* getMachine(input.machineId).pty.open(input.name, input.cwd) };
         }
         if (call.name === "codemode.ptyWrite") {
-          const input = yield* args(PtyWriteInput, "ptyWrite");
+          const input = yield* ptyArgs(call, PtyWriteInput, "ptyWrite");
           return { status: "completed", value: yield* getMachine(input.machineId).pty.write(input.name, Buffer.from(input.data, "base64")) };
         }
         if (call.name === "codemode.ptyRead") {
-          const { machineId, name, ...window } = yield* args(PtyReadInput, "ptyRead");
+          const { machineId, name, ...window } = yield* ptyArgs(call, PtyReadInput, "ptyRead");
           const value = yield* getMachine(machineId).pty.read(name, window);
           return { status: "completed", value: value.status === "ok" ? { ...value, data: Buffer.from(value.data).toString("base64") } : value };
         }
+        return undefined;
+      });
+    }
+    function dispatchPtyControl(call: Machine.ToolCall): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
+      return Effect.gen(function* () {
         if (call.name === "codemode.ptyResize") {
-          const input = yield* args(PtyResizeInput, "ptyResize");
+          const input = yield* ptyArgs(call, PtyResizeInput, "ptyResize");
           return { status: "completed", value: yield* getMachine(input.machineId).pty.resize(input.name, input.cols, input.rows) };
         }
         if (call.name === "codemode.ptyClose") {
-          const input = yield* args(PtyCloseInput, "ptyClose");
+          const input = yield* ptyArgs(call, PtyCloseInput, "ptyClose");
           return { status: "completed", value: yield* getMachine(input.machineId).pty.close(input.name) };
         }
         if (call.name === "codemode.ptyList") {
-          const input = yield* args(PtyListInput, "ptyList");
+          const input = yield* ptyArgs(call, PtyListInput, "ptyList");
           return { status: "completed", value: yield* getMachine(input.machineId).pty.list() };
         }
         return undefined;
@@ -207,16 +213,11 @@ export function createCodemode(options: Options) {
       return Effect.gen(function* () {
         const binding = live.get(call.cellId);
         if (!binding) return yield* new CodemodeError({ reason: "unknown_cell_id", message: "cell has settled" });
-        const catalogOp = yield* dispatchCatalog(call);
-        if (catalogOp !== undefined) return catalogOp;
-        const machineOp = yield* dispatchMachineOp(call);
-        if (machineOp !== undefined) return machineOp;
-        const computerOp = yield* dispatchComputerOp(call);
-        if (computerOp !== undefined) return computerOp;
-        const ptyOp = yield* dispatchPtyOp(call);
-        if (ptyOp !== undefined) return ptyOp;
-        const hostOp = yield* dispatchHostOp(call, binding);
-        if (hostOp !== undefined) return hostOp;
+        const resolvers = [dispatchCatalog, dispatchMachineOp, dispatchComputerOp, dispatchPtyIo, dispatchPtyControl, (op: Machine.ToolCall) => dispatchHostOp(op, binding)];
+        for (const resolve of resolvers) {
+          const result = yield* resolve(call);
+          if (result !== undefined) return result;
+        }
         return yield* binding.caller(call);
       });
     }

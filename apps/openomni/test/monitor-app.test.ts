@@ -119,9 +119,11 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
 });
 
 /**
- * Monitor door for #1273: a watch attaches read-only to a named tmux
- * terminal (the same kind of session pty.session manages) and wakes on its
- * output; watch completion kills only the attach client, never the terminal.
+ * Monitor door for #1273: a watch attaches a tmux client to a named terminal
+ * (the same kind of session pty.session manages) and wakes on its output;
+ * watch completion kills only the attach client, never the terminal. The
+ * attach is writable because tmux 3.7 refuses send-keys into a session whose
+ * only client is read-only; the watch still never writes.
  */
 test("a monitor watch observes a named tmux terminal and leaves it open", async () => {
   const tmuxSocket = `oo-1273-monitor-${process.pid}`;
@@ -151,17 +153,14 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
                 description: "named terminal signal",
                 source: {
                   kind: "command",
-                  command: `tmux -L ${tmuxSocket} attach -r -t qa`,
+                  command: `tmux -L ${tmuxSocket} attach -t qa`,
                   filter: "WAKE-7342",
                   persistent: true,
                 },
               },
             },
           });
-        else {
-          for (const message of input.messages) for (const part of message.parts) if (part.type === "tool") console.log("PTY-MON part:", JSON.stringify(part.state).slice(0, 300));
-          sink.onMessage(assistantMessage(input, { text: "observed terminal" }));
-        }
+        else sink.onMessage(assistantMessage(input, { text: "observed terminal" }));
         return { type: "stop" as const };
       }),
     },
@@ -174,14 +173,7 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
     const snapshot = plane.openKernel(event.sessionId).getSnapshot(event.sessionId);
     if (snapshot.turns.at(-1)?.terminal?.kind === "waiting") waiting.resolve();
   });
-  const waitTimer = setTimeout(() => {
-    for (const row of plane.listSessions()) {
-      const snap = plane.openKernel(row.id).getSnapshot(row.id);
-      console.log("PTY-MON turns:", JSON.stringify(snap.turns.map((turn) => turn.terminal)).slice(0, 400));
-      for (const action of sessionTree(row.id, plane.sessionStore(row.id).actions)) if (action.kind === "turn" || action.kind === "alarm") console.log("PTY-MON action:", action.kind, action.id.slice(0, 60));
-    }
-    waiting.reject(new Error("terminal watch did not suspend"));
-  }, 5000);
+  const waitTimer = setTimeout(() => waiting.reject(new Error("terminal watch did not suspend")), 5000);
   try {
     ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "watch the terminal" }));
     await waiting.promise;
@@ -211,9 +203,10 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
     guard.removeEventListener("abort", abort);
   });
   // The terminal's owner is the tmux server: feed it directly, as any other
-  // writer (a bash{session} call, a human) would.
+  // writer (a bash{session} call, a human) would. printf's format string keeps
+  // the typed keystroke echo from matching; only the one output line fires.
   expect(
-    Bun.spawnSync(["tmux", "-L", tmuxSocket, "send-keys", "-t", "qa", "echo WAKE-7342", "Enter"]).exitCode,
+    Bun.spawnSync(["tmux", "-L", tmuxSocket, "send-keys", "-t", "qa", "printf 'WAKE-%d\n' 7342", "Enter"]).exitCode,
   ).toBe(0);
   await woke.promise;
   expect(calls).toBe(2);
@@ -227,7 +220,5 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
   expect((prompt.effect.value as { content?: string }).content).toContain("WAKE-7342");
   // Watch completion unsubscribed from the terminal without closing it.
   const probe = Bun.spawnSync(["tmux", "-L", tmuxSocket, "has-session", "-t", "qa"], { stderr: "pipe" });
-  console.log("PTY-MON has-session:", probe.exitCode, probe.stderr.toString());
-  console.log("PTY-MON ls:", Bun.spawnSync(["tmux", "-L", tmuxSocket, "list-sessions"], { stderr: "pipe" }).stdout.toString());
   expect(probe.exitCode).toBe(0);
 });
