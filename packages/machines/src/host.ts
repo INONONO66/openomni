@@ -83,6 +83,8 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
   return Effect.gen(function* () {
     const attachments = new Map<string, Attachment>();
     const connectionByMachine = new Map<string, string>();
+    /** Machines that attached at least once: their detached window reads `disconnected`. */
+    const known = new Set<string>();
     const inFlight = new Map<string, Set<string>>();
     const handles = new Map<string, MachineHandle>();
     function detach(key: string, reason: string): void {
@@ -117,6 +119,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
         detach(source.key, "superseded_by_reattach");
         attachments.set(source.key, { enrollment, offer, capabilities: outcome.capabilities, ...source });
         connectionByMachine.set(offer.machineId, source.key);
+        known.add(offer.machineId);
         options.events.publish(Machine.Events.Attached, { machineId: offer.machineId, time: options.now(), effectiveCapabilities: [...outcome.capabilities] });
         respond({ status: "attached", effectiveCapabilities: [...outcome.capabilities], effectiveExports: [...exports.exports] } satisfies Machine.AttachResult);
       });
@@ -171,7 +174,10 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
     function connection(id: string): Attachment {
       const key = connectionByMachine.get(id);
       const attachment = key === undefined ? undefined : attachments.get(key);
-      if (attachment === undefined) throw new MachineRefusalError({ reason: "machine_not_attached", message: `machine is not attached: ${id}` });
+      if (attachment === undefined) {
+        if (known.has(id)) throw new MachineRefusalError({ reason: "disconnected", message: `machine is disconnected: ${id}` });
+        throw new MachineRefusalError({ reason: "machine_not_attached", message: `machine is not attached: ${id}` });
+      }
       return attachment;
     }
     function location(id: string, path: string) {
@@ -186,7 +192,13 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
       if (candidates[1]?.path === root.path) throw new MachineRefusalError({ reason: "ambiguous_export", message: "multiple exports name the same root" });
       return { peer, export: root.name, path: posix.relative(root.path, absolute) };
     }
-    const transportFailure = (operation: string) => (error: import("./ipc").IpcError): MachineError => new TransportFailure({ operation, message: error.message || String(error), cause: String(error) });
+    // A call that dies WITH its connection is the typed reconnect-window
+    // refusal (#1270), never a transport diagnostic: it settles exactly once
+    // and is never replayed.
+    const transportFailure = (operation: string) => (error: import("./ipc").IpcError): MachineError =>
+      error._tag === "IpcConnectionError"
+        ? new MachineRefusalError({ reason: "disconnected", message: error.message || "connection closed" })
+        : new TransportFailure({ operation, message: error.message || String(error), cause: String(error) });
     function filesystem<O extends Machine.FsValue["op"]>(id: string, path: string, op: O, extra: { data?: string; offset?: number; limit?: number } = {}): Effect.Effect<Value<O>, MachineError> {
       return Effect.gen(function* () {
         const target = yield* Effect.try({ try: () => location(id, path), catch: decodeMachineFailure("fs.location") });
