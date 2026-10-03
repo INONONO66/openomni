@@ -49,35 +49,45 @@ function validateEmit(row: GateRow, record: PointRecord): EmitKind | undefined {
   return kind;
 }
 
-function validateHow(row: GateRow, handlers: ReadonlySet<string>): void {
-  // Audit-only: an observe row may name its handler, params, and requires -
-  // never a verdict, obligation, rewrite field, or emission.
+/**
+ * Audit-only: an observe row may name its handler, params, and requires -
+ * never a verdict, obligation, rewrite field, or emission.
+ */
+function validateObserve(row: GateRow): void {
   if (
-    row.do === "observe" &&
-    (row.how.ref === undefined ||
-      row.how.verdict !== undefined ||
-      row.how.metric !== undefined ||
-      row.how.limit !== undefined ||
-      row.how.fields !== undefined ||
-      row.how.emit !== undefined)
+    row.how.ref === undefined ||
+    row.how.verdict !== undefined ||
+    row.how.metric !== undefined ||
+    row.how.limit !== undefined ||
+    row.how.fields !== undefined ||
+    row.how.emit !== undefined
   )
     reject("bad_action", row, "how");
+}
+
+/**
+ * One execution mode per gate row (#1251 r5): the fold applies exactly one
+ * mode, so a mixed `how` must refuse here - an admitted constant beside a
+ * declared guard would execute the constant and silently bypass the guard.
+ */
+function validateGate(row: GateRow): void {
+  if (row.how.metric !== undefined) {
+    // Obligation row (the historical projection): metric/limit under the
+    // projection-fixed allow; its optional ref names the obligation handler
+    // enforced at the turn boundary, never a consulted gate guard.
+    if (row.how.verdict !== "allow") reject("bad_action", row, "how");
+    return;
+  }
+  // A constant verdict or a consulted handler: exactly one, never both or neither.
+  if ((row.how.verdict !== undefined) === (row.how.ref !== undefined))
+    reject("bad_action", row, "how");
+}
+
+function validateHow(row: GateRow, handlers: ReadonlySet<string>): void {
   if ((row.how.metric === undefined) !== (row.how.limit === undefined))
     reject("bad_field", row, "limit");
-  // One execution mode per row (#1251 r5): the fold applies exactly one mode,
-  // so a mixed `how` must refuse here - an admitted constant beside a declared
-  // guard would execute the constant and silently bypass the guard.
-  if (row.do === "gate") {
-    if (row.how.metric !== undefined) {
-      // Obligation row (the historical projection): metric/limit under the
-      // projection-fixed allow; its optional ref names the obligation handler
-      // enforced at the turn boundary, never a consulted gate guard.
-      if (row.how.verdict !== "allow") reject("bad_action", row, "how");
-    } else if ((row.how.verdict !== undefined) === (row.how.ref !== undefined)) {
-      // A constant verdict or a consulted handler: exactly one, never both or neither.
-      reject("bad_action", row, "how");
-    }
-  }
+  if (row.do === "observe") validateObserve(row);
+  if (row.do === "gate") validateGate(row);
   if (
     row.do === "rewrite" &&
     (row.how.ref === undefined || row.how.verdict !== undefined || row.how.metric !== undefined)
