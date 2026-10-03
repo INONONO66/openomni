@@ -159,7 +159,8 @@ Disconnection is a first-class state: while a known machine's transport is
 down, its handle calls — including calls that were in flight when the
 transport dropped — fail once with typed `MachineRefusalError`
 `disconnected` (never replayed); a machine that never attached stays
-`machine_not_attached`. A daemon configured with `reconnect` keeps its
+`machine_not_attached`. A daemon configured with `reconnect` (the CLI enables it for tcp
+attachments; a unix daemon exits with its same-box host) keeps its
 drivers alive and redials with full-jitter exponential backoff (base 250ms,
 cap 30s, injected scheduler/randomness in tests); a successful reattach
 resets the backoff and the host's existing handles serve the replacement

@@ -30,7 +30,11 @@ const TcpConfiguration = z
   .strict();
 const Configuration = z.union([UnixConfiguration, TcpConfiguration]);
 
-/** Real time and real entropy; tests inject their own through the daemon API. */
+/**
+ * Real time and real entropy; tests inject their own through the daemon API.
+ * Only TCP attachments reconnect: a network between daemon and host blips, a
+ * same-box unix host that went away is a shutdown and the daemon exits with it.
+ */
 const reconnect: ReconnectOptions = {
   scheduler: {
     schedule(delayMs, task) {
@@ -52,7 +56,6 @@ export function attachConfiguredMachine(configPath: string, id: () => string) {
       offer: config.offer,
       fsExports: new Map((config.offer.exports ?? []).map((entry) => [entry.name, entry.path])),
       runner: mode.runner,
-      reconnect,
     };
     if ("socketPath" in config) {
       return yield* attachMachineDaemon({ ...common, socketPath: config.socketPath });
@@ -66,6 +69,7 @@ export function attachConfiguredMachine(configPath: string, id: () => string) {
     });
     return yield* attachMachineDaemon({
       ...common,
+      reconnect,
       tcp: config.tcp,
       hostPublicKey: config.hostPublicKey,
       ...identity,
