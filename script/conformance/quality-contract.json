@@ -26,6 +26,8 @@
     "packages/agent/tsconfig.test.json",
     "packages/channels/tsconfig.build.json",
     "packages/channels/tsconfig.json",
+    "packages/codemode/tsconfig.json",
+    "packages/codemode/tsconfig.test.json",
     "packages/machines/tsconfig.json",
     "packages/machines/tsconfig.test.json",
     "packages/protocol/tsconfig.build.json",

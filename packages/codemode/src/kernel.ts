@@ -1,11 +1,10 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { Machine } from "@openomni/protocol";
-import type { MachineError } from "../errors";
-import { onAbort } from "../interrupt-on";
+import { onAbort, type MachineError } from "@openomni/machines";
 import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
 import { DriverFailure, type CodeError } from "./errors";
-import { decodeCodeFailure } from "../failure";
+import { decodeCodeFailure } from "./failure";
 import { z } from "zod";
 
 const PYTHON_DRIVER = String.raw`

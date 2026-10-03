@@ -87,9 +87,10 @@ openomni/
 Read `X <- Y` as Y may depend on X.
 
 ```text
-protocol <- agent, machines, channels, apps/openomni, apps/desktop
+protocol <- agent, machines, codemode, channels, apps/openomni, apps/desktop
 agent <- channels, apps/openomni
-machines <- apps/openomni
+machines <- codemode, apps/openomni
+codemode <- apps/openomni
 channels <- apps/openomni
 ui <- apps/desktop
 ```
@@ -99,8 +100,9 @@ ui <- apps/desktop
 | `protocol` | none |
 | `agent` | protocol |
 | `machines` | protocol |
+| `codemode` | protocol, machines |
 | `channels` | protocol, agent |
-| `apps/openomni` | protocol, channels, agent, machines |
+| `apps/openomni` | protocol, channels, agent, machines, codemode |
 | `ui` | none |
 | `apps/desktop` | protocol, ui |
 <!-- END GENERATED TOPOLOGY -->

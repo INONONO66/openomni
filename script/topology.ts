@@ -30,10 +30,11 @@ export interface WorkspaceTopology {
  *
  * #1246 merged ten packages into five: ipc and codemode folded into machines,
  * policy/ledger/llm folded into agent, and the channel-facing stores moved
- * into channels. The import direction (right imports left) is:
+ * into channels. #1272 extracted code mode back out as the sixth package.
+ * The import direction (right imports left) is:
  * protocol <- agent, machines, channels, apps/openomni, apps/desktop;
- * agent <- channels, apps/openomni; machines <- apps/openomni;
- * channels <- apps/openomni; ui <- apps/desktop.
+ * agent <- channels, apps/openomni; machines <- codemode, apps/openomni;
+ * codemode <- apps/openomni; channels <- apps/openomni; ui <- apps/desktop.
  */
 export const TOPOLOGY = [
   {
@@ -73,6 +74,19 @@ export const TOPOLOGY = [
     tsconfigVerify: true,
   },
   {
+    key: "codemode",
+    displayName: "codemode",
+    dir: "packages/codemode",
+    packageName: "@openomni/codemode",
+    // The shared Python-backed cell runtime (#1272): it consumes the machines
+    // structural host/daemon contracts and protocol schemas, nothing else.
+    allowedDeps: ["@openomni/protocol", "@openomni/machines"],
+    testLane: true,
+    coverageLane: true,
+    knipWorkspace: true,
+    tsconfigVerify: true,
+  },
+  {
     key: "channels",
     displayName: "channels",
     dir: "packages/channels",
@@ -95,6 +109,7 @@ export const TOPOLOGY = [
       "@openomni/channels",
       "@openomni/agent",
       "@openomni/machines",
+      "@openomni/codemode",
     ],
     testLane: true,
     coverageLane: true,
