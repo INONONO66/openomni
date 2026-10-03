@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
-import { openSessionStore } from "../../src/store/session-file";
+import { openSessionStore } from "../../src/core/store/session-file";
 import { runTestPromise } from "../helpers/isolated";
 import { createHash } from "node:crypto";
 import { DecisionFact } from "@openomni/protocol";
-import { createDecisionFactPort } from "../../src/store/decision";
-import { computeDecisionFactHash } from "../../src/store/decision";
+import { createDecisionFactPort } from "../../src/core/store/decision";
+import { computeDecisionFactHash } from "../../src/core/store/decision";
 import { testNow, useMemoryStores } from "./helpers/storage";
 
 const stores = useMemoryStores();

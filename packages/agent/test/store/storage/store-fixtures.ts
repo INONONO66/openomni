@@ -3,7 +3,7 @@ import { expect } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bootstrapStoreDatabase } from "../../../src/store/session-file";
+import { bootstrapStoreDatabase } from "../../../src/core/store/session-file";
 
 export const policyFixture = {
   name: "allow-turn",

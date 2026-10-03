@@ -3,14 +3,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, spyOn, test } from "bun:test";
-import { Session, Journal } from "@openomni/agent";
-const SessionEntity = Session.SessionEntity;
-type SessionEntityPorts = Session.SessionEntityPorts;
-type SessionEntityTimerContext = Session.SessionEntityTimerContext;
-type SessionEntityTurnInput = Session.SessionEntityTurnInput;
-type ObservationPublishFailure = Journal.ObservationPublishFailure;
-const openCatalogStore = Journal.openCatalogStore;
-const openSessionStore = Journal.openSessionStore;
+import { Core } from "@openomni/agent";
+const SessionEntity = Core.SessionEntity;
+type SessionEntityPorts = Core.SessionEntityPorts;
+type SessionEntityTimerContext = Core.SessionEntityTimerContext;
+type SessionEntityTurnInput = Core.SessionEntityTurnInput;
+type ObservationPublishFailure = Core.ObservationPublishFailure;
+const openCatalogStore = Core.openCatalogStore;
+const openSessionStore = Core.openSessionStore;
 import type { Inbox, ObservationSink } from "@openomni/protocol";
 import { Effect } from "effect";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
@@ -58,7 +58,7 @@ async function provisionSession(
   const catalog = openCatalogStore(catalogPath, { now });
   const store = openSessionStore(sessionFilePath(sessionsDir, sessionId), { now });
   try {
-    const kernel = Journal.SessionHandleStore.createSessionKernel(store, catalog);
+    const kernel = Core.SessionHandleStore.createSessionKernel(store, catalog);
     await runEffect(
       kernel.materialize({
         actionId: `${sessionId}:materialize`,
@@ -205,7 +205,7 @@ test("without an injected port a publish failure on a file-mode handle is an inc
   });
   const store = plane.handles.openSession("ported-session");
   try {
-    materializeSession(Journal.SessionHandleStore.createSessionKernel(store, plane.catalog), "ported-session");
+    materializeSession(Core.SessionHandleStore.createSessionKernel(store, plane.catalog), "ported-session");
     expect(store.sessions.get("ported-session")?.id).toBe("ported-session");
     expect(incident.mock.calls).toEqual([
       ["ledger observation publish failed: ported-session:configure", new Error("sink failed")],

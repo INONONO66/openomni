@@ -1,18 +1,19 @@
 import { AppInvariantError } from "./invariant";
-import { Kernel, Session } from "@openomni/agent";
-const ObservationSink = Kernel.ObservationSink;
-type ObservationSink = Kernel.ObservationSink;
+import { Core } from "@openomni/agent";
+const ObservationSink = Core.ObservationSink;
+type ObservationSink = Core.ObservationSink;
 import { Effect } from "effect";
-const createSessionChatRunner = Session.createSessionChatRunner;
-const createTurnDispatcher = Kernel.createTurnDispatcher;
-const failureFacts = Kernel.failureFacts;
-const sessionTool = Kernel.sessionTool;
-const ToolRefused = Kernel.ToolRefused;
-type ChatAgentConfig = Kernel.ChatAgentConfig;
-type SessionRunner = Session.SessionRunner;
-type SessionRuntime = Session.SessionRuntime;
+const createSessionChatRunner = Core.createSessionChatRunner;
+const createTurnDispatcher = Core.createTurnDispatcher;
+const failureFacts = Core.failureFacts;
+const sessionTool = Core.sessionTool;
+const ToolRefused = Core.ToolRefused;
+type ChatAgentConfig = Core.ChatAgentConfig;
+type SessionRunner = Core.SessionRunner;
+type SessionRuntime = Core.SessionRuntime;
 import { traceIdFromUuid, type AnyToolDefinition, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
+import { pinnedModelSelection, restoreModelSelection } from "./composition/model-selection";
 import { messageMaterialization } from "./composition/message-session";
 import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
@@ -101,6 +102,8 @@ export function createResident(options: ResidentOptions) {
               ? {}
               : { modelFallbacks: [...options.modelFallbacks] }),
             ...(compaction === undefined ? {} : { compaction }),
+            // #1276: product choice injected into the core seam.
+            restoreModelSelection,
             ...chatProviderConfig(options),
           },
           traceContext: {
@@ -113,6 +116,8 @@ export function createResident(options: ResidentOptions) {
         }),
         reportError: (error) =>
           failureFacts(error)?.llm === true ? classifyTurnFailure(error).text : undefined,
+        // #1276: product choice injected into the core seam.
+        pinnedModel: pinnedModelSelection,
       });
       return yield* runner(input).pipe(Effect.provideService(ObservationSink, { ...observations, publish: observation.events.publish }));
     });

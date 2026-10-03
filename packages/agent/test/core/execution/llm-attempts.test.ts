@@ -1,12 +1,12 @@
 import { APICallError } from "ai";
 import { sessionTree } from "../../helpers/session-tree";
 import { testExecutor } from "../../helpers/executor";
-import type { ResolvedExecutorOptions } from "../../../src/kernel/gate/decide";
+import type { ResolvedExecutorOptions } from "../../../src/core/gate/decide";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
 import { requestLedger, turnExecutor, failure } from "../../helpers/effect-g1";
-import { AgentFailure } from "../../../src/kernel/failure";
+import { AgentFailure } from "../../../src/core/failure";
 import { LlmRunFailure } from "../../../src/model";
 import { runChatAttempts } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";

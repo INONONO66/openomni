@@ -1,5 +1,5 @@
 import type { PolicyRow, Storage as ProtocolStorage } from "@openomni/protocol";
-import { SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
+import { SEEDED_POLICY_ROWS } from "../../src/core/gate/compile";
 import { isolatedLedger } from "./isolated";
 
 /** Seeds the mandatory policy rows plus `rows` into the catalog's policy plane at generation 1. */

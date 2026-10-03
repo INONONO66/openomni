@@ -40,7 +40,7 @@ export interface ChatAgentConfig {
     readonly alarmIds: readonly string[];
   }, ExecutionError>;
   /** The session owns inbox claims; this loop invokes its three model-step boundaries. */
-  boundary?: import("../session/run").SessionRunnerInput["boundary"];
+  boundary?: import("./run").SessionRunnerInput["boundary"];
   toolWave?: (calls: readonly Tool.Call[], signal?: AbortSignal) => Effect.Effect<readonly Tool.Result[], ExecutionError>;
   /** Durable L2 authority for session-owned prompt, turn, model, and tool work. */
   executor?: Executor;
@@ -71,6 +71,17 @@ export interface ChatAgentConfig {
    * restoration keeps the fallback pinned for the turn.
    */
   pinnedModel?: Model.Ref;
+  /**
+   * Composition-owned release policy for a pinned fallback (#1276): the app
+   * injects `restoreModelSelection` (apps/openomni/src/composition/
+   * model-selection.ts). It returns the index in the model chain this turn
+   * starts from. Absent = start at the primary without a recorded restoration.
+   */
+  restoreModelSelection?: (
+    executor: Pick<Executor, "run">,
+    pinned: Model.Ref | undefined,
+    chain: readonly Model.Ref[],
+  ) => Effect.Effect<number, ExecutionError>;
   budget?: AgentBudget;
   onStepFinish?: (step: AgentStep) => Effect.Effect<void, ExecutionError>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Effect.Effect<Tool.Result, ExecutionError>;

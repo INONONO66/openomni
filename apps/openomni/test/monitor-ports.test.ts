@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { Kernel, type Session, Journal } from "@openomni/agent";
-type SessionEntityTimerContext = Session.SessionEntityTimerContext;
-const CommitRefused = Journal.CommitRefused;
-const AgentFailure = Kernel.AgentFailure;
+import { Core } from "@openomni/agent";
+type SessionEntityTimerContext = Core.SessionEntityTimerContext;
+const CommitRefused = Core.CommitRefused;
+const AgentFailure = Core.AgentFailure;
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { AppLedgerPlane, SessionKernel } from "../src/composition/cluster-runtime";

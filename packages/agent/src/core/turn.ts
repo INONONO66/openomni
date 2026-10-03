@@ -21,7 +21,6 @@ import { applyCompaction, prepareCompactionAfterContinue } from "./compaction";
 import { DEFAULT_PROTECT_RECENT } from "../plugins/compaction/contract";
 import { estimateMessagesTokens } from "../plugins/compaction/estimate";
 import { ExecutorContext, type Executor } from "./gate/decide";
-import { restoreModelSelection } from "../plugins/model-selection";
 
 
 // ─── from core/execution/state.ts (#1247) ───
@@ -806,10 +805,10 @@ export function runAgent(
     ? Context.make(ExecutorContext, durableExecutor).pipe(Context.add(Scope.Scope, scope))
     : Context.make(Scope.Scope, scope);
   return Effect.gen(function* () {
-    state.modelChainStart = yield* restoreModelSelection(durableExecutor, config.pinnedModel, [
+    state.modelChainStart = yield* config.restoreModelSelection?.(durableExecutor, config.pinnedModel, [
       config.model,
       ...(config.modelFallbacks ?? []),
-    ]);
+    ]) ?? Effect.succeed(0);
     for (;;) {
       yield* drainStepBoundary(state, config, "before_llm");
       if (

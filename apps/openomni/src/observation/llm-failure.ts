@@ -1,7 +1,7 @@
 /** Channel rendering of kernel-classified failures; raw provider details stay private. */
 
-import { Kernel, Model } from "@openomni/agent";
-const failureFacts = Kernel.failureFacts;
+import { Core, Model } from "@openomni/agent";
+const failureFacts = Core.failureFacts;
 import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
 

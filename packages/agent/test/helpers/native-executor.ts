@@ -1,13 +1,13 @@
 import { executionReads } from "./execution-reads";
 import { isolatedLedger } from "./isolated";
 import { sessionTree } from "./session-tree";
-import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
-import { KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../src/kernel/gate/compile";
+import type { ResolvedExecutorOptions } from "../../src/core/gate/decide";
+import { KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../src/core/gate/compile";
 import { type LedgerAction, PlainObjectSchema } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { SessionKernel } from "../../src/session/entity";
-import type { ExecutionLedger } from "../../src/kernel/gate/decide";
+import type { SessionKernel } from "../../src/core/entity";
+import type { ExecutionLedger } from "../../src/core/gate/decide";
 
 export const fiberSessionId = "fiber-session";
 export const nativePolicy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,

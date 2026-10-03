@@ -1,7 +1,7 @@
-import type { Session } from "@openomni/agent";
+import type { Core } from "@openomni/agent";
 import { Effect } from "effect";
 
-type SessionRequests = Effect.Success<ReturnType<typeof Session.createSessionRequests>>;
+type SessionRequests = Effect.Success<ReturnType<typeof Core.createSessionRequests>>;
 import { decodeChannelFailure } from "../../src/errors";
 import type { GatewayRouterPorts } from "../../src/router";
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Policy } from "../../src/policy/index";
+import { Policy } from "../../src/policy";
 import type { JsonShapedValue } from "../../src/json";
 
 test("rejects non-JSON-plain effect values", () => {

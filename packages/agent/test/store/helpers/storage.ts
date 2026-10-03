@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ObservationSink } from "@openomni/protocol";
-import { openCatalogStore } from "../../../src/store/catalog";
-import { openSessionStore } from "../../../src/store/session-file";
-import * as SessionHandleStore from "../../../src/store/fence";
+import { openCatalogStore } from "../../../src/core/store/catalog";
+import { openSessionStore } from "../../../src/core/store/session-file";
+import * as SessionHandleStore from "../../../src/core/store/fence";
 
 /** Fixed injected clock (#1245): ledger tests assert exact timestamps. */
 export const TEST_NOW = 1_700_000_000_000;

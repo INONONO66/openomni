@@ -1,6 +1,6 @@
-import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/core/gate/compile";
 import { describe, expect, it, mock } from "bun:test";
-import { compilePolicySnapshot, createPolicyCompiler, PolicyCompileError, SEEDED_POLICY_ROWS, type PolicyEvaluationInput } from "../../../src/kernel/gate/compile";
+import { compilePolicySnapshot, createPolicyCompiler, PolicyCompileError, SEEDED_POLICY_ROWS, type PolicyEvaluationInput } from "../../../src/core/gate/compile";
 import type { PolicyRow, Storage } from "@openomni/protocol";
 import { atGeneration, compaction, draft, MemoryPolicyRows, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
 

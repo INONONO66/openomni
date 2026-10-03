@@ -1,11 +1,9 @@
 import { Cause, Clock, Effect } from "effect";
-import type { ExecutionError } from "../../kernel/failure";
+import { type ExecutionError, RunEvents, type Entropy } from "../../core/api";
 import type { Message, BusEvent } from "@openomni/protocol";
-import { RunEvents } from "../../kernel/run-events";
 import type { CompactionYield } from "./geometry";
 import type { CompactionCandidate } from "./speculate";
 import type { ResolvedCompactionOptions, CompactionResult } from "./contract";
-import type { Entropy } from "../../kernel/ports";
 import {
   resolveThresholdTokens,
   estimateMessagesTokens,

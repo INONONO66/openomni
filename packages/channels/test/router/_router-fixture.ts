@@ -6,9 +6,9 @@ import { channelTransaction } from "../helpers/channel-transaction";
 import { originalAction, requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
 import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
-import { Kernel } from "@openomni/agent";
-const KERNEL_POLICY_REGISTRY = Kernel.KERNEL_POLICY_REGISTRY;
-const compilePolicySnapshot = Kernel.compilePolicySnapshot;
+import { Core } from "@openomni/agent";
+const KERNEL_POLICY_REGISTRY = Core.KERNEL_POLICY_REGISTRY;
+const compilePolicySnapshot = Core.compilePolicySnapshot;
 
 import { decodeChannelFailure } from "../../src/errors";
 import { Bus } from "../helpers/observation";

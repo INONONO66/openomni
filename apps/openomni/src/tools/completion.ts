@@ -1,9 +1,9 @@
 import { conform, systemText } from "./core/completion-format";
 import { Machine, type ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
-import { Kernel } from "@openomni/agent";
-const defineTool = Kernel.defineTool;
-const ToolRefused = Kernel.ToolRefused;
+import { Core } from "@openomni/agent";
+const defineTool = Core.defineTool;
+const ToolRefused = Core.ToolRefused;
 
 /** What one sub-model call asks for: the prompt, and optionally a system text and model id. */
 export interface LlmCall {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { canonicalDigest, emittedRowKey, type PlainValue } from "@openomni/protocol";
-import { compileGateRows, type GateHandler } from "../src/kernel/gate/compose";
+import { compileGateRows, type GateHandler } from "../src/core/gate/compose";
 import { fullPointTable, gateRow } from "./helpers/gate-rows";
 
 const table = fullPointTable();

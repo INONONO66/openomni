@@ -4,9 +4,9 @@ import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { catalogDefinitions } from "../src/tools/core/catalog";
-import { Kernel, Model as AgentModel } from "@openomni/agent";
-const toolSpec = Kernel.toolSpec;
-type Executor = Kernel.Executor;
+import { Core, Model as AgentModel } from "@openomni/agent";
+const toolSpec = Core.toolSpec;
+type Executor = Core.Executor;
 import { completionFixture as completionPort } from "./helpers/completion-fixture";
 type RunInput = AgentModel.RunInput;
 

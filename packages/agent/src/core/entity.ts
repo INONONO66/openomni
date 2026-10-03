@@ -1,14 +1,14 @@
 
-import * as SessionHandleStore from "../store/fence";
-import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "../store/errors";
+import * as SessionHandleStore from "./store/fence";
+import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "./store/errors";
 import { PlainValueSchema, SessionTransition, type Inbox } from "@openomni/protocol";
 import { Cause, Context, Effect, Exit, Option, type Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
-import { LeaseLost, SessionAdmissionRefused, type SessionError } from "../kernel/failure";
+import { LeaseLost, SessionAdmissionRefused, type SessionError } from "./failure";
 import { createSessionAdmission, decideSessionAdmission } from "./mailbox";
 import { type SessionAdmissionSnapshot, type SessionEntityAuthority, type SessionEntityPorts, type SessionEntityTimerContext, type SessionTimerOutcome, type SessionControllerState, type ResolvedSessionRuntime, type SessionRunner, type SessionRunnerResult, createSessionTurn } from "./run";
 import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit";
-import { createRawSlots } from "../kernel/gate/decide";
+import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
 import { DeadlineRpc, InterruptRpc, PromptRpc, RequestCancelRpc, RequestResolveRpc, ResumeRpc, RetryScheduledRpc, WatchFiredRpc, WatchTimeoutRpc, type ChainAppendReceipt } from "./messages";
 

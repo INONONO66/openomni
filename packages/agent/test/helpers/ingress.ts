@@ -1,8 +1,8 @@
-import type { LedgerError } from "../../src/store/errors";
+import type { LedgerError } from "../../src/core/store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { SessionKernel } from "../../src/session/entity";
-import { receivedMessageAction } from "../../src/session/commit";
+import type { SessionKernel } from "../../src/core/entity";
+import { receivedMessageAction } from "../../src/core/commit";
 
 export interface ReceivedMessageInput {
   readonly id: string;

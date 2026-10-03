@@ -1,8 +1,8 @@
-import { Kernel, type Session, Bundle, Model } from "@openomni/agent";
+import { Core, Bundle, Model } from "@openomni/agent";
 const BundlesLive = Bundle.BundlesLive;
-const GenerationLayers = Kernel.GenerationLayers;
-const ObservationSink = Kernel.ObservationSink;
-type SessionRuntime = Session.SessionRuntime;
+const GenerationLayers = Core.GenerationLayers;
+const ObservationSink = Core.ObservationSink;
+type SessionRuntime = Core.SessionRuntime;
 import { AgentProcessLive } from "../../src/agent-layers";
 import { Bus } from "./bus";
 const Llm = Model.Llm;

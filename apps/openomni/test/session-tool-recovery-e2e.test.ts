@@ -9,15 +9,15 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Kernel, Session, Journal, Testing } from "@openomni/agent";
-const closeSessions = Session.closeSessions;
-const createSessionChatRunner = Session.createSessionChatRunner;
-const createTurnDispatcher = Kernel.createTurnDispatcher;
-const defineTool = Kernel.defineTool;
-const eraseTool = Kernel.eraseTool;
+import { Core, Testing } from "@openomni/agent";
+const closeSessions = Core.closeSessions;
+const createSessionChatRunner = Core.createSessionChatRunner;
+const createTurnDispatcher = Core.createTurnDispatcher;
+const defineTool = Core.defineTool;
+const eraseTool = Core.eraseTool;
 const session = Testing.session;
-const sessionTool = Kernel.sessionTool;
-type SessionRuntime = Session.SessionRuntime;
+const sessionTool = Core.sessionTool;
+type SessionRuntime = Core.SessionRuntime;
 import { Bus } from "./helpers/bus";
 import { L0Observation, Tool } from "@openomni/protocol";
 import { z } from "zod";
@@ -225,7 +225,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         });
         crashRef.current = crashPlane;
         prefix = treeOf();
-        expect(Journal.SessionHandleStore.openTurns(prefix)).toHaveLength(1);
+        expect(Core.SessionHandleStore.openTurns(prefix)).toHaveLength(1);
         expect(
           prefix.filter(
             (action) =>

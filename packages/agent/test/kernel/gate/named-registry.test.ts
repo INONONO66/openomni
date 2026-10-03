@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { canonicalDigest, type PlainValue, RowVerdict, RowVerdictRead, PolicyRow, type Storage } from "@openomni/protocol";
-import { compilePolicySnapshot, createNamedPolicyRegistry, createPolicyCompiler, KERNEL_POLICY_REGISTRY, NamedPolicyRegistryError, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
+import { compilePolicySnapshot, createNamedPolicyRegistry, createPolicyCompiler, KERNEL_POLICY_REGISTRY, NamedPolicyRegistryError, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
 import { atGeneration, compaction, draft, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
 
 const input = {

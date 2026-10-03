@@ -1,5 +1,4 @@
-import type { SessionKernel } from "../../session/entity";
-import { receivedMessages } from "../../session/commit";
+import { Core } from "@openomni/agent";
 import {
   canonicalDigest,
   Inbox,
@@ -7,17 +6,16 @@ import {
   type LedgerAction,
   type LedgerSession,
 } from "@openomni/protocol";
-import type { SessionRunnerResult } from "../../session/run";
 
 /** A child seals its own obligation; only the receiving executor changes the parent. */
 export function parentReply(
-  kernel: SessionKernel,
+  kernel: Core.SessionKernel,
   row: LedgerSession.Row,
   terminal: LedgerAction.Append,
-  result: SessionRunnerResult,
+  result: Core.SessionRunnerResult,
 ): SessionTransition.OutboundMessage | undefined {
   if (row.parentId === null || result.kind === "waiting") return undefined;
-  const original = receivedMessages(kernel, row.id).rows
+  const original = Core.receivedMessages(kernel, row.id).rows
     .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
     .find((origin) => origin.success && origin.data.senderSessionId === row.parentId);
   if (original === undefined || !original.success) return undefined;

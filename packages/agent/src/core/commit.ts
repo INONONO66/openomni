@@ -1,14 +1,14 @@
-import type { CommitReceipt } from "../store/services";
-import type { LedgerError } from "../store/errors";
+import type { CommitReceipt } from "./store/services";
+import type { LedgerError } from "./store/errors";
 import { Effect } from "effect";
 import type { SessionKernel } from "./entity";
 import { canonicalDigest, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
 import { pinCompactionAction } from "../plugins/compaction/successor";
-import type * as SessionHandleStore from "../store/fence";
+import type * as SessionHandleStore from "./store/fence";
 import { z } from "zod";
-import { RunReasonCode } from "../kernel/reason-codes";
-import { GenerationUnavailable } from "../kernel/failure";
+import { RunReasonCode } from "./reason-codes";
+import { GenerationUnavailable } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { SessionRunnerResult, SessionTool } from "./run";
 

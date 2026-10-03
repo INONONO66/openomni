@@ -1,5 +1,5 @@
 import type { LedgerSession } from "@openomni/protocol";
-import { SessionCommitError } from "../kernel/failure";
+import { SessionCommitError } from "../core/failure";
 
 export function requireCommit(result: LedgerSession.CommitResult): LedgerSession.Row {
   if (!result.ok) throw new SessionCommitError({ result });

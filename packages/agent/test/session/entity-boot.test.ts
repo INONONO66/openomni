@@ -4,7 +4,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
-import { L0Write } from "../../src/store/session-file";
+import { L0Write } from "../../src/core/store/session-file";
 import { Effect } from "effect";
 import { clusterTempDir, clusterMessages, readChain, runCluster, sendPrompt, sessionFileFor, verifyChain, waitUntil, } from "../helpers/cluster-runtime";
 

@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { runAgentSync } from "./helpers/executor";
 import { expect, spyOn, test } from "bun:test";
-import * as SessionHandleStore from "../src/store/fence";
+import * as SessionHandleStore from "../src/core/store/fence";
 import { sessionTree } from "./helpers/session-tree";
 import { canonicalDigest, FoldCheckpoint, PlainValueSchema } from "@openomni/protocol";
 import { foldHistoryState, hydrateSessionHistory } from "../src/inspect/history";
-import { deliveryActions } from "../src/session/commit";
+import { deliveryActions } from "../src/core/commit";
 import { bounded } from "./helpers/bounded";
 import { effectOf, intentOf } from "./helpers/crash-matrix";
 import { commitReceivedMessage } from "./helpers/ingress";

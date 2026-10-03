@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isOriginSurface, OriginMark } from "../src/index";
+import { isOriginSurface, OriginMark } from "../src";
 import { attributes } from "./markup";
 
 const SURFACES = ["slack", "discord", "telegram", "github"] as const;

@@ -3,8 +3,8 @@ import { Effect, Result } from "effect";
 import { runLedgerSync } from "../helpers/effect";
 import { expect, test } from "bun:test";
 import { LedgerSession } from "@openomni/protocol";
-import { createSqliteActorRegistryAdapter } from "../../../src/store/storage/sqlite-actor-registry-adapter";
-import { createSqliteDecisionFacts } from "../../../src/store/decision";
+import { createSqliteActorRegistryAdapter } from "../../../src/core/store/storage/sqlite-actor-registry-adapter";
+import { createSqliteDecisionFacts } from "../../../src/core/store/decision";
 import { openCatalogDatabase, openLedgerDatabase, observedL0Adapters } from "../helpers/ledger";
 
 test("raw recorded facts reject malformed JSON and non-finite JSON numbers", () => {

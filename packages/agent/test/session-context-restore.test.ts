@@ -8,11 +8,11 @@ import { answerThenCompact } from "./helpers/effect-g2";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 
 import type { LedgerAction, Message, PlainObject } from "@openomni/protocol";
-import { createTurnDispatcher } from "../src/kernel/tool";
-import type { SessionRunner } from "../src/session/run";
+import { createTurnDispatcher } from "../src/core/tool";
+import type { SessionRunner } from "../src/core/run";
 import { Bus } from "./helpers/bus";
 import { session } from "../src/testing/registry";
-import type { SessionHandle, SessionRunnerInput } from "../src/session/run";
+import type { SessionHandle, SessionRunnerInput } from "../src/core/run";
 import { foldSessionHistory } from "../src/inspect/history";
 
 let nextId = 0;

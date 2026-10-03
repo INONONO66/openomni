@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
-import { Policy, PolicyDecision } from "../src/policy/index";
+import { Policy, PolicyDecision } from "../src/policy";
 
 const it = test;
 

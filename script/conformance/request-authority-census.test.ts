@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as protocol from "../../packages/protocol/src/index";
+import * as protocol from "../../packages/protocol/src";
 import { authorityViolations, scanRequestAuthority } from "../request-authority-census";
 
 const root = join(import.meta.dir, "../..");

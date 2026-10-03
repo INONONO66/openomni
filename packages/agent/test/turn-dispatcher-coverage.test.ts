@@ -11,9 +11,9 @@ import {
   defineTool,
   type Executor,
 } from "./helpers/effect-g3-dispatcher";
-import { AgentFailure } from "../src/kernel/failure";
-import { currentInvocation, requireOpenInvocation, ExecutorContextError } from "../src/kernel/gate/decide";
-import { GenerationOwnership, SessionLayer } from "../src/kernel/ports";
+import { AgentFailure } from "../src/core/failure";
+import { currentInvocation, requireOpenInvocation, ExecutorContextError } from "../src/core/gate/decide";
+import { GenerationOwnership, SessionLayer } from "../src/core/ports";
 import { z } from "zod";
 import { recordingExecutor, recordingLedger } from "./helpers/effect-g3";
 import { allowAllPolicy, opPhaseOf } from "./helpers/compiled-policy";

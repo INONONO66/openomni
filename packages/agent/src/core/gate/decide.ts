@@ -1,20 +1,19 @@
-import type { LedgerError } from "../../store/errors";
+import type { LedgerError } from "../store/errors";
 import { Effect, Scope, Context, Deferred, Exit, Cause, Option, Clock, Fiber } from "effect";
 import * as Failure from "../failure";
 import { type ExecutionError, GenerationUnavailable, InvocationClosed, CommitFailed, ExecutionApprovalError, PolicyDenied, AgentFailure, Interrupted, OutcomeUnknown } from "../failure";
 import { type BusEvent, GateDecision, LedgerAction, type LedgerSession, type ObservationSink as ObservationPort, type PlainValue, type SessionTransition, Tool, type PlainObject, L0Observation, canonicalDigest, PlainValueSchema, RowVerdictType, SessionHistory, listenForAbort } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput, PolicyEvaluation } from "./compile";
-import type { RetryAlarmPort, AlarmSenders } from "../alarm";
-import { createRetryAlarmPort } from "../../session/alarm";
+import type { RetryAlarmPort, AlarmSenders } from "../alarm-ports";
+import { createRetryAlarmPort } from "../alarm";
 import type { WaveControl, Dispatcher } from "../tool";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { onAbort, type CapturedGeneration, BOUNDED_CONCURRENCY, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "../ports";
-import { createApprovalRequest } from "../../session/request-binding";
+import { createApprovalRequest } from "../request-binding";
 import { Retry } from "../../model";
 import { attachFailureFacts } from "../retry";
-import { attemptRouteChange } from "../../plugins/model-selection";
 import { judgeStop, type StopState, type StopObservation, type StopMetric } from "../stop";
-import type * as SessionHandleStore from "../../store/fence";
+import type * as SessionHandleStore from "../store/fence";
 import { executionPoint } from "../points";
 
 // ─── from executor-contract.ts (#1247) ───
@@ -38,7 +37,7 @@ export interface ExecutionLedger {
     payload: SessionTransition.Payload,
     inputId: string,
     at: number,
-  ): Effect.Effect<import("../../session/request").RequestDecision, ExecutionError>;
+  ): Effect.Effect<import("../request").RequestDecision, ExecutionError>;
 }
 
 interface ExecutionIdentity {
@@ -213,6 +212,31 @@ export interface DurableExecutor extends Executor {
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
   ): Effect.Effect<T, ExecutionError>;
+}
+
+/**
+ * Route-change evidence on a retry attempt (#1276: gate-owned; formerly the
+ * model-selection plugin). A route switch is evidence on the newly admitted
+ * attempt, not a rewritten selection.
+ */
+function attemptRouteChange(
+  previous: LedgerAction.Receipt | undefined,
+  next: PlainValue,
+): PlainValue {
+  const asRecord = (value: PlainValue | undefined): PlainObject =>
+    value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+  if (previous === undefined) return null;
+  const from = asRecord(asRecord(previous.action.intent.value).value);
+  const to = asRecord(next);
+  if (typeof from.provider !== "string" || typeof from.model !== "string" ||
+      typeof to.provider !== "string" || typeof to.model !== "string") return null;
+  if (from.provider === to.provider && from.model === to.model) return null;
+  return {
+    kind: "route.changed",
+    from: { provider: from.provider, model: from.model },
+    to: { provider: to.provider, model: to.model },
+    fromActionId: previous.action.id,
+  };
 }
 
 export interface ExecutorOptions {

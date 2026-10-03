@@ -5,11 +5,11 @@ import { Cause, Effect, Exit } from "effect";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Kernel, Journal } from "@openomni/agent";
-const currentExecutor = Kernel.currentExecutor;
-const InvocationClosed = Kernel.InvocationClosed;
-type InvocationClosed = Kernel.InvocationClosed;
-type ExecutionApprovalRequest = Kernel.ExecutionApprovalRequest;
+import { Core } from "@openomni/agent";
+const currentExecutor = Core.currentExecutor;
+const InvocationClosed = Core.InvocationClosed;
+type InvocationClosed = Core.InvocationClosed;
+type ExecutionApprovalRequest = Core.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { z } from "zod";
 import {
@@ -24,7 +24,7 @@ import { planeOf } from "./helpers/ledger";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { runEffect } from "./helpers/effect";
-import type { AppSessionHandle } from "../src/index";
+import type { AppSessionHandle } from "../src";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import {
   adoptAtFence,
@@ -258,7 +258,7 @@ function nextTerminal(): Promise<void> {
       const terminal = tree(event.sessionId).find(
         (action) => action.id === event.id,
       );
-      if (terminal === undefined || Journal.SessionHandleStore.turnTerminal(terminal) === undefined) return;
+      if (terminal === undefined || Core.SessionHandleStore.turnTerminal(terminal) === undefined) return;
       clearTimeout(timer);
       stop();
       resolve();
@@ -328,7 +328,7 @@ test("after-model SDK interrupt starts zero bodies and seals one interrupted ter
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);
   const terminals = tree(activeRow().id).flatMap((action) => {
-    const terminal = Journal.SessionHandleStore.turnTerminal(action);
+    const terminal = Core.SessionHandleStore.turnTerminal(action);
     return terminal ? [terminal] : [];
   });
   expect(terminals.map((terminal) => terminal.kind)).toEqual(["interrupted"]);
@@ -893,7 +893,7 @@ test("approval-time prompts retain durable identities and enter the next model s
   expect(inputs[0]).toEqual([initialId]);
   expect(inputs[1]?.filter((id) => promptIds.includes(id))).toEqual(promptIds);
   const delivered = tree(handle.id).flatMap((action) => {
-    const delivery = Journal.SessionHandleStore.delivery(action);
+    const delivery = Core.SessionHandleStore.delivery(action);
     return delivery?.kind === "prompt" ? [delivery] : [];
   });
   expect(delivered.slice(1).map((delivery) => [delivery.inboxId, delivery.boundary])).toEqual([

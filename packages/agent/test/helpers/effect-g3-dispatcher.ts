@@ -1,5 +1,5 @@
-export { defineTool, currentExecutor } from "../../src/kernel/tool";
-export type { Executor } from "../../src/kernel/gate/decide";
-import { createDispatcher as rawDispatcher, createTurnDispatcher as rawTurnDispatcher } from "../../src/kernel/tool";
+export { defineTool, currentExecutor } from "../../src/core/tool";
+export type { Executor } from "../../src/core/gate/decide";
+import { createDispatcher as rawDispatcher, createTurnDispatcher as rawTurnDispatcher } from "../../src/core/tool";
 export const createDispatcher = rawDispatcher;
 export const createTurnDispatcher = rawTurnDispatcher;

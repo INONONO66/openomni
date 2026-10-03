@@ -10,7 +10,7 @@ import {
   effectiveBudgetThresholds,
   publishBudgetTelemetry,
   recordTokenUsage,
-} from "../../src/kernel/budget";
+} from "../../src/core/budget";
 
 /** The run whose budget is being reported; the reporter never mints one. */
 const TEST_RUN = { traceId: "trace-budget-test", sessionId: "session-budget-test" };

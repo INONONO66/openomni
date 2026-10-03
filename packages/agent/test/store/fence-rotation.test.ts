@@ -11,12 +11,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Effect } from "effect";
-import { L0Write } from "../../src/store/session-file";
-import type { LedgerError } from "../../src/store/errors";
-import { createSessionKernel, type SessionKernel } from "../../src/store/fence";
-import type { CatalogStore } from "../../src/store/catalog";
-import { openCatalogStore } from "../../src/store/catalog";
-import { openSessionStore } from "../../src/store/session-file";
+import { L0Write } from "../../src/core/store/session-file";
+import type { LedgerError } from "../../src/core/store/errors";
+import { createSessionKernel, type SessionKernel } from "../../src/core/store/fence";
+import type { CatalogStore } from "../../src/core/store/catalog";
+import { openCatalogStore } from "../../src/core/store/catalog";
+import { openSessionStore } from "../../src/core/store/session-file";
 import { runLedgerSync } from "./helpers/effect";
 import { TEST_NOW, testNow } from "./helpers/storage";
 
@@ -213,9 +213,9 @@ test("concurrent activations from two processes: one winner, stale loser refused
   try {
     const childSource = `
       import { Effect } from "effect";
-      import { createSessionKernel } from "./src/store/fence.ts";
-      import { openCatalogStore } from "./src/store/catalog.ts";
-      import { openSessionStore } from "./src/store/session-file/index.ts";
+      import { createSessionKernel } from "./src/core/store/fence.ts";
+      import { openCatalogStore } from "./src/core/store/catalog.ts";
+      import { openSessionStore } from "./src/core/store/session-file/index.ts";
       import { runLedgerSync } from "./test/store/helpers/effect.ts";
       const sessionId = String(process.env.FENCE_SESSION_ID);
       const owner = String(process.env.FENCE_OWNER);
@@ -335,7 +335,7 @@ test("R8: kill inside the commit transaction leaves no partial action row", asyn
     const row = kernel.row("s3");
     const childSource = `
       import { Database } from "bun:sqlite";
-      import { L0Write } from "./src/store/session-file/index.ts";
+      import { L0Write } from "./src/core/store/session-file/index.ts";
       const db = new Database(String(process.env.FENCE_SESSION_PATH));
       db.run("PRAGMA busy_timeout = 5000");
       db.run("BEGIN IMMEDIATE");

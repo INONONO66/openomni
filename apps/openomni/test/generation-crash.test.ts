@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Bundle, Kernel } from "@openomni/agent";
+import { Core, Bundle } from "@openomni/agent";
 const BundlesLive = Bundle.BundlesLive;
-const GenerationLayers = Kernel.GenerationLayers;
-const SessionLayer = Kernel.SessionLayer;
+const GenerationLayers = Core.GenerationLayers;
+const SessionLayer = Core.SessionLayer;
 import { Effect } from "effect";
 import { z } from "zod";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";

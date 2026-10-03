@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import * as barrel from "../src/index";
+import * as barrel from "../src";
 
 test("channels barrel exposes only its runtime public surface", () => {
   expect(Object.keys(barrel).sort()).toEqual([

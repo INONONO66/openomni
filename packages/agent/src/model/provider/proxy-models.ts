@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Effect } from "effect";
 import { decodeLlmFailure } from "../error";
 import { ProxyModelsError, type LlmError } from "../errors";
-import type { Provider } from "./index";
+import type { Provider } from ".";
 
 /**
  * A proxy that cannot list its models must fail loudly: swallowing the

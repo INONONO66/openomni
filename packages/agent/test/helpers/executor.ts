@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { createExecutor } from "../../src/kernel/gate/decide";
-import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
+import { createExecutor } from "../../src/core/gate/decide";
+import type { ResolvedExecutorOptions } from "../../src/core/gate/decide";
 import { runTestSync } from "./isolated";
 import { executorLayer } from "./service-layers";
 export { runAgent, runAgentSync } from "./isolated";

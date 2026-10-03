@@ -1,7 +1,7 @@
 import type { ActorRegistry } from "@openomni/channels";
 import { type Actor, canonicalDigest, type Provisioning } from "@openomni/protocol";
-import { Kernel } from "@openomni/agent";
-const ToolRefused = Kernel.ToolRefused;
+import { Core } from "@openomni/agent";
+const ToolRefused = Core.ToolRefused;
 import {
   type ContactOperation,
   type ContactResult,

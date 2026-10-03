@@ -1,5 +1,5 @@
 import type { SDKMessage } from "../message";
-import type { Provider } from "./index";
+import type { Provider } from ".";
 
 export namespace ProviderTransform {
   type AssistantMessageContent = Extract<SDKMessage, { role: "assistant" }>["content"];

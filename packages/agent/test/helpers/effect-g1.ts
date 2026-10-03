@@ -2,18 +2,18 @@ import { uniqueEntropy } from "./time";
 import { fencedExecutionLedger } from "./execution-reads";
 import { testExecutor } from "./executor";
 import { allowConfigure, kernelRuntime, type SessionFixture as SessionRuntime, } from "./session-services";
-import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
+import type { ResolvedExecutorOptions } from "../../src/core/gate/decide";
 import { Cause, Effect, Exit } from "effect";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
-import type { SessionKernel } from "../../src/session/entity";
-import type { ExecutorOptions, ExecutionLedger } from "../../src/kernel/gate/decide";
-import type {} from "../../src/session/run";
-import { commitSessionRequest } from "../../src/session/mailbox";
-import { AgentFailure } from "../../src/kernel/failure";
+import type { SessionKernel } from "../../src/core/entity";
+import type { ExecutorOptions, ExecutionLedger } from "../../src/core/gate/decide";
+import type {} from "../../src/core/run";
+import { commitSessionRequest } from "../../src/core/mailbox";
+import { AgentFailure } from "../../src/core/failure";
 import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";
 import { isolatedLedger } from "./isolated";
-import type { CompiledPolicySnapshot } from "../../src/kernel/gate/compile";
+import type { CompiledPolicySnapshot } from "../../src/core/gate/compile";
 export { createTestAgent, runTestAgent, runChatAttempts } from "./effect-g2";
 export const nullRetryAlarm: NonNullable<ExecutorOptions["retryAlarm"]> = {
   arm: () => Effect.void,

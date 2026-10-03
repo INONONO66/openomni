@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import { Kernel } from "@openomni/agent";
-const createDispatcher = Kernel.createDispatcher;
-const createExecutor = Kernel.createExecutor;
+import { Core } from "@openomni/agent";
+const createDispatcher = Core.createDispatcher;
+const createExecutor = Core.createExecutor;
 import type {
   AnyToolDefinition,
   ObservationSink,

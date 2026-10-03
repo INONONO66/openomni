@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { ExecutionError } from "../../kernel/failure";
+import type { ExecutionError, Entropy } from "../../core/api";
 import type { Message } from "@openomni/protocol";
 import type {
   ResolvedCompactionOptions,
@@ -13,7 +13,6 @@ import { elideToolOutputs } from "./reduce";
 import { resolveThresholdTokens, ESTIMATED_CHARS_PER_TOKEN } from "./estimate";
 import { isAnchorMessage, isWarmCandidateValid } from "./candidate";
 import { attemptAnchoredCut } from "./summary";
-import type { Entropy } from "../../kernel/ports";
 import type { CompactionCandidate } from "./speculate";
 
 function reduceHistoryBeforeCut(

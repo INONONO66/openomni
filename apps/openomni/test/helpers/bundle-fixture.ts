@@ -1,7 +1,7 @@
 import { closeSync, openSync, writeSync } from "node:fs";
-import { Bundle, Kernel } from "@openomni/agent";
+import { Core, Bundle } from "@openomni/agent";
 const bundle = Bundle.bundle;
-const ObservationSink = Kernel.ObservationSink;
+const ObservationSink = Core.ObservationSink;
 type BundleDefinition = Bundle.BundleDefinition;
 import { Tool } from "@openomni/protocol";
 import { Effect, Layer } from "effect";

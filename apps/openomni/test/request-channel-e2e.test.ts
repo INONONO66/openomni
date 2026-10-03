@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { assertNoLegacyRequestStores } from "./helpers/storage-evidence";
 import { Bus } from "./helpers/bus";
-import { Journal } from "@openomni/agent";
+import { Core } from "@openomni/agent";
 import { L0Observation } from "@openomni/protocol";
 import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
@@ -23,7 +23,7 @@ test("real external WebSocket reply wakes its original idle request owner withou
   suite.defer(
     Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.kind !== "turn" || planeRef.current === undefined) return;
-      const terminal = Journal.SessionHandleStore.turnTerminal(
+      const terminal = Core.SessionHandleStore.turnTerminal(
         sessionTree(event.sessionId, planeRef.current.sessionStore(event.sessionId).actions).find(
           (action) => action.id === event.id,
         ),

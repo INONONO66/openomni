@@ -1,6 +1,6 @@
-import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/core/gate/compile";
 import { expect, test } from "bun:test";
-import { compilePolicySnapshot } from "../../../src/kernel/gate/compile";
+import { compilePolicySnapshot } from "../../../src/core/gate/compile";
 import { atGeneration, compaction, draft } from "./row-fixtures";
 
 const workerRule = {

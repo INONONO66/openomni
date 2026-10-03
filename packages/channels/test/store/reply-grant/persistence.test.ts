@@ -6,11 +6,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createReplyGrantStore } from "../../../src/store/reply-grant/index.js";
-import { Journal } from "@openomni/agent";
-const openCatalogStore = Journal.openCatalogStore;
-import { createSqliteReplyGrantAdapter } from "../../../../agent/src/store/storage/sqlite-reply-grant-adapter";
-const bootstrapStoreDatabase = Journal.bootstrapStoreDatabase;
-const CATALOG_SCHEMA = Journal.CATALOG_SCHEMA;
+import { Core } from "@openomni/agent";
+const openCatalogStore = Core.openCatalogStore;
+import { createSqliteReplyGrantAdapter } from "../../../../agent/src/core/store/storage/sqlite-reply-grant-adapter";
+const bootstrapStoreDatabase = Core.bootstrapStoreDatabase;
+const CATALOG_SCHEMA = Core.CATALOG_SCHEMA;
 import { testNow } from "../../../../agent/test/store/helpers/storage";
 import { z } from "zod";
 

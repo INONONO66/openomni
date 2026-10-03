@@ -1,20 +1,20 @@
 import type { Readable } from "node:stream";
-import { Bundle, Kernel, Session } from "@openomni/agent";
+import { Core, Bundle } from "@openomni/agent";
 const BundleDefinitions = Bundle.BundleDefinitions;
-const Entropy = Kernel.Entropy;
-const GenerationLayers = Kernel.GenerationLayers;
-const ObservationSink = Kernel.ObservationSink;
-const closeSessions = Session.closeSessions;
-const createSessionRequests = Session.createSessionRequests;
-const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
-const currentExecutor = Kernel.currentExecutor;
-const decideSessionAdmission = Session.decideSessionAdmission;
-const AgentFailure = Kernel.AgentFailure;
-type AgentFailure = Kernel.AgentFailure;
-const adoptSessionAuthority = Session.adoptSessionAuthority;
-const receivedMessageAction = Session.receivedMessageAction;
-type SessionEntryServices = Kernel.SessionEntryServices;
-type SessionRuntime = Session.SessionRuntime;
+const Entropy = Core.Entropy;
+const GenerationLayers = Core.GenerationLayers;
+const ObservationSink = Core.ObservationSink;
+const closeSessions = Core.closeSessions;
+const createSessionRequests = Core.createSessionRequests;
+const createSessionEntityRunTurn = Core.createSessionEntityRunTurn;
+const currentExecutor = Core.currentExecutor;
+const decideSessionAdmission = Core.decideSessionAdmission;
+const AgentFailure = Core.AgentFailure;
+type AgentFailure = Core.AgentFailure;
+const adoptSessionAuthority = Core.adoptSessionAuthority;
+const receivedMessageAction = Core.receivedMessageAction;
+type SessionEntryServices = Core.SessionEntryServices;
+type SessionRuntime = Core.SessionRuntime;
 import { createChannelStores, createGatewayRouter, decodeChannelFailure } from "@openomni/channels";
 import { Effect } from "effect";
 import {
@@ -41,6 +41,7 @@ import { messageDecisionRules } from "./composition/message-decision";
 import { seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
+import { parentReply } from "./composition/parent-reply";
 import { createProcessReplyChannel } from "./composition/process-replies";
 
 export const ProcessSessionRequest = z
@@ -141,6 +142,8 @@ export function serveProcessSession(
       plane.openKernel,
     ),
     authorizeConfigure: configureAuthority(generations, plane.openKernel),
+    // #1276: product choice injected into the core seam (#1258 replaces it).
+    parentReply,
   };
   const messages = {
     ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>

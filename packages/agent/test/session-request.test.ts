@@ -14,7 +14,7 @@ import {
   type LedgerSession,
   type SessionTransition,
 } from "@openomni/protocol";
-import { decideRequestTransition, requestBindingDigest } from "../src/session/request";
+import { decideRequestTransition, requestBindingDigest } from "../src/core/request";
 
 const row: LedgerSession.Row = {
   id: "session",

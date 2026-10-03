@@ -1,4 +1,4 @@
-import { openCatalogStore } from "../../../src/store/catalog";
+import { openCatalogStore } from "../../../src/core/store/catalog";
 import type { PlainValue, PolicyRow, Storage } from "@openomni/protocol";
 
 export function withPolicyRows<A>(run: (source: Storage.PolicyRowSubAdapter) => A): A {

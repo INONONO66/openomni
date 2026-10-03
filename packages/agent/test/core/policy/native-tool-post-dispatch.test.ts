@@ -3,7 +3,7 @@ import { catalogLayer } from "../../helpers/service-layers";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { describe, expect, it } from "bun:test";
 import { Tool } from "@openomni/protocol";
-import { createDispatcher, defineTool, ToolRefused } from "../../../src/kernel/tool";
+import { createDispatcher, defineTool, ToolRefused } from "../../../src/core/tool";
 import { z } from "zod";
 import {
   actionCommitGate,

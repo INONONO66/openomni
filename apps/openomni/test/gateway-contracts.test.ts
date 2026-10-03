@@ -4,9 +4,9 @@ import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
 import { Bus } from "./helpers/bus";
 import { describe, expect, test } from "bun:test";
 import { createChannelStores, decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
-import { Journal, type Model } from "@openomni/agent";
+import { Core, type Model } from "@openomni/agent";
 type RunInput = Model.RunInput;
-const createSurfaceKeyStore = Journal.createSurfaceKeyStore;
+const createSurfaceKeyStore = Core.createSurfaceKeyStore;
 import { Gateway, MessagingEvents, type Tool } from "@openomni/protocol";
 import {
   channelStoreSource,

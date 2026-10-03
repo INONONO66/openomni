@@ -2,9 +2,9 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import type { LedgerSession } from "@openomni/protocol";
-import * as ledgerExports from "../../../src/store/session-file";
-import { bootstrapStoreDatabase } from "../../../src/store/session-file";
-import { SESSION_FILE_SCHEMA } from "../../../src/store/session-file";
+import * as ledgerExports from "../../../src/core/store/session-file";
+import { bootstrapStoreDatabase } from "../../../src/core/store/session-file";
+import { SESSION_FILE_SCHEMA } from "../../../src/core/store/session-file";
 
 test("967 exports expose only canonical session authority", () => {
   expect(Object.hasOwn(ledgerExports, "Session")).toBe(false);

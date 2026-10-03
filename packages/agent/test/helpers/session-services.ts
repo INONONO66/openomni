@@ -1,17 +1,18 @@
 import { LlmLive } from "../../src/model";
-import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "../../src/kernel/gate/compile";
+import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
 import { LedgerAction, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
 import { Clock, type Context, Effect, Layer, Scope, Semaphore } from "effect";
-import { NamedPolicyRegistry } from "../../src/kernel/bundle";
-import type { SessionKernel } from "../../src/session/entity";
-import { GenerationUnavailable, type SessionError } from "../../src/kernel/failure";
+import { NamedPolicyRegistry } from "../../src/core/bundle";
+import type { SessionKernel } from "../../src/core/entity";
+import { GenerationUnavailable, type SessionError } from "../../src/core/failure";
 import { AgentGenerationLive } from "./generation-layer";
-import { makeSessionGenerations, type GenerationBundle } from "../../src/session/run";
-import type { SessionRuntime } from "../../src/session/run";
-import { Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/kernel/ports";
+import { makeSessionGenerations, type GenerationBundle } from "../../src/core/run";
+import type { SessionRuntime } from "../../src/core/run";
+import { Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/core/ports";
 import { isolatedLedger } from "./isolated";
 import { observationService } from "./service-layers";
 import { entropySource, fixedClock } from "./time";
+import { parentReply } from "./composition-fixtures";
 
 /** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
 export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
@@ -23,13 +24,14 @@ export interface SessionFixture extends SessionRuntime {
 }
 
 /** The kernel plane every fixture rides inside `isolated()`: the isolation's shared kernel, resolved lazily. */
-export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions"> {
+export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply"> {
   return kernelRuntime(() => isolatedLedger().kernel);
 }
 
 /** A runtime kernel plane over one explicit kernel handle (crash children own their stores). */
-export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions"> {
-  return { openKernel: () => kernel(), listSessions: () => kernel().listRows() };
+export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply"> {
+  // #1276: parent replies are composition-injected; fixtures keep the shipped behavior.
+  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply };
 }
 
 const fixtures = new WeakMap<Scope.Scope, WeakMap<SessionFixture, Context.Context<SessionEntryServices>>>();

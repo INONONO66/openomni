@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type { Session } from "@openomni/agent";
-type SessionRuntime = Session.SessionRuntime;
+import type { Core } from "@openomni/agent";
+type SessionRuntime = Core.SessionRuntime;
 
 /** Scheduling is outside these in-memory fixtures; retries still use native Effects. */
 export const immediateRetryAlarm: NonNullable<SessionRuntime["retryAlarm"]> = {

@@ -3,7 +3,7 @@ import { APICallError } from "ai";
 import { LlmRunFailure } from "../src/model";
 import { PlainObjectSchema, type LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
-import { restoreModelSelection } from "../src/plugins/model-selection";
+import { restoreModelSelection } from "./helpers/composition-fixtures";
 import { requestLedger } from "./helpers/effect-g1";
 import { testExecutor } from "./helpers/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";

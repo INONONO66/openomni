@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { type Session, Journal, type Model } from "@openomni/agent";
-type SessionRunner = Session.SessionRunner;
+import { Core, type Model } from "@openomni/agent";
+type SessionRunner = Core.SessionRunner;
 import { decodeChannelFailure } from "@openomni/channels";
 type RunInput = Model.RunInput;
 type Sink = Model.Sink;
-const createSurfaceKeyStore = Journal.createSurfaceKeyStore;
+const createSurfaceKeyStore = Core.createSurfaceKeyStore;
 import type { Tool } from "@openomni/protocol";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { createResidentGateway } from "../src/gateway";

@@ -1,8 +1,8 @@
-import { Kernel, Journal } from "@openomni/agent";
-const currentInvocation = Kernel.currentInvocation;
-const executionPoint = Kernel.executionPoint;
-const ToolRefused = Kernel.ToolRefused;
-type LedgerError = Journal.LedgerError;
+import { Core } from "@openomni/agent";
+const currentInvocation = Core.currentInvocation;
+const executionPoint = Core.executionPoint;
+const ToolRefused = Core.ToolRefused;
+type LedgerError = Core.LedgerError;
 import { Alarm, EncodedPayload, type ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
 import type { SessionKernel } from "../../composition/cluster-runtime";
@@ -80,7 +80,7 @@ export async function armWatch(
 ) {
   const watch = Alarm.Watch.parse({ ...source, description });
   const kernel = ports.openKernel(context.sessionId);
-  const turn = Journal.SessionHandleStore.turnIntent(kernel.actionById(context.turnId));
+  const turn = Core.SessionHandleStore.turnIntent(kernel.actionById(context.turnId));
   if (turn === undefined) throw new ToolRefused("monitor", "no captured turn");
   const { policy } = currentInvocation();
   // The monitor consults the registered `tool.pre` point (#1251) in the

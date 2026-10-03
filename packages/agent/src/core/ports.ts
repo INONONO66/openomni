@@ -4,7 +4,7 @@ import type { CompiledPolicySnapshot } from "./gate/compile";
 import type { Llm } from "../model";
 import type { SessionError } from "./failure";
 import type { NamedPolicyRegistry } from "./bundle";
-import type { GenerationRawSlots } from "../session/run";
+import type { GenerationRawSlots } from "./run";
 import type { ToolDispatchDefinition } from "./tool";
 
 // ─── from core/entropy.ts (#1247) ───

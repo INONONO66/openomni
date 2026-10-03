@@ -3,8 +3,8 @@ import { Effect, Fiber } from "effect";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Kernel, Journal } from "@openomni/agent";
-const createTurnDispatcher = Kernel.createTurnDispatcher;
+import { Core } from "@openomni/agent";
+const createTurnDispatcher = Core.createTurnDispatcher;
 import type { AnyToolDefinition, LedgerAction } from "@openomni/protocol";
 import { requestLedger, crashAfterRequestOpen, type RequestLedger } from "../../../packages/agent/test/helpers/effect-g1";
 import { catalogLayer, executorLayer } from "../../../packages/agent/test/helpers/service-layers";
@@ -14,11 +14,11 @@ import { sessionTree } from "../../../packages/agent/test/store/helpers/session-
 import { createRequestDomainRevisions } from "../src/tools/core/request-domain-revisions";
 import { runEffect } from "./helpers/effect";
 import { afterEach, beforeEach, expect, it } from "bun:test";
-const openCatalogStore = Journal.openCatalogStore;
-const openSessionStore = Journal.openSessionStore;
+const openCatalogStore = Core.openCatalogStore;
+const openSessionStore = Core.openSessionStore;
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { testPlane } from "./helpers/ledger";
-const eraseTool = Kernel.eraseTool;
+const eraseTool = Core.eraseTool;
 import type { PlainObject } from "@openomni/protocol";
 import { createProvisionTool, PROVISION_POLICY_ROWS } from "../src/tools/provision";
 import { catalogDefinitions } from "../src/tools/core/catalog";
@@ -248,7 +248,7 @@ for (const operation of [PROMOTE, MERGE]) {
         const session = openSessionStore(dbPath, { now: testClock() });
         const catalog = openCatalogStore(catalogPath, { now: testClock() });
         return {
-          kernel: Journal.SessionHandleStore.createSessionKernel(session, catalog),
+          kernel: Core.SessionHandleStore.createSessionKernel(session, catalog),
           close: () => {
             session.close();
             catalog.close();

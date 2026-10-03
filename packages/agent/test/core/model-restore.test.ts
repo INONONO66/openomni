@@ -1,6 +1,7 @@
 import { messageSource } from "../helpers/message-source";
 import { recordingResolveModel } from "../helpers/resolve-model";
 import { testExecutor } from "../helpers/executor";
+import { restoreModelSelection } from "../helpers/composition-fixtures";
 import { type ChatFixture, chatServices } from "../helpers/chat-services";
 import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
@@ -8,8 +9,8 @@ import { recordingLedger } from "../helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
 import type { Sink } from "../../src/model";
 import type { LedgerAction, Model, PlainObject, PolicyRow } from "@openomni/protocol";
-import { runAgent } from "../../src/kernel/turn";
-import { createAssistantMessage } from "../../src/kernel/message-factory";
+import { runAgent } from "../../src/core/turn";
+import { createAssistantMessage } from "../../src/core/message-factory";
 import { compiledPolicy, opPhaseOf } from "../helpers/compiled-policy";
 import { createStopOutcome } from "../helpers/mock-llm";
 import { runInput } from "../helpers/run-input";
@@ -66,6 +67,7 @@ async function turn(options: {
         model: primary,
         ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
         ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
+        restoreModelSelection,
         llm: {
           run: (_input: import("../../src/model").RunInput, sink: Sink) =>
             Effect.promise(async () => {

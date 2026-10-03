@@ -1,4 +1,4 @@
-import { AgentFailure } from "../../src/store/errors";
+import { AgentFailure } from "../../src/core/store/errors";
 import { canonicalDigest, FoldCheckpoint, PlainObjectSchema, PlainValueSchema, type LedgerAction, } from "@openomni/protocol";
 import { z } from "zod";
 import { Effect } from "effect";
@@ -6,10 +6,10 @@ import { runAgent } from "./executor";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture, } from "./session-services";
 import { isolatedLedger } from "./isolated";
 import { CompactionPredecessorError } from "../../src/plugins/compaction/successor";
-import { closeSessions } from "../../src/session/run";
+import { closeSessions } from "../../src/core/run";
 import { session } from "../../src/testing/registry";
 import { hydrateSessionHistory } from "../../src/inspect/history";
-import { foldCheckpointAction } from "../../src/session/commit";
+import { foldCheckpointAction } from "../../src/core/commit";
 import { requireCommit } from "../../src/testing/commit";
 import { requestLedger } from "./request-ledger";
 import { paddingActions, reconstructionFixture, reconstructionSession, } from "./reconstruction-fixture";

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { PlainValue, PolicyRow } from "@openomni/protocol";
-import { compileGateRows, type GateHandler } from "../src/kernel/gate/compose";
+import { compileGateRows, type GateHandler } from "../src/core/gate/compose";
 import {
   compilePolicySnapshot,
   createNamedPolicyRegistry,
   KERNEL_POLICY_REGISTRY,
-} from "../src/kernel/gate/compile";
+} from "../src/core/gate/compile";
 import { fullPointTable, gateRow } from "./helpers/gate-rows";
 
 const table = fullPointTable();

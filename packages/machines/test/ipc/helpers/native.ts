@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { IdSource, Ipc } from "@openomni/protocol";
-import { connectIpcClient as connect, createIpcServer as listen, typedCall as nativeCall } from "../../../src/index";
+import { connectIpcClient as connect, createIpcServer as listen, typedCall as nativeCall } from "../../../src";
 import { PeerRequestTable as NativeTable } from "../../../src/ipc/peer-request-table";
 import { decodeIpcFailure } from "../../../src/failure";
 import { acquire, run, sync } from "./effects";

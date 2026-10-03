@@ -2,7 +2,7 @@ import { expect, it } from "bun:test";
 import { Effect } from "effect";
 import type { Message } from "@openomni/protocol";
 import { executeCompaction } from "../../src/plugins/compaction/execute-cut";
-import type { Executor } from "../../src/kernel/gate/decide";
+import type { Executor } from "../../src/core/gate/decide";
 import { isolated } from "../helpers/isolated";
 
 function assistant(id: string): Message.WithParts {

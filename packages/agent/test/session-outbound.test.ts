@@ -6,14 +6,14 @@ import { Database } from "bun:sqlite";
 import { seedPolicy } from "./helpers/seed-policy";
 import { receiveOutbound, failure, foreign } from "./helpers/effect-g2";
 import { isolated, isolatedLedger } from "./helpers/isolated";
-import * as SessionHandleStore from "../src/store/fence";
-import { closeSessions, type SessionRunner } from "../src/session/run";
+import * as SessionHandleStore from "../src/core/store/fence";
+import { closeSessions, type SessionRunner } from "../src/core/run";
 import { session } from "../src/testing/registry";
-import { resolveSessionRuntime } from "../src/session/run";
+import { resolveSessionRuntime } from "../src/core/run";
 import { createController } from "../src/testing/controller";
 import { reopenableLedger } from "./helpers/reopenable-ledger";
 import { canonicalDigest } from "@openomni/protocol";
-import { createSessionRequests } from "../src/session/request";
+import { createSessionRequests } from "../src/core/request";
 import { fileRequest, planeAnswer } from "./helpers/session-request-plane";
 
 /**

@@ -1,5 +1,5 @@
-import { Kernel } from "@openomni/agent";
-const defineTool = Kernel.defineTool;
+import { Core } from "@openomni/agent";
+const defineTool = Core.defineTool;
 import { z } from "zod";
 import { fileOperation, walker, type FilePorts } from "./core/filesystem";
 import { parseLocus } from "./locus";

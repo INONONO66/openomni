@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { BusEvent } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
-import { ObservationSink } from "../../src/kernel/ports";
-import { observationBusLayer } from "../../src/session/bus";
+import { ObservationSink } from "../../src/core/ports";
+import { observationBusLayer } from "../../src/core/bus";
 import { bounded } from "../helpers/bounded";
 import { runTestPromise } from "../helpers/isolated";
 

@@ -3,7 +3,7 @@ import { isolated } from "../helpers/isolated";
 import { describe, expect, it } from "bun:test";
 import type { Message, PlainValue } from "@openomni/protocol";
 import { z } from "zod";
-import { RunEvents } from "../../src/kernel/turn";
+import { RunEvents } from "../../src/core/turn";
 import { Bus } from "../helpers/bus";
 import { Compaction } from "../../src/plugins/compaction/compact";
 import type { ResolvedCompactionOptions, SummarizationBudget } from "../../src/plugins/compaction/contract";

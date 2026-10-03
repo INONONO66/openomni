@@ -1,30 +1,9 @@
-import type { SessionKernel } from "../session/entity";
-import type { LedgerAction, Model, PlainObject, PlainValue } from "@openomni/protocol";
+import type { Core } from "@openomni/agent";
+import type { Model, PlainObject, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { ExecutionError } from "../kernel/failure";
-import type { Executor } from "../kernel/gate/decide";
 
 function record(value: PlainValue | undefined): PlainObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-/** A route switch is evidence on the newly admitted attempt, not a rewritten selection. */
-export function attemptRouteChange(
-  previous: LedgerAction.Receipt | undefined,
-  next: PlainValue,
-): PlainValue {
-  if (previous === undefined) return null;
-  const from = record(record(previous.action.intent.value).value);
-  const to = record(next);
-  if (typeof from.provider !== "string" || typeof from.model !== "string" ||
-      typeof to.provider !== "string" || typeof to.model !== "string") return null;
-  if (from.provider === to.provider && from.model === to.model) return null;
-  return {
-    kind: "route.changed",
-    from: { provider: from.provider, model: from.model },
-    to: { provider: to.provider, model: to.model },
-    fromActionId: previous.action.id,
-  };
 }
 
 /**
@@ -34,7 +13,7 @@ export function attemptRouteChange(
  * own selection.
  */
 export function pinnedModelSelection(
-  kernel: SessionKernel,
+  kernel: Core.SessionKernel,
   sessionId: string,
   turnId: string,
 ): Model.Ref | undefined {
@@ -51,10 +30,10 @@ export function pinnedModelSelection(
  * the policy refused it.
  */
 export function restoreModelSelection(
-  executor: Pick<Executor, "run">,
+  executor: Pick<Core.Executor, "run">,
   pinned: Model.Ref | undefined,
   chain: readonly Model.Ref[],
-): Effect.Effect<number, ExecutionError> {
+): Effect.Effect<number, Core.ExecutionError> {
   return Effect.suspend(() => {
   const primary = chain[0];
   if (pinned === undefined || primary === undefined) return Effect.succeed(0);

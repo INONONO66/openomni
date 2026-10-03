@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import * as SessionHandleStore from "../../src/store/fence";
-import { openCatalogStore } from "../../src/store/catalog";
-import { openSessionStore } from "../../src/store/session-file";
-import { SessionEntity } from "../../src/session/entity";
-import { receivedMessageAction } from "../../src/session/commit";
+import * as SessionHandleStore from "../../src/core/store/fence";
+import { openCatalogStore } from "../../src/core/store/catalog";
+import { openSessionStore } from "../../src/core/store/session-file";
+import { SessionEntity } from "../../src/core/entity";
+import { receivedMessageAction } from "../../src/core/commit";
 import { runAgent } from "../helpers/executor";
 import { clusterTempDir, runCluster, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
 

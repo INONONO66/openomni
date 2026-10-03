@@ -9,24 +9,24 @@ import { testExecutor } from "./executor";
 import { catalogLayer, dispatcherToolPorts } from "./service-layers";
 import { type ChatFixture as ChatAgentConfig, fixtureConfigHead, fixtureTraceContext, prepareChatFixture, } from "./chat-services";
 import type { SessionFixture as SessionRuntime } from "./session-services";
-import { createSessionChatRunner } from "../../src/session/run";
-import { createTurnDispatcher } from "../../src/kernel/tool";
+import { createSessionChatRunner } from "../../src/core/run";
+import { createTurnDispatcher } from "../../src/core/tool";
 import type { AnyToolDefinition } from "@openomni/protocol";
 import type { Run, RunInput } from "../../src/model";
-import type {} from "../../src/session/run";
+import type {} from "../../src/core/run";
 import { PlainValueSchema } from "@openomni/protocol";
 import { createCompactionPlan } from "../../src/plugins/compaction/durable";
-import { createAssistantMessage } from "../../src/kernel/message-factory";
+import { createAssistantMessage } from "../../src/core/message-factory";
 import { foldSessionHistory } from "../../src/inspect/history";
-import type { SessionRunnerInput, SessionRunnerResult } from "../../src/session/run";
+import type { SessionRunnerInput, SessionRunnerResult } from "../../src/core/run";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import type { LedgerAction, SessionTransition } from "@openomni/protocol";
-import type { CompiledPolicySnapshot } from "../../src/kernel/gate/compile";
-import type { ChatAgentInput } from "../../src/kernel/types";
+import type { CompiledPolicySnapshot } from "../../src/core/gate/compile";
+import type { ChatAgentInput } from "../../src/core/types";
 import type { Sink } from "../../src/model";
-import type { ExecutorOptions, DurableExecutor } from "../../src/kernel/gate/decide";
-import type { SessionHandle } from "../../src/session/run";
-import { AgentFailure, CommitFailed } from "../../src/kernel/failure";
+import type { ExecutorOptions, DurableExecutor } from "../../src/core/gate/decide";
+import type { SessionHandle } from "../../src/core/run";
+import { AgentFailure, CommitFailed } from "../../src/core/failure";
 import { allowAllPolicy } from "./compiled-policy";
 import { runInput } from "./run-input";
 
@@ -112,7 +112,7 @@ export function receiveOutbound(message: SessionTransition.OutboundMessage, crea
       parentActionId: null,
     }),
   ).pipe(
-    Effect.mapError((error: import("../../src/store/errors").LedgerError) => new CommitFailed({ error })),
+    Effect.mapError((error: import("../../src/core/store/errors").LedgerError) => new CommitFailed({ error })),
   );
 }
 export function suspendedRequest(handle: SessionHandle, suspended: Promise<void>) {

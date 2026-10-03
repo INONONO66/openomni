@@ -1,13 +1,13 @@
 import { canonicalDigest, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, type SessionGeneration, type PlainObject } from "@openomni/protocol";
 import { Clock, Effect } from "effect";
-import { AgentFailure, CommitFailed, type ExecutionError } from "../kernel/failure";
+import { AgentFailure, CommitFailed, type ExecutionError } from "./failure";
 import { receivedMessageAction } from "./commit";
 import { requestBindingDigest } from "./request-binding";
 export { requestBindingDigest } from "./request-binding";
-import * as SessionHandleStore from "../store/fence";
+import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./entity";
 import { type SessionRuntime, getSessionHandle, adoptSessionAuthority } from "./run";
-import { Entropy } from "../kernel/ports";
+import { Entropy } from "./ports";
 
 // ─── from session-request.ts (#1247) ───
 export interface RequestDecision {

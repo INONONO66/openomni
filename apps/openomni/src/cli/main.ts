@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { listenForAbort } from "@openomni/protocol";
 import { gatewayRuntime } from "../gateway";
 import { loadConfig, resolveClusterStorage } from "../config";
-import { installShutdownHandlers, startOpenOmni } from "../index";
+import { installShutdownHandlers, startOpenOmni } from "..";
 import { type CliDeps, runCli } from "./commands";
 import { attachConfiguredMachine } from "./machine";
 import { platformEntropy } from "../composition/platform";

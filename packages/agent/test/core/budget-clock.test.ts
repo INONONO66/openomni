@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { collector } from "../helpers/observation-collector";
-import { createBudgetState, evaluateBudget, publishBudgetTelemetry } from "../../src/kernel/budget";
+import { createBudgetState, evaluateBudget, publishBudgetTelemetry } from "../../src/core/budget";
 
 /**
  * #1245: the wall-time budget reads only the injected clock. The ceiling is a

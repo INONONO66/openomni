@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { Machine } from "@openomni/protocol";
-import { createCodemode as create } from "../../../src/codemode/index";
+import { createCodemode as create } from "../../../src/codemode";
 import { PythonKernel as NativeKernel } from "../../../src/codemode/kernel";
 import { decodeCodeFailure } from "../../../src/failure";
 import type { CodeError } from "../../../src/codemode/errors";

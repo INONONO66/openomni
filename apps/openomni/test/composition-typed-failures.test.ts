@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { Effect } from "effect";
-import type { Journal } from "@openomni/agent";
-type CommitReceipt = Journal.CommitReceipt;
+import type { Core } from "@openomni/agent";
+type CommitReceipt = Core.CommitReceipt;
 import type { LedgerSession } from "@openomni/protocol";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "../src/composition/ingress-executor";
 import { messageMaterialization, prepareMessage } from "../src/composition/message-session";

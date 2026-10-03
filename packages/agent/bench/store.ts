@@ -6,9 +6,9 @@ import { Bench } from "tinybench";
 import { L0Observation, type LedgerSession, type Message } from "@openomni/protocol";
 import { Bus } from "../test/store/helpers/observation";
 import { materializeSession } from "../test/store/helpers/session";
-import { openCatalogStore } from "../src/store/catalog";
-import { openSessionStore } from "../src/store/session-file";
-import * as SessionHandleStore from "../src/store/fence";
+import { openCatalogStore } from "../src/core/store/catalog";
+import { openSessionStore } from "../src/core/store/session-file";
+import * as SessionHandleStore from "../src/core/store/fence";
 import { prepareTurnCommit, seedTurnHistory } from "./seed-turn-history";
 
 type BenchmarkResult = {

@@ -1,12 +1,12 @@
-import * as SessionHandleStore from "../../src/store/fence";
+import * as SessionHandleStore from "../../src/core/store/fence";
 import type { AnyToolDefinition, Tool } from "@openomni/protocol";
 import { Clock, Context, Effect, Layer } from "effect";
-import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
-import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../../src/kernel/ports";
-import { scopeObservation } from "../../src/session/bus";
+import type { ResolvedExecutorOptions } from "../../src/core/gate/decide";
+import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../../src/core/ports";
+import { scopeObservation } from "../../src/core/bus";
 import { testBusService } from "./isolated";
 import { entropySource, fixedClock } from "./time";
-import { createTurnDispatcher } from "../../src/kernel/tool";
+import { createTurnDispatcher } from "../../src/core/tool";
 
 /** The dispatcher-backed tool surface of a chat fixture config. */
 export function dispatcherToolPorts(

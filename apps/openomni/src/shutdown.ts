@@ -1,7 +1,7 @@
-import { Session, type Kernel } from "@openomni/agent";
-const closeSessions = Session.closeSessions;
-type SessionError = Kernel.SessionError;
-type SessionRuntime = Session.SessionRuntime;
+import { Core } from "@openomni/agent";
+const closeSessions = Core.closeSessions;
+type SessionError = Core.SessionError;
+type SessionRuntime = Core.SessionRuntime;
 import { Effect, Result } from "effect";
 import { type AppLifecycleFailure, lifecycleFailure } from "./runtime";
 

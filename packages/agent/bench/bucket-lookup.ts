@@ -1,6 +1,6 @@
-import { KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
+import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import { expect, test } from "bun:test";
-import { createPolicyCompiler, type PolicyEvaluationInput } from "../src/kernel/gate/compile";
+import { createPolicyCompiler, type PolicyEvaluationInput } from "../src/core/gate/compile";
 import { atGeneration, compaction, draft, MemoryPolicyRows, unrelatedRows, } from "../test/kernel/gate/row-fixtures";
 
 const ROW_COUNT = 220;

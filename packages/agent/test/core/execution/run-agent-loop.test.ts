@@ -20,15 +20,15 @@ import { expect, test, spyOn } from "bun:test";
 import { seedPolicy } from "../../helpers/seed-policy";
 import { Message, canonicalDigest, type LedgerSession, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
-import { closeSessions } from "../../../src/session/run";
+import { closeSessions } from "../../../src/core/run";
 import { session } from "../../../src/testing/registry";
-import { createSessionChatRunner } from "../../../src/session/run";
+import { createSessionChatRunner } from "../../../src/core/run";
 import {
   sessionTool,
   defineTool,
   eraseTool,
-} from "../../../src/kernel/tool";
-import { createAssistantMessage } from "../../../src/kernel/message-factory";
+} from "../../../src/core/tool";
+import { createAssistantMessage } from "../../../src/core/message-factory";
 import { reopenableLedger } from "../../helpers/reopenable-ledger";
 import { restoreCompactionProjection } from "../../../src/plugins/compaction/durable";
 import { assistantStep } from "../../helpers/dispatching-runner";
@@ -72,7 +72,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
           async (
             request: import("../../../src/model").RunInput,
             sink: import("../../../src/model").Sink,
-            input: import("../../../src/session/run").SessionRunnerInput,
+            input: import("../../../src/core/run").SessionRunnerInput,
           ) => {
             inputs.push(structuredClone(request.messages));
             calls += 1;
@@ -215,7 +215,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
         const summarizing = Promise.withResolvers<void>();
         const summary = Promise.withResolvers<string>();
         const runner = createSessionChatRunner({
-          prepare: (input: import("../../../src/session/run").SessionRunnerInput) =>
+          prepare: (input: import("../../../src/core/run").SessionRunnerInput) =>
             Effect.gen(function* () {
               const dispatcher = yield* testTurnDispatcher(input, runtime);
               return prepareChatFixture({

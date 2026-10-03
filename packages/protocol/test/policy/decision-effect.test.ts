@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
-import { Policy } from "../../src/policy/index";
+import { Policy } from "../../src/policy";
 
 const it = test;
 

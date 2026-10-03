@@ -1,7 +1,7 @@
 import { z } from "zod";
-import * as SessionHandleStore from "../store/fence";
-import type { SessionKernel } from "../session/entity";
-import { AgentInvariantViolation } from "../kernel/failure";
+import * as SessionHandleStore from "../core/store/fence";
+import type { SessionKernel } from "../core/entity";
+import { AgentInvariantViolation } from "../core/failure";
 import { canonicalDigest, FoldCheckpoint, NamedError, Message, PlainValueSchema, Tool, type LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
 
 /**

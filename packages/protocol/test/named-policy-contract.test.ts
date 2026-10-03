@@ -6,7 +6,7 @@ import {
   RowVerdictRead,
   SessionGeneration,
   SessionHistory,
-} from "../src/index";
+} from "../src";
 
 describe("durable named-policy wire contract", () => {
   test("transform rows require namespaced refs and JSON-only config", () => {
