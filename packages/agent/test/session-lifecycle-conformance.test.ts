@@ -483,7 +483,7 @@ const TURN_PREFIX = [
     "session.configure:configured",
     "prompt:-",
     "policy.decision:result",
-    "inbox.deliver:delivery",
+    "prompt:delivery",
     "turn:pending",
     "policy.decision:result",
 ];
@@ -578,7 +578,7 @@ describe("session lifecycle conformance", () => {
             "session.configure",
             "prompt",
             "policy.decision",
-            "inbox.deliver",
+            "prompt",
             "turn",
             "policy.decision",
             "policy.decision",
@@ -597,16 +597,16 @@ describe("session lifecycle conformance", () => {
             ],
         });
         const wait = result.named.get("WAIT")?.get("W");
-        expect(shape(wait)).toEqual([...TURN_PREFIX, ...WAVE_PRE, ...WAVE_INTENT, "request:state"]);
+        expect(shape(wait)).toEqual([...TURN_PREFIX, ...WAVE_PRE, ...WAVE_INTENT, "request:open"]);
         expect(wait?.requests.map((request: SessionTransition.Request) => request.state)).toEqual(["open"]);
         const approved = result.named.get("WAVE_APPROVED")?.get("W");
         expect(shape(approved)).toEqual([
             ...TURN_PREFIX,
             ...WAVE_PRE,
             ...WAVE_INTENT,
-            "request:state",
-            "reply:state",
-            "request:state",
+            "request:open",
+            "request:answered",
+            "request:resolved",
             ...WAVE.map(() => "tool:application"),
             ...WAVE.flatMap(() => ["policy.decision:result", "tool:result"]),
             ...TURN_SUFFIX,
@@ -715,8 +715,8 @@ describe("session lifecycle conformance", () => {
                 ...WAVE_PRE,
                 ...WAVE_INTENT,
                 ...(id === "REFUSED"
-                    ? ["request:state", "reply:state", "request:state"]
-                    : ["request:state", "request:state", "request:state"]),
+                    ? ["request:open", "request:answered", "request:resolved"]
+                    : ["request:open", "request:expired", "request:expired"]),
                 ...blockedTail,
             ]);
             expect(final?.row).toMatchObject({ revision: 29, state: "idle" });
@@ -747,12 +747,12 @@ describe("session lifecycle conformance", () => {
             ...TURN_PREFIX,
             ...WAVE_PRE,
             ...WAVE_INTENT,
-            "request:state",
-            "prompt:-",
-            "request:state",
-            "request:state",
+            "request:open",
+            "signal:-",
+            "request:resolved",
+            "request:resolved",
             ...WAVE.map(() => "tool:result"),
-            "inbox.deliver:delivery",
+            "signal:delivery",
             "turn:terminal",
         ]);
         expect(cancelled?.row).toMatchObject({ revision: 24, state: "interrupted" });
@@ -1099,17 +1099,17 @@ describe("session lifecycle conformance", () => {
         expect(stale?.requests[0]).toMatchObject({ state: "resolved", outcome: "answered" });
         expect(resolutions(stale)).toEqual([
             ["request", "opened"],
-            ["reply", "rejected"],
-            ["reply", "rejected"],
-            ["reply", "rejected"],
-            ["reply", "resolved"],
+            ["request", "rejected"],
+            ["request", "rejected"],
+            ["request", "rejected"],
+            ["request", "resolved"],
             ["request", "resolved"],
             ["prompt", undefined],
         ]);
         // A misrouted answer is refused before any record: neither session keeps it.
         const misrouted = [...result.final.values()].flatMap((snapshot: SessionSnapshot) => snapshot.actions.filter((action: LedgerAction.Node) => action.id.includes("corrupt-session")));
         expect(misrouted).toEqual([]);
-        expect(resolutions(result.final.get("answer-refuse")).at(-1)).toEqual(["reply", "duplicate"]);
+        expect(resolutions(result.final.get("answer-refuse")).at(-1)).toEqual(["request", "duplicate"]);
     })));
     test("T11 refused stale executor CAS runs zero bodies and publishes zero observations", () => traceTest(() => Effect.gen(function* () {
         const runtime = runtimeFor();
@@ -1152,7 +1152,7 @@ describe("session lifecycle conformance", () => {
         const facts = { notBefore: 1250, deadline: 2000, jitter: 0.375, remainingBudget: 3, route: "provider/model", provenance: "retry-after" };
         const handle = yield* withSessionServices(session({ id: "REPLAY", role: "resident", runner: (input) => Effect.gen(function* () {
             bodies += 1;
-            yield* input.ledger.commit({ id: "recorded-retry", sessionId: input.sessionId, parentId: input.turnId, kind: "attempt", ts: 1025,
+            yield* input.ledger.commit({ id: "recorded-retry", sessionId: input.sessionId, parentId: input.turnId, kind: "llm", ts: 1025,
                 intent: { encodingVersion: 1, value: { phase: "retry.scheduled", ...facts } },
                 effect: { encodingVersion: 1, value: { phase: "scheduled", ...facts } }, irreversible: true }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
             return { kind: "result", text: "recorded" };
@@ -1179,7 +1179,7 @@ function assertRequestRaces(result: TraceResult): void {
     });
     // Late reply settles the request as outcome_unknown once; the delayed timer
     // is recorded once as a duplicate input, its retry commits nothing.
-    expect(kinds(late).slice(4)).toEqual(["request", "reply", "request", "request"]);
+    expect(kinds(late).slice(4)).toEqual(["request", "request", "request", "request"]);
     expect(late?.actions.slice(4).map((action: LedgerAction.Node) => objectValue(action.effect.value)?.resolution)).toEqual(["opened", "late_unknown", "late_unknown", "duplicate"]);
     const cancelled = result.final.get("QCANCEL");
     expect(cancelled?.requests[0]).toMatchObject({
@@ -1192,7 +1192,7 @@ function assertRequestRaces(result: TraceResult): void {
         ["request", "opened"],
         ["request", "cancelled"],
         ["request", "cancelled"],
-        ["reply", "duplicate"],
+        ["request", "duplicate"],
     ]);
     expect(cancelled?.inbox).toEqual([]);
     const answered = result.final.get("QANSWER");
@@ -1205,7 +1205,7 @@ function assertRequestRaces(result: TraceResult): void {
     // later Owner cancel is recorded once as a duplicate and changes nothing.
     expect(resolutions(answered)).toEqual([
         ["request", "opened"],
-        ["reply", "resolved"],
+        ["request", "resolved"],
         ["request", "resolved"],
         ["prompt", undefined],
         ["request", "duplicate"],
@@ -1217,9 +1217,9 @@ function assertRequestRaces(result: TraceResult): void {
     expect(rejected?.requests[0]).toMatchObject({ state: "open", seenReplyIds: [], replies: [] });
     expect(resolutions(rejected)).toEqual([
         ["request", "opened"],
-        ["reply", "rejected"],
-        ["reply", "rejected"],
-        ["reply", "rejected"],
+        ["request", "rejected"],
+        ["request", "rejected"],
+        ["request", "rejected"],
     ]);
 }
 /** The complete snapshot of `sessionId` after the named step; a missing one fails the trace. */
@@ -1298,7 +1298,7 @@ function reply(q: SessionTransition.Request, inputId: string, receivedAt: number
         generation: q.generation,
         toolsHash: q.toolsHash,
         domainRevisions: q.domainRevisions,
-        decision: "reply",
+        decision: "answer",
         allowedAction: "report_result",
         content: "ok",
     };

@@ -60,7 +60,8 @@ baselines). A PR is admitted by:
   suppression-free) and `check-types`.
 - **Dependency Rules** (`deps`): topology, dependency bands, guards,
   side-effects, tool lint, plus the relocated structural gates
-  `check-dead-exports.ts`, `check-import-cycles.ts` and
+  `check-dead-exports.ts`, `check-import-cycles.ts`,
+  `check-journal-writers.ts` (one writer module per journal kind, #1252) and
   `verify-tsconfig-inheritance.ts`.
 - **Tests**: selected workspace lanes and, for tooling/full plans, the two
   scripts-tooling shards; `scripts-contracts` always runs.

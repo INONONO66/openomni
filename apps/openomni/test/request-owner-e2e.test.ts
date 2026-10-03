@@ -314,7 +314,7 @@ test("real Owner socket cannot apply an original Person invocation against a cha
     const previous = sessionActions(drifted);
     expect(sessionActions(after).slice(0, previous.length)).toEqual(previous);
     expect(sessionActions(after).slice(previous.length)).toMatchObject([
-      { kind: "reply", effect: { value: { resolution: "rejected" } } },
+      { kind: "request", effect: { value: { resolution: "rejected" } } },
     ]);
     expect(after.modelCalls).toBe(1);
     noLegacy(after);

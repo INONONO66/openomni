@@ -266,12 +266,12 @@ function historyPageIn(
   });
 }
 
-function stateEffect(action: LedgerAction.Node) {
+function stateEffect(action: LedgerAction.Node, label: "outbound" | "state" = "state") {
   const effect = action.effect.value;
   if (effect === null || typeof effect !== "object" || Array.isArray(effect))
     throw new LedgerInvariant({
       operation: "session.stateEffect",
-      message: `invalid ${action.kind === "outbound" ? "outbound" : "state"} action effect`,
+      message: `invalid ${label} action effect`,
     });
   return effect;
 }
@@ -309,7 +309,7 @@ function outboundStatesPageIn(
 ) {
   return requiredActionsIn(context)
     .outboundStatesPage(sessionId, cursor, limit)
-    .map((action) => SessionTransition.Outbound.parse(stateEffect(action).outbound));
+    .map((action) => SessionTransition.Outbound.parse(stateEffect(action, "outbound").outbound));
 }
 
 function outboundRowsIn(
@@ -331,7 +331,7 @@ const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string() });
 
 /**
  * Pending-message projection (W5.2): `prompt` actions carrying an inbox
- * payload whose id no `inbox.deliver` action references yet, folded from the
+ * payload whose id no delivery row references yet, folded from the
  * chain — there is no inbox table.
  */
 function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
@@ -485,8 +485,11 @@ export function turnTerminal(
   return parsed.success ? parsed.data : undefined;
 }
 
+const DELIVERY_KINDS: ReadonlySet<string> = new Set(["prompt", "signal", "action"]);
+
+/** A delivered-input journal row (#1252): prompt/signal/action with a delivery-phase effect. */
 export function delivery(action: LedgerAction.Node | undefined): SessionTurn.Delivery | undefined {
-  if (action?.kind !== "inbox.deliver") return undefined;
+  if (action === undefined || !DELIVERY_KINDS.has(action.kind)) return undefined;
   const parsed = SessionTurn.Delivery.safeParse(action.effect.value);
   return parsed.success ? parsed.data : undefined;
 }
@@ -703,9 +706,9 @@ interface TailFold {
 
 /** Route each window row by its stored phase so only the needed schema parses. */
 function foldTailAction({ tails, pending }: TailWindow, action: LedgerAction.Node): void {
-  if (action.kind === "inbox.deliver") {
-    const delivered = delivery(action);
-    if (delivered === undefined || delivered.kind !== "prompt") return;
+  const delivered = delivery(action);
+  if (delivered !== undefined) {
+    if (delivered.kind !== "prompt") return;
     const message = { role: "user" as const, text: delivered.content };
     const open = tails.get(delivered.turnId);
     if (open !== undefined) open.messages.push(message);

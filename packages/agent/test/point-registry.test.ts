@@ -226,13 +226,13 @@ describe("gate-row compose rejections (#1251)", () => {
     ).toBe("post_end_emit");
   });
 
-  it("rejects prompt and signal emissions: the emit set is message | alarm.arm | compaction only", () => {
+  it("rejects prompt and signal emissions: the emit set is message | alarm | compaction only", () => {
     for (const emit of ["prompt", "signal"]) {
       expect(
         rejectionCode(() => compile([gateRow("tool.post", { do: "emit", how: { emit } })])),
       ).toBe("bad_action");
     }
-    for (const emit of ["message", "alarm.arm", "compaction"]) {
+    for (const emit of ["message", "alarm", "compaction"]) {
       expect(() =>
         compile([gateRow("tool.post", { do: "emit", how: { emit, intent: { body: "x" } } })]),
       ).not.toThrow();

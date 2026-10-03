@@ -149,7 +149,7 @@ describe("fenced session write discipline", () => {
         id: `${row.id}:delivery`,
         parentId: index === 0 ? null : `${prompts[index - 1]?.id}:delivery`,
         sessionId,
-        kind: "inbox.deliver",
+        kind: "prompt",
         intent: { encodingVersion: 1, value: { inboxId: row.id } },
         effect: { encodingVersion: 1, value: { content: row.id } },
         irreversible: true,

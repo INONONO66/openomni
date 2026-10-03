@@ -103,7 +103,7 @@ test("gateway request port commits physical bindings and receiving intake withou
     generation: request.generation,
     toolsHash: request.toolsHash,
     domainRevisions: {},
-    decision: "reply" as const,
+    decision: "answer" as const,
     allowedAction: "report_result" as const,
     content: "answer",
   };

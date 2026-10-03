@@ -83,8 +83,22 @@ async function turn(options: {
       );
     }),
   );
+  // #1252: attempts share the llm kind; logical rows carry no attempt ordinal
+  // and are not children of an attempt intent.
+  const attemptIds = new Set(
+    recording.committed
+      .filter(
+        (action: import("@openomni/protocol").LedgerAction.Append) =>
+          action.kind === "llm" &&
+          (action.intent.value as { attempt?: number }).attempt !== undefined,
+      )
+      .map((action: import("@openomni/protocol").LedgerAction.Append) => action.id),
+  );
   const llm = recording.committed.filter(
-    (action: import("@openomni/protocol").LedgerAction.Append) => action.kind === "llm",
+    (action: import("@openomni/protocol").LedgerAction.Append) =>
+      action.kind === "llm" &&
+      (action.intent.value as { attempt?: number }).attempt === undefined &&
+      !attemptIds.has(action.parentId ?? ""),
   );
   const decisions = recording.committed
     .filter(

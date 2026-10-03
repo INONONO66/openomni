@@ -6,7 +6,7 @@ import { expectCommitted, requestFixture, requestStateAction } from "../helpers/
 const stores = useSqliteStores("request-storage");
 
 test.each([
-  "reply",
+  "answer",
   "approval",
 ] as const)("%s retains original invocation and request snapshots across restart", (mode) => {
   const { request, original, commit } = requestFixture(stores.kernel, mode);
@@ -34,7 +34,7 @@ test("reply snapshots advance current state without changing original history", 
     seenReplyIds: ["reply"],
     replies: [{ replyId: "reply", responderId: "alice", content: "done", receivedAt: 5 }],
   };
-  expectCommitted(commit([requestStateAction(terminal, "original:resolution", "reply")]));
+  expectCommitted(commit([requestStateAction(terminal, "original:resolution", "answered")]));
   expect(stores.kernel.requestById("original")).toEqual(terminal);
   expect(
     sessionTree(request.sessionId, stores.session.actions).slice(0, initialTree.length),
@@ -56,7 +56,6 @@ test("duplicate terminal identities and stale revisions leave the entire action 
       outcome: "cancelled",
     },
     "original:resolution",
-    "reply",
   );
   expectCommitted(commit([terminal]));
   const before = sessionTree(request.sessionId, stores.session.actions);

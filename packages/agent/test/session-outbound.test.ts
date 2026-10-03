@@ -317,7 +317,8 @@ test("outbound insert failure rolls back the source terminal in the same SQLite 
   fileRequest((dbPath) =>
     Effect.gen(function* () {
       using raw = new Database(dbPath);
-      raw.run(`CREATE TRIGGER refuse_outbound BEFORE INSERT ON action WHEN NEW.kind = 'outbound'
+      raw.run(`CREATE TRIGGER refuse_outbound BEFORE INSERT ON action
+    WHEN NEW.kind = 'message' AND json_extract(NEW.intent, '$.op') = 'open'
     BEGIN SELECT RAISE(ABORT, 'test outbound fault'); END`);
       const runtime: SessionFixture = {
         authorizeConfigure: allowConfigure,

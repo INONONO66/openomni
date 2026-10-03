@@ -47,6 +47,20 @@ function pendingInbox(id = sessionId) {
 function results(kind: LedgerAction.Kind) {
   return actions().filter((action) => action.kind === kind && effectOf(action).phase === "result");
 }
+/** #1252: attempts share the llm kind; an attempt result settles an intent pinning its ordinal. */
+function attemptIds() {
+  return new Set(
+    actions()
+      .filter((action) => action.kind === "llm" && typeof intentOf(action).attempt === "number")
+      .map((action) => action.id),
+  );
+}
+function llmResults(which: "attempt" | "logical") {
+  const ids = attemptIds();
+  return results("llm").filter(
+    (action) => (which === "attempt") === ids.has(action.parentId ?? ""),
+  );
+}
 function terminalClass(action: LedgerAction.Node) {
   const terminal = z
     .enum(["executed", "failed", "outcome_unknown"])
@@ -90,16 +104,16 @@ function recoverExecutor(witness: Witness) {
       return "not_durable";
     case "llm_body_before_attempt_result_commit":
       expect(witness.bodies).toEqual(["llm"]);
-      expect(witness.pending).toMatchObject({ kind: "attempt", effect: { terminal: "executed" } });
-      expect(results("attempt").map(effectOf)).toMatchObject([
+      expect(witness.pending).toMatchObject({ kind: "llm", effect: { terminal: "executed" } });
+      expect(llmResults("attempt").map(effectOf)).toMatchObject([
         { terminal: "outcome_unknown", recovery: { site: "crash", rawSettled: false } },
       ]);
-      return terminalClass(nth(results("llm"), 0));
+      return terminalClass(nth(llmResults("logical"), 0));
     case "llm_result_committed":
       expect(witness.bodies).toEqual(["llm"]);
       expect(recovered).toEqual(before);
-      expect(results("attempt").map(effectOf)).toMatchObject([{ terminal: "executed" }]);
-      return terminalClass(nth(results("llm"), 0));
+      expect(llmResults("attempt").map(effectOf)).toMatchObject([{ terminal: "executed" }]);
+      return terminalClass(nth(llmResults("logical"), 0));
     case "tool_wave_between_result_commits":
       expect(witness.bodies).toEqual(["first", "second"]);
       expect(
@@ -356,7 +370,12 @@ function recoverContinuation(witness: Witness) {
 function recoverRetryAlarm(witness: Witness) {
   return Effect.gen(function* () {
   expect(witness.bodies).toEqual(["llm"]);
-  const attempts = actions().filter((action) => action.kind === "attempt");
+  const ids = attemptIds();
+  const attempts = actions().filter(
+    (action) =>
+      action.kind === "llm" &&
+      (ids.has(action.id) || ids.has(action.parentId ?? "")),
+  );
   expect(attempts.map(intentOf)).toMatchObject([
     { phase: "intent", attempt: 1 },
     { phase: "result" },
@@ -364,7 +383,7 @@ function recoverRetryAlarm(witness: Witness) {
   const alarmId = `${nth(attempts, 0).id}:retry:1`;
   const armed = actions().find((action) => action.id === alarmId);
   expect(armed).toMatchObject({
-    kind: "alarm.arm",
+    kind: "alarm",
     effect: {
       value: { status: "armed", spec: { kind: "retry.scheduled", attempt: 1, notBefore: 100 } },
     },
@@ -388,7 +407,7 @@ function recoverRetryAlarm(witness: Witness) {
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(pendingInbox()).toEqual([]);
   expect(
-    actions().filter((action) => action.kind === "alarm.arm" && action.id.includes(":retry:")),
+    actions().filter((action) => action.kind === "alarm" && action.id.includes(":retry:")),
   ).toHaveLength(1);
   return "rearmed";
   });
@@ -398,7 +417,7 @@ function recoverStaleOwner(witness: Witness) {
   return Effect.gen(function* () {
   expect(witness.bodies).toEqual(["llm"]);
   const staleAction = LedgerAction.Append.parse(witness.staleAction);
-  expect(staleAction.kind).toBe("attempt");
+  expect(staleAction.kind).toBe("llm");
   expect(effectOf(staleAction)).toMatchObject({ phase: "result", terminal: "executed" });
   const owner = z.string().parse(witness.lease.owner);
   let refusals = 0;
@@ -421,7 +440,7 @@ function recoverStaleOwner(witness: Witness) {
     return undefined;
   }));
   expect(refusals).toBe(1);
-  expect(results("attempt").filter((action) => action.parentId === staleAction.parentId).map(effectOf)).toMatchObject([
+  expect(results("llm").filter((action) => action.parentId === staleAction.parentId).map(effectOf)).toMatchObject([
     { terminal: "outcome_unknown", recovery: { site: "crash", rawSettled: false } },
   ]);
   // Write disposition and ambiguous effect disposition are independent assertions.
@@ -523,7 +542,7 @@ async function watchWakeCell(dbPath: string) {
   expect(typeof witness.lease.owner).toBe("string");
   const proof = await recoverMessagePlane(point, dbPath);
   expect(proof.watch).toEqual({ occurrenceId: "doorbell:fired:1", redelivery: "duplicate_occurrence", fired: 1 });
-  expect(proof.before.filter(({ kind }) => kind === "alarm.fired")).toHaveLength(1);
+  expect(proof.before.filter(({ kind }) => kind === "alarm")).toHaveLength(1);
   const pending = proof.inboxBefore.filter(({ status }) => status === "pending");
   expect(pending).toHaveLength(1);
   expect(proof.inboxAfter.filter(({ id, status }) => id === pending[0]?.id && status === "consumed")).toHaveLength(1);

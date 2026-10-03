@@ -502,11 +502,15 @@ describe("durable session handle", () => {
         const result = yield* awaitSignal(handle.prompt("run once"));
 
         const actions = tree(handle.id);
-        const prompt = actions.find((action) => action.kind === "prompt");
+        // #1252: the delivery row shares the prompt kind; the admission row has no delivery phase.
+        const isAdmittedPrompt = (action: (typeof actions)[number]) =>
+          action.kind === "prompt" &&
+          (action.effect.value as { phase?: string } | null)?.phase !== "delivery";
+        const prompt = actions.find(isAdmittedPrompt);
         const turn = actions.find((action) => SessionHandleStore.turnIntent(action) !== undefined);
         const decisions = actions.filter((action) => action.kind === "policy.decision");
         expect(result).toEqual({ kind: "result", text: "complete" });
-        expect(actions.filter((action) => action.kind === "prompt")).toHaveLength(1);
+        expect(actions.filter(isAdmittedPrompt)).toHaveLength(1);
         expect(actions.filter((action) => action.kind === "turn")).toHaveLength(2);
         // Prompt has no post point (#1251): the executor consults prompt.pre only.
         expect(decisions.map(policyHook).sort()).toEqual([

@@ -17,7 +17,7 @@ const answer: SessionTransition.Answer = {
   generation: 1,
   toolsHash: "tools",
   domainRevisions: {},
-  decision: "reply",
+  decision: "answer",
   allowedAction: "report_result",
   content: "answer",
 };

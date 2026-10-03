@@ -160,7 +160,9 @@ function beforeResult(point: CrashPoint, action: LedgerAction.Append, toolResult
   switch (point) {
     case "llm_body_before_attempt_result_commit":
     case "owner_reclaimed_before_stale_transcript_flush":
-      return action.kind === "attempt";
+      // #1252: attempts share the llm kind; the attempt result is the one
+      // carrying durable usage provenance.
+      return action.kind === "llm" && effectOf(action).usageProvenance !== undefined;
     case "tool_wave_between_result_commits":
       return action.kind === "tool" && toolResults === 2;
     case "compaction_summary_before_result_commit":
@@ -181,7 +183,8 @@ function intercept(ledger: ExecutionLedger, point: CrashPoint, bodies: string[])
         if (beforeResult(point, action, toolResults)) return stop(point, bodies, action);
         const receipt = yield* ledger.commit(action);
         const after =
-          (point === "llm_result_committed" && action.kind === "llm") ||
+          (point === "llm_result_committed" && action.kind === "llm" &&
+            effectOf(action).usageProvenance === undefined) ||
           (committedCompactionPoints.has(point) && action.kind === "compaction");
         if (after && result) return stop(point, bodies, action);
         return receipt;

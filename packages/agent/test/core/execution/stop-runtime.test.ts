@@ -16,7 +16,7 @@ import { isolated, isolatedLedger } from "../../helpers/isolated";
 import { collector } from "../../helpers/observation-collector";
 import { commitReceivedMessage } from "../../helpers/ingress";
 
-/** The alarm table is gone: an armed alarm is an `alarm.arm` chain action with no settling child. */
+/** The alarm table is gone: an armed alarm is an armed `alarm` chain action with no settling child. */
 function armAlarm(id: string): void {
   const ledger = isolatedLedger();
   const appended = ledger.session.actions.append(
@@ -24,15 +24,15 @@ function armAlarm(id: string): void {
       id,
       parentId: null,
       sessionId: "stop",
-      kind: "alarm.arm",
-      intent: { encodingVersion: 1, value: { phase: "intent", op: "alarm.arm" } },
+      kind: "alarm",
+      intent: { encodingVersion: 1, value: { phase: "intent", op: "arm" } },
       effect: { encodingVersion: 1, value: { phase: "result" } },
       ts: Date.now(),
       irreversible: true,
     },
     ledger.kernel.row("stop").revision,
   );
-  if (appended === undefined) throw new Error("alarm.arm append refused");
+  if (appended === undefined) throw new Error("alarm arm append refused");
 }
 
 function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "prior-alarm") {
@@ -186,7 +186,10 @@ for (const [mode, reason, count] of [
     expect(outcome.snapshot.turns[0]?.terminal?.kind).toBe("error");
     if (mode === "blocked") expect(outcome.bodies).toBe(0);
     if (mode === "progress")
-      expect(outcome.actions.filter((action) => action.kind === "inbox.deliver")).toHaveLength(9);
+      expect(outcome.actions.filter((action) =>
+        (action.kind === "prompt" || action.kind === "signal") &&
+        (action.effect.value as { phase?: string } | null)?.phase === "delivery",
+      )).toHaveLength(9);
   });
 }
 test("only a still-armed action created by this turn permits a waiting terminal", async () => {

@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  Journal,
   LedgerAction,
   SessionTransition,
   type ObservationSink,
@@ -48,9 +49,9 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
     parent_id TEXT REFERENCES action(id),
     session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
     kind TEXT NOT NULL CHECK (kind IN (
-      'prompt', 'turn', 'llm', 'attempt', 'tool', 'message', 'inbox.deliver',
-      'compaction', 'fold.checkpoint', 'alarm.arm', 'alarm.fired', 'alarm.paused',
-      'session.configure', 'policy.decision', 'request', 'reply', 'outbound'
+      'prompt', 'signal', 'turn', 'llm', 'message', 'request', 'alarm',
+      'session.configure', 'policy.decision', 'tool', 'compaction', 'action',
+      'fold.checkpoint'
     )),
     intent TEXT NOT NULL CHECK (json_valid(intent)),
     effect TEXT NOT NULL CHECK (json_valid(effect)),
@@ -70,18 +71,18 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
      WHERE kind = 'session.configure' AND json_valid(effect)`,
   `CREATE INDEX IF NOT EXISTS idx_action_input
      ON action(session_id, json_extract(intent, '$.inputId'), ordinal DESC)
-     WHERE kind IN ('request', 'reply')`,
+     WHERE kind = 'request'`,
   "CREATE INDEX IF NOT EXISTS idx_action_kind_revision ON action(session_id, kind, ordinal DESC)",
   `CREATE INDEX IF NOT EXISTS idx_action_outbound_state
      ON action(session_id, json_extract(effect, '$.outbound.message.messageId'), ordinal DESC)
-     WHERE kind = 'outbound'`,
+     WHERE kind = 'message' AND json_extract(intent, '$.op') IN ('open', 'ack')`,
   "CREATE INDEX IF NOT EXISTS idx_action_parent ON action(session_id, parent_id, ordinal)",
   `CREATE INDEX IF NOT EXISTS idx_action_request_state
      ON action(json_extract(effect, '$.request.requestId'))
-     WHERE kind IN ('request', 'reply') AND json_extract(effect, '$.phase') = 'state'`,
+     WHERE kind = 'request'`,
   `CREATE INDEX IF NOT EXISTS idx_action_turn_effect
      ON action(session_id, json_extract(effect, '$.turnId'), ordinal DESC)
-     WHERE kind IN ('turn', 'inbox.deliver')`,
+     WHERE kind IN ('turn', 'prompt', 'signal', 'action')`,
   `CREATE INDEX IF NOT EXISTS idx_action_turn_intent
      ON action(session_id, json_extract(intent, '$.phase'), ordinal DESC)
      WHERE kind = 'turn'`,
@@ -128,17 +129,77 @@ type Reads = Pick<
   | "pendingMessages"
 >;
 
-function decodeOne(value: ActionSqlRow | null) {
-  const row = ActionSqlRow.nullable().parse(value);
-  return row === null ? undefined : decodeAction(row);
+/**
+ * Read degradation (#1252): a row that fails decode is kept verbatim on disk,
+ * emits one `journal.corrupt{seq, kind, reason}` observation and folds as
+ * opaque — its stored intent/effect text carried as plain string values. A row
+ * that cannot even shape an opaque node is skipped; one bad row never blocks
+ * session load.
+ */
+function reportCorruptRow(row: ActionSqlRow, sink: ObservationSink, reason: string): void {
+  try {
+    sink.publish(Journal.CorruptEvent, { seq: row.ordinal, kind: row.kind, reason });
+  } catch {
+    // Post-read observation must never block the degraded read itself.
+  }
 }
 
-function decodeRows(values: ActionSqlRow[]) {
-  return ActionSqlRow.array().parse(values).map(decodeAction);
+function decodeActionDegraded(
+  row: ActionSqlRow,
+  sink: ObservationSink,
+): LedgerAction.Node | undefined {
+  try {
+    return decodeAction(row);
+  } catch (cause) {
+    reportCorruptRow(row, sink, cause instanceof Error ? cause.message : String(cause));
+    try {
+      return decodeAction({
+        ...row,
+        intent: JSON.stringify(row.intent),
+        effect: JSON.stringify(row.effect),
+        revert: null,
+      });
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+/**
+ * Projection reads degrade by exclusion (#1252): a corrupt row emits the same
+ * single `journal.corrupt{seq, kind, reason}` observation as the fold path and
+ * is skipped — the port answers instead of throwing. The fold (`range`) keeps
+ * the opaque shape instead because the report view must show every row.
+ */
+function decodeOneDegraded(
+  value: ActionSqlRow | null,
+  sink: ObservationSink,
+): LedgerAction.Node | undefined {
+  const row = ActionSqlRow.nullable().parse(value);
+  if (row === null) return undefined;
+  try {
+    return decodeAction(row);
+  } catch (cause) {
+    reportCorruptRow(row, sink, cause instanceof Error ? cause.message : String(cause));
+    return undefined;
+  }
+}
+
+function decodeRowsDegraded(values: ActionSqlRow[], sink: ObservationSink): LedgerAction.Node[] {
+  return ActionSqlRow.array().parse(values).flatMap((row) => {
+    try {
+      return [decodeAction(row)];
+    } catch (cause) {
+      reportCorruptRow(row, sink, cause instanceof Error ? cause.message : String(cause));
+      return [];
+    }
+  });
 }
 
 /** Each semantic port owns a literal statement and explicit bindings. */
-function createActionReads(db: Database): Reads {
+function createActionReads(db: Database, sink: ObservationSink): Reads {
+  const decodeOne = (value: ActionSqlRow | null) => decodeOneDegraded(value, sink);
+  const decodeRows = (values: ActionSqlRow[]) => decodeRowsDegraded(values, sink);
   return {
     priorModelAttempt(sessionId, turnId) {
       return decodeOne(
@@ -146,8 +207,9 @@ function createActionReads(db: Database): Reads {
           .query<ActionSqlRow, [string, string, string]>(`
         SELECT a.* FROM action a JOIN action llm ON llm.id = a.parent_id
         LEFT JOIN action turn ON turn.id = llm.parent_id
-        WHERE a.session_id = ? AND a.kind = 'attempt'
+        WHERE a.session_id = ? AND a.kind = 'llm'
           AND json_extract(a.intent, '$.phase') = 'intent'
+          AND json_extract(a.intent, '$.attempt') IS NOT NULL
           AND json_extract(a.intent, '$.op') = 'chat' AND llm.parent_id != ?
           AND coalesce(json_extract(turn.intent, '$.turnId'), '') != ?
         ORDER BY a.ordinal DESC LIMIT 1`)
@@ -220,7 +282,7 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string, number, number]>(`
-        SELECT * FROM action WHERE session_id = ? AND kind IN ('turn', 'inbox.deliver')
+        SELECT * FROM action WHERE session_id = ? AND kind IN ('turn', 'prompt', 'signal', 'action')
           AND ordinal > ?
         ORDER BY ordinal LIMIT ?`)
           .all(sessionId, cursor, pageSize.parse(limit)),
@@ -254,7 +316,7 @@ function createActionReads(db: Database): Reads {
       return decodeOne(
         db
           .query<ActionSqlRow, [string, string]>(`
-        SELECT * FROM action WHERE session_id = ? AND kind IN ('request', 'reply')
+        SELECT * FROM action WHERE session_id = ? AND kind = 'request'
           AND json_extract(intent, '$.inputId') = ?
         ORDER BY ordinal DESC LIMIT 1`)
           .get(sessionId, inputId),
@@ -264,8 +326,7 @@ function createActionReads(db: Database): Reads {
       return decodeOne(
         db
           .query<ActionSqlRow, [string]>(`
-        SELECT * FROM action WHERE kind IN ('request', 'reply')
-          AND json_extract(effect, '$.phase') = 'state'
+        SELECT * FROM action WHERE kind = 'request'
           AND json_extract(effect, '$.request.requestId') = ?
         ORDER BY rowid DESC LIMIT 1`)
           .get(id),
@@ -275,11 +336,9 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string | null, string | null, string, number]>(`
-        SELECT a.* FROM action a WHERE a.kind IN ('request', 'reply')
-          AND json_extract(a.effect, '$.phase') = 'state'
+        SELECT a.* FROM action a WHERE a.kind = 'request'
           AND (? IS NULL OR a.session_id = ?) AND json_extract(a.effect, '$.request.requestId') > ?
-          AND a.rowid = (SELECT max(b.rowid) FROM action b WHERE b.kind IN ('request', 'reply')
-            AND json_extract(b.effect, '$.phase') = 'state'
+          AND a.rowid = (SELECT max(b.rowid) FROM action b WHERE b.kind = 'request'
             AND json_extract(b.effect, '$.request.requestId') = json_extract(a.effect, '$.request.requestId'))
         ORDER BY json_extract(a.effect, '$.request.requestId') LIMIT ?`)
           .all(sessionId ?? null, sessionId ?? null, cursor, pageSize.parse(limit)),
@@ -289,11 +348,12 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string, string, number]>(`
-        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'outbound'
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'message'
+          AND json_extract(a.intent, '$.op') IN ('open', 'ack')
           AND coalesce(json_extract(a.effect, '$.outbound.message.messageId'), a.id) > ?
           AND (json_extract(a.effect, '$.outbound.message.messageId') IS NULL
             OR a.ordinal = (SELECT max(b.ordinal) FROM action b WHERE b.session_id = a.session_id
-              AND b.kind = 'outbound' AND json_extract(b.effect, '$.outbound.message.messageId') =
+              AND b.kind = 'message' AND json_extract(b.effect, '$.outbound.message.messageId') =
                 json_extract(a.effect, '$.outbound.message.messageId')))
         ORDER BY coalesce(json_extract(a.effect, '$.outbound.message.messageId'), a.id) LIMIT ?`)
           .all(sessionId, cursor, pageSize.parse(limit)),
@@ -354,10 +414,11 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string]>(`
-        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind = 'prompt'
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind IN ('prompt', 'signal', 'action')
           AND json_extract(a.effect, '$.inboxKind') IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM action d WHERE d.session_id = a.session_id
-            AND d.kind = 'inbox.deliver' AND json_extract(d.intent, '$.inboxId') = a.id)
+            AND d.kind IN ('prompt', 'signal', 'action')
+            AND json_extract(d.intent, '$.inboxId') = a.id)
         ORDER BY a.ordinal`)
           .all(sessionId),
       );
@@ -373,7 +434,7 @@ export function createActions(
   onObservationFailure: ObservationFailurePort,
 ): ProtocolStorage.ActionSubAdapter {
   return {
-    ...createActionReads(db),
+    ...createActionReads(db, observationSink),
     append(input, expectedRevision) {
       const parsed = LedgerAction.Append.parse(input);
       const receipt = transaction(() => appendAction(db, parsed, expectedRevision));
@@ -457,14 +518,15 @@ export function createActions(
           .query(
             `SELECT * FROM action WHERE session_id = ? AND kind = 'prompt' AND id = ?
            UNION ALL
-           SELECT * FROM action WHERE session_id = ? AND kind = 'reply'
+           SELECT * FROM action WHERE session_id = ? AND kind = 'request'
+           AND json_extract(effect, '$.phase') = 'answered'
            AND json_extract(effect, '$.answer.outbound.messageId') = ? ORDER BY ordinal`,
           )
           .all(destinationSessionId, messageId, destinationSessionId, messageId),
       );
       for (const row of rows) {
         const action = decodeAction(row);
-        if (action.kind === "reply") {
+        if (action.kind === "request") {
           const effect = action.effect.value;
           if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
           const answer = SessionTransition.Answer.safeParse(effect.answer);
@@ -488,7 +550,10 @@ export function createActions(
           )
           .all(sessionId, afterRevision, pageLimit),
       );
-      return rows.map(decodeAction);
+      return rows.flatMap((row) => {
+        const action = decodeActionDegraded(row, observationSink);
+        return action === undefined ? [] : [action];
+      });
     },
   };
 }
@@ -563,7 +628,7 @@ export function bootstrapStoreDatabase(db: Database, schema: readonly string[]):
   }).immediate();
 }
 
-export function openStoreDatabase(path: string, schema: readonly string[]): Database {
+function openStoreDatabase(path: string, schema: readonly string[]): Database {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   let bootstrapped = false;

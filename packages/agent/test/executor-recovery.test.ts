@@ -743,7 +743,7 @@ describe("crash-open recovery", () => {
     );
     await isolated(
       options.ledger.commit(
-        openIntent("attempt-1", "attempt", "lost-llm", { op: "chat", value: { attempt: 1 } }),
+        openIntent("attempt-1", "llm", "lost-llm", { op: "chat", value: { attempt: 1 } }),
       ),
     );
     await recover(testExecutor(options));
@@ -751,8 +751,8 @@ describe("crash-open recovery", () => {
       actions.map((action) => [action.kind, action.parentId, effect(action).terminal]),
     ).toEqual([
       ["llm", "turn", undefined],
-      ["attempt", "lost-llm", undefined],
-      ["attempt", "attempt-1", "outcome_unknown"],
+      ["llm", "lost-llm", undefined],
+      ["llm", "attempt-1", "outcome_unknown"],
       ["llm", "lost-llm", "outcome_unknown"],
     ]);
     expect(effect(nth(actions, 3))).toMatchObject({
@@ -785,10 +785,10 @@ describe("crash-open recovery", () => {
           openIntent("prefix-llm", "llm", "turn", { op: "chat", value: {} }),
         );
         yield* options.ledger.commit(
-          openIntent("prefix-attempt", "attempt", "prefix-llm", { op: "chat", value: {} }),
+          openIntent("prefix-attempt", "llm", "prefix-llm", { op: "chat", value: {} }),
         );
         yield* options.ledger.commit(
-          settledResult("prefix-attempt", "attempt", { terminal: "executed", evidence }),
+          settledResult("prefix-attempt", "llm", { terminal: "executed", evidence }),
         );
       }),
     );
@@ -825,12 +825,12 @@ describe("crash-open recovery", () => {
     );
     await isolated(
       options.ledger.commit(
-        openIntent("attempt-2", "attempt", "llm-2", { op: "chat", value: { attempt: 1 } }),
+        openIntent("attempt-2", "llm", "llm-2", { op: "chat", value: { attempt: 1 } }),
       ),
     );
     await isolated(
       options.ledger.commit(
-        settledResult("attempt-2", "attempt", {
+        settledResult("attempt-2", "llm", {
           terminal: "executed",
           effect: {},
           evidence: {

@@ -19,7 +19,7 @@ function result(id: string, parentId: string, evidence: LedgerAction.Node["effec
     id,
     parentId,
     sessionId: "metrics",
-    kind: "attempt",
+    kind: "llm",
     ordinal: id === "first" ? 1 : 2,
     ts: 1_000,
     intent: { encodingVersion: 1, value: { phase: "result" } },

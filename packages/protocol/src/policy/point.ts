@@ -109,9 +109,9 @@ export const POINT_RECORDS: readonly PointRecord[] = Object.freeze([
 ]);
 
 /**
- * The only row intents an `emit` row may journal: `message`, `alarm.arm`,
+ * The only row intents an `emit` row may journal: `message`, armed `alarm`,
  * `compaction` (intent). Inputs (prompt, signal) enter solely through the
  * session entity's `deliver` RPC and are rejected at compose.
  */
-export const EMIT_KINDS = Object.freeze(["message", "alarm.arm", "compaction"] as const);
+export const EMIT_KINDS = Object.freeze(["message", "alarm", "compaction"] as const);
 export type EmitKind = (typeof EMIT_KINDS)[number];

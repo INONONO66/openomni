@@ -1,8 +1,10 @@
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type { ObservationSink, Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
-import { SessionNotFound } from "./errors";
-import { openStoreDatabase, SILENT_OBSERVATION_SINK, StoreHandle } from "./session-file/index.js";
+import { CatalogVersionRefused, SessionNotFound } from "./errors";
+import { bootstrapStoreDatabase, SILENT_OBSERVATION_SINK, StoreHandle } from "./session-file/index.js";
 import { createSqliteActorRegistryAdapter } from "./storage/sqlite-actor-registry-adapter";
 import { createSqliteBlacklistAdapter } from "./storage/sqlite-blacklist-adapter";
 import { createSqliteChannelGrantAdapter } from "./storage/sqlite-channel-grant-adapter";
@@ -133,10 +135,14 @@ export const CATALOG_SCHEMA: readonly string[] = [
   "CREATE INDEX IF NOT EXISTS idx_surface_key_session ON surface_key(session_id)",
   `CREATE TABLE IF NOT EXISTS policy (
     name TEXT NOT NULL,
+    -- Policy-row kinds are point kinds (#1251): the closed journal set plus
+    -- the two historical tokens the legacy point mapping still converts
+    -- (gate/migrate.ts). Old catalog files keep their original CREATE TABLE
+    -- (IF NOT EXISTS), so historical rows stay byte-for-byte.
     kind TEXT NOT NULL CHECK (kind IN (
-      'prompt', 'turn', 'llm', 'attempt', 'tool', 'message', 'inbox.deliver',
-      'compaction', 'fold.checkpoint', 'alarm.arm', 'alarm.fired', 'alarm.paused',
-      'session.configure', 'policy.decision', 'request', 'reply', 'outbound'
+      'prompt', 'signal', 'turn', 'llm', 'message', 'request', 'alarm',
+      'session.configure', 'policy.decision', 'tool', 'compaction', 'action',
+      'fold.checkpoint', 'inbox.deliver', 'alarm.fired'
     )),
     phase TEXT NOT NULL CHECK (phase IN ('pre', 'post')),
     match TEXT NOT NULL CHECK (json_valid(match)),
@@ -148,6 +154,15 @@ export const CATALOG_SCHEMA: readonly string[] = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_policy_read ON policy(generation, kind, phase, priority DESC, name)",
 ];
+
+/**
+ * Catalog schemaVersion (#1252): stamped into `PRAGMA user_version` when the
+ * catalog is created or opened by code at least this new. A file whose marker
+ * is greater than this constant was written by newer code and opens read-only.
+ */
+const CATALOG_SCHEMA_VERSION = 1;
+
+const UserVersion = z.object({ user_version: z.number().int().nonnegative() });
 
 
 export interface SessionIndexRow {
@@ -195,8 +210,12 @@ export class CatalogStore extends StoreHandle {
   readonly replyGrant: ProtocolStorage.ReplyGrantSubAdapter;
   readonly provisioning: ProtocolStorage.ProvisioningSubAdapter;
   readonly policies: ProtocolStorage.PolicyRowSubAdapter;
-  constructor(db: Database, observationSink: ObservationSink, now: () => number) {
+  /** Set only when the file's schemaVersion marker is newer than this build. */
+  private readonly newerFileVersion: number | undefined;
+  private readOnlyClosed = false;
+  constructor(db: Database, observationSink: ObservationSink, now: () => number, newerFileVersion?: number) {
     super(db, observationSink, now);
+    this.newerFileVersion = newerFileVersion;
     this.surfaceKey = createSqliteSurfaceKeyAdapter(db, now);
     this.egressBudget = createSqliteEgressBudgetAdapter(db, now);
     this.actorRegistry = createSqliteActorRegistryAdapter(db, now);
@@ -207,8 +226,30 @@ export class CatalogStore extends StoreHandle {
     this.policies = createPolicies(db, this.transaction);
   }
 
+  /** Refuses mutation on a catalog written by newer code (#1252): read-only. */
+  private refuseNewerSchema(operation: "indexSession" | "rotateFence"): void {
+    if (this.newerFileVersion === undefined) return;
+    throw new CatalogVersionRefused({
+      fileVersion: this.newerFileVersion,
+      codeVersion: CATALOG_SCHEMA_VERSION,
+      operation,
+    });
+  }
+
+  /** A newer-schema catalog closes without the WAL checkpoint: zero writes. */
+  override close(): void {
+    if (this.newerFileVersion === undefined) {
+      super.close();
+      return;
+    }
+    if (this.readOnlyClosed) return;
+    this.readOnlyClosed = true;
+    this.db.close();
+  }
+
   /** Registers a session in the index at fence 0; a lost race is not an error. */
   indexSession(input: SessionIndexInsert): boolean {
+    this.refuseNewerSchema("indexSession");
     const inserted = this.db
       .query(
         `INSERT INTO session_index (id, parent_id, role, fence, created_at)
@@ -239,6 +280,7 @@ export class CatalogStore extends StoreHandle {
    * refused "stale" by `commitSession`.
    */
   rotateFence(sessionId: string): number {
+    this.refuseNewerSchema("rotateFence");
     return this.transaction(() => {
       const rotated = RotatedFence.nullable().parse(
         this.db
@@ -258,9 +300,25 @@ export interface OpenCatalogStoreOptions {
 }
 
 export function openCatalogStore(path: string, options: OpenCatalogStoreOptions): CatalogStore {
-  return new CatalogStore(
-    openStoreDatabase(path, CATALOG_SCHEMA),
-    options.observationSink ?? SILENT_OBSERVATION_SINK,
-    options.now,
-  );
+  const sink = options.observationSink ?? SILENT_OBSERVATION_SINK;
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+  const db = new Database(path);
+  let handle: CatalogStore | undefined;
+  try {
+    const fileVersion = UserVersion.parse(db.query("PRAGMA user_version").get()).user_version;
+    if (fileVersion > CATALOG_SCHEMA_VERSION) {
+      // Newer-code file (#1252): no DDL, no file-touching pragma, no marker
+      // rewrite — the connection itself is pinned query-only.
+      db.run("PRAGMA busy_timeout = 5000");
+      db.run("PRAGMA query_only = ON");
+      handle = new CatalogStore(db, sink, options.now, fileVersion);
+      return handle;
+    }
+    bootstrapStoreDatabase(db, CATALOG_SCHEMA);
+    if (fileVersion < CATALOG_SCHEMA_VERSION) db.run(`PRAGMA user_version = ${CATALOG_SCHEMA_VERSION}`);
+    handle = new CatalogStore(db, sink, options.now);
+    return handle;
+  } finally {
+    if (handle === undefined) db.close();
+  }
 }

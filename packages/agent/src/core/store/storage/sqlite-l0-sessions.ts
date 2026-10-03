@@ -40,7 +40,7 @@ function materializeSession(
       return refuse(new MaterializeRefused({ sessionId: parsed.row.id, reason: "state" }));
     return { created: false, row: existing };
   }
-  const receipt = appendAction(db, parsed.initialAction, 0);
+  const receipt = appendAction(db, parsed.initialAction, 0, refuse);
   if (receipt === undefined)
     return refuse(new MaterializeRefused({ sessionId: parsed.row.id, reason: "configuration" }));
   const row = selectSession(db, parsed.row.id);

@@ -2,7 +2,7 @@ import type { CommitReceipt } from "./store/services";
 import type { LedgerError } from "./store/errors";
 import { Effect } from "effect";
 import type { SessionKernel } from "./entity";
-import { canonicalDigest, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, JournalKind, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
 import { pinCompactionAction } from "../plugins/compaction/successor";
 import type * as SessionHandleStore from "./store/fence";
@@ -301,6 +301,16 @@ export function turnCheckpointAction(input: {
   };
 }
 
+/**
+ * The journal row kind one delivered input lands as (#1252): `prompt` and
+ * `action` inputs are rows of their own kind; interrupt/resume control is a
+ * `signal` row. The single mapping both the admission constructor and the
+ * delivery constructor share.
+ */
+export function inputRowKind(kind: Inbox.Kind): "prompt" | "signal" | "action" {
+  return kind === "prompt" || kind === "action" ? kind : "signal";
+}
+
 export function deliveryActions(
   items: readonly Inbox.Row[],
   target:
@@ -315,8 +325,17 @@ export function deliveryActions(
       id: `${item.id}:delivery`,
       parentId: parent,
       sessionId: item.sessionId,
-      kind: "inbox.deliver",
-      intent: { encodingVersion: 1, value: { inboxId: item.id } },
+      // #1252: a delivered input is a journal row of its own kind — `prompt`
+      // for turn inputs, `signal` for interrupt/resume control. The retired
+      // `inbox.deliver` kind had one writer here; this constructor keeps it.
+      kind: inputRowKind(item.kind),
+      intent: {
+        encodingVersion: 1,
+        value:
+          item.kind === "interrupt" || item.kind === "resume"
+            ? { inboxId: item.id, control: item.kind }
+            : { inboxId: item.id, delivery: JournalKind.DEFAULT_DELIVERY },
+      },
       effect: {
         encodingVersion: 1,
         value: {
@@ -369,6 +388,34 @@ export function turnTerminalAction(input: {
     },
     irreversible: true,
     ts: input.at,
+  };
+}
+
+/** The gate's turn-stop row (#1252): constructed here, the turn kind's single writer. */
+export function turnStopAction(input: {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly sessionId: string;
+  readonly generation: number;
+  readonly verdict: PlainValue;
+  readonly state: PlainValue;
+  readonly ts: number;
+}): LedgerAction.Append {
+  return {
+    id: input.id,
+    parentId: input.parentId,
+    sessionId: input.sessionId,
+    kind: "turn",
+    intent: {
+      encodingVersion: 1,
+      value: { phase: "stop", generation: input.generation },
+    },
+    effect: {
+      encodingVersion: 1,
+      value: { phase: "stop", verdict: input.verdict, state: input.state },
+    },
+    irreversible: true,
+    ts: input.ts,
   };
 }
 
@@ -483,7 +530,8 @@ export function receivedMessageAction(input: {
     id: input.id,
     parentId: input.parentActionId,
     sessionId: input.sessionId,
-    kind: "prompt",
+    // #1252: control inputs (interrupt/resume) are signal rows; prompts are prompt rows.
+    kind: inputRowKind(input.kind),
     intent: input.origin,
     effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
     irreversible: true,
@@ -494,7 +542,7 @@ export function receivedMessageAction(input: {
 /**
  * Chain fold over received-message actions (W5.2 F1): every `prompt` action
  * carrying an inbox payload, projected to the historical inbox row shape.
- * Entries whose `<id>` a later `inbox.deliver` intent references are consumed.
+ * Entries whose `<id>` a later delivery row's intent references are consumed.
  */
 export function receivedMessages(
   kernel: SessionKernel,
@@ -506,10 +554,9 @@ export function receivedMessages(
   for (;;) {
     const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
     for (const action of page.actions) {
-      if (action.kind === "prompt") {
+      if (action.kind === "prompt" || action.kind === "signal" || action.kind === "action") {
         const effect = ReceivedEffect.safeParse(action.effect.value);
         if (effect.success) received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
-      } else if (action.kind === "inbox.deliver") {
         const intent = DeliverIntent.safeParse(action.intent.value);
         if (intent.success) delivered.add(intent.data.inboxId);
       }

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { interruptOn } from "./ports";
-import type { LedgerAction, } from "@openomni/protocol";
+import type { LedgerAction, PlainObject } from "@openomni/protocol";
 import type { AlarmSkipReason, AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
 export type { AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
@@ -22,6 +22,34 @@ const skip = (reason: AlarmSkipReason): AlarmDisposition => ({ op: "skip", reaso
 
 
 
+/**
+ * The one `alarm` append constructor (#1252): this module is the kind's
+ * declared single writer; retry arms (gate) and watch lifecycle facts
+ * (composition monitor ports) both build their rows here.
+ */
+export function alarmAction(input: {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly sessionId: string;
+  readonly intent: PlainObject;
+  readonly effect: PlainObject;
+  readonly revert?: PlainObject;
+  readonly ts: number;
+}): LedgerAction.Append {
+  return {
+    id: input.id,
+    parentId: input.parentId,
+    sessionId: input.sessionId,
+    kind: "alarm",
+    intent: { encodingVersion: 1, value: input.intent },
+    effect: { encodingVersion: 1, value: input.effect },
+    ...(input.revert === undefined
+      ? { irreversible: true as const }
+      : { revert: { encodingVersion: 1 as const, value: input.revert } }),
+    ts: input.ts,
+  };
+}
+
 const RETRY_SEPARATOR = ":retry:";
 const PAGE_LIMIT = 256;
 
@@ -30,7 +58,7 @@ function hasNewerAttempt(reads: AlarmChainReads, attempt: LedgerAction.Node): bo
   let cursor = 0;
   for (;;) {
     const page = reads.operationChildrenPage(attempt.parentId, cursor);
-    if (page.some((child) => child.kind === "attempt" && child.ordinal > attempt.ordinal))
+    if (page.some((child) => child.kind === "llm" && child.ordinal > attempt.ordinal))
       return true;
     if (page.length < PAGE_LIMIT) return false;
     cursor = page.at(-1)?.ordinal ?? cursor;

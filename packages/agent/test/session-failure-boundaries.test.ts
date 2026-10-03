@@ -340,7 +340,11 @@ test("zero-grace shutdown rescans when an executor terminal lands after its seal
         expect(kernel.openOperationsPage(handle.id, input.turnId)).toEqual([]);
         expect(
           sessionTree(kernel, handle.id)
-            .filter((action) => action.kind === "prompt")
+            .filter(
+              (action) =>
+                (action.kind === "prompt" || action.kind === "signal") &&
+                PlainObjectSchema.parse(action.effect.value).inboxKind !== undefined,
+            )
             .map((action) => PlainObjectSchema.parse(action.effect.value).inboxKind),
         ).toEqual(["prompt", "interrupt"]);
         // No release plane: the adopted fence owner stays durable after shutdown.

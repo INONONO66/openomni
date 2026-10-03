@@ -449,7 +449,7 @@ test.each([
     });
     expect(
       sessionTree(child.id, fixture.plane.sessionStore(child.id).actions).filter(
-        (action) => action.kind === "alarm.arm",
+        (action) => action.kind === "alarm",
       ),
     ).toEqual([]);
     const senderKernel = fixture.plane.openKernel("sender");

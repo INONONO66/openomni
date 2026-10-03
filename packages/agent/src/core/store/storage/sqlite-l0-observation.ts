@@ -82,7 +82,7 @@ function publishMessageTerminal(
     const effect = action.effect.value;
     if (effect === null || typeof effect !== "object" || Array.isArray(effect)) return;
     const request = SessionTransition.Request.parse(effect.request);
-    if (request.mode === "reply" && request.state === "expired") {
+    if (request.mode === "answer" && request.state === "expired") {
       const source = requestMessageIdentity(db, request.requestId, action.sessionId);
       scoped.publish(Gateway.MessageObserved, {
         kind: "message.timed_out",

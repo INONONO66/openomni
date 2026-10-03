@@ -49,7 +49,7 @@ export function answerNativeRequest(
     generation: request.generation,
     toolsHash: request.toolsHash,
     domainRevisions: request.domainRevisions,
-    decision: "reply",
+    decision: "answer",
     allowedAction: "report_result",
     content,
     outbound: message,

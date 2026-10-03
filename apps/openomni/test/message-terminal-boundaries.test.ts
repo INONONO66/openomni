@@ -127,7 +127,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     expect(letters[0]?.content).toBe(terminals[0]?.text);
     // No child-owned request/alarm is opened by the terminal reply.
     expect(
-      sessionTree(child.id, plane.sessionStore(child.id).actions).filter((action) => action.kind === "alarm.arm"),
+      sessionTree(child.id, plane.sessionStore(child.id).actions).filter((action) => action.kind === "alarm"),
     ).toEqual([]);
     const parentKernel = plane.openKernel(child.parentId);
     expect(parentKernel.requestRows(child.parentId)).toHaveLength(1);

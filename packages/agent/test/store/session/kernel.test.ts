@@ -248,7 +248,7 @@ function delivery(input: {
     id: input.id,
     parentId: input.parentId,
     sessionId: input.sessionId,
-    kind: "inbox.deliver",
+    kind: "prompt",
     intent: { encodingVersion: 1, value: { inboxId: input.inboxId } },
     effect: {
       encodingVersion: 1,

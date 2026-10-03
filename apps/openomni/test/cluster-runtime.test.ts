@@ -264,7 +264,7 @@ test("late-bound entity ports refuse early use and forward after one binding", a
         id: "request-session:llm:attempt:1",
         parentId: "request-session:llm",
         sessionId: fixture.request.sessionId,
-        kind: "attempt",
+        kind: "llm",
         intent: { encodingVersion: 1, value: { phase: "intent" } },
         effect: { encodingVersion: 1, value: { phase: "pending" } },
         ts: 100,

@@ -1,3 +1,4 @@
+import { attemptIntentIds, isAttemptRow, isLogicalLlm } from "./helpers/llm-rows";
 import { runAgentSync } from "./helpers/executor";
 import { sessionTree } from "./helpers/session-tree";
 import { pinnedModelSelection, restoreModelSelection } from "./helpers/composition-fixtures";
@@ -58,7 +59,7 @@ function input(
           id: `fixture-delivery-${index}`,
           sessionId: "session-1",
           parentId: null,
-          kind: "inbox.deliver",
+          kind: "prompt",
           intent: { encodingVersion: 1, value: {} },
           effect: {
             encodingVersion: 1,
@@ -348,13 +349,14 @@ describe("session chat runner", () => {
             },
           );
 
+          const attemptIds = attemptIntentIds(actions);
           const llmIntents = actions.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
-              action.kind === "llm" && actionPhase(action) === "intent",
+              isLogicalLlm(action, attemptIds) && actionPhase(action) === "intent",
           );
           const llmResults = actions.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
-              action.kind === "llm" && actionPhase(action) === "result",
+              isLogicalLlm(action, attemptIds) && actionPhase(action) === "result",
           );
           expect(calls).toBe(2);
           expect(llmIntents).toHaveLength(2);
@@ -385,8 +387,11 @@ describe("session chat runner", () => {
             llmIntents.map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
           );
 
+          // #1252: the delivery row shares the prompt kind; the admission row has no delivery phase.
           const prompts = actions.filter(
-            (action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "prompt",
+            (action: import("@openomni/protocol").LedgerAction.Node) =>
+              action.kind === "prompt" &&
+              (action.effect.value as { phase?: string } | null)?.phase !== "delivery",
           );
           expect(prompts).toHaveLength(1);
           expect(prompts[0]?.id).toBe(inboxIds[0]);
@@ -409,17 +414,18 @@ describe("session chat runner", () => {
             },
           );
 
+          const attemptIds = attemptIntentIds(actions);
           const llmIntents = actions.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
-              action.kind === "llm" && actionPhase(action) === "intent",
+              isLogicalLlm(action, attemptIds) && actionPhase(action) === "intent",
           );
           const attempts = actions.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
-              action.kind === "attempt" && actionPhase(action) === "intent",
+              isAttemptRow(action, attemptIds) && actionPhase(action) === "intent",
           );
           const attemptResults = actions.filter(
             (action: import("@openomni/protocol").LedgerAction.Node) =>
-              action.kind === "attempt" && actionPhase(action) === "result",
+              isAttemptRow(action, attemptIds) && actionPhase(action) === "result",
           );
           expect(calls).toBe(2);
           expect(llmIntents).toHaveLength(1);
@@ -462,7 +468,7 @@ describe("session chat runner", () => {
           const llmIntents = actions
             .filter(
               (action: import("@openomni/protocol").LedgerAction.Node) =>
-                action.kind === "llm" && actionPhase(action) === "intent",
+                isLogicalLlm(action, attemptIntentIds(actions)) && actionPhase(action) === "intent",
             )
             .map((action: import("@openomni/protocol").LedgerAction.Node) => action.intent.value);
           expect(answered).toEqual([mockProviderModel.id, fallback.id, mockProviderModel.id]);

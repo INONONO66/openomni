@@ -20,7 +20,7 @@ export namespace Storage {
     turnIntentsPage(sessionId: string, beforeRevision: number, limit: number): LedgerAction.Node[];
     /** Ordinal of the turn intent preceding the newest `count` intents before `beforeRevision`, else 0. */
     turnWindowStart(sessionId: string, beforeRevision: number, count: number): number;
-    /** `turn` and `inbox.deliver` actions after `cursor`, ascending: one window feeds every tail. */
+    /** `turn` and delivery (`prompt`/`signal`/`action`) actions after `cursor`, ascending: one window feeds every tail. */
     turnTailPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];
     openTurnsPage(sessionId: string, cursor: number, limit: number): LedgerAction.Node[];
     resultFor(sessionId: string, parentId: string): LedgerAction.Node | undefined;
@@ -61,8 +61,8 @@ export namespace Storage {
     /** Revision-ordered actions with `ordinal > afterRevision`, at most `limit` of them. */
     range(sessionId: string, afterRevision: number, limit: number): LedgerAction.Node[];
     /**
-     * Chain-fold pending projection (W5.2): `prompt` actions with an inbox
-     * payload that no later `inbox.deliver` action references, in chain order.
+     * Chain-fold pending projection (W5.2): `prompt`/`signal` actions with an
+     * inbox payload that no later delivery row references, in chain order.
      */
     pendingMessages(sessionId: string): LedgerAction.Node[];
   }

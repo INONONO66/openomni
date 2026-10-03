@@ -6,7 +6,7 @@ import { runLedgerSync } from "./effect";
 
 export function requestFixture(
   kernel: SessionHandleStore.SessionKernel,
-  mode: SessionTransition.Request["mode"] = "reply",
+  mode: SessionTransition.Request["mode"] = "answer",
 ) {
   materializeSession(kernel, "request-session");
   const authority = adoptWriter(kernel, "request-session");
@@ -70,18 +70,23 @@ export function requestFixture(
   return { request, original, commit, authority };
 }
 
+function statePhase(request: SessionTransition.Request): "open" | "resolved" | "expired" {
+  if (request.state === "open") return "open";
+  return request.state === "expired" ? "expired" : "resolved";
+}
+
 export function requestStateAction(
   request: SessionTransition.Request,
   id = `${request.requestId}:open`,
-  kind: LedgerAction.Kind = "request",
+  phase: "open" | "answered" | "resolved" | "expired" = statePhase(request),
 ): LedgerAction.Append {
   return {
     id,
     parentId: request.requestId,
     sessionId: request.sessionId,
-    kind,
+    kind: "request",
     intent: { encodingVersion: 1, value: { requestId: request.requestId } },
-    effect: { encodingVersion: 1, value: { phase: "state", request } },
+    effect: { encodingVersion: 1, value: { phase, request } },
     irreversible: true,
     ts: 4,
   };

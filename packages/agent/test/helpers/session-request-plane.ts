@@ -65,6 +65,6 @@ export function planeAnswer(request: SessionTransition.Request, responder = "chi
     principal: { kind: "session", principalId: responder, evidenceId: id },
     bindingDigest: request.bindingDigest, inputHash: request.inputHash, effectHash: request.effectHash,
     generation: request.generation, toolsHash: request.toolsHash, domainRevisions: request.domainRevisions,
-    decision: "reply", allowedAction: "report_result", content: responder,
+    decision: "answer", allowedAction: "report_result", content: responder,
   };
 }

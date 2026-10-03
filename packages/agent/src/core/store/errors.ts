@@ -45,6 +45,21 @@ export class PolicyGenerationRefused extends Data.TaggedError("PolicyGenerationR
   }
 }
 
+/**
+ * Fail-closed journal write (#1252): a row body that does not satisfy its
+ * kind's declared schema refuses the whole commit; nothing partial lands.
+ */
+export class SchemaRefused extends Data.TaggedError("SchemaRefused")<{
+  readonly sessionId: string;
+  readonly actionId: string;
+  readonly kind: string;
+  readonly reason: string;
+}> {
+  override get message(): string {
+    return `journal append refused: ${this.kind} row ${this.actionId} violates its declared schema (${this.reason})`;
+  }
+}
+
 export class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
   readonly capability: "storage" | "sessions" | "actions" | "policies";
 }> {
@@ -70,6 +85,22 @@ export class LedgerInvariant extends Data.TaggedError("LedgerInvariant")<{
   readonly cause?: Error;
 }> {}
 
+/**
+ * Catalog schemaVersion fence (#1252): a catalog file whose `user_version`
+ * marker is greater than this build's `CATALOG_SCHEMA_VERSION` was written by
+ * newer code. It opens read-only: reads work, Deliver (fence rotation) and
+ * fork (session indexing) are refused with this error, bytes stay untouched.
+ */
+export class CatalogVersionRefused extends Data.TaggedError("CatalogVersionRefused")<{
+  readonly fileVersion: number;
+  readonly codeVersion: number;
+  readonly operation: "indexSession" | "rotateFence";
+}> {
+  override get message(): string {
+    return `catalog schemaVersion ${this.fileVersion} is newer than this build (${this.codeVersion}); ${this.operation} refused — catalog is read-only`;
+  }
+}
+
 /** An incoherent reply-grant projection row observed by the SQLite adapter. */
 export class ReplyGrantProjectionError extends Error {
   readonly code = "incoherent_reply_grant";
@@ -86,6 +117,8 @@ export type LedgerError =
   | FenceRefused
   | CommitRefused
   | PolicyGenerationRefused
+  | SchemaRefused
+  | CatalogVersionRefused
   | StorageUnavailable
   | CorruptRecord
   | AgentFailure;

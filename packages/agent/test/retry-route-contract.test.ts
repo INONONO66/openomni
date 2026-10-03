@@ -1,3 +1,4 @@
+import { attemptIntentIds, isAttemptRow } from "./helpers/llm-rows";
 import { APICallError } from "ai";
 import { expect, test } from "bun:test";
 import { APIError, Retry, run as runLlm, type RunInput } from "../src/model";
@@ -83,7 +84,8 @@ function scenario(prefix: Prefix, floor = 0, veto = false) {
 }
 
 function attempts(actions: readonly LedgerAction.Append[]) {
-  return actions.filter((action) => action.kind === "attempt" &&
+  const ids = attemptIntentIds(actions);
+  return actions.filter((action) => isAttemptRow(action, ids) &&
     PlainObjectSchema.parse(action.intent.value).phase === "intent");
 }
 
@@ -98,7 +100,8 @@ for (const prefix of ["text", "tool"] as const) {
   test(`a failed ${prefix} prefix forbids fallback and keeps billed evidence`, () => isolated(Effect.gen(function* () {
     const value = yield* scenario(prefix);
     expectFailedPrimaryAttempt(value);
-    const result = value.committed.find((action) => action.kind === "attempt" &&
+    const result = value.committed.find((action) =>
+      isAttemptRow(action, attemptIntentIds(value.committed)) &&
       PlainObjectSchema.parse(action.effect.value).phase === "result");
     expect(result?.effect.value).toMatchObject({ evidence: { failures: [{
       tag: "LlmRunFailure", visibleOutput: true, usage,

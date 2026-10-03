@@ -57,6 +57,8 @@ const store = {
   PolicyGenerationRefused: new Store.PolicyGenerationRefused({ generation: 1, reason: "conflict" }),
   StorageUnavailable: new Store.StorageUnavailable({ capability: "storage" }),
   CorruptRecord: new Store.CorruptRecord({ operation: "decode", id: "record" }),
+  SchemaRefused: new Store.SchemaRefused({ sessionId: "session", actionId: "action", kind: "prompt", reason: "fixture" }),
+  CatalogVersionRefused: new Store.CatalogVersionRefused({ fileVersion: 99, codeVersion: 1, operation: "indexSession" }),
 } satisfies { [K in Store.LedgerError["_tag"]]: Extract<Store.LedgerError, { _tag: K }> };
 // Agent.SessionError absorbs Store.LedgerError and Model.LlmRunFailure, so those fixtures are members too.
 const agent = {

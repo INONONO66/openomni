@@ -175,7 +175,7 @@ test("snapshot pages retain all deliveries for the selected turn without loading
   for (let index = 0; index < 257; index += 1) {
     append(
       `delivery-${index}`,
-      "inbox.deliver",
+      "prompt",
       {},
       {
         phase: "delivery",
@@ -226,7 +226,7 @@ test("snapshot tails fold deliveries committed before their turn intent and stay
   const deliver = (id: string, turnId: string, content: string, parentId: string) =>
     append(
       id,
-      "inbox.deliver",
+      "prompt",
       {},
       {
         phase: "delivery",
@@ -246,7 +246,7 @@ test("snapshot tails fold deliveries committed before their turn intent and stay
   turn("second");
   append(
     "d-interrupt",
-    "inbox.deliver",
+    "signal",
     {},
     {
       phase: "delivery",
@@ -283,7 +283,7 @@ test("snapshot tails fold deliveries committed before their turn intent and stay
 test("operation reads exclude administrative checkpoints and reject mismatched result identities", () => {
   turn("turn");
   append("llm", "llm", { phase: "intent" }, undefined, "turn");
-  const attempt = append("attempt", "attempt", { phase: "intent", op: "chat" }, undefined, "llm");
+  const attempt = append("attempt", "llm", { phase: "intent", op: "chat", attempt: 1 }, undefined, "llm");
   expect(kernel.priorModelAttempt("bounded", "other-turn")).toEqual(attempt);
   expect(kernel.priorModelAttempt("bounded", "turn")).toBeUndefined();
   append("operation-seed", "fold.checkpoint", {}, { phase: "result" }, "llm");
@@ -357,7 +357,7 @@ test("request state pages select the latest identity and cross page boundaries",
       "request",
       { inputId: requestId },
       {
-        phase: "state",
+        phase: "open",
         request: { ...request, sessionId: "bounded", requestId },
       },
     );
@@ -372,9 +372,9 @@ test("request state pages select the latest identity and cross page boundaries",
   };
   const update = append(
     "r000:cancelled",
-    "reply",
+    "request",
     { inputId: "answer" },
-    { phase: "state", request: cancelled },
+    { phase: "resolved", request: cancelled },
   );
   expect(kernel.requestById(requestId)).toEqual(cancelled);
   expect(kernel.requestInputById("bounded", "answer")).toEqual(update);
@@ -401,8 +401,8 @@ test("outbound pages deduplicate acknowledgements without dropping the next page
     };
     append(
       `${payload.messageId}:pending`,
-      "outbound",
-      {},
+      "message",
+      { op: "open" },
       {
         outbound: {
           message: { ...payload, digest: canonicalDigest(payload) },
@@ -419,7 +419,7 @@ test("outbound pages deduplicate acknowledgements without dropping the next page
     state: "delivered" as const,
     destinationReceipt: { id: "receipt", revision: 2 },
   };
-  append("m000:ack", "outbound", {}, { outbound: delivered });
+  append("m000:ack", "message", { op: "ack" }, { outbound: delivered });
   expect(kernel.outboundStatesPage("bounded", "", 1)).toEqual([delivered]);
   expect(
     kernel.outboundStatesPage("bounded", "m255").map((value) => value.message.messageId),

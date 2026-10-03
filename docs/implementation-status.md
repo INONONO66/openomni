@@ -1,5 +1,59 @@
 # Implementation Status
 
+## #1252 twelve journal kinds (epic #1260, draft PR #1278)
+
+On `epic1260/1252-journal-kinds-12` (2026-10-04, base `6a9063d7`). The journal
+kind set is closed at 12 — nine core (`prompt`, `signal`, `turn`, `llm`,
+`message`, `session.configure`, `policy.decision`, `request`, `alarm`) plus
+three capability (`tool`, `compaction`, `action`) — each declared
+`{kind, version, schema}` with one writer in
+`packages/protocol/src/journal/{core,capability}/` and fixed by
+`packages/protocol/test/kind-census.test.ts`. Retired kinds and their readers:
+`reply` → `request{phase: answered}` (lifecycle phases
+`open|answered|resolved|expired` via `lifecyclePhase`, answered-request SQL and
+inspect read phases; channels' reply decision is `answer` over the same rows —
+the reply-grant store keeps only claim/listLive, no answer lookup);
+`attempt` → `llm` rows pinning their ordinal in the intent (`attempt: n`),
+with metrics/model-pin SQL/crash tests discriminating on the ordinal or durable
+`usageProvenance`; `inbox.deliver` → `prompt`/`signal` delivery rows
+(`effect.phase: "delivery"`; control admissions interrupt/resume are `signal`);
+`outbound` → `message{op: open|ack}`; `alarm.arm`/`alarm.fired`/`alarm.paused`
+→ one `alarm` kind (`op: arm|fired`, fired outcome
+`delivered|stale|exhausted` with `via` provenance for cancel/paused/timeout).
+Writes are fail-closed: `appendAction` validates every row body against its
+kind's declaration schema (`Journal.declarationFor`) and refuses the whole
+commit with the typed `SchemaRefused` — nothing partial lands
+(`journal-fail-closed.test.ts` pins row count and hash head) — and entity
+admission runs `Journal.admitInputKind`, rejecting capability-off input kinds
+as `unknown_kind` (`packages/agent/src/core/mailbox.ts`). One writer module
+per kind is enforced by `script/check-journal-writers.ts` (registered in CI
+next to `check-written-types`; a planted second append site for a kind fails
+the script). Reads degrade on every read port: a row that fails decode emits
+exactly one `journal.corrupt{seq, kind, reason}` observation; the fold
+(`range`) keeps it as opaque while the projection ports
+(`decodeOne`/`decodeRows`: requestById, turnTailPage, outboundsPage, lastChat,
+pendingMessages, messagesFor and the rest) skip it and still answer — one bad
+row never blocks session load or an inspect read
+(`journal-corrupt-degrade.test.ts`). The catalog stamps a schemaVersion into
+`PRAGMA user_version` at create; a catalog whose marker is greater than the
+build's version opens read-only — reads work, Deliver (fence rotation) and
+fork (session indexing) are refused with the typed `CatalogVersionRefused`,
+and the file bytes stay identical (`old-session-readonly.test.ts`). `prompt`
+and `action` declare `delivery: steer|followUp` (default `followUp`,
+`input-admission.test.ts`); the gate emit set is
+`message | alarm{arm} | compaction`. The six retired-kind searches in the
+issue grep to zero across packages and apps. Deviations: only
+`delivery: "followUp"` is produced in this PR — the `action` kind's writer,
+`steer` production, `action.after` consumption and the `turn.consumed.stale`
+closure (acceptance test `stale-action.test.ts`) are declared and
+census-tested here and land with #1255, which builds the action capability
+plugin (#1253 owns the `deliver` RPC that refuses unregistered `action` rows
+`unknown_kind`); the catalog policy-table CHECK keeps
+`inbox.deliver`/`alarm.fired` tokens because the #1251 legacy point mapping
+still converts those historical rows; policy point ids (e.g. the
+`alarm.fired` hook point) are point names, not journal kinds, and stay
+unchanged.
+
 ## #1276 one core, five plugins (epic #1260, draft PR #1277)
 
 On `epic1260/1276-core-plugins-move` (2026-10-03, base `66d56edb`).

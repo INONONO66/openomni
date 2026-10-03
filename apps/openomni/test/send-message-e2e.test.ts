@@ -67,7 +67,7 @@ test.each([
   const actions = plane
     .listSessions()
     .flatMap((row) => sessionTree(row.id, plane.sessionStore(row.id).actions));
-  expect(actions.filter((action) => action.kind === "outbound")).toEqual([]);
+  expect(actions.filter((action) => action.kind === "message" && (action.effect.value as { outbound?: unknown } | null)?.outbound !== undefined)).toEqual([]);
 });
 
 test("an explicit model send_message routes through MessagePort.ingest to the external surface", async () => {
@@ -129,13 +129,13 @@ test("a child session terminal commits exactly one parent reply with the origina
       (candidate) => candidate.id === event.id,
     );
     if (action === undefined) return;
-    if (action.kind === "inbox.deliver") {
+    if (action.kind === "prompt" || action.kind === "signal") {
       const delivery = SessionTurn.Delivery.safeParse(action.effect.value);
       if (delivery.success && delivery.data.content.includes("CHILD_SENTINEL")) consumed = true;
     }
     const effect = action.effect.value;
     if (
-      action.kind === "outbound" &&
+      action.kind === "message" &&
       effect !== null &&
       typeof effect === "object" &&
       !Array.isArray(effect)
@@ -203,7 +203,7 @@ test("a child session terminal commits exactly one parent reply with the origina
     (action) => action.id === outbound?.destinationReceipt?.id,
   );
   expect(receipt).toMatchObject({
-    kind: "reply",
+    kind: "request",
     effect: { value: { answer: { inputId: rows[0]?.id, outbound: rows[0]?.origin.value } } },
   });
   // W5.2 consumed = no longer pending in the parent's kernel inbox.

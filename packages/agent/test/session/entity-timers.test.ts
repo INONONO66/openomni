@@ -68,7 +68,7 @@ describe("retry delivery chain guard", () => {
           action({ id: operation, parentId: fixture.identity.turnId, sessionId: id, kind: "llm" }),
         );
         yield* fixture.ledger.commit(
-          action({ id: attempt, parentId: operation, sessionId: id, kind: "attempt" }),
+          action({ id: attempt, parentId: operation, sessionId: id, kind: "llm" }),
         );
 
         expect(retryDelivery(reads, `${attempt}:retry:1`)).toEqual({ op: "run" });
@@ -87,7 +87,7 @@ describe("retry delivery chain guard", () => {
             id: `${operation}:attempt:2`,
             parentId: operation,
             sessionId: id,
-            kind: "attempt",
+            kind: "llm",
           }),
         );
         expect(retryDelivery(reads, `${attempt}:retry:1`)).toEqual({
@@ -100,7 +100,7 @@ describe("retry delivery chain guard", () => {
           id: `${attempt}:result`,
           parentId: attempt,
           sessionId: id,
-          kind: "attempt",
+          kind: "llm",
           intent: { encodingVersion: 1, value: { phase: "result" } },
           effect: { encodingVersion: 1, value: { phase: "result", terminal: "failed" } },
           ts: 101,
@@ -132,11 +132,11 @@ describe("retry delivery chain guard", () => {
       });
     const nodes = [
       node("op", null, "llm", 1),
-      node("op:attempt:1", "op", "attempt", 2),
+      node("op:attempt:1", "op", "llm", 2),
       ...Array.from({ length: 256 }, (_, index) =>
         node(`op:tool:${index}`, "op", "tool", 3 + index),
       ),
-      node("op:attempt:2", "op", "attempt", 259),
+      node("op:attempt:2", "op", "llm", 259),
     ];
     const memory = memoryExecutionReads(() => nodes);
     const reads: AlarmChainReads = {
@@ -274,7 +274,7 @@ describe("watch delivery chain guards", () => {
             id: occurrence,
             parentId: fixture.identity.turnId,
             sessionId: id,
-            kind: "alarm.fired",
+            kind: "alarm",
           }),
         );
         yield* fixture.ledger.commit(
@@ -282,7 +282,7 @@ describe("watch delivery chain guards", () => {
             id: watchTimeoutKey(timeout),
             parentId: fixture.identity.turnId,
             sessionId: id,
-            kind: "alarm.fired",
+            kind: "alarm",
           }),
         );
 

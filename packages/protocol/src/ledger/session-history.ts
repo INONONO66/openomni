@@ -91,6 +91,11 @@ export namespace SessionHistory {
     "result",
     "state",
     "record",
+    // The request lifecycle phases (#1252): answers are `answered` rows.
+    "open",
+    "answered",
+    "resolved",
+    "expired",
   ]);
   export type Phase = z.infer<typeof Phase>;
 
@@ -177,7 +182,7 @@ export namespace SessionHistory {
       revision: z.number().int().positive(),
       turnId: Id.nullable(),
       callId: Id,
-      mode: z.enum(["approval", "reply"]),
+      mode: z.enum(["approval", "answer"]),
       inputHash: Id,
       state: z.enum(["open", "resolved", "refused", "expired", "cancelled"]),
       outcome: Outcome,

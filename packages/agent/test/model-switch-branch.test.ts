@@ -1,3 +1,4 @@
+import { attemptIntentIds, isAttemptRow, isLogicalLlm } from "./helpers/llm-rows";
 import { expect, test } from "bun:test";
 import { APICallError } from "ai";
 import { LlmRunFailure } from "../src/model";
@@ -28,7 +29,7 @@ function retryFailure() {
 }
 
 function attemptIntents(actions: readonly LedgerAction.Node[]) {
-  return actions.filter((action) => action.kind === "attempt" &&
+  return actions.filter((action) => isAttemptRow(action, attemptIntentIds(actions)) &&
     PlainObjectSchema.parse(action.intent.value).phase === "intent");
 }
 
@@ -88,7 +89,7 @@ test("restoration honors a caller-captured pre-switch parent and appends a new b
   expect(yield* restoreModelSelection(branch, fallback, [primary, fallback])).toBe(0);
   const after = sessionTree(recording.identity.sessionId);
   expect(after.slice(0, before.length)).toEqual(before);
-  const restoration = after.slice(before.length).find((action) => action.kind === "llm" &&
+  const restoration = after.slice(before.length).find((action) => isLogicalLlm(action, attemptIntentIds(after)) &&
     PlainObjectSchema.parse(action.intent.value).phase === "intent");
   expect(restoration).toMatchObject({ parentId: preSwitch.id });
   expect(restoration?.intent.value).toMatchObject({ op: "restore_model_selection", value: { from: fallback, to: primary } });

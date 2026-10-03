@@ -5,7 +5,8 @@ import { type ExecutionError, GenerationUnavailable, InvocationClosed, CommitFai
 import { type BusEvent, GateDecision, LedgerAction, type LedgerSession, type ObservationSink as ObservationPort, type PlainValue, type SessionTransition, Tool, type PlainObject, L0Observation, canonicalDigest, PlainValueSchema, RowVerdictType, SessionHistory, listenForAbort } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput, PolicyEvaluation } from "./compile";
 import type { RetryAlarmPort, AlarmSenders } from "../alarm-ports";
-import { createRetryAlarmPort } from "../alarm";
+import { alarmAction, createRetryAlarmPort } from "../alarm";
+import { turnStopAction } from "../commit";
 import type { WaveControl, Dispatcher } from "../tool";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { onAbort, type CapturedGeneration, BOUNDED_CONCURRENCY, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "../ports";
@@ -770,7 +771,7 @@ function usageProvenance(evidence: PlainValue, failure: ExecutionError | undefin
 
 /**
  * Default durable retry port over the timer plane (W5.2 plan D8): `arm`
- * commits the `retry.scheduled` fact as an `alarm.arm` chain action through
+ * commits the `retry.scheduled` fact as an armed `alarm` chain action through
  * the session ledger. Without a cluster client there is no DeliverAt sender:
  * the chain action is the durable evidence activation resume consumes, and
  * the live residual sleep carries the in-process wait. Composition injects
@@ -785,27 +786,23 @@ export function createLedgerRetryAlarmPort(
   return createRetryAlarmPort({
     commitScheduled: (input) =>
       ledger
-        .commit(LedgerAction.Append.parse({
+        .commit(LedgerAction.Append.parse(alarmAction({
           id: input.id,
           parentId: null,
           sessionId,
-          kind: "alarm.arm",
-          intent: { encodingVersion: 1, value: { kind: "at", fireAt: input.notBefore } },
+          intent: { op: "arm", kind: "at", fireAt: input.notBefore },
           effect: {
-            encodingVersion: 1,
-            value: {
-              status: "armed",
-              spec: {
-                kind: "retry.scheduled",
-                attempt: input.attempt,
-                reason: input.reason,
-                notBefore: input.notBefore,
-              },
+            status: "armed",
+            spec: {
+              kind: "retry.scheduled",
+              attempt: input.attempt,
+              reason: input.reason,
+              notBefore: input.notBefore,
             },
           },
-          revert: { encodingVersion: 1, value: { op: "cancel", id: input.id } },
+          revert: { op: "cancel", id: input.id },
           ts: input.notBefore,
-        }))
+        })))
         .pipe(
           Effect.mapError((error) => new CommitFailed({ error })),
           Effect.asVoid,
@@ -827,7 +824,7 @@ function createAttemptRunner(
     return Effect.gen(function* () {
       const decision = yield* approve(request, intent, policy);
       if (decision === "approve") return;
-      yield* record.appendResult({ kind: "attempt", op: request.op }, intent.action.id, {
+      yield* record.appendResult({ kind: "llm", op: request.op }, intent.action.id, {
         phase: "result", terminal: "blocked_pre", reason: decision === "timeout" ? "approval_timeout" : "approval_refused",
       });
       return yield* new PolicyDenied({ phase: "pre", ruleIds: policy.matchedRuleIds });
@@ -844,7 +841,7 @@ function createAttemptRunner(
         return prepared.admit().pipe(
           Effect.flatMap((): Effect.Effect<void, ExecutionError> => options.signal?.aborted ? Effect.interrupt : Effect.void),
           Effect.flatMap(() => record.appendIntent({
-            kind: "attempt", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
+            kind: "llm", op: prepared.request.op, parentId: parent.action.id, value: prepared.request.intent,
             invocation: {
               effectHash: canonicalDigest(prepared.request.effect), attempt, maxAttempts: Retry.MAX_ATTEMPTS,
               retryReason: failures.at(-1) ?? null,
@@ -864,7 +861,7 @@ function createAttemptRunner(
         Effect.flatMap((exit) => {
           const evidence = Exit.isSuccess(exit) ? attempts.evidence?.(exit.value) ?? null : causeEvidence(exit.cause);
           const failure = Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
-          return record.appendResult({ kind: "attempt", op: prepared.request.op }, intent.action.id, {
+          return record.appendResult({ kind: "llm", op: prepared.request.op }, intent.action.id, {
             phase: "result", effect: prepared.request.effect,
             terminal: Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause) ? "interrupted" : "executed",
             usageProvenance: usageProvenance(evidence, failure),
@@ -959,29 +956,18 @@ function createStopJudge(
       });
       return completion.verdict === "allow";
     }));
-    yield* commit({
+    yield* commit(turnStopAction({
       id: options.entropy(),
       sessionId: options.identity.sessionId,
       parentId: options.identity.parentActionId,
-      kind: "turn",
-      intent: {
-        encodingVersion: 1,
-        value: { phase: "stop", generation: options.policy.generation },
-      },
-      effect: {
-        encodingVersion: 1,
-        value: {
-          phase: "stop",
-          verdict:
-            result.verdict.kind === "waiting"
-              ? { kind: "waiting", reason: "live_wait", alarmIds: [...result.verdict.alarmIds] }
-              : { ...result.verdict },
-          state: { ...result.state },
-        },
-      },
+      generation: options.policy.generation,
+      verdict:
+        result.verdict.kind === "waiting"
+          ? { kind: "waiting", reason: "live_wait", alarmIds: [...result.verdict.alarmIds] }
+          : { ...result.verdict },
+      state: { ...result.state },
       ts: options.clock(),
-      irreversible: true,
-    });
+    }));
     return result;
   });
 }
@@ -1141,7 +1127,7 @@ function createExecutionRecovery(options: ExecutorOptions, record: RecoveryRecor
       let ambiguous = false;
       let lastSettled: LedgerAction.Node = action;
       for (const attempt of operationRecords(options.ledger.operationChildrenPage, action.id)) {
-        if (attempt.kind !== "attempt" || attempt.parentId !== action.id) continue;
+        if (attempt.kind !== "llm" || attempt.parentId !== action.id) continue;
         if (object(attempt.intent.value).phase !== "intent") continue;
         const settled = terminal(attempt.id);
         if (settled !== undefined) {

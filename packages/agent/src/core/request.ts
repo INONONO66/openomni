@@ -142,6 +142,19 @@ function payloadEvidence(payload: SessionTransition.Payload) {
   return {};
 }
 
+/**
+ * The request lifecycle phase a row records (#1252): answers are the
+ * `answered` phase of the one `request` kind — the former `reply` kind.
+ */
+function lifecyclePhase(
+  payload: SessionTransition.Payload,
+  request: SessionTransition.Request,
+): "open" | "answered" | "resolved" | "expired" {
+  if (payload.kind === "request.answer") return "answered";
+  if (request.state === "open") return "open";
+  return request.state === "expired" ? "expired" : "resolved";
+}
+
 function inputRecord(
   command: SessionTransition.Command,
   request: SessionTransition.Request,
@@ -154,7 +167,7 @@ function inputRecord(
     id: `${parentId}:input:${command.inputId}`,
     parentId,
     sessionId: command.sessionId,
-    kind: payload.kind === "request.answer" ? "reply" : "request",
+    kind: "request",
     intent: {
       encodingVersion: 1,
       value: { inputId: command.inputId, inputDigest, command: payload.kind },
@@ -162,7 +175,7 @@ function inputRecord(
     effect: {
       encodingVersion: 1,
       value: PlainValueSchema.parse({
-        phase: "state",
+        phase: lifecyclePhase(payload, request),
         request,
         resolution,
         ...payloadEvidence(payload),
@@ -187,7 +200,11 @@ function resolutionRecord(
     intent: { encodingVersion: 1, value: { phase: "resolution" } },
     effect: {
       encodingVersion: 1,
-      value: PlainValueSchema.parse({ phase: "state", request, resolution }),
+      value: PlainValueSchema.parse({
+        phase: request.state === "expired" ? "expired" : "resolved",
+        request,
+        resolution,
+      }),
     },
     ts: command.at,
     irreversible: true,
@@ -211,7 +228,7 @@ function receivesReply(
   request: SessionTransition.Request,
   resolution: SessionTransition.Resolution,
 ): boolean {
-  return request.mode === "reply" && (resolution === "attached" || resolution === "resolved");
+  return request.mode === "answer" && (resolution === "attached" || resolution === "resolved");
 }
 
 function replyIntake(
@@ -461,7 +478,7 @@ function principalValid(
   request: SessionTransition.Request,
 ): boolean {
   if (request.mode === "approval")
-    return answer.principal.kind === "owner" && answer.decision !== "reply";
+    return answer.principal.kind === "owner" && answer.decision !== "answer";
   return answer.decision !== "approve";
 }
 
@@ -630,7 +647,7 @@ function openedRequest(
     sessionId: input.sessionId,
     turnId,
     callId: typeof intent.callId === "string" ? intent.callId : input.requestId,
-    mode: "reply",
+    mode: "answer",
     parsedInput: value,
     inputHash: canonicalDigest(value),
     effectHash: typeof intent.effectHash === "string" ? intent.effectHash : canonicalDigest({}),
