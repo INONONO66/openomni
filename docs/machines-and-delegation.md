@@ -153,7 +153,9 @@ refused `peer_key_mismatch` before admission, and a pin-mismatched intruder
 never displaces a valid attachment. Unix connections carry no peer key; the
 enrollment pin is simply not consulted there. See `docs/key-generation.md`
 for openssl one-liners, rotation, and addressing (Tailscale = tailnet IP in
-`tcp.host`; LAN = interface address).
+`tcp.host`; LAN = interface address). Breaking (#1270): `Enrollment.publicKey`
+is REQUIRED — existing `OPENOMNI_MACHINES_ENROLLED` values without it fail
+closed at boot until each enrollment carries the daemon's key fingerprint.
 
 Disconnection is a first-class state: while a known machine's transport is
 down, its handle calls — including calls that were in flight when the
