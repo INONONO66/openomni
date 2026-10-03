@@ -29,7 +29,8 @@ The protocol contracts for both belong together because they meet in the tool ca
   intersection, sorted; mismatched machine ids refuse (`machine_mismatch`).
   Neither side can grant itself a capability the other never named.
 - `Machine.CapabilityId` — dot-namespaced lowercase grammar (`fs.read`,
-  `shell.exec`, `kernel.py`, `screen.read`, `input.write`). Open vocabulary,
+  `shell.exec`, `kernel.py`, `screen.read`, `input.write`, `pty.session`).
+  Open vocabulary,
   owned grammar: enrollment writer, daemon offer, and tool `requires` all
   parse the same shape.
 - Events: `machine.attached` (carries the effective set in force),
@@ -201,7 +202,46 @@ attach` is unchanged: a remote daemon attaches alongside `self` over the
 same protocol and negotiates capabilities through the same
 enrollment/offer intersection.
 
-### 2.5 Code-mode ownership and lifecycle
+### 2.5 Persistent terminals (`pty.session` over tmux, #1273)
+
+- Capability `pty.session` is offered only when `tmux` resolves on PATH at
+  attach time (probe via the same `CommandRunner` port); enrollment ∩ offer
+  stays authoritative, so an installed binary alone grants nothing. Wire
+  methods: `machine.pty_open/pty_write/pty_read/pty_resize/pty_close/pty_list`
+  with protocol-owned bounds (`PTY_READ_MAX_BYTES` 256 KiB,
+  `PTY_WRITE_MAX_BYTES` 16 KiB, list 1000, cols/rows 1000, `waitMs` <= 30 s)
+  and typed refusals `pty_not_found` / `pty_not_available` /
+  `path_escapes_export`.
+- The daemon runs ONE tmux control-mode client (`tmux -C`, module split
+  `pty-control` / `pty-decode` / `pty-registry` / `pty.ts`); each `pty_open`
+  is `new-session -d` with cwd confined by the SAME `openCwd` rule as exec
+  (refused before any session exists, symlink escapes included). Same-name
+  open reattaches, never creates a second session; each session's window is
+  linked into the reserved control session `omo-pty-control` because
+  `%output` only flows for the attached session's panes.
+- `pty_read` is the authoritative pull: one cursor sequence replays the
+  `capture-pane -S -` scrollback snapshot taken at attach, then live decoded
+  `%output` bytes, with no duplicate bytes across the transition. Cursors are
+  opaque monotonically advancing tokens (`p1:<generation>:<offset>`); callers
+  persist only the returned token. Over-cap reads return the bounded suffix
+  with `truncated: true` and a cursor past ALL observed output; a
+  foreign-generation cursor resumes after the current snapshot. The optional
+  `machine.pty_output` notification is a wake-up only, never output state.
+- The tmux server, not the daemon, owns session lifetime: a daemon restart
+  rediscovers sessions by name (`list-sessions`) with scrollback and cursor
+  continuity. tmux server death marks every session `lost`, settles pending
+  reads as `pty_not_available`, and withdraws the capability until the next
+  attach probe. A malformed control record fails exactly the affected pane's
+  next read, then streaming resumes.
+- Model doors (the 12-tool catalog stays sealed): `bash` gains optional
+  `session` — with `machine`+`session` the command is typed into the named
+  terminal (`send-keys` literal hex chunks) and stdout carries output since
+  the tool's own per-session cursor; an empty command just reads. `monitor`
+  watches a named terminal as a command source and its completion never
+  closes the terminal. Code mode: `m.pty(name)` handles with
+  `open/write/read/resize/close` plus `m.ptyList()`.
+
+### 2.6 Code-mode ownership and lifecycle
 
 `createCodemode({machines,completion,tools})` is a reusable facade over a
 structural machines port. It supplies

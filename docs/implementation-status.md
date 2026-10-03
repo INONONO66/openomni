@@ -1,5 +1,35 @@
 # Implementation Status
 
+## #1273 persistent terminals: pty.session over tmux
+
+On `machines/1273-pty-session` (2026-10-03, base `a004bdb0`, draft PR #1283).
+The machine protocol gains the `pty.session` capability and six wire methods
+`machine.pty_open/pty_write/pty_read/pty_resize/pty_close/pty_list` with
+strict bounds (`PTY_READ_MAX_BYTES` 256 KiB, `PTY_WRITE_MAX_BYTES` 16 KiB,
+`PTY_LIST_MAX_SESSIONS` 1000, cols/rows <= 1000, read `waitMs` <= 30 s long
+poll) and typed refusals `pty_not_found`/`pty_not_available`/
+`path_escapes_export`; `machine.pty_output` is a reserved wake-up
+notification, never output authority. The daemon adapter
+(`packages/machines/src/pty.ts` + `pty-control`/`pty-decode`/`pty-registry`)
+runs one `tmux -C` control client, decodes octal-escaped `%output` into
+per-session cursor streams (opaque `p1:<generation>:<offset>` tokens, replay
+= `capture-pane -S -` snapshot then live bytes, no duplicates, over-cap reads
+return the bounded suffix with `truncated: true` and advance past all
+observed output, 1 MiB live retention), confines `pty_open` cwd under the
+exec `openCwd` rule before any session exists, reattaches same-name opens,
+links session windows into the reserved `omo-pty-control` session, and
+rediscovers sessions by name after a daemon restart (the tmux server owns
+session lifetime). Server death marks sessions `lost`, settles pending reads
+`pty_not_available`, and withdraws the capability until the next attach
+probe. Host handles gain `pty` (`src/pty-host.ts`, one routed-call seam);
+code mode exposes `m.pty(name).open/write/read/resize/close` and
+`m.ptyList()`; the sealed `bash` tool gains optional `session` (per-session
+cursor state inside the tool, empty command = read-only drain) and `monitor`
+watches a named terminal without closing it. Tests: protocol machine suite,
+real-tmux adapter suite on a private socket (`packages/machines/test/pty.test.ts`),
+attach offer gating + enrollment withhold + export refusals, and app-door
+e2e including a daemon restart over a live tmux server.
+
 ## #1253 four session entity RPCs (epic #1260, draft PR #1279)
 
 On `epic1260/1253-four-entity-rpcs` (2026-10-03, base `58b7f18d`). The session
