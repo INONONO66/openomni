@@ -343,14 +343,21 @@ class BrowserClient:
         self._transcript += text
         return text
 
-    def _await_output(self, markers, rounds=240, wait_ms=1000):
+    def _await_output(self, markers, quiet_rounds=120, wait_ms=1000, max_reads=10000):
         """Block on pty_read long-polls until a marker line is retained: readiness
-        is decided by exact output, never by elapsed time; rounds only bound it."""
-        for _ in range(rounds):
+        is decided by exact output, never by elapsed time. Non-empty reads return
+        immediately (terminal echo arrives as many tiny events), so the failure
+        bound counts QUIET long-poll rounds plus a generous total-read cap."""
+        quiet = 0
+        for _ in range(max_reads):
             for marker in markers:
                 if marker in self._transcript:
                     return marker
-            if self._drain(wait_ms) is None:
+            chunk = self._drain(wait_ms)
+            if chunk is None:
+                return None
+            quiet = quiet + 1 if chunk == "" else 0
+            if quiet >= quiet_rounds:
                 return None
         return None
 
@@ -437,27 +444,50 @@ class BrowserClient:
             )
 
 
+    def is_connected(self):
+        return self._browser is not None and self._browser.is_connected()
+
+    def _lost(self, message):
+        """Loss detection (#1275 clause 6): drop the client, attach the transcript."""
+        self._shutdown(kill=False)
+        _browser_clients.pop((self.machine_id, self.profile_dir), None)
+        self._drain()
+        return BrowserLost(message, self._transcript)
+
+    def _alive(self):
+        if not self.is_connected():
+            raise self._lost("chromium exited or its CDP connection is gone")
+        return self._browser
+
+    def _reconnect(self):
+        """A stale connection is discarded and re-attached over the retained
+        endpoint; a dead Chromium surfaces as browser_lost, never a silent
+        replacement launch against the same profile."""
+        self._shutdown(kill=False)
+        try:
+            self._connect()
+        except BrowserLost:
+            _browser_clients.pop((self.machine_id, self.profile_dir), None)
+            raise
+
     @property
     def browser(self):
-        return self._browser
+        return self._alive()
 
     @property
     def contexts(self):
-        return self._browser.contexts
+        return self._alive().contexts
 
     @property
     def context(self):
-        contexts = self._browser.contexts
+        contexts = self._alive().contexts
         if not contexts:
-            raise ToolError("the connected chromium exposes no browser context")
+            raise self._lost("the connected chromium exposes no browser context")
         return contexts[0]
 
     @property
     def pages(self):
         return self.context.pages
-
-    def is_connected(self):
-        return self._browser is not None and self._browser.is_connected()
 
     def _shutdown(self, kill):
         browser = self._browser
@@ -503,6 +533,8 @@ def browser(machine_id, *, headless=True, profile_dir=None, executable_path=None
                 + ("headless" if client.headless else "headed")
                 + "; close() it before switching display modes"
             )
+        if not client.is_connected():
+            client._reconnect()
         return client
     client = BrowserClient(machine_id, profile, bool(headless))
     client._attach(executable_path)
