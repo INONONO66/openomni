@@ -140,6 +140,75 @@ describe("gate-row compose rejections (#1251)", () => {
     ).toBe("bad_action");
   });
 
+  it("rejects a consulted gate carrying a constant verdict with `bad_action`: the constant would silently bypass the declared guard (#1251 r5)", () => {
+    for (const verdict of ["allow", "deny", "require_approval"] as const) {
+      expect(
+        rejectionCode(() =>
+          compile([gateRow("tool.pre", { how: { ref: "guard/check", verdict } })], ["guard/check"]),
+        ),
+      ).toBe("bad_action");
+    }
+  });
+
+  it("admits exactly the three gate execution modes: constant, consulted, obligation (#1251 r5)", () => {
+    expect(() => compile([gateRow("tool.pre", { how: { verdict: "deny" } })])).not.toThrow();
+    expect(() =>
+      compile([gateRow("tool.pre", { how: { ref: "guard/check" } })], ["guard/check"]),
+    ).not.toThrow();
+    // The historical obligation projection: metric/limit under the projection-fixed
+    // allow, with an optional obligation-handler ref - never a consulted gate.
+    expect(() =>
+      compile(
+        [
+          gateRow("turn.post", {
+            how: { verdict: "allow", ref: "kernel/budget-clamp", metric: "fanout", limit: 8 },
+          }),
+        ],
+        ["kernel/budget-clamp"],
+      ),
+    ).not.toThrow();
+    expect(() =>
+      compile([gateRow("turn.post", { how: { verdict: "allow", metric: "fanout", limit: 8 } })]),
+    ).not.toThrow();
+    expect(
+      rejectionCode(() =>
+        compile([gateRow("turn.post", { how: { verdict: "deny", metric: "fanout", limit: 8 } })]),
+      ),
+    ).toBe("bad_action");
+    expect(rejectionCode(() => compile([gateRow("tool.pre", { how: {} })]))).toBe("bad_action");
+  });
+
+  it("rejects a rewrite or emit row carrying a foreign execution mode with `bad_action` (#1251 r5)", () => {
+    expect(
+      rejectionCode(() =>
+        compile(
+          [
+            gateRow("llm.pre", {
+              do: "rewrite",
+              how: { ref: "rewrite/model", fields: ["model"], verdict: "allow" },
+            }),
+          ],
+          ["rewrite/model"],
+        ),
+      ),
+    ).toBe("bad_action");
+    expect(
+      rejectionCode(() =>
+        compile(
+          [gateRow("tool.post", { do: "emit", how: { emit: "message", verdict: "deny" } })],
+        ),
+      ),
+    ).toBe("bad_action");
+    expect(
+      rejectionCode(() =>
+        compile(
+          [gateRow("tool.post", { do: "emit", how: { emit: "message", ref: "guard/check" } })],
+          ["guard/check"],
+        ),
+      ),
+    ).toBe("bad_action");
+  });
+
   it("rejects a declared requires entry without a registered handler with `unknown_handler`", () => {
     expect(
       rejectionCode(() =>

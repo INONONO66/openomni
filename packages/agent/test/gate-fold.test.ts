@@ -78,6 +78,39 @@ describe("gate decision fold (#1251)", () => {
     ]);
   });
 
+  it("a consulted gate always calls its declared guard - a conflicting constant cannot reach the fold (#1251 r5)", () => {
+    let calls = 0;
+    const guard: GateHandler = () => {
+      calls += 1;
+      return { verdict: "deny", payload: { blocked: true } };
+    };
+    const gate = compileGateRows({
+      table,
+      rows: [gateRow("tool.pre", { how: { ref: "guard/check" } })],
+      handlers: ["guard/check"],
+      generation: 1,
+    });
+    const { decision } = gate.decide(
+      "tool.pre",
+      { when: {}, value: {} },
+      { handlers: () => guard },
+    );
+    expect(calls).toBe(1);
+    expect(decision.verdict).toBe("deny");
+    expect(decision.consulted.map((entry) => entry.ref)).toEqual(["guard/check"]);
+    // The reviewer's r5 probe row: ref plus a constant allow. It must refuse at
+    // admission - it can never compile into a decidable gate that skips the guard.
+    expect(() =>
+      compileGateRows({
+        table,
+        rows: [gateRow("tool.pre", { how: { ref: "guard/check", verdict: "allow" } })],
+        handlers: ["guard/check"],
+        generation: 1,
+      }),
+    ).toThrow();
+    expect(calls).toBe(1);
+  });
+
   it("applies rewrites in row order, each over the prior output, to declared fields only", () => {
     const upgrade: GateHandler = (input) => ({
       value: { model: `${plainModel(input.value)}+a`, extra: "dropped" },

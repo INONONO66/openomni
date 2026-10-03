@@ -124,6 +124,9 @@ export function applyRow(
     });
     return;
   }
+  // Admission guarantees one execution mode per row: a verdict here is either
+  // a constant row or an obligation row's projection-fixed allow (whose ref
+  // names the turn-boundary obligation handler, never a consulted guard).
   if (row.how.verdict !== undefined) {
     state.verdict = foldVerdict(state.verdict, row.how.verdict);
     return;
