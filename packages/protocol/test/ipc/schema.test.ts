@@ -98,6 +98,8 @@ describe("Ipc.Methods param schemas", () => {
         Machine.WireMethod.PeekCode,
         Machine.WireMethod.Exec,
         Machine.WireMethod.CallTool,
+        Machine.WireMethod.ScreenRead,
+        Machine.WireMethod.InputWrite,
         Machine.WireMethod.FsOp,
       ].sort(),
     );
