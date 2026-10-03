@@ -65,6 +65,24 @@ test("#1276 check b: a plugin importing any core path other than core/api.ts fai
   expect(found[0]).toContain("may import only core/api.ts from the core");
 });
 
+test("#1276 check b: a plugin importing model/, inspect/ or testing/ fails", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/plugins/compaction/successor.ts",
+    'import { fold } from "../../inspect/history";\nimport { m } from "../../model/errors";',
+  );
+  expect(found).toHaveLength(2);
+  expect(found[0]).toContain("plugins/compaction/ may not import inspect/");
+});
+
+test("#1276 check b: a non-band root module stays out of the plugin edge rules", () => {
+  expect(
+    agentBandViolations(
+      "packages/agent/src/plugins/compaction/restore.ts",
+      'import { barrel } from "../../index";',
+    ),
+  ).toEqual([]);
+});
+
 test("#1276 check b legal edges: core/api.ts, protocol and plugin-internal imports pass", () => {
   expect(
     agentBandViolations(

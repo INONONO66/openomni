@@ -30,6 +30,7 @@ export const scriptsLanes = {
     "bundle-type-contract.test.ts",
     "census-consumer-contract.test.ts",
     "check-deps.test.ts",
+    "check-deps-agent-bands.test.ts",
     "check-quality-python.test.ts",
     "check-types-census.test.ts",
     "check-written-types.test.ts",
@@ -66,6 +67,7 @@ export const scriptToolingPartitions = {
   "scripts-tooling-1": [
     "census-consumer-contract.test.ts",
     "check-deps.test.ts",
+    "check-deps-agent-bands.test.ts",
     "check-written-types.test.ts",
     "run-quality-mutations.test.ts",
     "quality-mutation-workflow.test.ts",

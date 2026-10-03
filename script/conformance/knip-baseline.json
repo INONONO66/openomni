@@ -1,8 +1,3 @@
 {
-  "grandfathered": [
-    "files packages/agent/src/plugins/action/index.ts",
-    "files packages/agent/src/plugins/alarm/index.ts",
-    "files packages/agent/src/plugins/hook/index.ts",
-    "files packages/agent/src/plugins/tool/index.ts"
-  ]
+  "grandfathered": []
 }

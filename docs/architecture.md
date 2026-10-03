@@ -22,7 +22,7 @@ consumer work are recorded in [Implementation Status](implementation-status.md).
 
 ## Policy
 
-The policy gate inside `packages/agent` (`src/kernel/gate/`) is the generic actor-agnostic engine, and the agent dispatches the loop points it consumes. `packages/channels` owns perimeter policy. `apps/openomni` owns product composition and may select registrations without moving product semantics into the engine.
+The policy gate inside `packages/agent` (`src/core/gate/`) is the generic actor-agnostic engine, and the agent dispatches the loop points it consumes. `packages/channels` owns perimeter policy. `apps/openomni` owns product composition and may select registrations without moving product semantics into the engine.
 
 The old product-specific dispatch registrations and completion service were removed with their only implementation. Their protocol points remain contracts, not proof of a live consumer.
 
@@ -31,9 +31,10 @@ The old product-specific dispatch registrations and completion service were remo
 ```text
 ring 0  @openomni/protocol        schemas and pure folds
 ring 1  @openomni/agent           generic durable-session mechanics and the stateless
-                                  LLM loop, with the durable stores (src/store/), the
-                                  pure policy gate (src/kernel/gate/), and model
-                                  access (src/model/) folded in (#1246)
+                                  LLM loop, with the durable stores (src/core/store/),
+                                  the pure policy gate (src/core/gate/), and model
+                                  access (src/model/) folded in (#1246, one core/ since
+                                  #1276)
 
 lateral driver/gateway band:
         @openomni/machines        raw machine WHERE endpoints, the thin transport
