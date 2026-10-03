@@ -24,8 +24,7 @@ export interface JournalWriterFinding {
   readonly file: string;
   readonly line: number;
   readonly kind: string;
-  readonly reason: "undeclared_kind" | "foreign_writer";
-  readonly writer: string | undefined;
+  readonly writer: string;
 }
 
 const DECLARATION_GLOB = "packages/protocol/src/journal/{core,capability}/*.ts";
@@ -89,14 +88,12 @@ export function journalWriterFindings(root: string = ROOT): JournalWriterFinding
       const visit = (node: ts.Node): void => {
         if (ts.isObjectLiteralExpression(node)) {
           const kind = appendLiteralKind(node, kinds);
-          if (kind !== undefined) {
-            const writer = writers.get(kind);
+          // A recognized kind always has a declared writer: the kind set is
+          // built from the writer registry's keys.
+          const writer = kind === undefined ? undefined : writers.get(kind);
+          if (kind !== undefined && writer !== undefined) {
             const file = relative(root, join(root, path));
-            if (writer === undefined) {
-              findings.push({ file, line: line(source, node), kind, reason: "undeclared_kind", writer });
-            } else if (!writerOwns(file, writer)) {
-              findings.push({ file, line: line(source, node), kind, reason: "foreign_writer", writer });
-            }
+            if (!writerOwns(file, writer)) findings.push({ file, line: line(source, node), kind, writer });
           }
         }
         ts.forEachChild(node, visit);
@@ -120,10 +117,7 @@ export function checkJournalWriters(root: string | undefined): number {
   const findings = journalWriterFindings(root);
   for (const finding of findings) {
     process.stderr.write(
-      `VIOLATION [journal-writers] ${finding.file}:${finding.line} kind "${finding.kind}" ` +
-        (finding.reason === "undeclared_kind"
-          ? "has no declared writer\n"
-          : `is owned by ${finding.writer}\n`),
+      `VIOLATION [journal-writers] ${finding.file}:${finding.line} kind "${finding.kind}" is owned by ${finding.writer}\n`,
     );
   }
   if (findings.length > 0) return 1;

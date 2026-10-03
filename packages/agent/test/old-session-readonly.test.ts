@@ -59,6 +59,9 @@ test("#1252 newer catalog schemaVersion: reads work, Deliver/fork refused typed,
         expect(indexRefusal.fileVersion).toBe(99);
         expect(indexRefusal.codeVersion).toBe(1);
         expect(indexRefusal.operation).toBe("indexSession");
+        expect(indexRefusal.message).toBe(
+          "catalog schemaVersion 99 is newer than this build (1); indexSession refused — catalog is read-only",
+        );
       }
 
       // Deliver (activation fence rotation) is refused with the typed error.

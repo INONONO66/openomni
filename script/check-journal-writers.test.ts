@@ -71,6 +71,49 @@ test("a second append literal for a declared kind outside its writer module fail
     stderr:
       'VIOLATION [journal-writers] apps/openomni/src/rogue.ts:1 kind "alarm" is owned by packages/agent/src/core/alarm.ts\n',
   });
+
+  // Same tree in-process: the finding carries the exact location and owner,
+  // and the CLI shell reports the violating exit code.
+  expect(journalWriterFindings(root)).toEqual([
+    {
+      file: "apps/openomni/src/rogue.ts",
+      line: 1,
+      kind: "alarm",
+      writer: "packages/agent/src/core/alarm.ts",
+    },
+  ]);
+  expect(checkJournalWriters(root)).toBe(1);
+});
+
+test("an append literal with an undeclared kind is not a recognized journal row", () => {
+  const root = fixture({
+    "packages/protocol/src/journal/core/alarm.ts": ALARM_DECLARATION,
+    "packages/agent/src/core/alarm.ts": OWNER_WRITER,
+    // Only declared kinds are journal rows; a foreign "notice" literal is the
+    // append CHECK's problem (sqlite-l0-write refuses unknown kinds), not a
+    // writer-census finding.
+    "packages/agent/src/core/rogue.ts":
+      'export const planted = { id: "n", parentId: null, sessionId: "s", kind: "notice", ts: 5, irreversible: true };\n',
+  });
+
+  expect(journalWriterFindings(root)).toEqual([]);
+  expect(checkJournalWriters(root)).toBe(0);
+});
+
+test("a declaration without a backticked writer module is refused", () => {
+  const root = fixture({
+    "packages/protocol/src/journal/core/alarm.ts":
+      'export const alarm = declare(\n  "alarm",\n  schema,\n);\n',
+  });
+
+  expect(() => journalWriterDeclarations(root)).toThrow(
+    "journal declaration packages/protocol/src/journal/core/alarm.ts lacks a kind or a backticked writer module",
+  );
+});
+
+test("the CLI shell refuses a missing or nonexistent root", () => {
+  expect(checkJournalWriters(undefined)).toBe(1);
+  expect(checkJournalWriters(join(tmpdir(), "journal-writers-missing-root"))).toBe(1);
 });
 
 test("intent payload literals without an append shape never count as writers", () => {
