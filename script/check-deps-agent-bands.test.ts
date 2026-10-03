@@ -1,19 +1,25 @@
 /**
- * #1276 five-band agent table: the three new edge checks and the re-keyed
- * ratchet. Each check gets one synthetic violating file and one legal edge;
- * the re-keyed ratchet total must equal the corrected pre-move total (37;
- * review r2 addendum re-measured 66d56edb with band-root classification,
- * which the slash-only classifier undercounted by core/retry.ts). These cases
- * fail against the pre-#1276 seven-band table: `core/` was not a band (its
- * files escaped every rule), plugins could import any core path, siblings
- * were legal inside one `plugins` band, and no rule covered `apps/`.
+ * #1276 five-band agent table: the three new edge checks and the TIGHT
+ * ratchet (review r3 F1: every pin equals the file's HEAD actual count; slack
+ * fails closed). The edge-set proof replaces the old equal-totals assertion:
+ * HEAD actual total 25 = pre-move total 28 under the same corrected band-root
+ * classifier at 66d56edb minus the three edges the move deleted (listed
+ * below). These cases fail against the pre-#1276 seven-band table: `core/`
+ * was not a band (its files escaped every rule), plugins could import any
+ * core path, siblings were legal inside one `plugins` band, and no rule
+ * covered `apps/`.
  */
 import { expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  AGENT_BAND_EDGES_DELETED_BY_MOVE,
   AGENT_PLUGINS,
   agentBandRatchetTotal,
   agentBandViolations,
   appsAgentInternalViolations,
+  validateAgentBands,
 } from "./check-deps";
 
 // ─── check (a): core -> plugins/model/inspect/testing banned ───
@@ -181,8 +187,68 @@ test("#1276 check c legal edges: the barrel and app-internal imports pass; non-a
   ).toEqual([]);
 });
 
-// ─── the re-keyed ratchet total ───
+// ─── the tight ratchet and the edge-set proof ───
 
-test("#1276 ratchet: the re-keyed total equals the corrected pre-move total", () => {
-  expect(agentBandRatchetTotal()).toBe(37);
+/**
+ * The three forbidden edges the #1276 move DELETED: parent-reply and
+ * model-selection left packages/agent for apps/openomni/src/composition/, so
+ * core/run.ts and core/turn.ts stopped importing them (apps now inject both
+ * through the optional seams). Pre-move file:line at 66d56edb, re-keyed.
+ */
+const EDGES_DELETED_BY_MOVE = [
+  "core/turn.ts:24 ../plugins/model-selection",
+  "core/run.ts:21 ../plugins/parent-reply",
+  "core/run.ts:24 ../plugins/model-selection",
+] as const;
+
+test("#1276 ratchet: HEAD actual total is 25 = pre-move 28 minus the 3 deleted edges", () => {
+  expect(EDGES_DELETED_BY_MOVE).toHaveLength(AGENT_BAND_EDGES_DELETED_BY_MOVE);
+  // Pre-move total under the same corrected five-band classifier at 66d56edb
+  // (r2 addendum measurement) minus the deleted edges = HEAD actual total.
+  expect(agentBandRatchetTotal()).toBe(28 - EDGES_DELETED_BY_MOVE.length);
+});
+
+// ─── the real scanner: regrowth in a clean file and slack both fail ───
+
+function scratchAgentTree(files: Record<string, string>): string {
+  const root = mkdtempSync(join(tmpdir(), "bands-"));
+  for (const [file, source] of Object.entries(files)) {
+    const path = join(root, "packages/agent/src", file);
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, source);
+  }
+  return root;
+}
+
+test("#1276 (r3): a forbidden import in a formerly-pinned, now-clean file fails the scan", async () => {
+  const root = scratchAgentTree({
+    "core/store/errors.ts":
+      'import { name } from "../../plugins/alarm";\nexport const e = name;\n',
+  });
+  try {
+    const violations = await validateAgentBands(root);
+    expect(violations).toContain(
+      "VIOLATION: packages/agent/src/core/store/errors.ts:1 imports ../../plugins/alarm — #1247 bands: core/ may not import plugins/",
+    );
+    expect(violations).toContain(
+      "VIOLATION: packages/agent/src/core/store/errors.ts has 1 band violations over the #1276 ratchet of 0 — shrink only, never grow",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("#1276 (r3): a pin above the actual count fails closed", async () => {
+  // core/retry.ts is pinned at 1; a scratch tree where it is clean must fail.
+  const root = scratchAgentTree({
+    "core/retry.ts": "export const clean = true;\n",
+  });
+  try {
+    const violations = await validateAgentBands(root);
+    expect(violations).toContain(
+      "VIOLATION: packages/agent/src/core/retry.ts pin exceeds actual (1 > 0): lower the pin",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

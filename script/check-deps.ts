@@ -748,7 +748,7 @@ const AGENT_INSPECT_BUS_BAN = "core/bus";
 /**
  * #1276: exactly five plugin directories. agentBandViolations flags a file in
  * any other `plugins/<dir>/`, and packages/agent/test/plugins/
- * scaffold-names.test.ts asserts the live directory listing equals this table.
+ * plugins-layout.test.ts asserts the live directory listing equals this table.
  */
 export const AGENT_PLUGINS = ["action", "alarm", "compaction", "hook", "tool"] as const;
 
@@ -887,44 +887,43 @@ export function agentBandViolations(filePath: string, source: string): string[] 
 }
 
 /**
- * #1276 ratchet baseline, re-keyed after the kernel/+session/+store/ -> core/
- * move (#1247 pinned the same violations on the old paths). Counts are
- * UNCHANGED from the pre-move baseline so the totals prove the move neither
- * introduced nor hid an edge: pre-move total 37 = post-move total 37 (sum of
- * this map; `agentBandRatchetTotal()` is asserted by
- * script/check-deps-agent-bands.test.ts and printed by the gate). Counts may
- * only shrink; a new file or a higher count fails. #1255 drives every entry
- * to zero. Two entries moved to apps/openomni/src/composition (outside this
- * scan) and are kept at their old counts so the re-keyed total stays equal;
- * #1258 deletes them.
+ * #1276 ratchet baseline, TIGHT: every pin equals the file's HEAD actual count
+ * under the corrected band-root classifier, so there is no slack to grow into
+ * (review r3 F1; the issue's literal "equal totals" is an Owner-recorded
+ * deviation). HEAD actual total 25; pre-move total under the same classifier
+ * at 66d56edb is 28, and the difference is exactly the three edges the move
+ * deleted (core/turn.ts:24 and core/run.ts:21,24 -> parent-reply/
+ * model-selection, now injected by apps/openomni). Includes the core/retry.ts
+ * +1 slash-only-classifier undercount correction (r2 addendum). A new file, a
+ * higher count, OR A PIN ABOVE THE ACTUAL fails: shrinkage lowers the pin in
+ * the same PR. #1255 drives every entry to zero.
  */
 const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
+  ["packages/agent/src/core/commit.ts", 2],
+  // core -> plugins/compaction/restore edge; #1255 owns the inversion and
+  // #1252/#1253 delete the file with the single write path.
   ["packages/agent/src/core/compaction.ts", 3],
   ["packages/agent/src/core/failure.ts", 1],
-  ["packages/agent/src/core/gate/decide.ts", 6],
+  ["packages/agent/src/core/gate/decide.ts", 2],
   ["packages/agent/src/core/index.ts", 1],
-  ["packages/agent/src/core/ports.ts", 2],
+  ["packages/agent/src/core/mailbox.ts", 2],
+  ["packages/agent/src/core/ports.ts", 1],
+  // pre-existing value import (instanceof LlmRunFailure); undercounted by the
+  // slash-only classifier before #1276 (r2 addendum measurement correction).
+  ["packages/agent/src/core/retry.ts", 1],
+  ["packages/agent/src/core/run.ts", 2],
   ["packages/agent/src/core/turn.ts", 6],
   ["packages/agent/src/core/types.ts", 2],
   ["packages/agent/src/model/errors.ts", 1],
   // plugin -> inspect/history edge; #1255 owns the inversion.
-  ["packages/agent/src/plugins/compaction/successor.ts", 2],
-  // moved to apps (product choices); kept so the re-keyed total stays 36.
-  ["apps/openomni/src/composition/model-selection.ts", 1],
-  ["apps/openomni/src/composition/parent-reply/index.ts", 3],
-  ["packages/agent/src/core/commit.ts", 2],
-  // core -> plugins/compaction/restore edge; #1255 owns the inversion and
-  // #1252/#1253 delete the file with the single write path.
-  ["packages/agent/src/core/mailbox.ts", 2],
-  // pre-existing value import (instanceof LlmRunFailure); undercounted by the
-  // slash-only classifier before #1276 (review r2 addendum, measurement
-  // correction flagged to the Owner: pre-move 37 = post-move 37).
-  ["packages/agent/src/core/retry.ts", 1],
-  ["packages/agent/src/core/run.ts", 3],
-  ["packages/agent/src/core/store/errors.ts", 1],
+  ["packages/agent/src/plugins/compaction/successor.ts", 1],
 ]);
 
-/** The sum of the pinned allowances; equal before and after the #1276 move. */
+/** The number of forbidden edges the #1276 move deleted (parent-reply and
+ * model-selection left the package for apps/openomni/src/composition/). */
+export const AGENT_BAND_EDGES_DELETED_BY_MOVE = 3;
+
+/** HEAD actual violation total; the pins are tight, so this is the pin sum. */
 export function agentBandRatchetTotal(): number {
   let total = 0;
   for (const count of AGENT_BAND_RATCHET.values()) total += count;
@@ -933,10 +932,12 @@ export function agentBandRatchetTotal(): number {
 
 export async function validateAgentBands(root = "."): Promise<string[]> {
   const counts = new Map<string, string[]>();
+  let pinnedFilesScanned = 0;
   for await (const { filePath, source } of scanRepositorySources(
     `${AGENT_SRC_PREFIX}**/*.ts`,
     root,
   )) {
+    if (AGENT_BAND_RATCHET.has(filePath)) pinnedFilesScanned += 1;
     const found = agentBandViolations(filePath, source);
     if (found.length > 0) counts.set(filePath, found);
   }
@@ -947,6 +948,21 @@ export async function validateAgentBands(root = "."): Promise<string[]> {
       violations.push(
         ...found,
         `VIOLATION: ${filePath} has ${found.length} band violations over the #1276 ratchet of ${allowed} — shrink only, never grow`,
+      );
+    }
+  }
+  // Review r3 F1: slack is a growth surface, so a pin above the actual count
+  // fails closed — shrinkage is autonomous and lowers the pin in the same PR.
+  // Scoped to trees holding at least one pinned file (scratch gate fixtures
+  // have none); the repository always does, and deleting a single pinned file
+  // there still fails closed through the remaining ones.
+  for (const [filePath, allowed] of pinnedFilesScanned === 0
+    ? []
+    : [...AGENT_BAND_RATCHET.entries()].sort()) {
+    const actual = counts.get(filePath)?.length ?? 0;
+    if (actual < allowed) {
+      violations.push(
+        `VIOLATION: ${filePath} pin exceeds actual (${allowed} > ${actual}): lower the pin`,
       );
     }
   }
@@ -1614,9 +1630,11 @@ export async function main(): Promise<void> {
     ...goldenViolations,
   ];
 
-  // #1276: the re-keyed band ratchet total must equal the pre-move total,
-  // re-measured at 66d56edb with the corrected band-root classifier (37).
-  console.log(`#1276 agent band ratchet total: ${agentBandRatchetTotal()} (pre-move total: 37)`);
+  // #1276: tight pins — the printed totals carry the edge-set proof (25 = 28
+  // pre-move under the same classifier minus the 3 edges the move deleted).
+  console.log(
+    `#1276 agent band ratchet total: ${agentBandRatchetTotal()} (pre-move total under the same classifier: 28; ${AGENT_BAND_EDGES_DELETED_BY_MOVE} edges deleted by the move)`,
+  );
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {

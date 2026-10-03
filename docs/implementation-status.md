@@ -22,7 +22,13 @@ the five-band table with three new edge checks — core→plugin banned,
 plugin→sibling or non-api core banned, apps→agent internals banned
 (`appsAgentInternalViolations`) — each with fail-before tests in
 `script/check-deps-agent-bands.test.ts`; the band ratchet is re-keyed to the
-new paths with counts unchanged (total 36 = pre-move 36, printed by the gate).
+new paths with TIGHT pins (review r3: every pin equals the file's HEAD actual
+count, a pin above the actual fails closed) — 25 violations at HEAD vs 28
+pre-move under the same corrected band-root classifier (which also surfaced
+the `core/retry.ts` +1 undercount of the old slash-only classifier), the
+difference being exactly the three edges the move deleted
+(`core/turn.ts:24`, `core/run.ts:21,24` → parent-reply/model-selection, now
+app-injected); the gate prints both totals.
 Deviation from the issue body: the app did NOT already compose
 parent-reply/model-selection — core called them directly at four sites — so
 the seams above were added (~10 lines) beyond import-line-only.

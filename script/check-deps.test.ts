@@ -577,11 +577,15 @@ test("#1276 ratchet: growth over the pinned baseline fails, within-baseline pass
   const violations = await validateAgentBands(grown);
   expect(violations.some((line) => line.includes("over the #1276 ratchet of 1"))).toBe(true);
 
-  // Exactly at the pinned count: the ratchet holds without failing.
+  // Exactly at the pinned count: that file passes. The other pinned files are
+  // absent from this scratch tree, so the review r3 slack rule reports each of
+  // them (pin exceeds actual) — slack never passes silently.
   const pinned = fixture({
     "packages/agent/src/core/failure.ts": 'import { a } from "../plugins/compaction/restore";',
   });
-  expect(await validateAgentBands(pinned)).toEqual([]);
+  const atPin = await validateAgentBands(pinned);
+  expect(atPin.filter((line) => line.includes("core/failure.ts"))).toEqual([]);
+  expect(atPin.every((line) => line.includes("pin exceeds actual"))).toBe(true);
 });
 
 test("#1276 bands: external bans catch exact and prefixed specifiers, legal externals pass", () => {
