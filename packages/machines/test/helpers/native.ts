@@ -46,15 +46,19 @@ export async function createMachineHost(options: Omit<Parameters<typeof Native.c
   const callTool = options.callTool;
   const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), callTool: callTool ? (call) => foreign(() => callTool(call)) : undefined }));
   const handles = new Map<string, MachineHandle>();
-  return { native, list: native.list,
+  return { native, list: native.list, endpoints: native.endpoints,
     get(id: string) { let handle = handles.get(id); if (!handle) { handle = machineHandle(native.get(id)); handles.set(id, handle); } return handle; },
     close: async () => { await run(native.close()); await close(); },
   };
 }
 export type MachineHost = Awaited<ReturnType<typeof createMachineHost>>;
-export async function attachMachineDaemon(options: Omit<Parameters<typeof Native.attachMachineDaemon>[0], "runner" | "id"> & { id?: () => string; runner?: CodeRunner }) {
+type NativeDaemonOptions = Parameters<typeof Native.attachMachineDaemon>[0];
+type DaemonConnection =
+  | Omit<Extract<NativeDaemonOptions, { socketPath: string }>, "runner" | "id">
+  | Omit<Extract<NativeDaemonOptions, { tcp: { host: string; port: number } }>, "runner" | "id">;
+export async function attachMachineDaemon(options: DaemonConnection & { id?: () => string; runner?: CodeRunner }) {
   const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), runner: options.runner ? nativeRunner(options.runner) : undefined }));
-  return { native, attachment: native.attachment, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
+  return { native, get attachment() { return native.attachment; }, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
 }
 export function createFsDriver(...args: Parameters<typeof fsDriver>) {
   const native = sync(fsDriver(...args));

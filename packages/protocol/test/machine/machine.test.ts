@@ -6,6 +6,7 @@ const enrollment = {
   machineId: "mac-0",
   name: "brain-mac",
   allowedCapabilities: ["fs.read", "fs.write", "shell.exec", "kernel.py"],
+  publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   enrolledAt: 1,
 } satisfies Machine.Enrollment;
 

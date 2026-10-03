@@ -11,12 +11,13 @@ export function bridgeHost(
 ) {
   const callTool = options.callTool;
   return acquireEffect(createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     id: testIds("bridge-host"),
     enrollment: () => ({
       name: "workstation",
       machineId: "m-1",
       allowedCapabilities: ["kernel.py"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1000,
     }),
     events: { publish: () => undefined },

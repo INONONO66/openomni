@@ -1,6 +1,8 @@
 // Published protocol-only transport contract; product semantics stay in consumers.
-export { connectIpcClient } from "./client";
-export type { IpcClient } from "./client";
+export { connectIpcClient, connectIpcTcpClient } from "./client";
+export type { IpcClient, IpcTcpConnectSpec } from "./client";
 export * from "./errors";
-export { createIpcServer } from "./server";
-export type { IpcServer } from "./server";
+export { createIpcServer, createIpcTcpServer } from "./server";
+export type { IpcServer, IpcTcpServer, IpcTcpListenSpec } from "./server";
+export { certificateKeyFingerprint } from "./tls";
+export type { IpcTlsIdentity } from "./tls";

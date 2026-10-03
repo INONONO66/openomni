@@ -14,7 +14,7 @@ test.each([false, true])("machine entry adapter handles enrollment %s", async (e
   const home = mkdtempSync(join(tmpdir(), "openomni-machine-entry-"));
   const path = socketPath();
   const host = await acquireEffect(createMachineHost({
-    socketPath: path,
+    listen: { unix: path },
     id: testIds("entry-host"),
     enrollment: () =>
       enrolled
@@ -22,6 +22,7 @@ test.each([false, true])("machine entry adapter handles enrollment %s", async (e
             machineId: "entry-machine",
             name: "entry",
             allowedCapabilities: ["kernel.py"],
+            publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             enrolledAt: 1,
           }
         : undefined,

@@ -19,7 +19,7 @@ const RefusalFields = z.object({
   reason: z.enum([
     "machine_not_attached", "fs_not_available", "export_not_available", "path_escapes_export",
     "not_found", "wrong_kind", "io_error", "too_large", "ambiguous_export", "invalid_method",
-    "invalid_response", "closed", "ambiguous_machine",
+    "invalid_response", "closed", "ambiguous_machine", "peer_key_mismatch", "disconnected",
   ]),
   message: z.string(),
 });

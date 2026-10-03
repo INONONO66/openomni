@@ -19,12 +19,13 @@ async function fixture(
   const fake = fakeMac();
   let mode: ReturnType<typeof createCodemode>;
   const host = await createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     enrollment: (id) => ({
       machineId: id,
       name: id,
       tags: [id],
       allowedCapabilities: capabilities,
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: silent,

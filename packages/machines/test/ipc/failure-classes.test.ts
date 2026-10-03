@@ -6,6 +6,7 @@ import { IpcConnectionError, IpcProtocolError, IpcRemoteError } from "../../src/
 import { LineDecoder, encode } from "../../src/ipc/framing";
 import { createIpcServer } from "./helpers/native";
 import { captureError, deferred, within } from "./helpers/signal";
+import { expectOversizeFailFast } from "./helpers/oversize";
 import { socketPath as socketPathForTest } from "./helpers/socket-path";
 import { connectRaw, transportFixture } from "./helpers/transport";
 
@@ -166,13 +167,7 @@ describe("failure classes stay honest (#606 re-audit)", () => {
     const client = await connectIpcClient(socketPath);
     clients.push(client);
 
-    const call = client.call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000);
-    // Observe rejection immediately: FIN must fail the request even with unsent bytes.
-    const rejected = captureError(call);
-    const [error] = await within(
-      Promise.all([rejected, disconnected.promise]), "oversize FIN and server disconnect", 12_000,
-    );
-    expect(error).toBeInstanceOf(IpcConnectionError);
+    await expectOversizeFailFast(client, disconnected.promise);
   });
 
   test("an error frame carrying the request's id settles the requester's pending", async () => {

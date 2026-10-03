@@ -1,14 +1,12 @@
 import { acquireEffect, runEffect } from "./helpers/effect";
 import { testCellPorts } from "./helpers/native-tool-ports";
 import { expect, test } from "bun:test";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
+import type { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 import { createMachineHost } from "@openomni/machines";
-import { Machine } from "@openomni/protocol";
+import { pinnedTcpHostOptions, qaOffer, spawnAttachCli, tlsFixturesDir } from "./helpers/machine-cli";
 import { composeCodemode, type ComposedCodemode } from "../src/composition/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { socketPath } from "./helpers/socket-path";
@@ -24,7 +22,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
   const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
   let cells: ComposedCodemode;
   const host = await acquireEffect(createMachineHost({
-    socketPath: path,
+    listen: { unix: path },
     id: testIds("cli-host"),
     enrollment: (id) => ({
       machineId: id,
@@ -32,6 +30,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       tags: [id],
       allowedCapabilities: capabilities,
       allowedExports: ["data"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: {
@@ -47,52 +46,14 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
   const exits: Promise<void>[] = [];
   async function attach(id: string, root: string) {
     const configPath = join(base, `${id}.json`);
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        socketPath: path,
-        offer: {
-          machineId: id,
-          offeredCapabilities: capabilities,
-          exports: [{ name: "data", path: root }],
-          daemonVersion: "qa",
-          platform: `${process.platform}-${process.arch}`,
-          offeredAt: 2,
-        },
-      }),
-    );
-    const child = spawn(
-      process.execPath,
-      [join(import.meta.dir, "../src/cli/main.ts"), "machine", "attach", configPath],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-    children.push(child);
-    const exited = new Promise<void>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code, signal) =>
-        code === 0 ? resolve() : reject(new Error(`machine CLI exited ${code}/${signal}`)),
-      );
+    writeFileSync(configPath, JSON.stringify({ socketPath: path, offer: qaOffer(id, root, capabilities) }));
+    const cli = spawnAttachCli(configPath);
+    children.push(cli.child);
+    exits.push(cli.exited);
+    expect(await cli.attachment()).toMatchObject({
+      status: "attached",
+      effectiveCapabilities: [...capabilities].sort(),
     });
-    exits.push(exited);
-    const lines = createInterface({ input: child.stdout });
-    let errors = "";
-    child.stderr.on("data", (chunk: Buffer) => {
-      errors += chunk.toString();
-    });
-    try {
-      const line = await Promise.race([
-        once(lines, "line", { signal: AbortSignal.timeout(10_000) }),
-        exited.then(() => {
-          throw new Error(`machine CLI ended before attachment: ${errors}`);
-        }),
-      ]);
-      expect(Machine.AttachResult.parse(JSON.parse(String(line[0])))).toMatchObject({
-        status: "attached",
-        effectiveCapabilities: [...capabilities].sort(),
-      });
-    } finally {
-      lines.close();
-    }
   }
   try {
     await attach("A", rootA);
@@ -161,5 +122,38 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
         directoryExists: existsSync(base),
       }),
     );
+  }
+}, 30_000);
+
+test("machine attach CLI reaches a network host over pinned TLS", async () => {
+  const base = mkdtempSync(join(tmpdir(), "om-cli-tcp-"));
+  const root = join(base, "data");
+  mkdirSync(root);
+  writeFileSync(join(root, "note"), "over-the-wire");
+  const host = await acquireEffect(createMachineHost(pinnedTcpHostOptions(testIds("cli-tcp-host"), ["fs.read"])));
+  const configPath = join(base, "machine.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      tcp: { host: "127.0.0.1", port: host.endpoints.tcp?.port },
+      hostCertificate: join(tlsFixturesDir, "host-cert.pem"),
+      tlsCertificate: join(tlsFixturesDir, "daemon-cert.pem"),
+      tlsPrivateKey: join(tlsFixturesDir, "daemon-key.pem"),
+      offer: qaOffer("net-1", root, ["fs.read"]),
+    }),
+  );
+  const cli = spawnAttachCli(configPath);
+  try {
+    expect(await cli.attachment()).toMatchObject({
+      status: "attached",
+      effectiveCapabilities: ["fs.read"],
+    });
+    const read = await runEffect(host.get("net-1").fs.read(join(root, "note")));
+    expect(Buffer.from(read.data).toString()).toBe("over-the-wire");
+  } finally {
+    cli.child.kill("SIGTERM");
+    await cli.exited;
+    await runEffect(host.close());
+    rmSync(base, { recursive: true, force: true });
   }
 }, 30_000);

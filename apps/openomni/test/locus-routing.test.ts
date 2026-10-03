@@ -71,13 +71,14 @@ async function fixture(
   const root = await mkdtemp(join(tmpdir(), "locus-"));
   const socket = socketPath();
   const host = await acquireEffect(createMachineHost({
-    socketPath: socket,
+    listen: { unix: socket },
     id: testIds("locus-host"),
     enrollment: () => ({
       machineId: "c",
       name: "test",
       allowedCapabilities: capabilities,
       allowedExports: ["data", "shell"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: { publish: () => undefined },

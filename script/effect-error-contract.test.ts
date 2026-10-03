@@ -33,6 +33,7 @@ const ipc = {
   IpcProtocolError: new Ipc.IpcProtocolError(message),
   IpcTimeoutError: new Ipc.IpcTimeoutError({ ...message, requestId: "request", method: "fixture" }),
   IpcRemoteError: new Ipc.IpcRemoteError({ ...message, requestId: "request", method: "fixture", code: 1000 }),
+  IpcPeerKeyMismatchError: new Ipc.IpcPeerKeyMismatchError({ ...message, expected: "0".repeat(64), presented: "f".repeat(64) }),
 } satisfies { [K in Ipc.IpcError["_tag"]]: Extract<Ipc.IpcError, { _tag: K }> };
 const machines = {
   MachinesFailure: new Machines.MachinesFailure(diagnostic),

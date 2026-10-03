@@ -8,6 +8,7 @@ const enrollment = {
   name: "brain-mac",
   allowedCapabilities: ["fs.read"],
   allowedExports: ["notes", "code"],
+  publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   enrolledAt: 1,
 } satisfies Machine.Enrollment;
 
@@ -111,7 +112,7 @@ describe("Machine.Offer.exports", () => {
 describe("machine wire compatibility", () => {
   test("an Enrollment JSON written before exports existed still parses", () => {
     const legacy: PlainValue = JSON.parse(
-      '{"machineId":"mac-0","name":"brain-mac","allowedCapabilities":["fs.read"],"enrolledAt":1}',
+      '{"machineId":"mac-0","name":"brain-mac","allowedCapabilities":["fs.read"],"publicKey":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","enrolledAt":1}',
     );
     const result = Machine.Enrollment.safeParse(legacy);
     expect(result.success).toBe(true);

@@ -46,13 +46,14 @@ async function pair(
   const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
   let mode: ReturnType<typeof createCodemode>;
   const host = await createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     enrollment: (id) => ({
       machineId: id,
       name: id,
       tags: [id],
       allowedExports: ["data"],
       allowedCapabilities: capabilities,
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: silent,
@@ -233,7 +234,9 @@ test("host disconnect closes the injected runner and awaits its processes", asyn
     );
     await entered.promise;
     host.close();
-    expect(await outcome).toMatchObject({ _tag: "TransportFailure", operation: "cell.call" });
+    // #1270: a dropped transport surfaces as the typed disconnected refusal,
+    // the same contract the host side exposes for its dropped in-flight calls.
+    expect(await outcome).toMatchObject({ _tag: "MachineRefusalError", reason: "disconnected" });
     await da.closed;
     release.resolve();
   }, gate.tools);
@@ -256,6 +259,7 @@ test("tag ambiguity and an unbound machine port are typed, never arbitrary selec
     machineId: "A",
     name: "A",
     tags: ["same"],
+    publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     enrolledAt: 1,
     allowedCapabilities: ["kernel.py"],
     capabilities: ["kernel.py"],

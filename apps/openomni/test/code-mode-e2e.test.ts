@@ -54,12 +54,13 @@ async function createMachineHost(options: Omit<Parameters<typeof createHost>[0],
   const host = await acquireEffect(createHost({ id: testIds("e2e-host"), ...options }));
   suite.defer(async () => {
     await runEffect(host.close());
-    expect(existsSync(options.socketPath)).toBe(false);
+    const unixPath = options.listen.unix ?? "";
+    expect(existsSync(unixPath)).toBe(false);
     console.log(
       "967-U1 host cleanup",
       JSON.stringify({
-        socketPath: options.socketPath,
-        socketExists: existsSync(options.socketPath),
+        socketPath: unixPath,
+        socketExists: existsSync(unixPath),
       }),
     );
   });
@@ -67,7 +68,7 @@ async function createMachineHost(options: Omit<Parameters<typeof createHost>[0],
 }
 
 async function attachMachineDaemon(
-  options: Omit<Parameters<typeof attachDaemon>[0], "id">,
+  options: Omit<Extract<Parameters<typeof attachDaemon>[0], { socketPath: string }>, "id">,
 ): Promise<MachineDaemon> {
   const daemon = await acquireEffect(attachDaemon({ id: testIds("e2e-daemon"), ...options, runner: acquireSyncEffect(createCodemode({ id: testIds("e2e-cell") })).runner }));
   suite.defer(() => runEffect(daemon.close()));
@@ -78,6 +79,7 @@ const enrollment: Machine.Enrollment = {
   machineId: MACHINE_ID,
   name: "the laptop",
   allowedCapabilities: ["kernel.py"],
+  publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   enrolledAt: 0,
 };
 
@@ -101,7 +103,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   const config = suite.config("openomni-app-machine-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "app-machine-test", apiKey: "test-key" },
-    machines: { socketPath, enrolled: [appEnrollment] },
+    machines: { listen: { unix: socketPath }, enrolled: [appEnrollment] },
   });
   const app = await suite.boot({
     config,
@@ -164,7 +166,7 @@ test("a cell creates three child sessions through send_message", async () => {
   const config = suite.config("openomni-code-mode-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-    machines: { socketPath, enrolled: [enrollment] },
+    machines: { listen: { unix: socketPath }, enrolled: [enrollment] },
   });
   const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
   const app = await suite.boot({
@@ -264,7 +266,7 @@ test("the catalog remains available while machine execution refuses without atta
     config: suite.config("openomni-code-mode-off-", {
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-      machines: { socketPath: testSocketPath(), enrolled: [enrollment] },
+      machines: { listen: { unix: testSocketPath() }, enrolled: [enrollment] },
     }),
     llm: {
       resolveModel: fakeProviderModel,
@@ -313,13 +315,25 @@ test("the catalog remains available while machine execution refuses without atta
   expect(answer).toContain("kernel_not_available");
 }, 30_000);
 
+/** One enrolled-gated e2e host on a fresh socket; callTool is the only seam that differs per test. */
+async function e2eHost(callTool: Parameters<typeof createMachineHost>[0]["callTool"]) {
+  const socketPath = testSocketPath();
+  const host = await createMachineHost({
+    listen: { unix: socketPath },
+    enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
+    events: Bus,
+    now: () => Date.now(),
+    callTool,
+  });
+  return { socketPath, host };
+}
+
 /**
  * What actually makes a cell's identity unforgeable, pinned upstream of the
  * registry: the cell's code never states its own id. A cell that tries to
  * serve a call under another cell's id gets the daemon's stamp instead.
  */
 test("a cell cannot present another cell's id when calling back", async () => {
-  const socketPath = testSocketPath();
   const served: string[] = [];
 
   // AAA (tenant one) blocks inside a tool call the host holds until BBB
@@ -329,21 +343,15 @@ test("a cell cannot present another cell's id when calling back", async () => {
   const forgingServed = new Promise<void>((resolve) => {
     announceServed = resolve;
   });
-  const host = await createMachineHost({
-    socketPath,
-    enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
-    events: Bus,
-    now: () => Date.now(),
-    callTool: (call) => Effect.promise(async () => {
-      served.push(`${call.name}@${call.cellId}`);
-      if (call.name === "hold") {
-        await forgingServed;
-        return { status: "completed" as const, value: "held" };
-      }
-      announceServed();
-      return { status: "completed" as const, value: call.cellId };
-    }),
-  });
+  const { socketPath, host } = await e2eHost((call) => Effect.promise(async () => {
+    served.push(`${call.name}@${call.cellId}`);
+    if (call.name === "hold") {
+      await forgingServed;
+      return { status: "completed" as const, value: "held" };
+    }
+    announceServed();
+    return { status: "completed" as const, value: call.cellId };
+  }));
   await attachMachineDaemon({
     socketPath,
     offer: {
@@ -417,15 +425,8 @@ const CELL_ORIGIN: CatalogOrigin = { role: "resident", sessionId: "cell-e2e" };
  * startOpenOmni wires at boot, exercised without booting the app.
  */
 async function startCellHarness(ports: Partial<ToolPorts>) {
-  const socketPath = testSocketPath();
   let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
-  const host = await createMachineHost({
-    socketPath,
-    enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
-    events: Bus,
-    now: () => Date.now(),
-    callTool: (call) => cells.callTool(call),
-  });
+  const { socketPath, host } = await e2eHost((call) => cells.callTool(call));
   const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
   expect(daemon.attachment.status).toBe("attached");
   cells = acquireSyncEffect(composeCodemode(host, { id: testIds("e2e-compose") }));
@@ -738,7 +739,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
   const socketPath = testSocketPath();
 
   const host = await createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     enrollment: () => ({ ...enrollment, allowedCapabilities: ["fs.read"] }),
     events: Bus,
     now: () => Date.now(),

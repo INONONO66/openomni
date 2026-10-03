@@ -5,60 +5,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "./ipc/helpers/native";
 import { captureError } from "./ipc/helpers/signal";
-import { type BusEvent, Machine } from "@openomni/protocol";
+import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon, type CodeRunner } from "./helpers/native";
 import { type MachineHost, createMachineHost } from "./helpers/native";
 import { socketPath } from "./helpers/socket-path";
+import { eventCollector } from "./helpers/events";
 import { MachineCellError } from "../src/errors";
 import { kernelEnrollment } from "./helpers";
 import { exit as runExit } from "./helpers/effect";
-
-type MachineEventPayload =
-  | ReturnType<typeof Machine.Events.Attached.schema.parse>
-  | ReturnType<typeof Machine.Events.Detached.schema.parse>;
-type RecordedEvent = {
-  readonly name: string;
-  readonly payload: MachineEventPayload;
-};
-
-function eventCollector() {
-  const events: RecordedEvent[] = [];
-  const waiters: Array<{ name: string; resolve: (event: RecordedEvent) => void }> = [];
-  const sink: BusEvent.Sink = {
-    publish(descriptor, payload) {
-      const event =
-        descriptor.name === Machine.Events.Attached.name
-          ? { name: descriptor.name, payload: Machine.Events.Attached.schema.parse(payload) }
-          : {
-              name: descriptor.name,
-              payload: Machine.Events.Detached.schema.parse(payload),
-            };
-      events.push(event);
-      for (let i = waiters.length - 1; i >= 0; i -= 1) {
-        const waiter = waiters[i];
-        if (waiter && waiter.name === event.name) {
-          waiters.splice(i, 1);
-          waiter.resolve(event);
-        }
-      }
-    },
-  };
-  return {
-    sink,
-    events,
-    /** Resolves on the NEXT event of this name (bounded by bun's test timeout). */
-    next(name: string): Promise<RecordedEvent> {
-      return new Promise((resolve) => {
-        waiters.push({ name, resolve });
-      });
-    },
-  };
-}
 
 const enrollment: Machine.Enrollment = {
   name: "studio",
   machineId: "mac-studio",
   allowedCapabilities: ["fs.read", "shell.exec"],
+  publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   enrolledAt: 1000,
 };
 
@@ -94,7 +54,7 @@ async function withHost(
   const collector = eventCollector();
   const path = socketPath();
   const host = await createMachineHost({
-    socketPath: path,
+    listen: { unix: path },
     enrollment: resolve,
     events: collector.sink,
     now: () => 5000,

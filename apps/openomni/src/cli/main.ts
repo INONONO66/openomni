@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { listenForAbort } from "@openomni/protocol";
+import { listenForAbort, type Machine } from "@openomni/protocol";
 import { gatewayRuntime } from "../gateway";
 import { loadConfig, resolveClusterStorage } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "..";
@@ -172,8 +172,11 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
       const runtime = ManagedRuntime.make(Layer.effect(Scope.Scope, Effect.scope));
       try {
       const daemon = await runtime.runPromise(attachConfiguredMachine(configPath, platformEntropy().id));
-      console.log(JSON.stringify(daemon.attachment));
-      if (daemon.attachment.status === "refused") {
+      // Snapshot the initial attachment: narrowing the SNAPSHOT keeps the live
+      // `daemon.attachment` getter unnarrowed for the re-read after `closed`.
+      const initialAttachment: Machine.AttachResult = daemon.attachment;
+      console.log(JSON.stringify(initialAttachment));
+      if (initialAttachment.status === "refused") {
         return 1;
       }
       installShutdownHandlers({
@@ -185,7 +188,9 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
       // the SIGTERM path into a rejection here. daemon.closed needs no context,
       // so await it outside the runtime; a MachineError still rejects as in v3.
       await Effect.runPromise(daemon.closed);
-      return 0;
+      // A daemon that closed because a reattach was REFUSED exits nonzero so
+      // supervisors see the revocation instead of a clean shutdown.
+      return daemon.attachment.status === "refused" ? 1 : 0;
       } finally {
         await runtime.dispose();
       }

@@ -78,7 +78,7 @@ describe("real machine consumer surface", () => {
     await fixture(async (root) => {
       const path = socketPath();
       const host = await createMachineHost({
-        socketPath: path,
+        listen: { unix: path },
         enrollment: () => ({ ...enrollment(), allowedCapabilities: ["fs.read"] }),
         events: silent,
         now: () => 3,

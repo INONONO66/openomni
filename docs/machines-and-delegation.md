@@ -135,7 +135,44 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
   handles. `codemode.screen` is query-class at the app composition boundary;
   `codemode.input` is execution-class.
 
-### 2.3 Code-mode ownership and lifecycle
+### 2.3 Network transport (#1270)
+
+The host owns a listener SET feeding one attachment registry: the unix socket
+(mode 0600) is always bound; a TCP listener appears only when the Owner
+configures `OPENOMNI_MACHINES_TCP_HOST`/`PORT` plus the host TLS identity
+(`OPENOMNI_MACHINES_TLS_CERT`/`KEY` — all four or none, else boot refuses
+typed). Handles, events and codemode are transport-blind: a machine is the
+same machine on either door, and if one bind fails startup fails with the
+other listener released.
+
+Trust is certificate- and key-pinned, not public PKI: the daemon JSON carries
+the host's certificate PEM (`hostCertificate`) — the TLS chain must validate
+against it and the presented key must carry its fingerprint — while the host
+pins the daemon's key through the REQUIRED `Enrollment.publicKey` (sha256
+over SPKI DER, 64 lowercase hex). On TCP, an
+offered machineId whose presented key differs from the enrollment pin is
+refused `peer_key_mismatch` before admission, and a pin-mismatched intruder
+never displaces a valid attachment. Unix connections carry no peer key; the
+enrollment pin is simply not consulted there. See `docs/key-generation.md`
+for openssl one-liners, rotation, and addressing (Tailscale = tailnet IP in
+`tcp.host`; LAN = interface address). Breaking (#1270): `Enrollment.publicKey`
+is REQUIRED — existing `OPENOMNI_MACHINES_ENROLLED` values without it fail
+closed at boot until each enrollment carries the daemon's key fingerprint.
+
+Disconnection is a first-class state: while a known machine's transport is
+down, its handle calls — including calls that were in flight when the
+transport dropped — fail once with typed `MachineRefusalError`
+`disconnected` (never replayed); a machine that never attached stays
+`machine_not_attached`. A daemon configured with `reconnect` (the CLI enables it for tcp
+attachments; a unix daemon exits with its same-box host) keeps its
+drivers alive and redials with full-jitter exponential backoff (base 250ms,
+cap 30s, injected scheduler/randomness in tests); a successful reattach
+resets the backoff and the host's existing handles serve the replacement
+connection. A REFUSED reattach is terminal: the refusal surfaces, nothing is
+rescheduled, and the daemon closes (the CLI exits nonzero) until restart or
+config change.
+
+### 2.4 Code-mode ownership and lifecycle
 
 `createCodemode({machines,completion,tools})` is a reusable facade over a
 structural machines port. It supplies

@@ -81,7 +81,7 @@ test("closing the attached daemon scope terminates a host-dispatched process gro
   const path = socketPath("machine-life");
   const detached = deferred();
   const host = await acquire(createMachineHost({
-    socketPath: path, enrollment, now: () => 3, id: lifecycleIds("life-host"),
+    listen: { unix: path }, enrollment, now: () => 3, id: lifecycleIds("life-host"),
     events: { publish: (event) => { if (event.name === Machine.Events.Detached.name) detached.resolve(); } },
   }));
   const daemon = await acquire(attachMachineDaemon({ socketPath: path, id: lifecycleIds("life-daemon"), offer: offer("/tmp"), fsExports: new Map([["docs", "/tmp"]]) }));
@@ -92,7 +92,7 @@ test("closing the attached daemon scope terminates a host-dispatched process gro
     const pids = await within(observed.ready, "remote exec PID handshake");
     await within(daemon.close(), "daemon scope finalizers");
     await within(observed.closed, "remote process close");
-    expect(await within(result, "disconnected host RPC")).toMatchObject({ _tag: "TransportFailure", operation: "exec.call" });
+    expect(await within(result, "disconnected host RPC")).toMatchObject({ _tag: "MachineRefusalError", reason: "disconnected" });
     observed.assertClosed();
     expectGone(pids);
     await within(detached.promise, "host detach event");

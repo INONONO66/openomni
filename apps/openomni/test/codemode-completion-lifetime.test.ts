@@ -47,12 +47,13 @@ for (const stop of [false, true]) {
     const path = socketPath();
     let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
     const host = await acquireEffect(createMachineHost({
-      socketPath: path,
+      listen: { unix: path },
       id: testIds("lifetime-host"),
       enrollment: (machineId: string) => ({
         machineId,
         name: "completion-test",
         allowedCapabilities: ["kernel.py"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       }),
       events: { publish: () => undefined },

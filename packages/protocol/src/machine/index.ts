@@ -13,6 +13,9 @@ export namespace Machine {
   export const WellKnownCapability = Schema.WellKnownCapability;
   export const MachineId = Schema.MachineId;
   export type MachineId = Schema.MachineId;
+  export const KeyFingerprint = Schema.KeyFingerprint;
+  export type KeyFingerprint = Schema.KeyFingerprint;
+  export const fingerprintOf = Schema.fingerprintOf;
   export const WireMethod = Schema.WireMethod;
   export const AbsolutePath = Schema.AbsolutePath;
   export const ExecRequest = Schema.ExecRequest;

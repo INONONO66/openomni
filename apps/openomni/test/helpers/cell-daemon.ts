@@ -4,7 +4,7 @@ import { testIds } from "./test-entropy";
 export function cellDaemonOptions(
   socketPath: string,
   machineId: string,
-): Parameters<typeof attachMachineDaemon>[0] {
+): Extract<Parameters<typeof attachMachineDaemon>[0], { socketPath: string }> {
   return {
     socketPath,
     id: testIds(`cell-daemon-${machineId}`),

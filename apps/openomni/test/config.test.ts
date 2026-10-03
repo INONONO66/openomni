@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Crypto, Effect } from "effect";
 import { BunCrypto } from "../src/composition/cluster-crypto";
@@ -32,6 +34,10 @@ const ENV_KEYS = [
   "OPENOMNI_SOCIAL_BUDGETS",
   "OPENOMNI_MACHINES_ENROLLED",
   "OPENOMNI_MACHINES_SOCKET",
+  "OPENOMNI_MACHINES_TCP_HOST",
+  "OPENOMNI_MACHINES_TCP_PORT",
+  "OPENOMNI_MACHINES_TLS_CERT",
+  "OPENOMNI_MACHINES_TLS_KEY",
   "OPENOMNI_CHANNEL_ALLOWED_SENDERS",
 ] as const;
 
@@ -56,6 +62,85 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+});
+
+
+describe("machines network listener config", () => {
+  const enrolled = JSON.stringify([
+    {
+      machineId: "alpha",
+      name: "the laptop",
+      allowedCapabilities: ["fs.read"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      enrolledAt: 0,
+    },
+  ]);
+  function tlsFiles() {
+    const dir = mkdtempSync(join(tmpdir(), "om-config-tls-"));
+    const cert = join(dir, "host-cert.pem");
+    const key = join(dir, "host-key.pem");
+    writeFileSync(cert, "CERT-PEM");
+    writeFileSync(key, "KEY-PEM");
+    return { dir, cert, key };
+  }
+
+  /** The complete, valid four-field tuple plus enrollment; tests then poke one field. */
+  function setTcpTuple(cert: string, key: string, port = "7643"): void {
+    process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
+    process.env.OPENOMNI_MACHINES_TCP_HOST = "0.0.0.0";
+    process.env.OPENOMNI_MACHINES_TCP_PORT = port;
+    process.env.OPENOMNI_MACHINES_TLS_CERT = cert;
+    process.env.OPENOMNI_MACHINES_TLS_KEY = key;
+  }
+
+  it("absent tcp env keeps a unix-only listener set", () => {
+    process.env.OPENOMNI_MACHINES_SOCKET = "/tmp/machines-config-test.sock";
+    process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
+    const machines = loadConfig().machines;
+    expect(machines?.listen).toEqual({ unix: "/tmp/machines-config-test.sock" });
+    expect(machines?.tls).toBeUndefined();
+  });
+
+  it("the full tuple yields the tcp endpoint with the PEM contents read at boot", () => {
+    const { dir, cert, key } = tlsFiles();
+    try {
+      setTcpTuple(cert, key);
+      const machines = loadConfig().machines;
+      expect(machines?.listen.tcp).toEqual({ host: "0.0.0.0", port: 7643 });
+      expect(machines?.tls).toEqual({ certificate: "CERT-PEM", privateKey: "KEY-PEM" });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    "OPENOMNI_MACHINES_TCP_HOST",
+    "OPENOMNI_MACHINES_TCP_PORT",
+    "OPENOMNI_MACHINES_TLS_CERT",
+    "OPENOMNI_MACHINES_TLS_KEY",
+  ])("a tuple missing %s fails closed rather than binding unencrypted", (missing) => {
+    const { dir, cert, key } = tlsFiles();
+    try {
+      setTcpTuple(cert, key);
+      delete process.env[missing];
+      expect(() => loadConfig()).toThrow("must be set together");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a port outside 1-65535 and an unreadable PEM path", () => {
+    const { dir, cert, key } = tlsFiles();
+    try {
+      setTcpTuple(cert, key, "70000");
+      expect(() => loadConfig()).toThrow("OPENOMNI_MACHINES_TCP_PORT is invalid");
+      process.env.OPENOMNI_MACHINES_TCP_PORT = "7643";
+      process.env.OPENOMNI_MACHINES_TLS_CERT = join(dir, "missing.pem");
+      expect(() => loadConfig()).toThrow("OPENOMNI_MACHINES_TLS_CERT is unreadable");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("declared channel cutover", () => {
@@ -353,6 +438,7 @@ describe("ws exposure enforcement", () => {
         name: "the laptop",
         allowedCapabilities: ["fs.read"],
         allowedExports: ["notes", "src"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       },
     ]);
@@ -362,7 +448,7 @@ describe("ws exposure enforcement", () => {
 
   it("leaves the allowlist absent when the Owner named no export — no config, no reach", () => {
     process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
-      { machineId: "alpha", name: "the laptop", allowedCapabilities: ["fs.read"], enrolledAt: 0 },
+      { machineId: "alpha", name: "the laptop", allowedCapabilities: ["fs.read"], publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", enrolledAt: 0 },
     ]);
 
     expect(loadConfig().machines?.enrolled[0]?.allowedExports).toBeUndefined();
@@ -375,6 +461,7 @@ describe("ws exposure enforcement", () => {
         name: "the laptop",
         allowedCapabilities: ["fs.read"],
         allowedExports: ["notes", "notes"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       },
     ]);
@@ -388,6 +475,7 @@ describe("ws exposure enforcement", () => {
         name: "the laptop",
         allowedCapabilities: ["fs.read"],
         allowedExports: ["../escape"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       },
     ]);
