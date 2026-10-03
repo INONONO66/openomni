@@ -271,9 +271,9 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
         // Additive #1273 seam: pty-host owns schemas/codecs; only routing lives here.
         pty: createPtyHandle((method, params, timeoutMs) => Effect.gen(function* () {
           const peer = yield* Effect.try({ try: () => connection(id), catch: decodeMachineFailure("pty.connection") });
-          server.useConnection(peer.id);
+          peer.server.useConnection(peer.rawId);
           // Safe: pty-host validated params against this method's wire schema.
-          return yield* server.call(method, params as Ipc.Request["params"], timeoutMs).pipe(Effect.mapError(transportFailure("pty.call")));
+          return yield* peer.server.call(method, params as Ipc.Request["params"], timeoutMs).pipe(Effect.mapError(transportFailure("pty.call")));
         })),
         runCode: (cell, signal) => Effect.scoped(Effect.gen(function* () {
           const request = yield* Effect.try({ try: () => Machine.CellRequest.parse(cell), catch: decodeMachineFailure("cell.request") });
