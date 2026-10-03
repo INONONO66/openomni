@@ -637,13 +637,16 @@ describe("bash session door", () => {
     // a pre-restart cursor parse as a native offset into the new daemon's
     // stream and skip output (PR #1283 CI, tmux 3.4 runner).
     let generation = 0;
-    const daemonOptions = () => ({
-      socketPath: path,
-      id: testIds(`pty-bridge-daemon-g${(generation += 1)}`),
-      offer,
-      fsExports: new Map([["shell", "/"]]),
-      pty: { socketName: TMUX_SOCKET },
-    });
+    const daemonOptions = () => {
+      generation += 1;
+      return {
+        socketPath: path,
+        id: testIds(`pty-bridge-daemon-g${generation}`),
+        offer,
+        fsExports: new Map([["shell", "/"]]),
+        pty: { socketName: TMUX_SOCKET },
+      };
+    };
     let daemon = await acquireEffect(attachMachineDaemon(daemonOptions()));
     const bash = dispatchModelTool("bash", { machines: testMachinePorts(host) });
     // Each bash call long-polls the daemon for terminal output; the loop

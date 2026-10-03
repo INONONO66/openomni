@@ -237,7 +237,9 @@ enrollment/offer intersection.
   `session` — with `machine`+`session` the command is typed into the named
   terminal (`send-keys` literal hex chunks) and stdout carries output since
   the tool's own per-session cursor; an empty command just reads. `monitor`
-  watches a named terminal as a command source and its completion never
+  watches a named terminal through the same cursor door (subscribe at the
+  current cursor, drain `pty_read` beyond it: each retained byte at most
+  once, so screen repaints can never re-fire a line) and its completion never
   closes the terminal. Code mode: `m.pty(name)` handles with
   `open/write/read/resize/close` plus `m.ptyList()`.
 

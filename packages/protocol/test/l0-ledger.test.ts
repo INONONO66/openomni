@@ -135,7 +135,8 @@ describe("L0 ledger protocol", () => {
   test("watch lifetimes, absolute paths and regular expressions validate at the public boundary", () => {
     const command = { command: "echo hello", description: "command watch" };
     const path = { path: "/tmp/watch", event: "modify", description: "path watch" };
-    for (const spec of [command, path]) {
+    const terminal = { machine: "m-1", session: "qa", description: "terminal watch" };
+    for (const spec of [command, path, terminal]) {
       expect(Alarm.Watch.safeParse(spec).success).toBe(false);
       expect(Alarm.Watch.safeParse({ ...spec, persistent: true, timeout_ms: 1 }).success).toBe(
         false,
@@ -151,6 +152,7 @@ describe("L0 ledger protocol", () => {
     );
     for (const [spec, field] of [
       [{ ...command, timeout_ms: 1, filter: "[" }, "filter"],
+      [{ ...terminal, timeout_ms: 1, filter: "[" }, "filter"],
       [{ ...path, persistent: true, path: "relative" }, "path"],
     ] as const) {
       const result = Alarm.Watch.safeParse(spec);

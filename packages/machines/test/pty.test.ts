@@ -173,6 +173,23 @@ describe("pty.session over real tmux", () => {
     await run(adapter.shutdown());
   }, 30_000);
 
+  test("a reattach paint pass never re-delivers bytes the cursor already returned", async () => {
+    const adapter = await openAdapter("gen-paint");
+    const opened = okOpen(await run(adapter.open({ name: "paint", cwd: "/" })));
+    await writeText(adapter, "paint", "printf 'WAKE-%d\\n' 7342\r");
+    const first = await readUntil(adapter, "paint", opened.cursor, "WAKE-7342");
+    expect(count(first.seen, "WAKE-7342")).toBe(1);
+    // Same-name open is the paint-pass moment: the marker is still visible on
+    // the screen, and the reattach must not re-capture it into the cursor
+    // stream (PR #1283 CI finding 4: screen repaints re-deliver visible lines;
+    // the cursor contract is each retained byte at most once).
+    okOpen(await run(adapter.open({ name: "paint", cwd: "/" })));
+    const after = okRead(await run(adapter.read({ name: "paint", cursor: first.cursor })));
+    expect(Buffer.from(after.data, "base64").toString("utf8")).not.toContain("WAKE-7342");
+    await run(adapter.close({ name: "paint" }));
+    await run(adapter.shutdown());
+  }, 30_000);
+
   test("a session killed behind the adapter's back fails the next command visibly (%error reply)", async () => {
     const adapter = await openAdapter("gen-error-reply");
     okOpen(await run(adapter.open({ name: "ghost", cwd: "/" })));
