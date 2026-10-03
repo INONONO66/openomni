@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import { Machine } from "@openomni/protocol";
+import { createComputerUse } from "../src/computer-use";
 import { attachMachineDaemon, createMachineHost } from "./helpers/native";
+import { run } from "./ipc/helpers/effects";
 import { fakeMac, type FakeMacBehavior, png, sipsBounds } from "./helpers/fake-commands";
 import { socketPath } from "./helpers/socket-path";
 import { silent } from "./helpers";
@@ -121,6 +124,25 @@ describe("computer-use capability probes", () => {
         .toEqual({ status: "refused", reason: "input_not_available" });
       expect(fake.invocations("cliclick")).toHaveLength(before);
     });
+  });
+});
+
+describe("computer-use probe deadline", () => {
+  test("hanging probe binaries withhold both capabilities instead of stalling attach", async () => {
+    let n = 0;
+    const computer = createComputerUse({
+      runner: { run: () => Effect.never },
+      id: () => `probe-${++n}`,
+      probeTimeoutMs: 5,
+    });
+    const offered = await run(
+      computer.offeredCapabilities(["screen.read", "input.write", "fs.read"]),
+    );
+    // Non-computer capabilities pass through; the timed-out probes withdraw.
+    expect(offered).toEqual(["fs.read"]);
+    expect(await run(computer.screenRead({}))).toEqual({ status: "refused", reason: "screen_not_available" });
+    expect(await run(computer.inputWrite({ captureId: "x", actions: [{ click: { x: 1, y: 1 } }] })))
+      .toEqual({ status: "refused", reason: "input_not_available" });
   });
 });
 

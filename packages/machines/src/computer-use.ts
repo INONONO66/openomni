@@ -57,6 +57,8 @@ const DOWNSCALE_MAX_PASSES = 6;
 /** Shrink slightly past the square-root estimate so one pass usually fits. */
 const DOWNSCALE_HEADROOM = 0.9;
 const POINTS_PER_INCH = 72;
+/** Attach runs the probes; a hung probe binary must never stall daemon attach. */
+const PROBE_TIMEOUT_MS = 10_000;
 
 type ScreenRefusal = Extract<Machine.ScreenReadResult, { status: "refused" }>["reason"];
 type InputRefusal = Extract<Machine.InputWriteResult, { status: "refused" }>["reason"];
@@ -156,6 +158,8 @@ interface ComputerUseOptions {
   /** Injected entropy (#1245): capture ids and temp-file names. */
   readonly id: () => string;
   readonly tempDir?: string;
+  /** Probe deadline override; tests shrink it to prove the bound. */
+  readonly probeTimeoutMs?: number;
 }
 
 export interface ComputerUse {
@@ -197,8 +201,16 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
       (result) => (result === undefined || result.exitCode !== 0 ? undefined : parseBounds(result.stdout)),
     );
 
+  const probeTimeout = options.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
+  /** A probe that outlives its deadline reports the fallback refusal instead of hanging. */
+  const deadline = <A>(effect: Effect.Effect<A, MachineError>, fallback: A) =>
+    effect.pipe(
+      Effect.timeoutOption(probeTimeout),
+      Effect.map((result) => (result._tag === "None" ? fallback : result.value)),
+    );
+
   /** One full-screen probe capture proves both the binary and the TCC grant. */
-  const probeScreen = Effect.gen(function* () {
+  const probeScreen = deadline(Effect.gen(function* () {
     const path = join(temp, `om-screen-probe-${options.id()}.png`);
     return yield* Effect.gen(function* () {
       const captured = yield* run([SCREENCAPTURE, "-x", "-t", "png", path]);
@@ -210,21 +222,24 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
       if (bounds === undefined) return { refusal: "permission_denied" as const };
       return { refusal: undefined, bounds };
     }).pipe(Effect.ensuring(remove(path)));
-  });
+  }), { refusal: "screen_not_available" as const });
 
-  const probeAccessibility = Effect.map(
-    run([OSASCRIPT, "-e", ACCESSIBILITY_PROBE]),
-    (result) => result !== undefined && result.exitCode === 0,
+  const probeAccessibility = deadline(
+    Effect.map(
+      run([OSASCRIPT, "-e", ACCESSIBILITY_PROBE]),
+      (result) => result !== undefined && result.exitCode === 0,
+    ),
+    false,
   );
 
-  const probeInput = Effect.gen(function* () {
+  const probeInput = deadline(Effect.gen(function* () {
     const located = yield* run([WHICH, CLICLICK]);
     if (located === undefined || located.exitCode !== 0 || located.stdout.trim() === "") {
       return { refusal: "input_not_available" as const };
     }
     if (!(yield* probeAccessibility)) return { refusal: "permission_denied" as const };
     return { refusal: undefined, cliclick: located.stdout.trim() };
-  });
+  }), { refusal: "input_not_available" as const });
 
   const reprobeScreen = Effect.gen(function* () {
     const probe = yield* probeScreen;
