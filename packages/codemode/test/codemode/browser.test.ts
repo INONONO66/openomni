@@ -115,7 +115,11 @@ test(
     // other process already holds it the launch must advance just the same.
     let occupied: { stop(closeActiveConnections?: boolean): void } | undefined;
     try {
-      occupied = Bun.listen({ hostname: "127.0.0.1", port: 9222, socket: { data() {} } });
+      occupied = Bun.listen({ hostname: "127.0.0.1", port: 9222, socket: {
+          data() {
+            // The occupier only needs to hold the port; input is irrelevant.
+          },
+        } });
     } catch {
       occupied = undefined;
     }
@@ -184,7 +188,7 @@ test(
   CELL_TIMEOUT_MS,
 );
 
-test.if(process.platform === "darwin" || Boolean(process.env["DISPLAY"]))(
+test.if(process.platform === "darwin" || Boolean(process.env.DISPLAY))(
   "headless=False launches a headed Chromium and close() ends its session",
   async () => {
     const result = await mode.cell.run(
