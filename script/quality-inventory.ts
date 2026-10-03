@@ -326,7 +326,7 @@ export function buildInventory(root: string, contract: Contract): Inventory {
       path: "tsconfig.base.json",
       sha256: digest(readFileSync(join(root, "tsconfig.base.json"))),
     });
-    const path = "packages/machines/src/codemode/kernel.ts";
+    const path = "packages/codemode/src/kernel.ts";
     const source = ts.createSourceFile(
       path,
       readFileSync(join(root, path), "utf8"),

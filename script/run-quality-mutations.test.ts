@@ -95,7 +95,7 @@ test("reach probes write each marker once per process", async () => {
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-// packages/machines/src/codemode/kernel.ts declares `const process = spawn(...)`; a probe
+// packages/codemode/src/kernel.ts declares `const process = spawn(...)`; a probe
 // naming bare `process` there called ChildProcess.getBuiltinModule and threw,
 // which killed the interpreter start under reach instrumentation (run 35447636805).
 test("reach probes resolve their globals through globalThis inside shadowing scopes", async () => {
