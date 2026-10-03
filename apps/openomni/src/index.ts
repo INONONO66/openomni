@@ -44,14 +44,13 @@ import {
   type MachineError,
   type MachineHost,
 } from "@openomni/machines";
-import type { BusEvent, Machine } from "@openomni/protocol";
+import { traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
 import {
   attachSelfMachine,
   selfAttachFailure,
   selfEnrollment,
   type SelfMachine,
 } from "./composition/self-machine";
-import { traceIdFromUuid, type Channel } from "@openomni/protocol";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import type { ProvisionPort } from "./provisioning/channels";
