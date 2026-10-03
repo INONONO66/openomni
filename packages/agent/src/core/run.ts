@@ -14,7 +14,7 @@ import { Inbox, type LedgerAction, type LedgerSession, type Model, type Observat
 import type { ChatAgentConfig, AgentResult } from "./types";
 import type { decideSessionAdmission } from "./mailbox";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
-import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, receivedMessages, } from "./commit";
+import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, receivedMessages, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { LedgerError } from "./store/errors";
 import { z } from "zod";
 import { hydrateSessionHistory, refreshSessionHistory } from "../inspect/history";
@@ -945,7 +945,13 @@ export function createSessionTurn(
   function drainBoundary(input: TurnInput, boundary: SessionTurn.Boundary, parentActionId: string) {
     return Effect.gen(function* () {
       const observations = yield* ObservationService;
-      const pending = pendingBacklog(kernel, sessionId);
+      // #1253 boundary rule: steer rows drain at tool.post boundaries, followUp
+      // rows wait for turn end; widths are session.configure settings data.
+      const pending = boundaryConsumption(
+        pendingBacklog(kernel, sessionId),
+        boundary,
+        consumptionSettings(kernel, sessionId),
+      );
       const refusal = yield* ports.evaluatePromptPolicies(pending);
       if (refusal !== undefined) {
         yield* ports.consumePolicyBlockedInbox(pending);
@@ -960,7 +966,8 @@ export function createSessionTurn(
       );
       const checkpoint = turnCheckpointAction({
         id: checkpointId, parentId: parentActionId, sessionId, turnId: input.turnId, resultId: input.resultId,
-        resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary, at: clock(),
+        resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary,
+        inboxIds: pending.map((item) => item.id), at: clock(),
       });
       const current = kernel.row(sessionId);
       yield* commitFoldBatch(kernel, {

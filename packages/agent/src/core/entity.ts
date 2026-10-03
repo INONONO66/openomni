@@ -247,13 +247,16 @@ function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, Led
   const { authority, kernel, env } = handle;
   const detach = (body: Effect.Effect<void, SessionError>) => detachTurn(handle, body);
   return handle.gate.withPermits(1)(Effect.gen(function* () {
+    // #1253 turn end consumption: after a turn seals, the loop re-decides so a
+    // pending `followUp` backlog starts its follow-up turn before the ack.
+    let ranTurn = false;
     for (;;) {
       if (handle.live.current !== undefined) return { kind: "turn" as const };
       const snapshot = admissionSnapshot(handle);
       const decision = decideSessionAdmission(snapshot);
       switch (decision.kind) {
         case "stop":
-          return { kind: "stop" as const };
+          return ranTurn ? { kind: "turn" as const } : { kind: "stop" as const };
         case "refused": {
           const refusal = new SessionAdmissionRefused(authority.sessionId);
           yield* Effect.logWarning(refusal.message);
@@ -264,10 +267,12 @@ function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, Led
           continue;
         case "start":
           yield* env.ports.runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach });
-          return { kind: "turn" as const };
+          ranTurn = true;
+          continue;
         default:
           yield* env.ports.runTurn({ authority, kernel, decision, snapshot, detach });
-          return { kind: "turn" as const };
+          ranTurn = true;
+          continue;
       }
     }
   }));
@@ -331,6 +336,7 @@ function deliver(
       kind: inboxKind,
       content: body.content,
       origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(payload.source)) },
+      ...(body.delivery === undefined ? {} : { delivery: body.delivery }),
       status: "pending",
       consumedBy: null,
       consumedAt: null,

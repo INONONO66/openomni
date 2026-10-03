@@ -457,7 +457,14 @@ describe("T01-T15 real controller transition witnesses", () => {
           const running = yield* Effect.forkScoped(handle.prompt("start"));
           yield* bounded(Deferred.await(entered));
           // Durable ingress is independent of the runner, including compaction/approval waits.
-          for (const [ordinal, content] of ["one", "two"].entries())
+          // #1253: a steer row is consumable at the tool.post boundary; the
+          // followUp row waits for turn end in every case.
+          for (const [ordinal, [content, delivery]] of (
+            [
+              ["one", "steer"],
+              ["two", "followUp"],
+            ] as const
+          ).entries())
             yield* commitReceivedMessage(isolatedLedger().kernel, {
               id: `queued-${ordinal}`,
               sessionId: "S",
@@ -466,6 +473,7 @@ describe("T01-T15 real controller transition witnesses", () => {
               createdAt: 21 + ordinal,
               origin: { encodingVersion: 1, value: {} },
               parentActionId: isolatedLedger().kernel.latestAction("S")?.id ?? null,
+              delivery,
             });
           expect(
             isolatedLedger()
@@ -475,9 +483,10 @@ describe("T01-T15 real controller transition witnesses", () => {
           expect(drained).toEqual([]);
           yield* Deferred.succeed(release, undefined);
           yield* bounded(Fiber.join(running));
-          expect(drained).toEqual([["one", "two"]]);
-          // W5.2: the inbox table is gone; consumption evidence is the drained
-          // batch above plus an empty pending backlog.
+          // #1253 boundary rule: only the steer row drains mid-turn, and only
+          // at the tool.post boundary; the followUp row waits for turn end,
+          // where the leftover backlog feeds one follow-up turn.
+          expect(drained).toEqual([boundary === "after_tools" ? ["one"] : [], []]);
           expect(isolatedLedger().kernel.pendingMessages("S")).toEqual([]);
         }),
       ));

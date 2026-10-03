@@ -1,5 +1,6 @@
 import {
   canonicalDigest,
+  type ConsumptionSettings,
   Inbox,
   PlainObjectSchema,
   type LedgerAction,
@@ -327,7 +328,7 @@ function outboundRowsIn(
 }
 
 /** The chain effect one received message committed; the pending fold reads it back. */
-const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string() });
+const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
 
 /**
  * Pending-message projection (W5.2): `prompt` actions carrying an inbox
@@ -345,6 +346,7 @@ function pendingMessagesIn(context: SessionKernelContext, sessionId: string): In
         kind: effect.inboxKind,
         content: effect.content,
         origin: action.intent,
+        ...(effect.delivery === undefined ? {} : { delivery: effect.delivery }),
         status: "pending",
         consumedBy: null,
         consumedAt: null,
@@ -427,6 +429,8 @@ export function configureAction(input: {
   readonly parentId: string | null;
   readonly operation: SessionGeneration.ConfigureIntent["operation"];
   readonly snapshot: SessionGeneration.Snapshot;
+  /** `all|one` consumption widths (#1253); present only when the configure pins them. */
+  readonly settings?: ConsumptionSettings;
   readonly at: number;
 }): LedgerAction.Append {
   return {
@@ -436,7 +440,10 @@ export function configureAction(input: {
     kind: "session.configure",
     intent: {
       encodingVersion: 1,
-      value: { operation: input.operation },
+      value: {
+        operation: input.operation,
+        ...(input.settings === undefined ? {} : { settings: input.settings }),
+      },
     },
     effect: {
       encodingVersion: 1,

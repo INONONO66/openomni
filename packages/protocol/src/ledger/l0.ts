@@ -5,7 +5,8 @@ import { canonicalDigest, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 import { Message as ModelMessage } from "../message/index.js";
 import { Journal } from "../journal/index.js";
-import { EncodedPayload } from "../journal/declaration.js";
+import { Delivery, EncodedPayload } from "../journal/declaration.js";
+import { Settings as ConsumptionSettings } from "../journal/core/session-configure.js";
 
 export { SessionTransition } from "./session-transition.js";
 
@@ -275,6 +276,8 @@ export namespace SessionGeneration {
   export const ConfigureIntent = z
     .object({
       operation: z.enum(["create", "tools.add", "tools.remove", "system.blocks.set", "revert"]),
+      /** `all|one` consumption widths (#1253); present only when this configure pins them. */
+      settings: ConsumptionSettings.optional(),
     })
     .strict();
   export type ConfigureIntent = z.infer<typeof ConfigureIntent>;
@@ -559,6 +562,8 @@ export namespace Inbox {
       kind: Kind,
       content: z.string(),
       origin: EncodedPayload,
+      /** Loop-consumption mode (#1253): `steer` drains at tool.post boundaries, `followUp` only at turn end. Absent folds to `followUp`. */
+      delivery: Delivery.optional(),
       status: Status,
       consumedBy: NullableIdentifier,
       consumedAt: EpochMs.nullable(),

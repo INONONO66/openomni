@@ -2,7 +2,7 @@ import type { CommitReceipt } from "./store/services";
 import type { LedgerError } from "./store/errors";
 import { Effect } from "effect";
 import type { SessionKernel } from "./entity";
-import { canonicalDigest, JournalKind, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, ConsumptionSettings, type ConsumptionWidth, JournalKind, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
 import { pinCompactionAction } from "../plugins/compaction/successor";
 import type * as SessionHandleStore from "./store/fence";
@@ -277,6 +277,8 @@ export function turnCheckpointAction(input: {
   readonly resumeCount: number;
   readonly boundaryActionId: string;
   readonly boundary: SessionTurn.Boundary;
+  /** Consumed input seqs at this boundary (#1253): the turn's `turn.consumed` record. */
+  readonly inboxIds: readonly string[];
   readonly at: number;
 }): LedgerAction.Append {
   return {
@@ -284,7 +286,10 @@ export function turnCheckpointAction(input: {
     parentId: input.parentId,
     sessionId: input.sessionId,
     kind: "turn",
-    intent: { encodingVersion: 1, value: { phase: "checkpoint", turnId: input.turnId } },
+    intent: {
+      encodingVersion: 1,
+      value: { phase: "checkpoint", turnId: input.turnId, inboxIds: [...input.inboxIds] },
+    },
     effect: {
       encodingVersion: 1,
       value: {
@@ -334,7 +339,7 @@ export function deliveryActions(
         value:
           item.kind === "interrupt" || item.kind === "resume"
             ? { inboxId: item.id, control: item.kind }
-            : { inboxId: item.id, delivery: JournalKind.DEFAULT_DELIVERY },
+            : { inboxId: item.id, delivery: item.delivery ?? JournalKind.DEFAULT_DELIVERY },
       },
       effect: {
         encodingVersion: 1,
@@ -513,7 +518,7 @@ export function generationForOpen(
 }
 
 /** The chain effect one received message commits; the pending fold reads it back. */
-const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string() });
+const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
 const DeliverIntent = z.object({ inboxId: z.string() });
 
 /** The durable chain action for one received message (the inbox table is gone; the chain is the inbox). */
@@ -553,23 +558,41 @@ export function receivedMessageAction(input: {
  * carrying an inbox payload, projected to the historical inbox row shape.
  * Entries whose `<id>` a later delivery row's intent references are consumed.
  */
+interface ReceivedEntry {
+  readonly action: LedgerAction.Node;
+  readonly kind: Inbox.Kind;
+  readonly content: string;
+  readonly delivery?: JournalKind.Delivery;
+}
+
+function foldReceivedAction(
+  action: LedgerAction.Node,
+  received: ReceivedEntry[],
+  delivered: Set<string>,
+): void {
+  if (action.kind !== "prompt" && action.kind !== "signal" && action.kind !== "action") return;
+  const effect = ReceivedEffect.safeParse(action.effect.value);
+  if (effect.success)
+    received.push({
+      action,
+      kind: effect.data.inboxKind,
+      content: effect.data.content,
+      ...(effect.data.delivery === undefined ? {} : { delivery: effect.data.delivery }),
+    });
+  const intent = DeliverIntent.safeParse(action.intent.value);
+  if (intent.success) delivered.add(intent.data.inboxId);
+}
+
 export function receivedMessages(
   kernel: SessionKernel,
   sessionId: string,
 ): { readonly rows: Inbox.Row[]; readonly delivered: ReadonlySet<string> } {
-  const received: { readonly action: LedgerAction.Node; readonly kind: Inbox.Kind; readonly content: string }[] = [];
+  const received: ReceivedEntry[] = [];
   const delivered = new Set<string>();
   let afterRevision = 0;
   for (;;) {
     const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
-    for (const action of page.actions) {
-      if (action.kind === "prompt" || action.kind === "signal" || action.kind === "action") {
-        const effect = ReceivedEffect.safeParse(action.effect.value);
-        if (effect.success) received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
-        const intent = DeliverIntent.safeParse(action.intent.value);
-        if (intent.success) delivered.add(intent.data.inboxId);
-      }
-    }
+    for (const action of page.actions) foldReceivedAction(action, received, delivered);
     if (page.nextRevision === null) break;
     afterRevision = page.nextRevision;
   }
@@ -582,6 +605,7 @@ export function receivedMessages(
         kind: entry.kind,
         content: entry.content,
         origin: entry.action.intent,
+        ...(entry.delivery === undefined ? {} : { delivery: entry.delivery }),
         status: delivered.has(entry.action.id) ? "consumed" : "pending",
         consumedBy: null,
         consumedAt: null,
@@ -595,4 +619,57 @@ export function receivedMessages(
 /** Pending admission over a per-session file is the kernel's chain fold (plan F1). */
 export function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.Row[] {
   return kernel.pendingMessages(sessionId);
+}
+
+/** `session.configure.settings` carrier (#1253); any configure row may pin the widths. */
+const ConfigureSettingsIntent = z.object({ settings: ConsumptionSettings });
+
+/** Current behavior when no configure row pins widths: every boundary consumes all eligible rows. */
+export const DEFAULT_CONSUMPTION: ConsumptionSettings = { steering: "all", followUp: "all" };
+
+/**
+ * The `all|one` consumption widths (#1253): settings data folded from the
+ * latest `session.configure` row carrying `intent.settings`, not code.
+ */
+export function consumptionSettings(kernel: SessionKernel, sessionId: string): ConsumptionSettings {
+  let settings = DEFAULT_CONSUMPTION;
+  let afterRevision = 0;
+  for (;;) {
+    const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
+    for (const action of page.actions) {
+      if (action.kind !== "session.configure") continue;
+      const parsed = ConfigureSettingsIntent.safeParse(action.intent.value);
+      if (parsed.success) settings = parsed.data.settings;
+    }
+    if (page.nextRevision === null) return settings;
+    afterRevision = page.nextRevision;
+  }
+}
+
+/**
+ * The loop boundary consumption rule (#1253): control signals
+ * (interrupt/resume) are consumed at every boundary; `delivery: steer` input
+ * rows at `tool.post` (`after_tools`) boundaries and at turn end; `delivery:
+ * followUp` rows only at turn end. How many rows one boundary consumes per
+ * mode is the settings widths (`all|one`). Returns the consumed subset in
+ * backlog order.
+ */
+export function boundaryConsumption(
+  backlog: readonly Inbox.Row[],
+  boundary: SessionTurn.Boundary | "turn_end",
+  settings: ConsumptionSettings,
+): Inbox.Row[] {
+  const width = (rows: readonly Inbox.Row[], mode: ConsumptionWidth) =>
+    mode === "one" ? rows.slice(0, 1) : rows;
+  const inputs = backlog.filter((item) => item.kind === "prompt" || item.kind === "action");
+  const steer = inputs.filter((item) => (item.delivery ?? JournalKind.DEFAULT_DELIVERY) === "steer");
+  const followUp = inputs.filter((item) => (item.delivery ?? JournalKind.DEFAULT_DELIVERY) === "followUp");
+  const chosen = new Set(
+    [
+      ...backlog.filter((item) => item.kind === "interrupt" || item.kind === "resume"),
+      ...(boundary === "after_tools" || boundary === "turn_end" ? width(steer, settings.steering) : []),
+      ...(boundary === "turn_end" ? width(followUp, settings.followUp) : []),
+    ].map((item) => item.id),
+  );
+  return backlog.filter((item) => chosen.has(item.id));
 }
