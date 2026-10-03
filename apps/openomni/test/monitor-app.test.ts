@@ -153,7 +153,9 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
                 description: "named terminal signal",
                 source: {
                   kind: "command",
-                  command: `tmux -L ${tmuxSocket} attach -t qa`,
+                  // The watch PTY inherits this process's TERM; CI exports TERM=dumb,
+                  // which tmux attach refuses ("terminal does not support clear").
+                  command: `TERM=xterm-256color tmux -L ${tmuxSocket} attach -t qa`,
                   filter: "WAKE-7342",
                   persistent: true,
                 },

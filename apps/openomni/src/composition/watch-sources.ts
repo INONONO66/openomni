@@ -277,13 +277,18 @@ export function createWatchSources(
     spec: WatchSourceSpec,
     reason: "exit" | "source_error",
     exitCode: number | null,
+    output?: string,
   ) {
     return {
       sessionId: spec.sessionId,
       watchId: spec.id,
       epoch: spec.epoch,
       sourceKey: `${reason}:${spec.epoch}`,
-      content: JSON.stringify({ watchId: spec.id, epoch: spec.epoch, reason, exitCode }),
+      content: JSON.stringify(
+        output === undefined
+          ? { watchId: spec.id, epoch: spec.epoch, reason, exitCode }
+          : { watchId: spec.id, epoch: spec.epoch, reason, exitCode, output },
+      ),
       terminal: true,
     } satisfies WatchFire;
   }
@@ -300,10 +305,15 @@ export function createWatchSources(
   ): AlarmSource {
     const filter = watchSpec.filter === undefined ? undefined : new RegExp(watchSpec.filter);
     let lines = 0;
+    // The failing command's own words (PTY output merges stdout and stderr):
+    // a nonzero exit surfaces this in the summary so a watch that dies at
+    // birth (bad flag, unusable TERM) names its cause.
+    let lastLine = "";
     return commandSource(
       watchSpec.command,
       (content) => {
         lines += 1;
+        if (content.length > 0) lastLine = content;
         if (filter === undefined || filter.test(content))
           enqueue(holder, {
             sessionId: spec.sessionId,
@@ -314,7 +324,7 @@ export function createWatchSources(
             terminal: false,
           });
       },
-      (code) => enqueue(holder, summary(spec, "exit", code)),
+      (code) => enqueue(holder, summary(spec, "exit", code, code === 0 || lastLine === "" ? undefined : lastLine)),
       (error) => sourceFailure(spec, holder, error),
     );
   }

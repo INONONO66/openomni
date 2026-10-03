@@ -82,7 +82,7 @@ test("command watch sends filtered lines in source order and a terminal exit sum
   expect(fires.map((fire) => [fire.sourceKey, fire.content])).toEqual([
     ["line:3:1", "keep:1"],
     ["line:3:3", "keep:2"],
-    ["exit:3", JSON.stringify({ watchId: "watch-cmd", epoch: 3, reason: "exit", exitCode: 3 })],
+    ["exit:3", JSON.stringify({ watchId: "watch-cmd", epoch: 3, reason: "exit", exitCode: 3, output: "keep:2" })],
   ]);
   expect(summary.terminal).toBe(true);
   expect(fires.every((fire) => fire.watchId === "watch-cmd" && fire.epoch === 3)).toBe(true);
