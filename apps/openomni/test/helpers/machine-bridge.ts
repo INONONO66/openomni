@@ -11,7 +11,7 @@ export function bridgeHost(
 ) {
   const callTool = options.callTool;
   return acquireEffect(createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     id: testIds("bridge-host"),
     enrollment: () => ({
       name: "workstation",

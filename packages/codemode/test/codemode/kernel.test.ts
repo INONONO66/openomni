@@ -52,7 +52,7 @@ async function withMachine(
 ): Promise<void> {
   const path = socketPath();
   const host = await createMachineHost({
-    socketPath: path,
+    listen: { unix: path },
     enrollment: () => enrollment,
     events: silent,
     now: () => 5000,
@@ -358,7 +358,7 @@ describe("code-mode kernel substrate", () => {
   test("an unattached machine is refused", async () => {
     const path = socketPath();
     const host = await createMachineHost({
-      socketPath: path,
+      listen: { unix: path },
       enrollment: () => enrollment,
       events: silent,
       now: () => 5000,

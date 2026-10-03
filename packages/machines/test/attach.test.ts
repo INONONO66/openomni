@@ -95,7 +95,7 @@ async function withHost(
   const collector = eventCollector();
   const path = socketPath();
   const host = await createMachineHost({
-    socketPath: path,
+    listen: { unix: path },
     enrollment: resolve,
     events: collector.sink,
     now: () => 5000,

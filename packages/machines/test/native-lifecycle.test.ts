@@ -81,7 +81,7 @@ test("closing the attached daemon scope terminates a host-dispatched process gro
   const path = socketPath("machine-life");
   const detached = deferred();
   const host = await acquire(createMachineHost({
-    socketPath: path, enrollment, now: () => 3, id: lifecycleIds("life-host"),
+    listen: { unix: path }, enrollment, now: () => 3, id: lifecycleIds("life-host"),
     events: { publish: (event) => { if (event.name === Machine.Events.Detached.name) detached.resolve(); } },
   }));
   const daemon = await acquire(attachMachineDaemon({ socketPath: path, id: lifecycleIds("life-daemon"), offer: offer("/tmp"), fsExports: new Map([["docs", "/tmp"]]) }));

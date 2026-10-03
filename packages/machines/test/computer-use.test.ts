@@ -27,11 +27,12 @@ async function fixture(
   const path = socketPath();
   const fake = fakeMac(options.behavior);
   const host = await createMachineHost({
-    socketPath: path,
+    listen: { unix: path },
     enrollment: () => ({
       machineId: "m-1",
       name: "mac",
       allowedCapabilities: options.allowed ?? COMPUTER,
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: silent,

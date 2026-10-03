@@ -54,12 +54,13 @@ async function createMachineHost(options: Omit<Parameters<typeof createHost>[0],
   const host = await acquireEffect(createHost({ id: testIds("e2e-host"), ...options }));
   suite.defer(async () => {
     await runEffect(host.close());
-    expect(existsSync(options.socketPath)).toBe(false);
+    const unixPath = options.listen.unix ?? "";
+    expect(existsSync(unixPath)).toBe(false);
     console.log(
       "967-U1 host cleanup",
       JSON.stringify({
-        socketPath: options.socketPath,
-        socketExists: existsSync(options.socketPath),
+        socketPath: unixPath,
+        socketExists: existsSync(unixPath),
       }),
     );
   });
@@ -331,7 +332,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
     announceServed = resolve;
   });
   const host = await createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
     now: () => Date.now(),
@@ -421,7 +422,7 @@ async function startCellHarness(ports: Partial<ToolPorts>) {
   const socketPath = testSocketPath();
   let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
   const host = await createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
     now: () => Date.now(),
@@ -739,7 +740,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
   const socketPath = testSocketPath();
 
   const host = await createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     enrollment: () => ({ ...enrollment, allowedCapabilities: ["fs.read"] }),
     events: Bus,
     now: () => Date.now(),

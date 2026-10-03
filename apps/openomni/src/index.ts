@@ -374,7 +374,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         : await acquireAppResource(
             runtime,
             createMachineHost({
-              socketPath: machines.socketPath,
+              listen: { unix: machines.socketPath },
               enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
               events: services.observations,
               id: services.entropy.id,

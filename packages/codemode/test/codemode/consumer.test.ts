@@ -46,7 +46,7 @@ async function pair(
   const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
   let mode: ReturnType<typeof createCodemode>;
   const host = await createMachineHost({
-    socketPath,
+    listen: { unix: socketPath },
     enrollment: (id) => ({
       machineId: id,
       name: id,

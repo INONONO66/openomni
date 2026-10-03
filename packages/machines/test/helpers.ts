@@ -27,7 +27,7 @@ export function offer(root: string, changes: Partial<Machine.Offer> = {}): Machi
 export const silent = { publish: () => undefined };
 
 export function wireHost(socketPath: string) {
-  return createMachineHost({ socketPath, enrollment, events: silent, now: () => 3 });
+  return createMachineHost({ listen: { unix: socketPath }, enrollment, events: silent, now: () => 3 });
 }
 
 export function wireDaemon(socketPath: string, root: string) {

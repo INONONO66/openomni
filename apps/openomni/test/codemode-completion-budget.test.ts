@@ -26,7 +26,7 @@ test("two cells in one turn each own a full completion budget", async () => {
   let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
   const cellCalls = new Map<string, number>();
   const host = await acquireEffect(createMachineHost({
-    socketPath: path,
+    listen: { unix: path },
     id: testIds("budget-host"),
     enrollment: (machineId: string) => ({ machineId, name: "budget", allowedCapabilities: ["kernel.py"], publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", enrolledAt: 0 }),
     events: { publish: () => undefined }, now: () => 1,
