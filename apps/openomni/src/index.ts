@@ -317,6 +317,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
             })
             .pipe(
               Effect.map((receipt) => SessionTransition.Resolution.parse(receipt.resolution)),
+              // A typed Resolve refusal (#1253: unknown or already-settled
+              // request, zero new facts) is the caller's stale answer, not a
+              // runtime failure: it surfaces as the `rejected` resolution the
+              // channel receipt maps to `request_answer.rejected`.
+              Effect.catchTag("ResolveRefused", () =>
+                Effect.succeed("rejected" as SessionTransition.Resolution),
+              ),
               Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "request.answer")),
             );
         }),
