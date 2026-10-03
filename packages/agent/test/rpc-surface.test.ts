@@ -21,6 +21,7 @@ import {
   sendResolve,
   sessionFileFor,
 } from "./helpers/cluster-runtime";
+import { SessionNotFound } from "../src/core/store/errors";
 import { seedSessionWithOpenRequest } from "./helpers/seed-request";
 import { approvalAnswer } from "./helpers/request-fixtures";
 import { runAgent } from "./helpers/executor";
@@ -68,6 +69,26 @@ async function seedSession(
     catalog.close();
   }
 }
+
+test("a session absent from both planes refuses activation before any handler runs", () => {
+  // Pins the invariant that lets the deliver handler read the session row
+  // unguarded: activation reads the row first (fence rotation + adoption), and
+  // BOTH planes throw SessionNotFound for an unknown session, so no handler
+  // ever observes a missing row — the old in-handler `closed` fallback was
+  // unreachable and is deleted.
+  const sessionId = "surface-absent-session";
+  const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+  const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
+  try {
+    expect(() => catalog.rotateFence(sessionId)).toThrow(SessionNotFound);
+    const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+    expect(() => kernel.row(sessionId)).toThrow(SessionNotFound);
+    expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId)).toEqual([]);
+  } finally {
+    store.close();
+    catalog.close();
+  }
+});
 
 test("deliver(prompt) replaces Prompt: the input row lands and a turn runs to seal", async () => {
   const sessionId = "surface-prompt";

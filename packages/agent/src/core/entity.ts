@@ -299,15 +299,12 @@ function deliver(
     const registered = env.ports.inputRegistrations ?? CORE_INPUT_REGISTRATIONS;
     if (!registered.includes(payload.kind))
       return yield* new DeliverRefused({ code: "unknown_kind" });
-    const row = yield* Effect.suspend(() => {
-      try {
-        return Effect.succeed(kernel.row(authority.sessionId));
-      } catch (error) {
-        return error instanceof SessionNotFound
-          ? Effect.fail(new DeliverRefused({ code: "closed" }))
-          : Effect.die(error);
-      }
-    });
+    // Unguarded by construction: every activation already read this row
+    // (rotateActivationFence / adoptFence) and no API deletes one, so a
+    // session absent from both planes never reaches this handler — it dies at
+    // activation (pinned by rpc-surface "absent from both planes"). `closed`
+    // stays a reserved refusal code for the wire contract.
+    const row = kernel.row(authority.sessionId);
     const body = decodeDeliverBody(JSON.parse(payload.body));
     const inboxKind: Inbox.Kind =
       payload.kind === "prompt"

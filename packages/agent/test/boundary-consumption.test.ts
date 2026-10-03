@@ -115,7 +115,10 @@ function declare(runtime: SessionFixture, runner: SessionRunner) {
 }
 
 /** Commit a `session.configure` row pinning the consumption widths. */
-function commitSettings(settings: { steering: "all" | "one"; followUp: "all" | "one" }) {
+function commitSettings(
+  settings: { steering: "all" | "one"; followUp: "all" | "one" },
+  id = "configure-settings",
+) {
   return Effect.suspend(() => {
     const kernel = isolatedLedger().kernel;
     const current = kernel.row("S");
@@ -128,7 +131,7 @@ function commitSettings(settings: { steering: "all" | "one"; followUp: "all" | "
       expectedRevision: current.revision,
       actions: [
         configureAction({
-          id: "configure-settings",
+          id,
           sessionId: "S",
           parentId: kernel.latestAction("S")?.id ?? null,
           operation: "tools.add",
@@ -167,6 +170,18 @@ describe("integrated boundary consumption", () => {
         expect(consumptionSettings(isolatedLedger().kernel, "S")).toEqual({
           steering: "one",
           followUp: "one",
+        });
+        // The fold pages in 256-action windows: a settings row committed past
+        // the first window still wins over every earlier one.
+        yield* Effect.forEach(
+          Array.from({ length: 256 }, (_, index) => index),
+          (index) => commitSettings({ steering: "all", followUp: "all" }, `configure-page-${index}`),
+          { discard: true },
+        );
+        yield* commitSettings({ steering: "one", followUp: "all" }, "configure-final");
+        expect(consumptionSettings(isolatedLedger().kernel, "S")).toEqual({
+          steering: "one",
+          followUp: "all",
         });
       }),
     ));
