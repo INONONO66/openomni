@@ -293,3 +293,40 @@ export const DeliverBody = Schema.Struct({
   delivery: Schema.optional(Schema.Literals(["steer", "followUp"])),
 });
 export type DeliverBody = typeof DeliverBody.Type;
+
+/** The nine read models (#1253) the `read` RPC serves from the journal fold. */
+const ReadModelName = Schema.Literals([
+  "history",
+  "decisions",
+  "requests",
+  "alarms",
+  "generations",
+  "tree",
+  "metrics",
+  "control",
+  "outbound",
+]);
+
+/**
+ * One read page: `body` is the canonical JSON of the rendered model page
+ * (see `inspect/read.ts`); `nextCursor` is the next after-revision, or null
+ * when the page reached the chain head.
+ */
+export const ReadPage = Schema.Struct({
+  body: Schema.String,
+  nextCursor: Schema.NullOr(Schema.Number),
+});
+export type ReadPage = typeof ReadPage.Type;
+
+/**
+ * `read{model, cursor}` (#1253): the entity's fourth RPC. A pure projection
+ * over the committed chain — it appends nothing and never wakes the loop, so
+ * it is deliberately NOT cluster-persisted.
+ */
+export const ReadRpc = Rpc.make("Read", {
+  payload: {
+    model: ReadModelName,
+    cursor: Schema.Number,
+  },
+  success: ReadPage,
+});

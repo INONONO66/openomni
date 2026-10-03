@@ -10,8 +10,9 @@ import { type SessionAdmissionSnapshot, type SessionEntityAuthority, type Sessio
 import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit";
 import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
-import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeadlineRpc, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, InterruptRpc, PromptRpc, RequestCancelRpc, RequestResolveRpc, ResolveRefused, ResolveRpc, ResumeRpc, RetryAlarmBody, RetryScheduledRpc, WatchFiredAlarmBody, WatchFiredRpc, WatchTimeoutAlarmBody, WatchTimeoutRpc, type ChainAppendReceipt } from "./messages";
+import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeadlineRpc, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, InterruptRpc, PromptRpc, type ReadPage, ReadRpc, RequestCancelRpc, RequestResolveRpc, ResolveRefused, ResolveRpc, ResumeRpc, RetryAlarmBody, RetryScheduledRpc, WatchFiredAlarmBody, WatchFiredRpc, WatchTimeoutAlarmBody, WatchTimeoutRpc, type ChainAppendReceipt } from "./messages";
 import { alarmAction } from "./alarm";
+import { renderReadModel } from "../inspect/read";
 
 // ─── from cluster/kernel-registry.ts (#1247) ───
 /**
@@ -49,6 +50,7 @@ export const SessionEntity = Entity.make("Session", [
   DeliverRpc,
   ResolveRpc,
   AlarmRpc,
+  ReadRpc,
   PromptRpc,
   InterruptRpc,
   ResumeRpc,
@@ -461,6 +463,25 @@ function alarmOccurrence(
   }).pipe(Effect.orDie);
 }
 
+/**
+ * `read` (#1253): one model page from the journal fold. A pure, bounded
+ * projection over committed history — it appends nothing and never wakes the
+ * loop. Pagination follows the chain's own revision cursor.
+ */
+function readProjection(
+  handle: ActivationHandle,
+  payload: { readonly model: Parameters<typeof renderReadModel>[0]; readonly cursor: number },
+): Effect.Effect<ReadPage> {
+  const { kernel, authority } = handle;
+  return Effect.sync(() => {
+    const page = kernel.historyPage(authority.sessionId, { afterRevision: payload.cursor, limit: 256 });
+    return {
+      body: JSON.stringify(renderReadModel(payload.model, page.actions)),
+      nextCursor: page.nextRevision,
+    };
+  });
+}
+
 /** The recorded stale-occurrence fact; idempotent on `<occurrenceId>:stale`. */
 function appendStaleAlarm(
   handle: ActivationHandle,
@@ -629,6 +650,7 @@ export const SessionEntityLive = SessionEntity.toLayer(
       Deliver: (envelope: Entity.Request<typeof DeliverRpc>) => deliver(handle, envelope.payload),
       Resolve: (envelope: Entity.Request<typeof ResolveRpc>) => resolveCommand(handle, envelope.payload),
       Alarm: (envelope: Entity.Request<typeof AlarmRpc>) => alarmOccurrence(handle, envelope.payload),
+      Read: (envelope: Entity.Request<typeof ReadRpc>) => readProjection(handle, envelope.payload),
       Prompt: (envelope: Entity.Request<typeof PromptRpc>) => receive(handle, "prompt", envelope.payload),
       Interrupt: (envelope: Entity.Request<typeof InterruptRpc>) => receive(handle, "interrupt", envelope.payload),
       Resume: (envelope: Entity.Request<typeof ResumeRpc>) => receive(handle, "resume", envelope.payload),

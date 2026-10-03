@@ -643,3 +643,21 @@ export const sendAlarm = (
     const makeClient = yield* SessionEntity.client;
     return yield* makeClient(sessionId).Alarm(occurrence);
   });
+
+// ─── #1253 `read` send helper ───
+
+/** One `read` model page through the four-RPC surface. */
+export const sendRead = (
+  sessionId: string,
+  input: {
+    readonly model:
+      | "history" | "decisions" | "requests" | "alarms" | "generations"
+      | "tree" | "metrics" | "control" | "outbound";
+    readonly cursor: number;
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Read(input);
+  });
