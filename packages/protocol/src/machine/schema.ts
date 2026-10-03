@@ -33,6 +33,8 @@ export const WellKnownCapability = {
   screenRead: "screen.read",
   /** Guarded pointer/keyboard actions tied to the latest capture (#1274). */
   inputWrite: "input.write",
+  /** Persistent named terminals over tmux (#1273); offered only when tmux resolves at attach. */
+  ptySession: "pty.session",
 } as const satisfies Record<string, CapabilityId>;
 
 /**
@@ -86,6 +88,14 @@ export const WireMethod = {
   FsOp: "machine.fs_op",
   ScreenRead: "machine.screen_read",
   InputWrite: "machine.input_write",
+  PtyOpen: "machine.pty_open",
+  PtyWrite: "machine.pty_write",
+  PtyRead: "machine.pty_read",
+  PtyResize: "machine.pty_resize",
+  PtyClose: "machine.pty_close",
+  PtyList: "machine.pty_list",
+  /** Daemon → host wake-up; carries no authoritative output state (#1273). */
+  PtyOutput: "machine.pty_output",
 } as const;
 
 /** Shared by Enrollment/Offer arrays and the machine.attached event payload. */
@@ -611,3 +621,172 @@ export const InputWriteResult = z.discriminatedUnion("status", [
     .strict(),
 ]);
 export type InputWriteResult = z.infer<typeof InputWriteResult>;
+
+/**
+ * Persistent terminals (#1273): named tmux-backed sessions on an attached
+ * machine. Ceilings are protocol-owned so host, daemon, and tool surfaces
+ * quote the same numbers; the daemon enforces them (it holds the bytes).
+ * `machine.pty_read` is the authoritative pull contract — the optional
+ * `machine.pty_output` notification is only a wake-up and carries no output.
+ */
+export const PTY_READ_MAX_BYTES = 262_144;
+/** Terminal input is keystrokes; one write is bounded well below exec output. */
+export const PTY_WRITE_MAX_BYTES = 16_384;
+export const PTY_LIST_MAX_SESSIONS = 1000;
+export const PTY_MAX_COLS = 1000;
+export const PTY_MAX_ROWS = 1000;
+/** Upper bound on the optional long-poll a read may request before answering empty. */
+export const PTY_READ_WAIT_MAX_MS = 30_000;
+const PTY_READ_MAX_BASE64 = Math.ceil(PTY_READ_MAX_BYTES / 3) * 4;
+const PTY_WRITE_MAX_BASE64 = Math.ceil(PTY_WRITE_MAX_BYTES / 3) * 4;
+
+/**
+ * Session name grammar: a stable daemon-scoped terminal identifier. Flat and
+ * lowercase like {@link ExportName}, and additionally free of `.` and `:`,
+ * which tmux target syntax would re-interpret as window/pane selectors.
+ */
+export const PtySessionName = z
+  .string()
+  .max(64, { message: "session name must be at most 64 characters" })
+  .regex(/^[a-z0-9][a-z0-9_-]*$/, {
+    message: "session name must be lowercase alphanumeric with - or _ (e.g. build)",
+  });
+export type PtySessionName = z.infer<typeof PtySessionName>;
+
+/**
+ * Opaque continuation token for one terminal's output stream. Callers persist
+ * only the token the daemon returned and must not derive offsets from decoded
+ * text; the daemon owns its shape and guarantees monotonic advancement.
+ */
+export const PtyCursor = z.string().min(1).max(256);
+export type PtyCursor = z.infer<typeof PtyCursor>;
+
+export const PtyOpenRequest = z.object({ name: PtySessionName, cwd: AbsolutePath }).strict();
+export type PtyOpenRequest = z.infer<typeof PtyOpenRequest>;
+
+/**
+ * `refused` is a typed outcome, not a transport error: `pty_not_available`
+ * reports a missing/withdrawn effective capability (tmux absent at attach or
+ * its server gone), `path_escapes_export` the same confinement rule exec uses.
+ * Opening an existing name reattaches; the returned cursor always points at
+ * the start of the retained stream so a first read replays scrollback.
+ */
+export const PtyOpenResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok"), cursor: PtyCursor }).strict(),
+  z
+    .object({
+      status: z.literal("refused"),
+      reason: z.enum(["machine_not_attached", "pty_not_available", "path_escapes_export"]),
+    })
+    .strict(),
+]);
+export type PtyOpenResult = z.infer<typeof PtyOpenResult>;
+
+/** `data` is terminal input bytes as base64; the daemon sends them literally. */
+export const PtyWriteRequest = z
+  .object({ name: PtySessionName, data: Base64.max(PTY_WRITE_MAX_BASE64) })
+  .strict();
+export type PtyWriteRequest = z.infer<typeof PtyWriteRequest>;
+
+const PtySessionRefusal = z
+  .object({
+    status: z.literal("refused"),
+    reason: z.enum(["machine_not_attached", "pty_not_available", "pty_not_found"]),
+  })
+  .strict();
+
+export const PtyWriteResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok") }).strict(),
+  PtySessionRefusal,
+]);
+export type PtyWriteResult = z.infer<typeof PtyWriteResult>;
+
+/**
+ * Pull output after `cursor` (absent: from the start of the retained stream).
+ * `waitMs` lets a caller long-poll: the daemon may hold the reply until output
+ * exists after the cursor or the wait elapses, whichever is first.
+ */
+export const PtyReadRequest = z
+  .object({
+    name: PtySessionName,
+    cursor: PtyCursor.optional(),
+    waitMs: z.number().int().nonnegative().max(PTY_READ_WAIT_MAX_MS).optional(),
+  })
+  .strict();
+export type PtyReadRequest = z.infer<typeof PtyReadRequest>;
+
+/**
+ * When available output exceeds {@link PTY_READ_MAX_BYTES} the daemon returns
+ * the bounded suffix with `truncated: true` and a cursor advanced past ALL
+ * observed output, so repeated reads can never loop on discarded bytes.
+ */
+export const PtyReadResult = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("ok"),
+      data: Base64.max(PTY_READ_MAX_BASE64),
+      cursor: PtyCursor,
+      truncated: z.boolean(),
+    })
+    .strict(),
+  PtySessionRefusal,
+]);
+export type PtyReadResult = z.infer<typeof PtyReadResult>;
+
+export const PtyResizeRequest = z
+  .object({
+    name: PtySessionName,
+    cols: z.number().int().positive().max(PTY_MAX_COLS),
+    rows: z.number().int().positive().max(PTY_MAX_ROWS),
+  })
+  .strict();
+export type PtyResizeRequest = z.infer<typeof PtyResizeRequest>;
+
+export const PtyResizeResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok") }).strict(),
+  PtySessionRefusal,
+]);
+export type PtyResizeResult = z.infer<typeof PtyResizeResult>;
+
+export const PtyCloseRequest = z.object({ name: PtySessionName }).strict();
+export type PtyCloseRequest = z.infer<typeof PtyCloseRequest>;
+
+export const PtyCloseResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok") }).strict(),
+  PtySessionRefusal,
+]);
+export type PtyCloseResult = z.infer<typeof PtyCloseResult>;
+
+export const PtyListRequest = z.object({}).strict();
+export type PtyListRequest = z.infer<typeof PtyListRequest>;
+
+/**
+ * `lost` names a tracked session whose tmux session disappeared while the
+ * server lived; a whole-server loss withdraws the capability instead, so
+ * every call answers `pty_not_available` until a later attach finds tmux.
+ */
+export const PtySessionInfo = z
+  .object({ name: PtySessionName, status: z.enum(["live", "lost"]) })
+  .strict();
+export type PtySessionInfo = z.infer<typeof PtySessionInfo>;
+
+export const PtyListResult = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("ok"),
+      sessions: z.array(PtySessionInfo).max(PTY_LIST_MAX_SESSIONS),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("refused"),
+      reason: z.enum(["machine_not_attached", "pty_not_available"]),
+    })
+    .strict(),
+]);
+export type PtyListResult = z.infer<typeof PtyListResult>;
+
+/** Wake-up payload only: the consumer still reads by cursor over the wire. */
+export const PtyOutput = z.object({ name: PtySessionName }).strict();
+export type PtyOutput = z.infer<typeof PtyOutput>;
