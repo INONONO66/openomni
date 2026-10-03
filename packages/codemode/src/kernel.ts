@@ -182,6 +182,24 @@ class _Machine:
     def eval(self, code):
         return tool['codemode.eval'](machineId=self.machine_id, code=code)
 
+    def screen(self, display=None, region=None):
+        args = {'machineId': self.machine_id}
+        if display is not None:
+            args['display'] = display
+        if region is not None:
+            args['region'] = region
+        value = tool['codemode.screen'](**args)
+        if value['status'] == 'ok':
+            value['png'] = base64.b64decode(value['png'])
+            self._capture_id = value['captureId']
+        return value
+
+    def input(self, actions, capture_id=None):
+        anchor = capture_id if capture_id is not None else getattr(self, '_capture_id', None)
+        if anchor is None:
+            raise ToolError('input requires a prior screen() capture or an explicit capture_id')
+        return tool['codemode.input'](machineId=self.machine_id, captureId=anchor, actions=actions)
+
 
 class _Codemode:
     def listMachines(self):
