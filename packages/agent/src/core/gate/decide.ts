@@ -5,7 +5,8 @@ import { type ExecutionError, GenerationUnavailable, InvocationClosed, CommitFai
 import { type BusEvent, GateDecision, LedgerAction, type LedgerSession, type ObservationSink as ObservationPort, type PlainValue, type SessionTransition, Tool, type PlainObject, L0Observation, canonicalDigest, PlainValueSchema, RowVerdictType, SessionHistory, listenForAbort } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput, PolicyEvaluation } from "./compile";
 import type { RetryAlarmPort, AlarmSenders } from "../alarm-ports";
-import { createRetryAlarmPort } from "../alarm";
+import { alarmAction, createRetryAlarmPort } from "../alarm";
+import { turnStopAction } from "../commit";
 import type { WaveControl, Dispatcher } from "../tool";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { onAbort, type CapturedGeneration, BOUNDED_CONCURRENCY, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "../ports";
@@ -785,27 +786,23 @@ export function createLedgerRetryAlarmPort(
   return createRetryAlarmPort({
     commitScheduled: (input) =>
       ledger
-        .commit(LedgerAction.Append.parse({
+        .commit(LedgerAction.Append.parse(alarmAction({
           id: input.id,
           parentId: null,
           sessionId,
-          kind: "alarm",
-          intent: { encodingVersion: 1, value: { op: "arm", kind: "at", fireAt: input.notBefore } },
+          intent: { op: "arm", kind: "at", fireAt: input.notBefore },
           effect: {
-            encodingVersion: 1,
-            value: {
-              status: "armed",
-              spec: {
-                kind: "retry.scheduled",
-                attempt: input.attempt,
-                reason: input.reason,
-                notBefore: input.notBefore,
-              },
+            status: "armed",
+            spec: {
+              kind: "retry.scheduled",
+              attempt: input.attempt,
+              reason: input.reason,
+              notBefore: input.notBefore,
             },
           },
-          revert: { encodingVersion: 1, value: { op: "cancel", id: input.id } },
+          revert: { op: "cancel", id: input.id },
           ts: input.notBefore,
-        }))
+        })))
         .pipe(
           Effect.mapError((error) => new CommitFailed({ error })),
           Effect.asVoid,
@@ -959,29 +956,18 @@ function createStopJudge(
       });
       return completion.verdict === "allow";
     }));
-    yield* commit({
+    yield* commit(turnStopAction({
       id: options.entropy(),
       sessionId: options.identity.sessionId,
       parentId: options.identity.parentActionId,
-      kind: "turn",
-      intent: {
-        encodingVersion: 1,
-        value: { phase: "stop", generation: options.policy.generation },
-      },
-      effect: {
-        encodingVersion: 1,
-        value: {
-          phase: "stop",
-          verdict:
-            result.verdict.kind === "waiting"
-              ? { kind: "waiting", reason: "live_wait", alarmIds: [...result.verdict.alarmIds] }
-              : { ...result.verdict },
-          state: { ...result.state },
-        },
-      },
+      generation: options.policy.generation,
+      verdict:
+        result.verdict.kind === "waiting"
+          ? { kind: "waiting", reason: "live_wait", alarmIds: [...result.verdict.alarmIds] }
+          : { ...result.verdict },
+      state: { ...result.state },
       ts: options.clock(),
-      irreversible: true,
-    });
+    }));
     return result;
   });
 }

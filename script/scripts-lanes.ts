@@ -7,6 +7,7 @@ export const scriptsLanes = {
     "check-benchmark-regression.test.ts",
     "check-dead-exports.test.ts",
     "check-import-cycles.test.ts",
+    "check-journal-writers.test.ts",
     "check-patch-coverage.test.ts",
     "check-topology.test.ts",
     "ci-plan.test.ts",

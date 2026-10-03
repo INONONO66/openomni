@@ -182,6 +182,7 @@ jobs:
       - run: bun run lint:tools
       - run: bun run lint:tools --self-test
       - run: bun run script/check-dead-exports.ts
+      - run: bun run script/check-journal-writers.ts
       - run: bun run script/check-import-cycles.ts
       - run: bun run script/verify-tsconfig-inheritance.ts
 

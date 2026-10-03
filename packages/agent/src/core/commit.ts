@@ -391,6 +391,34 @@ export function turnTerminalAction(input: {
   };
 }
 
+/** The gate's turn-stop row (#1252): constructed here, the turn kind's single writer. */
+export function turnStopAction(input: {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly sessionId: string;
+  readonly generation: number;
+  readonly verdict: PlainValue;
+  readonly state: PlainValue;
+  readonly ts: number;
+}): LedgerAction.Append {
+  return {
+    id: input.id,
+    parentId: input.parentId,
+    sessionId: input.sessionId,
+    kind: "turn",
+    intent: {
+      encodingVersion: 1,
+      value: { phase: "stop", generation: input.generation },
+    },
+    effect: {
+      encodingVersion: 1,
+      value: { phase: "stop", verdict: input.verdict, state: input.state },
+    },
+    irreversible: true,
+    ts: input.ts,
+  };
+}
+
 export function policyRefusalResult(reason: string): SessionRunnerResult {
   const cause = new SessionPolicyRefusal(reason);
   return { kind: "error", text: cause.message, cause };

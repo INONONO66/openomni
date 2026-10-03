@@ -780,16 +780,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
             // then the turn's own boundary drain consumes it and aborts the wave.
             const attempt = () => Effect.suspend(() => {
               const { kernel, row, owner, fence } = borrowedAuthority(id);
-              const received: LedgerAction.Append = {
+              // #1252: an interrupt admission is a control `signal` row built
+              // by the core received-message constructor, like every other
+              // control admission.
+              const received: LedgerAction.Append = Core.receivedMessageAction({
                 id: services.entropy.id(),
-                parentId: kernel.latestAction(id)?.id ?? null,
                 sessionId: id,
-                kind: "prompt",
-                intent: { encodingVersion: 1, value: { kind: "session", id } },
-                effect: { encodingVersion: 1, value: { inboxKind: "interrupt", content: "" } },
-                irreversible: true,
-                ts: services.now(),
-              };
+                kind: "interrupt",
+                content: "",
+                origin: { encodingVersion: 1, value: { kind: "session", id } },
+                parentActionId: kernel.latestAction(id)?.id ?? null,
+                at: services.now(),
+              });
               return kernel.commit({
                 sessionId: id, owner, fence, now: services.now(),
                 expectedRevision: row.revision, actions: [received],

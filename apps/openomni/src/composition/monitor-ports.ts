@@ -1,8 +1,9 @@
-import type { Core } from "@openomni/agent";
+import { Core } from "@openomni/agent";
 type SessionEntityTimerContext = Core.SessionEntityTimerContext;
+const alarmAction = Core.alarmAction;
+const receivedMessageAction = Core.receivedMessageAction;
 import {
   Alarm,
-  EncodedPayload,
   type LedgerAction,
   type PlainObject,
 } from "@openomni/protocol";
@@ -165,7 +166,7 @@ export function watchState(
   };
 }
 
-/** A watch lifecycle chain action under a deterministic id. */
+/** A watch lifecycle chain action under a deterministic id (core alarm writer, #1252). */
 function watchAction(input: {
   readonly id: string;
   readonly parentId: string | null;
@@ -174,19 +175,17 @@ function watchAction(input: {
   readonly effect: PlainObject;
   readonly at: number;
 }): LedgerAction.Append {
-  return {
+  return alarmAction({
     id: input.id,
     parentId: input.parentId,
     sessionId: input.sessionId,
-    kind: "alarm",
-    intent: EncodedPayload.parse({ encodingVersion: 1, value: input.intent }),
-    effect: EncodedPayload.parse({ encodingVersion: 1, value: input.effect }),
-    irreversible: true,
+    intent: input.intent,
+    effect: input.effect,
     ts: input.at,
-  };
+  });
 }
 
-/** A watch wake prompt: the agent's received-message shape, alarm-originated. */
+/** A watch wake prompt: the core received-message constructor, alarm-originated (#1252). */
 function watchPromptAction(input: {
   readonly id: string;
   readonly sessionId: string;
@@ -196,12 +195,12 @@ function watchPromptAction(input: {
   readonly content: string;
   readonly at: number;
 }): LedgerAction.Append {
-  return {
+  return receivedMessageAction({
     id: input.id,
-    parentId: null,
     sessionId: input.sessionId,
     kind: "prompt",
-    intent: EncodedPayload.parse({
+    content: input.content,
+    origin: {
       encodingVersion: 1,
       value: {
         kind: "alarm",
@@ -209,14 +208,10 @@ function watchPromptAction(input: {
         epoch: input.epoch,
         sourceKey: input.sourceKey,
       },
-    }),
-    effect: EncodedPayload.parse({
-      encodingVersion: 1,
-      value: { inboxKind: "prompt", content: input.content },
-    }),
-    irreversible: true,
-    ts: input.at,
-  };
+    },
+    parentActionId: null,
+    at: input.at,
+  });
 }
 
 const WATCH_COMMIT_RETRIES = 5;
