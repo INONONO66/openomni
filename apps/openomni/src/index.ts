@@ -184,6 +184,8 @@ async function composeMachinePlane(
       id: deps.id,
       now: deps.now,
       callTool: deps.callTool,
+      // r1 M3: the live self attachment is never superseded by a reattach.
+      neverSupersede: [plane.self.id],
     }).pipe(Effect.mapError((error) => selfAttachFailure(`host listener failed: ${String(error)}`))),
   );
   const self = await acquireAppResource(

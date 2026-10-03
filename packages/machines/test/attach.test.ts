@@ -50,6 +50,7 @@ async function withHost(
     collector: ReturnType<typeof eventCollector>;
   }) => Promise<void>,
   callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>,
+  neverSupersede?: readonly Machine.MachineId[],
 ): Promise<void> {
   const collector = eventCollector();
   const path = socketPath();
@@ -59,6 +60,7 @@ async function withHost(
     events: collector.sink,
     now: () => 5000,
     callTool,
+    neverSupersede,
   });
   try {
     await run({ host, path, collector });
@@ -412,6 +414,30 @@ describe("machine attach handshake", () => {
           host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities,
         ).toBeUndefined();
       },
+    );
+  });
+
+  test("a neverSupersede machine refuses the second offer and the incumbent stays authoritative (#1271)", async () => {
+    await withHost(
+      () => enrollment,
+      async ({ host, path, collector }) => {
+        const first = await attachMachineDaemon({ socketPath: path, offer: offer() });
+        expect(first.attachment.status).toBe("attached");
+        const second = await attachMachineDaemon({
+          socketPath: path,
+          offer: offer({ offeredCapabilities: ["shell.exec"] }),
+        });
+        expect(second.attachment).toEqual({ status: "refused", reason: "already_attached" });
+        // No detach was published; the incumbent keeps its negotiated plane.
+        expect(collector.events.map((event) => event.name)).not.toContain("machine.detached");
+        expect(host.list().find((entry) => entry.machineId === "mac-studio")?.capabilities).toEqual(
+          ["fs.read"],
+        );
+        second.close();
+        first.close();
+      },
+      undefined,
+      ["mac-studio"],
     );
   });
 

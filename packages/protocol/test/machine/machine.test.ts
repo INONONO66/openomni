@@ -158,6 +158,11 @@ describe("Machine.AttachResult", () => {
     }
   });
 
+  test("refused vocabulary includes already_attached (#1271 self hijack refusal)", () => {
+    const result = Machine.AttachResult.safeParse({ status: "refused", reason: "already_attached" });
+    expect(result.success).toBe(true);
+  });
+
   test("refused carries no capability set", () => {
     const result = Machine.AttachResult.safeParse({
       status: "refused",

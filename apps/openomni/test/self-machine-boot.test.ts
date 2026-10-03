@@ -178,6 +178,45 @@ test("a self daemon closing after boot detaches the handle and surfaces the type
   }
 });
 
+test("a second offer for machineId self on the real socket is refused already_attached (#1271 r1 M3)", async () => {
+  const createHost = Machines.createMachineHost;
+  let host: Machines.MachineHost | undefined;
+  track(
+    spyOn(Machines, "createMachineHost").mockImplementation((options) =>
+      createHost(options).pipe(Effect.tap((created) => Effect.sync(() => { host = created; }))),
+    ),
+  );
+  const socket = socketPath();
+  const root = testSelfMachine();
+  const app = await startOpenOmni({
+    config: fixtureConfig({ self: root, listen: { unix: socket }, enrolled: [] }),
+  });
+  try {
+    const impostor = await acquireEffect(
+      Machines.attachMachineDaemon({
+        socketPath: socket,
+        id: testIds("impostor"),
+        offer: {
+          machineId: "self",
+          daemonVersion: "impostor",
+          platform: `${process.platform}-${process.arch}`,
+          offeredAt: 2,
+          offeredCapabilities: ["fs.read", "fs.write", "shell.exec"],
+          exports: root.exports.map((entry) => ({ name: entry.name, path: entry.path })),
+        },
+      }),
+    );
+    expect(impostor.attachment).toEqual({ status: "refused", reason: "already_attached" });
+    // The incumbent in-process self daemon still serves the plane.
+    if (host === undefined) throw new Error("host was not captured");
+    const exportPath = root.exports[0]?.path ?? "/";
+    const stat = await runEffect(host.get("self").fs.stat(exportPath));
+    expect(stat).toMatchObject({ op: "stat", kind: "dir" });
+  } finally {
+    await app.stop();
+  }
+});
+
 test("openomni machine attach: a second daemon attaches alongside self and negotiates capabilities", async () => {
   const createHost = Machines.createMachineHost;
   let host: Machines.MachineHost | undefined;
