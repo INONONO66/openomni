@@ -53,6 +53,7 @@ for (const stop of [false, true]) {
         machineId,
         name: "completion-test",
         allowedCapabilities: ["kernel.py"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       }),
       events: { publish: () => undefined },

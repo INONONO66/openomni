@@ -78,6 +78,7 @@ const enrollment: Machine.Enrollment = {
   machineId: MACHINE_ID,
   name: "the laptop",
   allowedCapabilities: ["kernel.py"],
+  publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   enrolledAt: 0,
 };
 

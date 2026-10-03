@@ -25,6 +25,7 @@ async function fixture(
       name: id,
       tags: [id],
       allowedCapabilities: capabilities,
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: silent,

@@ -78,6 +78,7 @@ async function fixture(
       name: "test",
       allowedCapabilities: capabilities,
       allowedExports: ["data", "shell"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: { publish: () => undefined },

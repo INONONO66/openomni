@@ -26,6 +26,7 @@ const enrollment: Machine.Enrollment = {
   name: "studio",
   machineId: "mac-studio",
   allowedCapabilities: ["kernel.py", "fs.read"],
+  publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   enrolledAt: 1000,
 };
 

@@ -17,6 +17,7 @@ export function bridgeHost(
       name: "workstation",
       machineId: "m-1",
       allowedCapabilities: ["kernel.py"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1000,
     }),
     events: { publish: () => undefined },

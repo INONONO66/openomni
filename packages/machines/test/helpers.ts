@@ -9,6 +9,7 @@ export function enrollment(): Machine.Enrollment {
     name: "workstation",
     allowedCapabilities: capabilities,
     allowedExports: ["docs"],
+    publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     enrolledAt: 1,
   };
 }

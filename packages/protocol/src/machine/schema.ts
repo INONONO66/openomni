@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { EpochMs } from "../time.js";
 import { PlainValueSchema } from "../json.js";
@@ -58,6 +59,22 @@ export const AbsolutePath = z
 export const MachineId = z.string().min(1);
 export type MachineId = z.infer<typeof MachineId>;
 
+/**
+ * Canonical textual form of a TLS public-key pin (#1270): exactly the 64
+ * lowercase hex characters of sha256(SubjectPublicKeyInfo DER). One spelling
+ * owned here so the Owner's enrollment, the daemon's pinned host key, and the
+ * transport's extracted peer key can never drift into case or encoding skew.
+ */
+export const KeyFingerprint = z.string().regex(/^[0-9a-f]{64}$/, {
+  message: "key fingerprint must be 64 lowercase hex chars of sha256(SPKI DER)",
+});
+export type KeyFingerprint = z.infer<typeof KeyFingerprint>;
+
+/** The ONE pin computation: sha256 over the SubjectPublicKeyInfo DER bytes. */
+export function fingerprintOf(spkiDer: Uint8Array): KeyFingerprint {
+  return createHash("sha256").update(spkiDer).digest("hex");
+}
+
 /** One owner for the frozen machine wire method names used by both peers. */
 export const WireMethod = {
   Attach: "machine.attach",
@@ -101,6 +118,8 @@ export const Enrollment = z
      * Which exports the fs surface may reach. Absence grants no exports.
      */
     allowedExports: z.array(ExportName).superRefine(uniqueExports).optional(),
+    /** Pinned daemon TLS public key; TCP attach is refused unless the peer presents it. */
+    publicKey: KeyFingerprint,
     enrolledAt: EpochMs,
   })
   .strict();
@@ -152,7 +171,7 @@ export const AttachResult = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("refused"),
-      reason: z.enum(["machine_not_enrolled", "machine_mismatch"]),
+      reason: z.enum(["machine_not_enrolled", "machine_mismatch", "peer_key_mismatch", "disconnected"]),
     })
     .strict(),
 ]);

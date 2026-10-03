@@ -22,6 +22,7 @@ test.each([false, true])("machine entry adapter handles enrollment %s", async (e
             machineId: "entry-machine",
             name: "entry",
             allowedCapabilities: ["kernel.py"],
+            publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             enrolledAt: 1,
           }
         : undefined,

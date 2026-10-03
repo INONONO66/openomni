@@ -32,6 +32,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
       tags: [id],
       allowedCapabilities: capabilities,
       allowedExports: ["data"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       enrolledAt: 1,
     }),
     events: {

@@ -353,6 +353,7 @@ describe("ws exposure enforcement", () => {
         name: "the laptop",
         allowedCapabilities: ["fs.read"],
         allowedExports: ["notes", "src"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       },
     ]);
@@ -362,7 +363,7 @@ describe("ws exposure enforcement", () => {
 
   it("leaves the allowlist absent when the Owner named no export — no config, no reach", () => {
     process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
-      { machineId: "alpha", name: "the laptop", allowedCapabilities: ["fs.read"], enrolledAt: 0 },
+      { machineId: "alpha", name: "the laptop", allowedCapabilities: ["fs.read"], publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", enrolledAt: 0 },
     ]);
 
     expect(loadConfig().machines?.enrolled[0]?.allowedExports).toBeUndefined();
@@ -375,6 +376,7 @@ describe("ws exposure enforcement", () => {
         name: "the laptop",
         allowedCapabilities: ["fs.read"],
         allowedExports: ["notes", "notes"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       },
     ]);
@@ -388,6 +390,7 @@ describe("ws exposure enforcement", () => {
         name: "the laptop",
         allowedCapabilities: ["fs.read"],
         allowedExports: ["../escape"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         enrolledAt: 0,
       },
     ]);
