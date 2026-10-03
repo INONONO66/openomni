@@ -234,6 +234,7 @@ test("plans both rename endpoints from real NUL-delimited git output without exe
   const plan = planSchema.parse(JSON.parse(result.stdout.toString()));
   expect(plan.lanes).toEqual([
     "machines",
+    "codemode",
     "openomniApp",
     "ui",
     "desktopApp",
