@@ -8,6 +8,7 @@ import { decodeIpcFailure } from "../failure";
 import { makeDispatcher } from "./callbacks";
 import { LineDecoder, encode } from "./framing";
 import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";
+import { certificateKeyFingerprint, type IpcTlsIdentity } from "./tls";
 
 /** Remove the socket file, tolerating a concurrent removal (ENOENT). */
 function unlinkIfExists(socketPath: string): void {
@@ -32,8 +33,8 @@ type RequestHandler = (
   connectionId: string,
 ) => Effect.Effect<void, IpcError>;
 
-export interface IpcServer {
-  readonly socketPath: string;
+/** Transport-independent request/notification surface shared by both listeners. */
+interface IpcServerApi {
   call(
     method: string,
     params?: Ipc.Request["params"],
@@ -42,8 +43,32 @@ export interface IpcServer {
   /** Returns false when the notification was dropped because no client is connected. */
   notify(method: string, params?: Ipc.Notification["params"]): Effect.Effect<boolean, IpcError>;
   useConnection(id: string): void;
+  /**
+   * The mutual-TLS peer key fingerprint of a live connection (#1270), or
+   * undefined for Unix connections. The HANDLER judges it (the host compares
+   * it against the enrollment selected by the offered machineId); the
+   * transport only extracts and exposes it.
+   */
+  peerFingerprintOf(connectionId: string): string | undefined;
   close(): Effect.Effect<void, IpcError>;
 }
+
+export interface IpcServer extends IpcServerApi {
+  readonly socketPath: string;
+}
+
+export interface IpcTcpServer extends IpcServerApi {
+  readonly host: string;
+  /** The bound port — the real one when the spec asked for port 0. */
+  readonly port: number;
+}
+
+/** TLS-over-TCP listener spec: mutual TLS, trust pinned by the attach handler. */
+export type IpcTcpListenSpec = {
+  readonly host: string;
+  readonly port: number;
+  readonly tls: IpcTlsIdentity;
+};
 
 // How long the pre-listen probe waits for the existing socket to answer
 // before concluding it is dead. No answer means "assume live": stealing a
@@ -64,54 +89,64 @@ function probeSocketLive(socketPath: string): Effect.Effect<boolean> {
   }).pipe(Effect.timeoutOption(SOCKET_PROBE_TIMEOUT_MS), Effect.map((value) => value._tag === "None" || value.value));
 }
 
-export function createIpcServer(
-  socketPath: string,
-  handler: RequestHandler,
-  options: IpcServerOptions,
-): Effect.Effect<IpcServer, IpcError, Scope.Scope> {
-  return Effect.gen(function* () {
-  const dispatch = yield* makeDispatcher;
-  // A leftover socket file blocks Bun.listen with EADDRINUSE — but blindly
-  // unlinking would steal a LIVE server's socket (new connections silently
-  // divert to the newcomer while the old server keeps running blind). Probe
-  // first; only a provably dead socket file is removed.
-  if (fs.existsSync(socketPath)) {
-    if (yield* probeSocketLive(socketPath)) {
-      return yield* new IpcConnectionError({ message: `socket ${socketPath} is in use by a live server` });
-    }
-    yield* Effect.try({ try: () => unlinkIfExists(socketPath), catch: decodeIpcFailure("socket.unlink") });
-  }
+interface SocketData {
+  id: string;
+}
 
-  interface SocketData {
-    id: string;
-  }
+interface BunSocket {
+  data: SocketData | undefined;
+  write(data: Buffer | Uint8Array | string): number;
+  end(): void;
+}
 
-  interface BunSocket {
-    data: SocketData | undefined;
-    write(data: Buffer | Uint8Array | string): number;
-    end(): void;
-  }
+/** What the TLS listener's handshake callback reads off the Bun socket. */
+interface TlsBunSocket extends BunSocket {
+  getPeerCertificate(): { readonly raw?: Buffer } | null;
+}
 
+type ConnectionState = {
+  id: string;
+  socket: BunSocket;
+  decoder: LineDecoder;
+  /** sha256(SPKI DER) of the mutual-TLS client certificate; Unix has none. */
+  peerFingerprint: string | undefined;
+  /**
+   * Bytes the kernel did not accept yet. Bun sockets do NOT buffer partial
+   * writes (unlike node:net) — whatever `socket.write` returns short must
+   * be kept here and flushed on `drain`, or the frame is silently
+   * truncated and the NDJSON stream desyncs.
+   */
+  writeQueue: Uint8Array[];
+  /** Close the socket once every queued byte flushed (protocol desync). */
+  endAfterFlush: boolean;
+  /** The socket is gone; drop writes instead of queueing them forever. */
+  closed: boolean;
+};
+
+type Dispatch = (task: Effect.Effect<void, IpcError>) => void;
+
+/**
+ * The transport-independent half of an IPC server: framing, correlation,
+ * limits, backpressure and the connection registry over any connected byte
+ * stream Bun hands us. `open` is the stream-ready entry point — the Unix
+ * listener calls it on socket open, the TLS listener only after the handshake
+ * produced a client certificate fingerprint.
+ */
+interface ServerCore {
+  open(socket: BunSocket, peerFingerprint?: string): void;
+  readonly handlers: {
+    data(socket: BunSocket, raw: Buffer): void;
+    drain(socket: BunSocket): void;
+    close(socket: BunSocket): void;
+  };
+  disconnectAll(message: string): void;
+  readonly api: Omit<IpcServerApi, "close">;
+}
+
+function makeServerCore(handler: RequestHandler, options: IpcServerOptions, dispatch: Dispatch): ServerCore {
   function connectionIdOf(socket: BunSocket): string | undefined {
     return socket.data?.id;
   }
-
-  type ConnectionState = {
-    id: string;
-    socket: BunSocket;
-    decoder: LineDecoder;
-    /**
-     * Bytes the kernel did not accept yet. Bun sockets do NOT buffer partial
-     * writes (unlike node:net) — whatever `socket.write` returns short must
-     * be kept here and flushed on `drain`, or the frame is silently
-     * truncated and the NDJSON stream desyncs.
-     */
-    writeQueue: Uint8Array[];
-    /** Close the socket once every queued byte flushed (protocol desync). */
-    endAfterFlush: boolean;
-    /** The socket is gone; drop writes instead of queueing them forever. */
-    closed: boolean;
-  };
 
   const connections = new Map<string, ConnectionState>();
   let connCounter = 0;
@@ -215,24 +250,28 @@ export function createIpcServer(
     })))))));
   }
 
-  const server = yield* Effect.try({ try: () => Bun.listen({
-    unix: socketPath,
-    socket: {
-      open(socket: BunSocket) {
-        const id = `conn-${++connCounter}`;
-        socket.data = { id } satisfies SocketData;
-        connections.set(id, {
-          id,
-          socket,
-          decoder: new LineDecoder(),
-          writeQueue: [],
-          endAfterFlush: false,
-          closed: false,
-        });
-      },
-      data(socket: BunSocket, raw: Buffer) {
-        const connId = connectionIdOf(socket);
-        const state = connId === undefined ? undefined : connections.get(connId);
+  function stateOf(socket: BunSocket): ConnectionState | undefined {
+    const connId = connectionIdOf(socket);
+    return connId === undefined ? undefined : connections.get(connId);
+  }
+
+  return {
+    open(socket, peerFingerprint) {
+      const id = `conn-${++connCounter}`;
+      socket.data = { id } satisfies SocketData;
+      connections.set(id, {
+        id,
+        socket,
+        decoder: new LineDecoder(),
+        peerFingerprint,
+        writeQueue: [],
+        endAfterFlush: false,
+        closed: false,
+      });
+    },
+    handlers: {
+      data(socket, raw) {
+        const state = stateOf(socket);
         if (!state) return;
         // A condemned connection's remaining inbound flood is dropped without
         // decoding: re-buffering megabytes of garbage per chunk pins the event
@@ -249,50 +288,142 @@ export function createIpcServer(
           closeAfterFlush(state);
         }))));
       },
-      drain(socket: BunSocket) {
-        const connId = connectionIdOf(socket);
-        const state = connId === undefined ? undefined : connections.get(connId);
+      drain(socket) {
+        const state = stateOf(socket);
         if (state) flushQueued(state);
       },
-      close(socket: BunSocket) {
+      close(socket) {
         // Bun delivers close after socket errors, so this is the single
         // teardown path. The connection may die before `open` assigned data.
         const id = connectionIdOf(socket);
         if (id !== undefined) removeConnection(id, "socket closed");
       },
     },
-  }), catch: decodeIpcFailure("server.listen") });
+    disconnectAll(message) {
+      peer.disconnectAll(new IpcConnectionError({ message }));
+    },
+    api: {
+      call(method, params, timeoutMs = 30_000) {
+        return Effect.suspend(() => {
+          const conn = getActiveConnection();
+          return conn ? peer.call(conn, method, params, timeoutMs) : new IpcConnectionError({ message: "no connected client" });
+        });
+      },
+      notify(method, params) {
+        return Effect.try({ try: () => {
+          const conn = getActiveConnection();
+          if (!conn) return false;
+          sendFrame(conn, Ipc.createNotification(method, params));
+          return true;
+        }, catch: decodeIpcFailure("server.notify") });
+      },
+      useConnection(id) {
+        if (connections.has(id)) activeConnectionId = id;
+      },
+      peerFingerprintOf(connectionId) {
+        return connections.get(connectionId)?.peerFingerprint;
+      },
+    },
+  };
+}
 
+/** Idempotent server shutdown shared by both listeners. */
+function makeServerClose(core: ServerCore, stop: () => void): Effect.Effect<void, IpcError> {
   let closed = false;
-  const close = Effect.try({ try: () => {
+  return Effect.try({ try: () => {
     if (closed) return;
     closed = true;
-    peer.disconnectAll(new IpcConnectionError({ message: "server closed" }));
-    server.stop(true);
-    unlinkIfExists(socketPath);
+    core.disconnectAll("server closed");
+    stop();
   }, catch: decodeIpcFailure("server.close") });
-  yield* Effect.addFinalizer(() => Effect.orDie(close));
-  return {
-    socketPath,
-    call(method, params, timeoutMs = 30_000) {
-      return Effect.suspend(() => {
-        const conn = getActiveConnection();
-        return conn ? peer.call(conn, method, params, timeoutMs) : new IpcConnectionError({ message: "no connected client" });
-      });
-    },
-    notify(method, params) {
-      return Effect.try({ try: () => {
-        const conn = getActiveConnection();
-        if (!conn) return false;
-        sendFrame(conn, Ipc.createNotification(method, params));
-        return true;
-      }, catch: decodeIpcFailure("server.notify") });
-    },
-    useConnection(id) {
-      if (connections.has(id)) activeConnectionId = id;
-    },
-    close: () => close,
-  };
+}
+
+export function createIpcServer(
+  socketPath: string,
+  handler: RequestHandler,
+  options: IpcServerOptions,
+): Effect.Effect<IpcServer, IpcError, Scope.Scope> {
+  return Effect.gen(function* () {
+    const dispatch = yield* makeDispatcher;
+    // A leftover socket file blocks Bun.listen with EADDRINUSE — but blindly
+    // unlinking would steal a LIVE server's socket (new connections silently
+    // divert to the newcomer while the old server keeps running blind). Probe
+    // first; only a provably dead socket file is removed.
+    if (fs.existsSync(socketPath)) {
+      if (yield* probeSocketLive(socketPath)) {
+        return yield* new IpcConnectionError({ message: `socket ${socketPath} is in use by a live server` });
+      }
+      yield* Effect.try({ try: () => unlinkIfExists(socketPath), catch: decodeIpcFailure("socket.unlink") });
+    }
+
+    const core = makeServerCore(handler, options, dispatch);
+    const server = yield* Effect.try({ try: () => Bun.listen({
+      unix: socketPath,
+      socket: {
+        open(socket: BunSocket) {
+          core.open(socket);
+        },
+        data: core.handlers.data,
+        drain: core.handlers.drain,
+        close: core.handlers.close,
+      },
+    }), catch: decodeIpcFailure("server.listen") });
+
+    const close = makeServerClose(core, () => {
+      server.stop(true);
+      unlinkIfExists(socketPath);
+    });
+    yield* Effect.addFinalizer(() => Effect.orDie(close));
+    return { socketPath, ...core.api, close: () => close };
+  });
+}
+
+/**
+ * The TLS-over-TCP listener (#1270): the SAME framing, correlation, limits,
+ * backpressure and connection registry as the Unix listener, behind a mutual
+ * TLS handshake. Chain verification is off by design — the trust model is the
+ * pinned key fingerprint, which the handler reads via `peerFingerprintOf`.
+ */
+export function createIpcTcpServer(
+  spec: IpcTcpListenSpec,
+  handler: RequestHandler,
+  options: IpcServerOptions,
+): Effect.Effect<IpcTcpServer, IpcError, Scope.Scope> {
+  return Effect.gen(function* () {
+    const dispatch = yield* makeDispatcher;
+    const core = makeServerCore(handler, options, dispatch);
+    const server = yield* Effect.try({ try: () => Bun.listen({
+      hostname: spec.host,
+      port: spec.port,
+      tls: {
+        cert: spec.tls.certificate,
+        key: spec.tls.privateKey,
+        requestCert: true,
+        rejectUnauthorized: false,
+      },
+      socket: {
+        // No `open` registration: Bun fires open BEFORE the TLS handshake, so
+        // no peer certificate exists yet. The connection becomes real only in
+        // `handshake`, and TLS delivers no application data before that.
+        handshake(socket: TlsBunSocket) {
+          const raw = socket.getPeerCertificate()?.raw;
+          if (raw === undefined) {
+            // Mutual TLS: a client that presented no certificate never
+            // becomes a connection — there is nothing to pin it by.
+            socket.end();
+            return;
+          }
+          core.open(socket, certificateKeyFingerprint(raw));
+        },
+        data: core.handlers.data,
+        drain: core.handlers.drain,
+        close: core.handlers.close,
+      },
+    }), catch: decodeIpcFailure("server.listen") });
+
+    const close = makeServerClose(core, () => server.stop(true));
+    yield* Effect.addFinalizer(() => Effect.orDie(close));
+    return { host: spec.host, port: server.port, ...core.api, close: () => close };
   });
 }
 
