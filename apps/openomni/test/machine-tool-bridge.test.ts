@@ -688,6 +688,8 @@ describe("bash session door", () => {
       expect(await bash({ session: "qa", command: "true" })).toMatchObject({ isError: true });
       expect(await bash({ machine: "m-1", session: "qa", command: "true", timeout: 5 })).toMatchObject({ isError: true });
       expect(await bash({ machine: "m-1", command: "" })).toMatchObject({ isError: true });
+      // The daemon's reserved control session is a typed refusal end to end.
+      expect(await bash({ machine: "m-1", session: "omo-pty-control", command: "" })).toMatchObject({ isError: true });
       // An unknown name is not an error at this door: open-or-reattach creates it.
       const created = await bash({ machine: "m-1", session: "fresh", command: "" });
       expect(created.isError).toBeUndefined();

@@ -173,6 +173,31 @@ describe("pty.session over real tmux", () => {
     await run(adapter.shutdown());
   }, 30_000);
 
+  test("a session killed behind the adapter's back fails the next command visibly (%error reply)", async () => {
+    const adapter = await openAdapter("gen-error-reply");
+    okOpen(await run(adapter.open({ name: "ghost", cwd: "/" })));
+    // Another tmux client removes the session; the registry still holds it.
+    expect(tmuxCli("kill-session", "-t", "=ghost").exitCode).toBe(0);
+    await expect(run(adapter.resize({ name: "ghost", cols: 100, rows: 30 }))).rejects.toMatchObject({
+      _tag: "MachinesFailure",
+      operation: "pty.command",
+    });
+    await run(adapter.shutdown());
+  }, 30_000);
+
+  test("a session created outside the adapter resolves by name on first use", async () => {
+    const adapter = await openAdapter("gen-outside");
+    // Start the control client first so discovery has already run.
+    okOpen(await run(adapter.open({ name: "anchor", cwd: "/" })));
+    expect(tmuxCli("new-session", "-d", "-s", "outsider", "-x", "80", "-y", "24").exitCode).toBe(0);
+    // Not in the registry, but on the server: resolve registers it by name.
+    const read = okRead(await run(adapter.read({ name: "outsider" })));
+    expect(read.truncated).toBe(false);
+    expect(await run(adapter.close({ name: "outsider" }))).toEqual({ status: "ok" });
+    await run(adapter.close({ name: "anchor" }));
+    await run(adapter.shutdown());
+  }, 30_000);
+
   test("a missing tmux binary withholds the capability and every call refuses pty_not_available", async () => {
     const adapter = createPtyAdapter({
       id: () => "gen-missing",
