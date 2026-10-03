@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { LedgerAction, type PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
-import { pinnedModelSelection } from "../src/plugins/model-selection";
+import { pinnedModelSelection } from "./helpers/composition-fixtures";
 import { isolated } from "./helpers/isolated";
 
 function selection(actions: readonly LedgerAction.Node[], turnId: string) {

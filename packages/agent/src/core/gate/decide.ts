@@ -12,7 +12,6 @@ import { onAbort, type CapturedGeneration, BOUNDED_CONCURRENCY, Entropy, Observa
 import { createApprovalRequest } from "../request-binding";
 import { Retry } from "../../model";
 import { attachFailureFacts } from "../retry";
-import { attemptRouteChange } from "../../plugins/model-selection";
 import { judgeStop, type StopState, type StopObservation, type StopMetric } from "../stop";
 import type * as SessionHandleStore from "../store/fence";
 import { executionPoint } from "../points";
@@ -213,6 +212,31 @@ export interface DurableExecutor extends Executor {
     parent: LedgerAction.Receipt,
     attempts: LlmAttempts<T>,
   ): Effect.Effect<T, ExecutionError>;
+}
+
+/**
+ * Route-change evidence on a retry attempt (#1276: gate-owned; formerly
+ * plugins/model-selection). A route switch is evidence on the newly admitted
+ * attempt, not a rewritten selection.
+ */
+function attemptRouteChange(
+  previous: LedgerAction.Receipt | undefined,
+  next: PlainValue,
+): PlainValue {
+  const asRecord = (value: PlainValue | undefined): PlainObject =>
+    value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+  if (previous === undefined) return null;
+  const from = asRecord(asRecord(previous.action.intent.value).value);
+  const to = asRecord(next);
+  if (typeof from.provider !== "string" || typeof from.model !== "string" ||
+      typeof to.provider !== "string" || typeof to.model !== "string") return null;
+  if (from.provider === to.provider && from.model === to.model) return null;
+  return {
+    kind: "route.changed",
+    from: { provider: from.provider, model: from.model },
+    to: { provider: to.provider, model: to.model },
+    fromActionId: previous.action.id,
+  };
 }
 
 export interface ExecutorOptions {

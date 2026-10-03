@@ -10,7 +10,7 @@ export { GenerationRawSlots } from "./gate/decide";
 import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./entity";
 import type { InspectRequest, InspectionPage } from "../inspect";
-import { Inbox, type LedgerAction, type LedgerSession, type ObservationSink, type SessionGeneration, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
+import { Inbox, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, AgentResult } from "./types";
 import type { decideSessionAdmission } from "./mailbox";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
@@ -18,10 +18,8 @@ import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAct
 import type { LedgerError } from "./store/errors";
 import { z } from "zod";
 import { hydrateSessionHistory, refreshSessionHistory } from "../inspect/history";
-import { parentReply } from "../plugins/parent-reply";
 import { observeDrained, scopeObservation } from "./bus";
 import { runAgent } from "./turn";
-import { pinnedModelSelection } from "../plugins/model-selection";
 
 // ─── from session-contract.ts (#1247) ───
 export interface SessionTool {
@@ -128,6 +126,19 @@ export interface SessionRuntime {
   }) => Effect.Effect<LedgerAction.Receipt, ExecutionError, RunnerServices>;
   /** Direct post-commit doorbells, independent of the lossy observation bus. */
   readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
+  /**
+   * Composition-owned child-to-parent reply (#1276): the app injects
+   * `parentReply` (apps/openomni/src/composition/parent-reply). Called at turn
+   * seal; a returned message is committed as the child's outbound obligation.
+   * Absent = a sealing child never writes toward its parent. #1258 replaces
+   * this with the contact contract.
+   */
+  readonly parentReply?: (
+    kernel: SessionKernel,
+    row: LedgerSession.Row,
+    terminal: LedgerAction.Append,
+    result: SessionRunnerResult,
+  ) => SessionTransition.OutboundMessage | undefined;
   readonly openIntent?: (input: {
     sessionId: string;
     turnId: string;
@@ -968,7 +979,7 @@ export function createSessionTurn(
         id: open.resultId, parentId: deliveries.at(-1)?.id ?? latest?.id ?? open.action.id,
         sessionId, turnId: open.turnId, result, resumeCount: open.resumeCount, boundaryActionId: open.boundaryActionId, at: clock(),
       });
-      const reply = parentReply(kernel, current, terminal, result);
+      const reply = runtime.parentReply?.(kernel, current, terminal, result);
       yield* commitFoldBatch(kernel, {
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
@@ -1007,6 +1018,12 @@ interface SessionChatRun {
 interface SessionChatRunnerOptions {
   readonly prepare: (input: SessionRunnerInput) => Effect.Effect<SessionChatRun, ExecutionError, RunnerServices>;
   readonly reportError?: (error: Error, input: SessionRunnerInput) => string | undefined;
+  /**
+   * Composition-owned pinned-model read (#1276): the app injects
+   * `pinnedModelSelection` (apps/openomni/src/composition/model-selection.ts).
+   * Absent = no turn-start pin; the chain starts at the primary.
+   */
+  readonly pinnedModel?: (kernel: SessionKernel, sessionId: string, turnId: string) => Model.Ref | undefined;
 }
 
 export function createSessionChatRunner(options: SessionChatRunnerOptions): SessionRunner {
@@ -1025,7 +1042,7 @@ export function createSessionChatRunner(options: SessionChatRunnerOptions): Sess
       traceContext: prepared.traceContext,
     }, {
       ...prepared.config,
-      pinnedModel: pinnedModelSelection(input.kernel, input.sessionId, input.turnId),
+      pinnedModel: options.pinnedModel?.(input.kernel, input.sessionId, input.turnId),
       execution: { runAttempts: executor.runAttempts, judgeStop: executor.judgeStop },
       signal: input.signal,
       boundary: input.boundary,

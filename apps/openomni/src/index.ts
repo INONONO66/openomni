@@ -59,6 +59,7 @@ import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { createMessageInboxCommit, prepareMessage } from "./composition/message-session";
 import { dispatchOutboundMessage } from "./composition/terminal-message";
+import { parentReply } from "./composition/parent-reply";
 import {
   AppLedger,
   createSessionLivePlane,
@@ -278,6 +279,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
           catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
         }),
       authorizeConfigure: configureAuthority(services.generations, plane.openKernel),
+      // #1276: product choice injected into the core seam (#1258 replaces it).
+      parentReply,
     };
     // Request transitions never steal a live activation's fence: the borrowed
     // kernel view commits under the running turn's authority (idle sessions

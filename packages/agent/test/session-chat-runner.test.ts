@@ -1,5 +1,6 @@
 import { runAgentSync } from "./helpers/executor";
 import { sessionTree } from "./helpers/session-tree";
+import { pinnedModelSelection, restoreModelSelection } from "./helpers/composition-fixtures";
 import { testTurnDispatcher } from "./helpers/service-layers";
 import { prepareChatFixture } from "./helpers/chat-services";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
@@ -172,14 +173,18 @@ function runDurably(
       prepare: (input: import("../src/core/run").SessionRunnerInput) =>
         Effect.gen(function* () {
           return prepareChatFixture({
-            config: config(
-              run,
-              (yield* testTurnDispatcher(input, runtime)).executor,
-              fallbacks,
-            ),
+            config: {
+              ...config(
+                run,
+                (yield* testTurnDispatcher(input, runtime)).executor,
+                fallbacks,
+              ),
+              restoreModelSelection,
+            },
             traceContext,
           });
         }),
+      pinnedModel: pinnedModelSelection,
     });
     const handle = yield* Effect.gen(function* () {
       const fixture: SessionFixture = runtime;

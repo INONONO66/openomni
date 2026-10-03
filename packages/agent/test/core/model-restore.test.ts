@@ -1,6 +1,7 @@
 import { messageSource } from "../helpers/message-source";
 import { recordingResolveModel } from "../helpers/resolve-model";
 import { testExecutor } from "../helpers/executor";
+import { restoreModelSelection } from "../helpers/composition-fixtures";
 import { type ChatFixture, chatServices } from "../helpers/chat-services";
 import { Effect } from "effect";
 import { isolated } from "../helpers/isolated";
@@ -66,6 +67,7 @@ async function turn(options: {
         model: primary,
         ...(options.modelFallbacks === undefined ? {} : { modelFallbacks: options.modelFallbacks }),
         ...(options.pinnedModel === undefined ? {} : { pinnedModel: options.pinnedModel }),
+        restoreModelSelection,
         llm: {
           run: (_input: import("../../src/model").RunInput, sink: Sink) =>
             Effect.promise(async () => {

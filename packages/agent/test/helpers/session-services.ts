@@ -12,6 +12,7 @@ import { Entropy, GenerationLayers, ObservationSink, type SessionEntryServices }
 import { isolatedLedger } from "./isolated";
 import { observationService } from "./service-layers";
 import { entropySource, fixedClock } from "./time";
+import { parentReply } from "./composition-fixtures";
 
 /** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
 export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
@@ -23,13 +24,14 @@ export interface SessionFixture extends SessionRuntime {
 }
 
 /** The kernel plane every fixture rides inside `isolated()`: the isolation's shared kernel, resolved lazily. */
-export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions"> {
+export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply"> {
   return kernelRuntime(() => isolatedLedger().kernel);
 }
 
 /** A runtime kernel plane over one explicit kernel handle (crash children own their stores). */
-export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions"> {
-  return { openKernel: () => kernel(), listSessions: () => kernel().listRows() };
+export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply"> {
+  // #1276: parent replies are composition-injected; fixtures keep the shipped behavior.
+  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply };
 }
 
 const fixtures = new WeakMap<Scope.Scope, WeakMap<SessionFixture, Context.Context<SessionEntryServices>>>();

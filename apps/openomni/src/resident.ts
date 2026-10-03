@@ -13,6 +13,7 @@ type SessionRunner = Core.SessionRunner;
 type SessionRuntime = Core.SessionRuntime;
 import { traceIdFromUuid, type AnyToolDefinition, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
+import { pinnedModelSelection, restoreModelSelection } from "./composition/model-selection";
 import { messageMaterialization } from "./composition/message-session";
 import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
@@ -101,6 +102,8 @@ export function createResident(options: ResidentOptions) {
               ? {}
               : { modelFallbacks: [...options.modelFallbacks] }),
             ...(compaction === undefined ? {} : { compaction }),
+            // #1276: product choice injected into the core seam.
+            restoreModelSelection,
             ...chatProviderConfig(options),
           },
           traceContext: {
@@ -113,6 +116,8 @@ export function createResident(options: ResidentOptions) {
         }),
         reportError: (error) =>
           failureFacts(error)?.llm === true ? classifyTurnFailure(error).text : undefined,
+        // #1276: product choice injected into the core seam.
+        pinnedModel: pinnedModelSelection,
       });
       return yield* runner(input).pipe(Effect.provideService(ObservationSink, { ...observations, publish: observation.events.publish }));
     });

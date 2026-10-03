@@ -41,6 +41,7 @@ import { messageDecisionRules } from "./composition/message-decision";
 import { seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
+import { parentReply } from "./composition/parent-reply";
 import { createProcessReplyChannel } from "./composition/process-replies";
 
 export const ProcessSessionRequest = z
@@ -141,6 +142,8 @@ export function serveProcessSession(
       plane.openKernel,
     ),
     authorizeConfigure: configureAuthority(generations, plane.openKernel),
+    // #1276: product choice injected into the core seam (#1258 replaces it).
+    parentReply,
   };
   const messages = {
     ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>

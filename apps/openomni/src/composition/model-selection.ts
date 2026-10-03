@@ -1,8 +1,6 @@
-import type { SessionKernel } from "../core/entity";
+import type { Core } from "@openomni/agent";
 import type { LedgerAction, Model, PlainObject, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { ExecutionError } from "../core/failure";
-import type { Executor } from "../core/gate/decide";
 
 function record(value: PlainValue | undefined): PlainObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -34,7 +32,7 @@ export function attemptRouteChange(
  * own selection.
  */
 export function pinnedModelSelection(
-  kernel: SessionKernel,
+  kernel: Core.SessionKernel,
   sessionId: string,
   turnId: string,
 ): Model.Ref | undefined {
@@ -51,10 +49,10 @@ export function pinnedModelSelection(
  * the policy refused it.
  */
 export function restoreModelSelection(
-  executor: Pick<Executor, "run">,
+  executor: Pick<Core.Executor, "run">,
   pinned: Model.Ref | undefined,
   chain: readonly Model.Ref[],
-): Effect.Effect<number, ExecutionError> {
+): Effect.Effect<number, Core.ExecutionError> {
   return Effect.suspend(() => {
   const primary = chain[0];
   if (pinned === undefined || primary === undefined) return Effect.succeed(0);
