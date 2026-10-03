@@ -1,22 +1,18 @@
 /**
  * #1276 five-band agent table: the three new edge checks and the TIGHT
  * ratchet (review r3 F1: every pin equals the file's HEAD actual count; slack
- * fails closed). The edge-set proof replaces the old equal-totals assertion:
- * HEAD actual total 25 = pre-move total 28 under the same corrected band-root
- * classifier at 66d56edb minus the three edges the move deleted (listed
- * below). These cases fail against the pre-#1276 seven-band table: `core/`
- * was not a band (its files escaped every rule), plugins could import any
- * core path, siblings were legal inside one `plugins` band, and no rule
- * covered `apps/`.
+ * fails closed; the historical reconciliation against 66d56edb lives in the
+ * #1276 receipt, not in a test). These cases fail against the pre-#1276
+ * seven-band table: `core/` was not a band (its files escaped every rule),
+ * plugins could import any core path, siblings were legal inside one
+ * `plugins` band, and no rule covered `apps/`.
  */
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  AGENT_BAND_EDGES_DELETED_BY_MOVE,
   AGENT_PLUGINS,
-  agentBandRatchetTotal,
   agentBandViolations,
   appsAgentInternalViolations,
   validateAgentBands,
@@ -187,26 +183,6 @@ test("#1276 check c legal edges: the barrel and app-internal imports pass; non-a
   ).toEqual([]);
 });
 
-// ─── the tight ratchet and the edge-set proof ───
-
-/**
- * The three forbidden edges the #1276 move DELETED: parent-reply and
- * model-selection left packages/agent for apps/openomni/src/composition/, so
- * core/run.ts and core/turn.ts stopped importing them (apps now inject both
- * through the optional seams). Pre-move file:line at 66d56edb, re-keyed.
- */
-const EDGES_DELETED_BY_MOVE = [
-  "core/turn.ts:24 ../plugins/model-selection",
-  "core/run.ts:21 ../plugins/parent-reply",
-  "core/run.ts:24 ../plugins/model-selection",
-] as const;
-
-test("#1276 ratchet: HEAD actual total is 25 = pre-move 28 minus the 3 deleted edges", () => {
-  expect(EDGES_DELETED_BY_MOVE).toHaveLength(AGENT_BAND_EDGES_DELETED_BY_MOVE);
-  // Pre-move total under the same corrected five-band classifier at 66d56edb
-  // (r2 addendum measurement) minus the deleted edges = HEAD actual total.
-  expect(agentBandRatchetTotal()).toBe(28 - EDGES_DELETED_BY_MOVE.length);
-});
 
 // ─── the real scanner: regrowth in a clean file and slack both fail ───
 

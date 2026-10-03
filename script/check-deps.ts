@@ -890,10 +890,11 @@ export function agentBandViolations(filePath: string, source: string): string[] 
  * #1276 ratchet baseline, TIGHT: every pin equals the file's HEAD actual count
  * under the corrected band-root classifier, so there is no slack to grow into
  * (review r3 F1; the issue's literal "equal totals" is an Owner-recorded
- * deviation). HEAD actual total 25; pre-move total under the same classifier
- * at 66d56edb is 28, and the difference is exactly the three edges the move
- * deleted (core/turn.ts:24 and core/run.ts:21,24 -> parent-reply/
- * model-selection, now injected by apps/openomni). Includes the core/retry.ts
+ * deviation). Band ratchet 25 at HEAD with tight per-file pins; the pre-move
+ * tree measures 45 under the same classifier, of which 16 were
+ * plugins/compaction imports now routed through core/api and 4 were
+ * product-choice edges the move removed (see the reconciliation receipt).
+ * Includes the core/retry.ts
  * +1 slash-only-classifier undercount correction (r2 addendum). A new file, a
  * higher count, OR A PIN ABOVE THE ACTUAL fails: shrinkage lowers the pin in
  * the same PR. #1255 drives every entry to zero.
@@ -919,9 +920,6 @@ const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
   ["packages/agent/src/plugins/compaction/successor.ts", 1],
 ]);
 
-/** The number of forbidden edges the #1276 move deleted (parent-reply and
- * model-selection left the package for apps/openomni/src/composition/). */
-export const AGENT_BAND_EDGES_DELETED_BY_MOVE = 3;
 
 /** HEAD actual violation total; the pins are tight, so this is the pin sum. */
 export function agentBandRatchetTotal(): number {
@@ -1630,11 +1628,9 @@ export async function main(): Promise<void> {
     ...goldenViolations,
   ];
 
-  // #1276: tight pins — the printed totals carry the edge-set proof (25 = 28
-  // pre-move under the same classifier minus the 3 edges the move deleted).
-  console.log(
-    `#1276 agent band ratchet total: ${agentBandRatchetTotal()} (pre-move total under the same classifier: 28; ${AGENT_BAND_EDGES_DELETED_BY_MOVE} edges deleted by the move)`,
-  );
+  // #1276: tight pins — the printed total is the computed pin sum (= HEAD
+  // actual); the historical reconciliation lives in the #1276 receipt.
+  console.log(`#1276 agent band ratchet total: ${agentBandRatchetTotal()}`);
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {
