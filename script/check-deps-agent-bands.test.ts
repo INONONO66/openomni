@@ -8,6 +8,7 @@
  */
 import { expect, test } from "bun:test";
 import {
+  AGENT_PLUGINS,
   agentBandRatchetTotal,
   agentBandViolations,
   appsAgentInternalViolations,
@@ -74,13 +75,50 @@ test("#1276 check b: a plugin importing model/, inspect/ or testing/ fails", () 
   expect(found[0]).toContain("plugins/compaction/ may not import inspect/");
 });
 
-test("#1276 check b: a non-band root module stays out of the plugin edge rules", () => {
+test("#1276 check b: a plugin importing the package root barrel fails (review r2 probe)", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/plugins/alarm/review-probe.ts",
+    'import { Core } from "../../index";',
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]).toContain(
+    "plugins/alarm/ may not import the package root barrel (it re-exports every band)",
+  );
+});
+
+test("#1276 check b: a plugin importing a band root barrel fails", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/plugins/alarm/review-probe.ts",
+    'import { M } from "../../model";\nimport { barrel } from "../..";',
+  );
+  expect(found).toHaveLength(2);
+  expect(found[0]).toContain("plugins/alarm/ may not import model/");
+  expect(found[1]).toContain("may not import the package root barrel");
+});
+
+test("#1276: a core file importing the package root barrel fails; testing/ may", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/core/review-probe.ts",
+    'import { Model } from "../index";',
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]).toContain("core/ may not import the package root barrel");
   expect(
     agentBandViolations(
-      "packages/agent/src/plugins/compaction/restore.ts",
-      'import { barrel } from "../../index";',
+      "packages/agent/src/testing/registry.ts",
+      'import { Core } from "../index";',
     ),
   ).toEqual([]);
+});
+
+test("#1276: a file in a plugin directory outside the five-plugin table fails", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/plugins/rogue/index.ts",
+    'export const name = "rogue";',
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]).toContain(`plugins/ holds exactly {${AGENT_PLUGINS.join(", ")}}`);
+  expect(AGENT_PLUGINS).toEqual(["action", "alarm", "compaction", "hook", "tool"]);
 });
 
 test("#1276 check b legal edges: core/api.ts, protocol and plugin-internal imports pass", () => {

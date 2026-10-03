@@ -215,8 +215,8 @@ export interface DurableExecutor extends Executor {
 }
 
 /**
- * Route-change evidence on a retry attempt (#1276: gate-owned; formerly
- * plugins/model-selection). A route switch is evidence on the newly admitted
+ * Route-change evidence on a retry attempt (#1276: gate-owned; formerly the
+ * model-selection plugin). A route switch is evidence on the newly admitted
  * attempt, not a rewritten selection.
  */
 function attemptRouteChange(

@@ -745,6 +745,19 @@ const AGENT_BANDS: Record<string, {
 /** inspect/ may import session reads but never the live bus (issue table 1). */
 const AGENT_INSPECT_BUS_BAN = "core/bus";
 
+/**
+ * #1276: exactly five plugin directories. agentBandViolations flags a file in
+ * any other `plugins/<dir>/`, and packages/agent/test/plugins/
+ * scaffold-names.test.ts asserts the live directory listing equals this table.
+ */
+export const AGENT_PLUGINS = ["action", "alarm", "compaction", "hook", "tool"] as const;
+
+/** `../../index` (or `../..`) resolves to the package root barrel, which
+ * re-exports every band at once; review r2 closed this classification hole. */
+function isAgentPackageRoot(rest: string): boolean {
+  return rest === "" || rest === "index" || rest === "index.ts";
+}
+
 function agentBandOf(filePath: string): string | undefined {
   if (!filePath.startsWith(AGENT_SRC_PREFIX)) return undefined;
   const rest = filePath.slice(AGENT_SRC_PREFIX.length);
@@ -782,8 +795,11 @@ function pluginImportViolation(filePath: string, targetRest: string): string | u
   if (targetRest === "core" || targetRest.startsWith("core/")) {
     return `plugins/${ownPlugin}/ may import only core/api.ts from the core (got ${targetRest})`;
   }
-  const target = targetRest.includes("/") ? (targetRest.split("/")[0] ?? "") : "";
-  if (target !== "" && target in AGENT_BANDS) {
+  if (isAgentPackageRoot(targetRest)) {
+    return `plugins/${ownPlugin}/ may not import the package root barrel (it re-exports every band)`;
+  }
+  const target = targetRest.split("/")[0] ?? "";
+  if (target in AGENT_BANDS) {
     return `plugins/${ownPlugin}/ may not import ${target}/`;
   }
   return undefined;
@@ -797,12 +813,22 @@ function agentRelativeImportViolation(
   spec: string,
 ): string | undefined {
   const resolved = resolveAgentRelative(filePath, spec);
-  if (!resolved.startsWith(AGENT_SRC_PREFIX)) return undefined;
-  const rest = resolved.slice(AGENT_SRC_PREFIX.length);
+  const packageRoot = AGENT_SRC_PREFIX.slice(0, -1);
+  if (resolved !== packageRoot && !resolved.startsWith(AGENT_SRC_PREFIX)) return undefined;
+  const rest = resolved === packageRoot ? "index" : resolved.slice(AGENT_SRC_PREFIX.length);
   if (band === "inspect" && rest.startsWith(AGENT_INSPECT_BUS_BAN)) {
     return "inspect/ folds the journal and may never touch the live bus";
   }
   if (band === "plugins") return pluginImportViolation(filePath, rest);
+  if (isAgentPackageRoot(rest)) {
+    return Object.keys(AGENT_BANDS).every((key) => internal.has(key))
+      ? undefined
+      : `${band}/ may not import the package root barrel (it re-exports every band)`;
+  }
+  // KNOWN HOLE (review r2 STOP branch): a band-root barrel (`../model`) is not
+  // classified as its band for non-plugin bands, because real core files import
+  // `../model`/`../inspect` and `core/retry.ts` (allowance 0) would exceed the
+  // frozen ratchet; re-keying is forbidden. #1255 owns the inversion.
   const target = rest.includes("/") ? (rest.split("/")[0] ?? "") : "";
   if (target !== "" && target in AGENT_BANDS && !internal.has(target)) {
     return `${band}/ may not import ${target}/`;
@@ -830,6 +856,14 @@ export function agentBandViolations(filePath: string, source: string): string[] 
   const rules = band === undefined ? undefined : AGENT_BANDS[band];
   if (band === undefined || rules === undefined) return [];
   const violations: string[] = [];
+  if (band === "plugins") {
+    const plugin = filePath.slice(AGENT_SRC_PREFIX.length).split("/")[1] ?? "";
+    if (!(AGENT_PLUGINS as readonly string[]).includes(plugin)) {
+      violations.push(
+        `VIOLATION: ${filePath} — #1276: plugins/ holds exactly {${AGENT_PLUGINS.join(", ")}}; plugins/${plugin}/ is not in the table`,
+      );
+    }
+  }
   const importPattern = /(?:from\s+|import\s+|import\s*\(\s*)["']([^"']+)["']/g;
   for (const match of source.matchAll(importPattern)) {
     const spec = match[1];

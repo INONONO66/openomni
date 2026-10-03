@@ -25,13 +25,26 @@ afterAll(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-function kernelFixture(): Core.SessionKernel {
+interface StoreFixture {
+  readonly kernel: Core.SessionKernel;
+  readonly session: ReturnType<typeof Core.openSessionStore>;
+}
+
+function kernelFixture(): StoreFixture {
   const directory = mkdtempSync(join(tmpdir(), "openomni-composition-"));
   directories.push(directory);
   const now = testClock();
   const catalog = Core.openCatalogStore(join(directory, "catalog.sqlite"), { now });
   const session = Core.openSessionStore(join(directory, "session.sqlite"), { now });
-  return Core.SessionHandleStore.createSessionKernel(session, catalog);
+  return { session, kernel: Core.SessionHandleStore.createSessionKernel(session, catalog) };
+}
+
+function appendAction(fixture: StoreFixture, action: LedgerAction.Append): void {
+  const receipt = fixture.session.actions.append(
+    action,
+    fixture.kernel.row(action.sessionId).revision,
+  );
+  if (receipt === undefined) throw new Error(`append refused: ${action.id}`);
 }
 
 type RunArguments = Parameters<Core.Executor["run"]>[0];
@@ -84,18 +97,68 @@ test("#1276 drift: restoreModelSelection — real and mirror agree on every bran
   }
 });
 
-test("#1276 drift: pinnedModelSelection — real and mirror agree on a kernel without prior attempts", () => {
-  const kernel = kernelFixture();
-  const row = materializeSession(kernel, "drift-session");
-  const real = pinnedModelSelection(kernel, row.id, "turn-1");
-  expect(real).toBeUndefined();
-  expect(mirror.pinnedModelSelection(kernel, row.id, "turn-1")).toBe(real);
+test("#1276 drift: pinnedModelSelection — real and mirror read back the recorded prior attempt", () => {
+  const fixture = kernelFixture();
+  const row = materializeSession(fixture.kernel, "drift-session");
+  // No prior attempt: both sides answer undefined.
+  expect(pinnedModelSelection(fixture.kernel, row.id, "turn-1")).toBeUndefined();
+  expect(mirror.pinnedModelSelection(fixture.kernel, row.id, "turn-1")).toBeUndefined();
+  // An earlier turn's chat attempt pinned a fallback.
+  appendAction(fixture, {
+    id: "pin-llm",
+    parentId: `${row.id}:configure`,
+    sessionId: row.id,
+    kind: "llm",
+    intent: { encodingVersion: 1, value: { phase: "intent" } },
+    effect: { encodingVersion: 1, value: { phase: "pending" } },
+    irreversible: true,
+    ts: 2,
+  });
+  appendAction(fixture, {
+    id: "pin-attempt",
+    parentId: "pin-llm",
+    sessionId: row.id,
+    kind: "attempt",
+    intent: {
+      encodingVersion: 1,
+      value: { phase: "intent", op: "chat", value: { provider: "anthropic", model: "fallback-1" } },
+    },
+    effect: { encodingVersion: 1, value: { phase: "pending" } },
+    irreversible: true,
+    ts: 3,
+  });
+  const real = pinnedModelSelection(fixture.kernel, row.id, "turn-1");
+  expect(real).toEqual({ provider: "anthropic", id: "fallback-1" });
+  expect(mirror.pinnedModelSelection(fixture.kernel, row.id, "turn-1")).toEqual(real);
 });
 
 test("#1276 drift: parentReply — real and mirror agree on the decision table", () => {
-  const kernel = kernelFixture();
+  const fixture = kernelFixture();
+  const kernel = fixture.kernel;
   const root = materializeSession(kernel, "drift-parent");
   const child = materializeSession(kernel, "drift-child", "drift-parent");
+  // The child received one message from its parent; a terminal run replies to it.
+  appendAction(
+    fixture,
+    Core.receivedMessageAction({
+      id: "drift-child:received-1",
+      sessionId: child.id,
+      kind: "prompt",
+      content: "do the work",
+      origin: {
+        encodingVersion: 1,
+        value: {
+          kind: "message",
+          messageId: "m-1",
+          senderSessionId: root.id,
+          replyTo: "m-0",
+          sourceActionId: "parent-req-1",
+        },
+      },
+      parentActionId: `${child.id}:configure`,
+      at: 5,
+    }),
+  );
   const terminal: LedgerAction.Append = {
     id: "drift-child:turn-1:seal",
     parentId: null,
@@ -106,18 +169,34 @@ test("#1276 drift: parentReply — real and mirror agree on the decision table",
     ts: testClock()(),
     irreversible: true,
   };
-  const results: readonly Core.SessionRunnerResult[] = [
-    { kind: "waiting", reason: "live_wait", alarmIds: [], text: "" },
-    { kind: "result", text: "done" },
+  const cases: readonly {
+    readonly result: Core.SessionRunnerResult;
+    readonly expected: { readonly terminal: "completed" | "interrupted"; readonly content: string } | undefined;
+  }[] = [
+    { result: { kind: "waiting", reason: "live_wait", alarmIds: [], text: "" }, expected: undefined },
+    { result: { kind: "result", text: "done" }, expected: { terminal: "completed", content: "done" } },
+    { result: { kind: "interrupted" }, expected: { terminal: "interrupted", content: "" } },
   ];
-  for (const result of results) {
-    for (const row of [root, child]) {
-      const real = parentReply(kernel, row, terminal, result);
-      // Root rows and waiting results reply nothing; the child has no received
-      // parent message in this fixture, so every cell is undefined — the point
-      // is both implementations fold the same decision.
+  for (const item of cases) {
+    // A root row replies nothing regardless of the result kind.
+    expect(parentReply(kernel, root, terminal, item.result)).toBeUndefined();
+    expect(mirror.parentReply(kernel, root, terminal, item.result)).toBeUndefined();
+    const real = parentReply(kernel, child, terminal, item.result);
+    if (item.expected === undefined) {
       expect(real).toBeUndefined();
-      expect(mirror.parentReply(kernel, row, terminal, result)).toBe(real);
+    } else {
+      // Correlation and terminal fields come from the received origin + seal.
+      expect(real).toMatchObject({
+        messageId: `${terminal.id}:reply`,
+        sourceSessionId: child.id,
+        sourceActionId: terminal.id,
+        destinationSessionId: root.id,
+        requestId: "parent-req-1",
+        replyTo: "m-0",
+        terminal: item.expected.terminal,
+        content: item.expected.content,
+      });
     }
+    expect(mirror.parentReply(kernel, child, terminal, item.result)).toEqual(real);
   }
 });
