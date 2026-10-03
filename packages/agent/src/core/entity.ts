@@ -12,7 +12,7 @@ import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
 import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, type ReadPage, ReadRpc, ResolveRefused, ResolveRpc, RetryAlarmBody, WatchFiredAlarmBody, WatchTimeoutAlarmBody } from "./messages";
 import { alarmAction } from "./alarm";
-import { renderReadModel } from "../inspect/read";
+import { renderReadModel } from "./read";
 
 // ─── from cluster/kernel-registry.ts (#1247) ───
 /**

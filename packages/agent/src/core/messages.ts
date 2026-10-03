@@ -179,7 +179,7 @@ const ReadModelName = Schema.Literals([
 
 /**
  * One read page: `body` is the canonical JSON of the rendered model page
- * (see `inspect/read.ts`); `nextCursor` is the next after-revision, or null
+ * (see `core/read.ts`); `nextCursor` is the next after-revision, or null
  * when the page reached the chain head.
  */
 export const ReadPage = Schema.Struct({
