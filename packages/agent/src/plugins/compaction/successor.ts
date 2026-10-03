@@ -1,4 +1,4 @@
-import type { SessionKernel } from "../../core/entity";
+import type { SessionKernel } from "../../core/api";
 import {
   canonicalDigest,
   Message,

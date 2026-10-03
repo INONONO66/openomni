@@ -1,9 +1,8 @@
 import { Effect } from "effect";
 import { Message, PlainValueSchema, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import { z } from "zod";
-import type { ExecutionRequest } from "../../core/gate/decide";
+import { type ExecutionRequest, ContextRestoreError } from "../../core/api";
 import { type CompactionRecord, restoreCompactionProjection } from "./durable";
-import { ContextRestoreError } from "../../core/failure";
 
 const DiscardedRange = z
   .object({
