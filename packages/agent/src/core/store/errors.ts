@@ -61,7 +61,7 @@ export class SchemaRefused extends Data.TaggedError("SchemaRefused")<{
 }
 
 export class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
-  readonly capability: "storage" | "sessions" | "actions" | "policies";
+  readonly capability: "storage" | "sessions" | "actions" | "policies" | "armed_alarms";
 }> {
   override get message(): string {
     return `L0 storage capability is unavailable: ${this.capability}`;
@@ -94,7 +94,7 @@ export class LedgerInvariant extends Data.TaggedError("LedgerInvariant")<{
 export class CatalogVersionRefused extends Data.TaggedError("CatalogVersionRefused")<{
   readonly fileVersion: number;
   readonly codeVersion: number;
-  readonly operation: "indexSession" | "rotateFence";
+  readonly operation: "indexSession" | "rotateFence" | "markArmed";
 }> {
   override get message(): string {
     return `catalog schemaVersion ${this.fileVersion} is newer than this build (${this.codeVersion}); ${this.operation} refused — catalog is read-only`;

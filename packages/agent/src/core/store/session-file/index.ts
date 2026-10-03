@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import {
   Journal,
   LedgerAction,
+  PlainObjectSchema,
   SessionTransition,
   type ObservationSink,
   type Storage,
@@ -100,6 +101,11 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
     data TEXT NOT NULL,
     row_hash TEXT NOT NULL,
     time_created INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS armed_alarms (
+    alarm_id TEXT PRIMARY KEY,
+    occurrence_id TEXT NOT NULL UNIQUE,
+    fire_at INTEGER NOT NULL
   )`,
 ];
 
@@ -558,6 +564,92 @@ export function createActions(
   };
 }
 
+// ─── #1254 S3: durable armed-alarm index reads ───
+
+/**
+ * One armed occurrence restored from the `armed_alarms` index (#1254 S3).
+ * `purpose`/`sourceKey`/`payload` are re-read from the committed `arm` row by
+ * `occurrenceId`; `armSeq` is recovered from the arm row id
+ * `${alarmId}:arm:${armSeq}` (decision: not stored in the table — the row id
+ * already carries it losslessly).
+ */
+export interface ArmedAlarmRow {
+  readonly alarmId: string;
+  readonly occurrenceId: string;
+  readonly fireAt: number;
+  readonly purpose: string;
+  readonly armSeq: number;
+  readonly sourceKey: string;
+  /** Canonical JSON of the arm's payload. */
+  readonly payload: string;
+}
+
+const ArmedAlarmSqlRow = z.object({
+  alarm_id: z.string(),
+  occurrence_id: z.string(),
+  fire_at: z.number(),
+  arm_id: z.string(),
+  intent: z.string(),
+});
+
+const ArmIntentView = z.object({
+  purpose: z.string().min(1),
+  sourceKey: z.string().min(1),
+  payload: PlainObjectSchema.optional(),
+});
+
+const ArmedCountRow = z.object({ count: z.number().int().nonnegative() });
+
+function armSeqFromArmRowId(armRowId: string): number {
+  const marker = armRowId.lastIndexOf(":arm:");
+  const seq = marker < 0 ? Number.NaN : Number(armRowId.slice(marker + ":arm:".length));
+  if (!Number.isInteger(seq) || seq < 0)
+    throw new LedgerInvariant({
+      operation: "alarm.armedAlarms",
+      message: `arm row id does not carry an armSeq: ${armRowId}`,
+    });
+  return seq;
+}
+
+/** Read ports over the `armed_alarms` index; the index itself is written only inside the append transaction. */
+function createArmedAlarmReads(db: Database): {
+  armedAlarms(): readonly ArmedAlarmRow[];
+  armedCount(): number;
+} {
+  return {
+    armedAlarms() {
+      const rows = ArmedAlarmSqlRow.array().parse(
+        db
+          .query(`
+        SELECT aa.alarm_id, aa.occurrence_id, aa.fire_at, a.id AS arm_id, a.intent AS intent
+        FROM armed_alarms aa
+        JOIN action a ON a.kind = 'alarm'
+          AND json_extract(a.intent, '$.op') = 'arm'
+          AND json_extract(a.effect, '$.occurrenceId') = aa.occurrence_id
+        ORDER BY aa.fire_at, aa.alarm_id`)
+          .all(),
+      );
+      return rows.map((row): ArmedAlarmRow => {
+        const intent = ArmIntentView.parse(JSON.parse(row.intent));
+        return {
+          alarmId: row.alarm_id,
+          occurrenceId: row.occurrence_id,
+          fireAt: row.fire_at,
+          purpose: intent.purpose,
+          armSeq: armSeqFromArmRowId(row.arm_id),
+          sourceKey: intent.sourceKey,
+          payload: JSON.stringify(intent.payload ?? {}),
+        };
+      });
+    },
+    armedCount() {
+      return ArmedCountRow.parse(
+        db.query("SELECT COUNT(*) AS count FROM armed_alarms").get(),
+      ).count;
+    },
+  };
+}
+
 /** Any stored representation SQLite admits into a TEXT hash column; only a string can verify. */
 const HashCell = z.union([z.string(), z.null(), z.number(), z.bigint(), z.instanceof(Uint8Array)]);
 
@@ -682,6 +774,9 @@ export class SessionStore extends StoreHandle {
   readonly sessions: SessionWriteAdapter;
   readonly actions: ProtocolStorage.ActionSubAdapter;
   readonly decisionFacts: ProtocolStorage.DecisionFactSubAdapter;
+  /** #1254 S3: the durable armed-alarm index of this session file. */
+  readonly armedAlarms: () => readonly ArmedAlarmRow[];
+  readonly armedCount: () => number;
   constructor(
     db: Database,
     observationSink: ObservationSink,
@@ -692,6 +787,9 @@ export class SessionStore extends StoreHandle {
     this.sessions = createSessions(db, this.transaction, observationSink, onObservationFailure);
     this.actions = createActions(db, this.transaction, observationSink, onObservationFailure);
     this.decisionFacts = createSqliteDecisionFacts(db);
+    const armed = createArmedAlarmReads(db);
+    this.armedAlarms = () => armed.armedAlarms();
+    this.armedCount = () => armed.armedCount();
   }
 }
 

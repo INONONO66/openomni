@@ -34,7 +34,7 @@ export {
 export { decideSessionAdmission, requestAuthorityKernel, commitSessionRequest } from "./mailbox";
 export { createSessionRequests, decideRequestTransition, requestBindingDigest } from "./request";
 export { receivedMessageAction, receivedMessages } from "./commit";
-export { alarmAction, armAction, firedAction, alarmDisposition, composeAlarmPurposes, AlarmComposeError, type AlarmChainReads, type AlarmDisposition, type AlarmPurposeRegistry } from "./alarm";
+export { alarmAction, armAction, firedAction, alarmDisposition, composeAlarmPurposes, AlarmComposeError, type AlarmChainReads, type AlarmDisposition, type AlarmPurposeRegistry, type AlarmSweepConfig } from "./alarm";
 export { SessionEntity, SessionEntityContext, SessionEntityLive, createSessionEntityRunTurn, type SessionKernel } from "./entity";
 export { makeObservationBus, observationBusLayer, scopeObservation } from "./bus";
 

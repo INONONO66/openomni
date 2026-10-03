@@ -160,6 +160,17 @@ export function firedAction(input: {
   });
 }
 
+/**
+ * Boot alarm sweep config (#1254 S3; S4 nests it inside `AlarmDrainConfig`).
+ * `full: true` rescans every session at boot; `full: false` rescans
+ * `has_armed` sessions plus sessions idle for at least `idleDays` days.
+ * Values come from the composition root's config, never from core constants.
+ */
+export interface AlarmSweepConfig {
+  readonly full: boolean;
+  readonly idleDays: number;
+}
+
 // ─── #1254 capability seam (frozen at S1: later steps add, never rename) ───
 
 /** The fired occurrence view a capability's `wake` receives. */

@@ -11,6 +11,7 @@ import {
   lifecycleFailure,
 } from "./runtime";
 import { timingSafeEqual } from "node:crypto";
+import { statSync } from "node:fs";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
@@ -50,6 +51,7 @@ import {
   assertWsExposure,
   loadConfig,
   modelTransport,
+  resolveAlarmSweep,
   resolveClusterStorage,
   type OpenOmniConfig,
   type RegisteredActor,
@@ -64,6 +66,8 @@ import {
   AppLedger,
   createSessionLivePlane,
   requestAuthorityKernel,
+  rescanOccurrences,
+  sessionFilePath,
   sessionTimerPort,
 } from "./composition/cluster-runtime";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
@@ -718,7 +722,57 @@ export async function startOpenOmni(options: StartOptions = {}) {
         }),
       }),
       requestDomainRevisions: domainRevisions,
+      // #1254 S3: an activation resends its armed occurrences through the
+      // entity's own persisted Alarm door (occurrence id = cluster dedupe).
+      sendAlarm: (sessionId, occurrence) =>
+        sendAlarm(sessionId, occurrence).pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() => {
+              console.error(`armed alarm resend failed: ${sessionId}`, cause);
+            }),
+          ),
+        ),
     });
+
+    // Boot alarm rescan (#1254 S3): wake every session that may hold armed
+    // alarms with an entity-internal `rescan` occurrence. Idleness is the
+    // session file's mtime; an in-memory plane has no idle sessions.
+    {
+      const sweep = resolveAlarmSweep(config);
+      const bootNow = services.now();
+      const lastActivityAt = (id: string): number => {
+        if (config.sessionsDir === undefined) return bootNow;
+        try {
+          return statSync(sessionFilePath(config.sessionsDir, id)).mtimeMs;
+        } catch {
+          return bootNow;
+        }
+      };
+      const rescans = rescanOccurrences({
+        armedSessionIds: plane.catalog.armedSessionIds(),
+        sessions: plane.listSessions().map((row) => ({
+          id: row.id,
+          lastActivityAt: lastActivityAt(row.id),
+        })),
+        sweep,
+        bootId: services.entropy.id(),
+        now: bootNow,
+      });
+      for (const rescan of rescans) {
+        await runAppBoot(
+          runtime,
+          sendAlarm(rescan.sessionId, rescan.occurrence).pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => {
+                console.error(`boot alarm rescan failed: ${rescan.sessionId}`, cause);
+              }),
+            ),
+            Effect.forkIn(appScope),
+            Effect.asVoid,
+          ),
+        );
+      }
+    }
 
     await acquire(Effect.succeed(supervisor), (resource) =>
       Effect.tryPromise({

@@ -72,6 +72,7 @@ test("session index registers at fence 0, rotates monotonically and refuses unkn
       role: "resident",
       fence: 0,
       createdAt: 1,
+      hasArmed: false,
     };
     expect(store.sessionIndex("s1")).toEqual(registered);
     expect(store.rotateFence("s1")).toBe(1);

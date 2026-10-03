@@ -11,6 +11,7 @@ export const ConfigurationError = NamedError.create(
   z.object({
     code: z.enum([
       "invalid_compaction_summarizer",
+      "invalid_alarm_sweep",
       "invalid_entity_idle_ms",
       "invalid_env_json",
       "invalid_machines_tcp",
@@ -36,6 +37,8 @@ export interface OpenOmniConfig {
   readonly sessionsDir?: string;
   /** Milliseconds of mailbox silence before a session entity passivates. */
   readonly entityIdleMs?: number;
+  /** Boot alarm sweep (#1254 S3): full rescan toggle and the idle-days floor. */
+  readonly alarmSweep?: { readonly full: boolean; readonly idleDays: number };
   readonly host: string;
   readonly wsPort: number;
   /** Enabled unless explicitly disabled with OPENOMNI_COMPACTION_SUMMARIZER=off. */
@@ -185,6 +188,40 @@ export function resolveClusterStorage(
     sessionsDir: config.sessionsDir ?? join(home, ".openomni", "sessions"),
     entityIdleMs: config.entityIdleMs ?? DEFAULT_ENTITY_IDLE_MS,
   };
+}
+
+/** Boot alarm sweep defaults (#1254 S3): flagged sessions only, 7 idle days. */
+const DEFAULT_ALARM_SWEEP = { full: false, idleDays: 7 } as const;
+
+/** The one owner of the alarm sweep defaults, mirroring `resolveClusterStorage`. */
+export function resolveAlarmSweep(
+  config: Pick<OpenOmniConfig, "alarmSweep">,
+): { readonly full: boolean; readonly idleDays: number } {
+  return config.alarmSweep ?? DEFAULT_ALARM_SWEEP;
+}
+
+function alarmSweepFromEnv(
+  env: Record<string, string | undefined>,
+): OpenOmniConfig["alarmSweep"] {
+  const full = env.OPENOMNI_ALARM_SWEEP_FULL?.trim();
+  const idle = env.OPENOMNI_ALARM_SWEEP_IDLE_DAYS?.trim();
+  if ((full === undefined || full.length === 0) && (idle === undefined || idle.length === 0)) {
+    return undefined;
+  }
+  if (full !== undefined && full.length > 0 && full !== "on" && full !== "off") {
+    throw new ConfigurationError({
+      code: "invalid_alarm_sweep",
+      message: 'OPENOMNI_ALARM_SWEEP_FULL must be "on" or "off" when set',
+    });
+  }
+  const idleDays = idle === undefined || idle.length === 0 ? DEFAULT_ALARM_SWEEP.idleDays : Number(idle);
+  if (!Number.isInteger(idleDays) || idleDays <= 0) {
+    throw new ConfigurationError({
+      code: "invalid_alarm_sweep",
+      message: "OPENOMNI_ALARM_SWEEP_IDLE_DAYS must be a positive integer of days",
+    });
+  }
+  return { full: full === "on", idleDays };
 }
 
 function entityIdleMsFromEnv(env: Record<string, string | undefined>): number | undefined {
@@ -439,6 +476,7 @@ export function loadConfig(
   const machines = machinesFromEnv(home, env);
   const actors = actorsFromEnv(env);
   const socialBudgets = socialBudgetsFromEnv(env);
+  const alarmSweep = alarmSweepFromEnv(env);
   const channelAllowedSenders = channelAllowedSendersFromEnv(env);
   return {
     ...resolveClusterStorage(
@@ -452,6 +490,7 @@ export function loadConfig(
     host,
     wsPort: parseWsPort(env.OPENOMNI_WS_PORT),
     compactionSummarizer: compactionSummarizerFromEnv(env),
+    ...(alarmSweep === undefined ? {} : { alarmSweep }),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),
     kek: resolveKek(env, home),
     model: modelFromEnv(env),

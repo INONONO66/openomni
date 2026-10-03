@@ -334,6 +334,15 @@ export interface SessionEntityPorts {
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,
   ) => Readonly<Record<string, number>>;
+  /**
+   * #1254 S3: resends one armed occurrence through the cluster's persisted
+   * DeliverAt door (the occurrence id is the dedupe key, so a live duplicate
+   * folds in the cluster). Absent means no resend plane is composed.
+   */
+  readonly sendAlarm?: (
+    sessionId: string,
+    occurrence: import("./alarm").AlarmFired,
+  ) => Effect.Effect<void>;
 }
 
 // ─── from controller-state (#1247) ───

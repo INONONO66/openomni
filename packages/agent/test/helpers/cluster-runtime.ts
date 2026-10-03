@@ -63,6 +63,15 @@ export interface TestClusterOptions {
   readonly detachTurns?: boolean;
   /** Crypto service for the cluster host; defaults to Bun webcrypto. */
   readonly crypto?: Layer.Layer<Crypto.Crypto>;
+  /**
+   * #1254 S3: observes each activation/rescan resend AFTER its Alarm RPC
+   * replied — the deterministic "the resent occurrence was consumed" signal.
+   */
+  readonly onAlarmResend?: (
+    sessionId: string,
+    occurrence: { readonly occurrenceId: string; readonly purpose: string },
+    receipt: { readonly outcome: "delivered" | "stale" },
+  ) => void;
 }
 
 /** What the test turn port hands the pluggable runner for one admitted turn. */
@@ -288,22 +297,37 @@ function makeTimerPort(): SessionEntityPorts["timers"] {
 function entityEnvLayer(options: TestClusterOptions) {
   return Layer.effect(
     SessionEntityContext,
-    Effect.acquireRelease(
-      Effect.sync(
-        (): SessionEntityEnv => ({
-          owner: `test-runner-${process.pid}`,
-          clock: () => Date.now(),
-          catalog: openCatalogStore(options.catalogFile, { now: wallClock }),
-          openSession: (sessionId) =>
-            openSessionStore(sessionFileFor(options.sessionsDir, sessionId), { now: wallClock }),
-          ports: {
-            runTurn: makeTurnPort(options.runner ?? resolvedRunner("ok"), options.detachTurns),
-            timers: makeTimerPort(),
-          },
-        }),
-      ),
-      (env) => Effect.sync(() => env.catalog.close()),
-    ),
+    Effect.gen(function* () {
+      // #1254 S3: the activation resend door — the entity's own persisted
+      // Alarm RPC, exactly the production path (occurrence id = dedupe key).
+      const makeClient = yield* SessionEntity.client;
+      return yield* Effect.acquireRelease(
+        Effect.sync(
+          (): SessionEntityEnv => ({
+            owner: `test-runner-${process.pid}`,
+            clock: () => Date.now(),
+            catalog: openCatalogStore(options.catalogFile, { now: wallClock }),
+            openSession: (sessionId) =>
+              openSessionStore(sessionFileFor(options.sessionsDir, sessionId), { now: wallClock }),
+            ports: {
+              runTurn: makeTurnPort(options.runner ?? resolvedRunner("ok"), options.detachTurns),
+              timers: makeTimerPort(),
+              sendAlarm: (sessionId, occurrence) =>
+                makeClient(sessionId)
+                  .Alarm(occurrence)
+                  .pipe(
+                    Effect.tap((receipt) =>
+                      Effect.sync(() => options.onAlarmResend?.(sessionId, occurrence, receipt)),
+                    ),
+                    Effect.asVoid,
+                    Effect.orDie,
+                  ),
+            },
+          }),
+        ),
+        (env) => Effect.sync(() => env.catalog.close()),
+      );
+    }),
   );
 }
 

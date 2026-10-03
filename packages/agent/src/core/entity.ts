@@ -11,7 +11,7 @@ import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit
 import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
 import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, type ReadPage, ReadRpc, ResolveRefused, ResolveRpc, RetryAlarmBody, WatchFiredAlarmBody, WatchTimeoutAlarmBody } from "./messages";
-import { firedAction } from "./alarm";
+import { alarmDisposition, firedAction, type AlarmChainReads } from "./alarm";
 import { renderReadModel } from "./read";
 
 // ─── from cluster/kernel-registry.ts (#1247) ───
@@ -442,14 +442,69 @@ function alarmOccurrence(
     }
   };
   return Effect.gen(function* () {
+    // #1254 S3: `rescan` is entity-internal — activation already resent every
+    // armed occurrence when this wake activated the entity; the occurrence
+    // itself appends no fact and is never a registrable purpose.
+    if (occurrence.purpose === "rescan") {
+      yield* resendArmedAlarms(handle);
+      return { outcome: "delivered" as const };
+    }
+    // #1254 S3: an occurrence whose arm row is on the chain goes through the
+    // one chain guard over the durable index; a fresh occurrence records
+    // `fired{delivered}` (which clears its index row in the same transaction)
+    // and wakes the loop, a superseded/settled one folds to a stale fact with
+    // zero execution. Purpose execution for these arms lands with S4/Lane 2.
+    if (handle.kernel.actionById(`${occurrence.alarmId}:arm:${occurrence.armSeq}`) !== undefined) {
+      const disposition = alarmDisposition(armedChainReads(handle), occurrence);
+      if (disposition.op === "run") {
+        yield* appendFiredAlarm(handle, occurrence, "delivered");
+        yield* drain(handle);
+        return { outcome: "delivered" as const };
+      }
+      yield* appendFiredAlarm(handle, occurrence, "stale");
+      return { outcome: "stale" as const };
+    }
     const outcome = yield* dispatch();
     if (outcome === "applied") {
       yield* drain(handle);
       return { outcome: "delivered" as const };
     }
-    yield* appendStaleAlarm(handle, occurrence);
+    yield* appendFiredAlarm(handle, occurrence, "stale");
     return { outcome: "stale" as const };
   }).pipe(Effect.orDie);
+}
+
+/** Chain reads over the durable `armed_alarms` index (#1254 S3). */
+function armedChainReads(handle: ActivationHandle): AlarmChainReads {
+  const { kernel } = handle;
+  return {
+    latestArm: (alarmId) => {
+      const row = kernel.armedAlarms().find((armed) => armed.alarmId === alarmId);
+      return row === undefined ? undefined : { occurrenceId: row.occurrenceId, at: row.fireAt };
+    },
+    settled: (occurrenceId) =>
+      kernel.actionById(`${occurrenceId}:delivered`) !== undefined ||
+      kernel.actionById(`${occurrenceId}:exhausted`) !== undefined,
+  };
+}
+
+/**
+ * Activation resend (#1254 S3): every row of the durable `armed_alarms` index
+ * goes back out as its ORIGINAL occurrence through the composed DeliverAt
+ * door — the occurrence id is the cluster dedupe key, so a live duplicate
+ * folds there. Forked: a send's reply only arrives after this activation's
+ * handlers are serving, so awaiting it here would deadlock the mailbox.
+ */
+function resendArmedAlarms(handle: ActivationHandle): Effect.Effect<void> {
+  const send = handle.env.ports.sendAlarm;
+  if (send === undefined) return Effect.void;
+  const { kernel, authority, scope } = handle;
+  return Effect.forkIn(
+    Effect.forEach(kernel.armedAlarms(), (row) => send(authority.sessionId, row), {
+      discard: true,
+    }),
+    scope,
+  ).pipe(Effect.asVoid);
 }
 
 /**
@@ -471,13 +526,14 @@ function readProjection(
   });
 }
 
-/** The recorded stale-occurrence fact; idempotent on `<occurrenceId>:stale`. */
-function appendStaleAlarm(
+/** The recorded firing fact (#1254); idempotent on `<occurrenceId>:<outcome>`. */
+function appendFiredAlarm(
   handle: ActivationHandle,
   occurrence: AlarmOccurrence,
+  outcome: "delivered" | "stale",
 ): Effect.Effect<void, LedgerError> {
   const { kernel, authority, env } = handle;
-  const id = `${occurrence.occurrenceId}:stale`;
+  const id = `${occurrence.occurrenceId}:${outcome}`;
   return retryRevision(() =>
     Effect.suspend(() => {
       if (kernel.actionById(id) !== undefined) return Effect.void;
@@ -497,7 +553,7 @@ function appendStaleAlarm(
               purpose: occurrence.purpose,
               alarmId: occurrence.alarmId,
               occurrenceId: occurrence.occurrenceId,
-              outcome: "stale",
+              outcome,
               ts: now,
             }),
           ],
@@ -605,6 +661,8 @@ export const SessionEntityLive = SessionEntity.toLayer(
     const scope = yield* Effect.scope;
     const gate = yield* Semaphore.make(1);
     const handle: ActivationHandle = { env, kernel, authority, scope, gate, live: { current: undefined } };
+    // #1254 S3: restore scheduling — resend every armed occurrence (forked).
+    yield* resendArmedAlarms(handle);
     yield* drain(handle).pipe(Effect.orDie);
     return {
       Deliver: (envelope: Entity.Request<typeof DeliverRpc>) => deliver(handle, envelope.payload),

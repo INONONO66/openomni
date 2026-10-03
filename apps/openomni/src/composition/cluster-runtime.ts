@@ -371,8 +371,63 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
           Effect.suspend(() => resolve().timers.watchTimeout(context, payload)),
       },
       requestDomainRevisions: (request) => resolve().requestDomainRevisions?.(request) ?? {},
+      sendAlarm: (sessionId, occurrence) =>
+        Effect.suspend(() => resolve().sendAlarm?.(sessionId, occurrence) ?? Effect.void),
     },
   };
+}
+
+// ─── #1254 S3: boot alarm rescan ───
+
+type AlarmSweepConfig = Core.AlarmSweepConfig;
+
+/** One empty rescan wake (#1254 S3): entity-internal, appends no fact. */
+export interface RescanOccurrence {
+  readonly sessionId: string;
+  readonly occurrence: {
+    readonly occurrenceId: string;
+    readonly purpose: "rescan";
+    readonly alarmId: string;
+    readonly armSeq: number;
+    readonly sourceKey: "rescan";
+    readonly payload: string;
+    readonly fireAt: number;
+  };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Boot alarm rescan targets (#1254 S3): `sweep.full` rescans every session;
+ * otherwise every `has_armed` session plus sessions idle for at least
+ * `sweep.idleDays`. The occurrence is keyed `sessionId:rescan:<bootId>` so a
+ * second boot is a new wake while one boot's duplicates fold in the cluster.
+ */
+export function rescanOccurrences(input: {
+  readonly armedSessionIds: readonly string[];
+  readonly sessions: readonly { readonly id: string; readonly lastActivityAt: number }[];
+  readonly sweep: AlarmSweepConfig;
+  readonly bootId: string;
+  readonly now: number;
+}): readonly RescanOccurrence[] {
+  const targets = new Set<string>(input.armedSessionIds);
+  for (const session of input.sessions) {
+    if (input.sweep.full || input.now - session.lastActivityAt >= input.sweep.idleDays * DAY_MS) {
+      targets.add(session.id);
+    }
+  }
+  return [...targets].sort().map((sessionId) => ({
+    sessionId,
+    occurrence: {
+      occurrenceId: `${sessionId}:rescan:${input.bootId}`,
+      purpose: "rescan" as const,
+      alarmId: `${sessionId}:rescan`,
+      armSeq: 0,
+      sourceKey: "rescan" as const,
+      payload: "{}",
+      fireAt: input.now,
+    },
+  }));
 }
 
 export interface SessionEntityRuntimeOptions {

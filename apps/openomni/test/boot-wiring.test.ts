@@ -5,13 +5,17 @@ import {
   resolveChannelGrant,
 } from "@openomni/channels";
 import { Database } from "bun:sqlite";
-import type { Model } from "@openomni/agent";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Core, type Model } from "@openomni/agent";
 type RunInput = Model.RunInput;
 type Sink = Model.Sink;
 import type { Channel } from "@openomni/protocol";
 import type { BuiltChannel, ChannelComponent } from "../src/channels";
 import { Effect } from "effect";
 import { bootResource } from "../src/composition/boot";
+import { rescanOccurrences } from "../src/composition/cluster-runtime";
 import { gatewayRuntime, runAppBoot } from "../src/gateway";
 import { MOUNTED_CHANNEL_DEFAULT_TIER, registerTrustedChannelGrant } from "../src/gateway";
 import {
@@ -372,5 +376,95 @@ describe("supervisor status passthrough", () => {
       { id: "channel:discord:main", surface: "discord", state: "vault_locked", detail: "no KEK" },
       { id: "channel:slack:main", surface: "slack", state: "disabled" },
     ]);
+  });
+});
+
+// ─── #1254 S3: boot alarm rescan ───
+
+describe("boot alarm rescan", () => {
+  const DAY_MS = 86_400_000;
+  const NOW = 100 * DAY_MS;
+
+  test("targets has_armed sessions always, idle sessions past the floor, everything under full", () => {
+    const sessions = [
+      { id: "active", lastActivityAt: NOW - DAY_MS },
+      { id: "idle", lastActivityAt: NOW - 8 * DAY_MS },
+      { id: "flagged", lastActivityAt: NOW },
+    ];
+    const sweep = { full: false, idleDays: 7 };
+
+    const rescans = rescanOccurrences({
+      armedSessionIds: ["flagged"],
+      sessions,
+      sweep,
+      bootId: "boot-1",
+      now: NOW,
+    });
+    expect(rescans.map((rescan) => rescan.sessionId)).toEqual(["flagged", "idle"]);
+    expect(rescans[0]?.occurrence).toEqual({
+      occurrenceId: "flagged:rescan:boot-1",
+      purpose: "rescan",
+      alarmId: "flagged:rescan",
+      armSeq: 0,
+      sourceKey: "rescan",
+      payload: "{}",
+      fireAt: NOW,
+    });
+
+    // A flagged session that is also idle stays one target (set semantics).
+    expect(
+      rescanOccurrences({
+        armedSessionIds: ["idle"],
+        sessions,
+        sweep,
+        bootId: "boot-1",
+        now: NOW,
+      }).map((rescan) => rescan.sessionId),
+    ).toEqual(["idle"]);
+
+    // Full sweep: every session, and a new boot id mints new occurrences.
+    const full = rescanOccurrences({
+      armedSessionIds: [],
+      sessions,
+      sweep: { full: true, idleDays: 7 },
+      bootId: "boot-2",
+      now: NOW,
+    });
+    expect(full.map((rescan) => rescan.sessionId)).toEqual(["active", "flagged", "idle"]);
+    expect(full.map((rescan) => rescan.occurrence.occurrenceId)).toEqual([
+      "active:rescan:boot-2",
+      "flagged:rescan:boot-2",
+      "idle:rescan:boot-2",
+    ]);
+  });
+
+  test("the catalog flag feeds the sweep: markArmed round-trips through armedSessionIds", () => {
+    const directory = mkdtempSync(join(tmpdir(), "boot-rescan-catalog-"));
+    const catalog = Core.openCatalogStore(join(directory, "catalog.sqlite"), {
+      now: () => 1,
+    });
+    try {
+      catalog.indexSession({ id: "s-armed", parentId: null, role: "resident", createdAt: 1 });
+      catalog.indexSession({ id: "s-quiet", parentId: null, role: "resident", createdAt: 1 });
+      expect(catalog.armedSessionIds()).toEqual([]);
+
+      catalog.markArmed("s-armed", true);
+      expect(catalog.armedSessionIds()).toEqual(["s-armed"]);
+      expect(
+        rescanOccurrences({
+          armedSessionIds: catalog.armedSessionIds(),
+          sessions: [],
+          sweep: { full: false, idleDays: 7 },
+          bootId: "boot-3",
+          now: NOW,
+        }).map((rescan) => rescan.occurrence.occurrenceId),
+      ).toEqual(["s-armed:rescan:boot-3"]);
+
+      catalog.markArmed("s-armed", false);
+      expect(catalog.armedSessionIds()).toEqual([]);
+    } finally {
+      catalog.close();
+      rmSync(directory, { recursive: true });
+    }
   });
 });
