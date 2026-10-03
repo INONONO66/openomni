@@ -242,14 +242,15 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     });
     /**
      * A scheduled reconnect attempt. Success resets the backoff counter; a
-     * REFUSED attach surfaces through `attachment` and schedules nothing; a
-     * transport failure releases the half-made connection and backs off.
-     * The failed in-flight calls of the dropped connection are never replayed.
+     * REFUSED reattach surfaces through `attachment` and closes the daemon —
+     * automatic reconnect stops until a restart or config change. A transport
+     * failure releases the half-made connection and backs off. The failed
+     * in-flight calls of the dropped connection are never replayed.
      */
     const attemptReattach: Effect.Effect<void> = Effect.suspend(() => {
       if (closing) return Effect.void;
       return establish.pipe(
-        Effect.andThen(Effect.sync(() => { if (attachment.status === "attached") reconnector?.reset(); })),
+        Effect.flatMap(() => attachment.status === "attached" ? Effect.sync(() => reconnector?.reset()) : Effect.orDie(close)),
         Effect.catch(() => releaseClient.pipe(Effect.andThen(Effect.sync(() => { if (!closing) reconnector?.scheduleAttempt(); })))),
       );
     });
