@@ -171,7 +171,15 @@ export const AttachResult = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("refused"),
-      reason: z.enum(["machine_not_enrolled", "machine_mismatch", "peer_key_mismatch", "disconnected"]),
+      reason: z.enum([
+        "machine_not_enrolled",
+        "machine_mismatch",
+        "peer_key_mismatch",
+        "disconnected",
+        // #1271: the id has a live attachment the host refuses to supersede
+        // (the brain's own `self` daemon must never be hijacked by a reattach).
+        "already_attached",
+      ]),
     })
     .strict(),
 ]);

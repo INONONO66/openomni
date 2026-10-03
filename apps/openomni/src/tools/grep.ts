@@ -7,7 +7,7 @@ import { fileOperation, filesystem, text, walker, type FilePorts } from "./core/
 const Input = z
   .object({
     pattern: z.string().min(1),
-    path: z.string().min(1).default("."),
+    path: z.string().min(1),
     glob: z.string().min(1).optional(),
     ignoreCase: z.boolean().default(false),
     literal: z.boolean().default(false),
@@ -56,7 +56,7 @@ export function createGrepTool(ports: FilePorts) {
   return defineTool({
     name: "grep",
     description:
-      "Search UTF-8 file content with a regular expression (literal=true for plain text) at a local path or machineId:/absolute/path. Directories recurse in name order without following symlinks; glob filters file names; context adds surrounding lines; binary files refuse.",
+      "Search UTF-8 file content with a regular expression (literal=true for plain text) at an /absolute path (searched on the default machine) or machineId:/absolute/path. Directories recurse in name order without following symlinks; glob filters file names; context adds surrounding lines; binary files refuse.",
     category: "query",
     input: Input,
     output: z.object({ matches: z.array(Match), truncated: z.boolean() }),

@@ -29,7 +29,7 @@ export function createEditTool(ports: FilePorts) {
   return defineTool({
     name: "edit",
     description:
-      "Apply one or more exact literal UTF-8 replacements to a local or machineId:/absolute/path file. Each oldText must match exactly once in the original and edits must not overlap. Read/write composition is not atomic against external writers.",
+      "Apply one or more exact literal UTF-8 replacements to one /absolute (default machine) or machineId:/absolute/path file. Each oldText must match exactly once in the original and edits must not overlap. Read/write composition is not atomic against external writers.",
     category: "mutation",
     sequential: true,
     input: z.object({ path: z.string().min(1), edits: z.array(Edit).min(1) }).strict(),

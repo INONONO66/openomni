@@ -5,6 +5,7 @@ import { gatewayRuntime, runAppBoot } from "../src/gateway";
 import { startOpenOmni } from "../src";
 import { AppLifecycleFailure } from "../src/runtime";
 import { Bus } from "./helpers/bus";
+import { testMachinesPlane } from "./helpers/self-machine";
 
 test("boot retains both the acquisition failure and the failing cleanup", async () => {
   const runtime = gatewayRuntime({ observations: Bus });
@@ -38,6 +39,7 @@ test("server bind failure preserves its cleanup failure and closes storage", asy
       host: "127.0.0.1", wsPort: port,
       kek: { kind: "locked", reason: "no vault key in this fixture" },
       model: { provider: "fake", id: "fixture", apiKey: "fixture" },
+      machines: testMachinesPlane(),
     } });
     await expect(failed).rejects.toBeInstanceOf(AggregateError);
     expect((await fetch(`http://127.0.0.1:${occupied.port}`)).status).toBe(200);

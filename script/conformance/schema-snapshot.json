@@ -501,6 +501,9 @@
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
+  "Journal.Corrupt": ["kind", "reason", "seq"],
+  "JournalKind.EncodedPayload": ["encodingVersion", "value"],
+  "JournalKind.RowBody": ["effect", "intent"],
   "L0Observation.ActionCommitted": ["id", "kind", "revision", "sessionId"],
   "LedgerAction.Append#0": [
     "effect",
@@ -580,9 +583,9 @@
   "LedgerSession.MaterializeResult#0": ["created", "receipt", "row"],
   "LedgerSession.MaterializeResult#1": ["created", "row"],
   "LedgerSession.Row": [
-    "id",
     "fence",
     "fenceOwner",
+    "id",
     "parentId",
     "policyGeneration",
     "revision",
@@ -618,6 +621,7 @@
     "enrolledAt",
     "machineId",
     "name",
+    "publicKey",
     "tags"
   ],
   "Machine.ExecRequest": ["cmd", "cwd"],
@@ -637,6 +641,14 @@
   "Machine.FsRequest#write": ["data", "export", "op", "path"],
   "Machine.FsResult#completed": ["status", "value"],
   "Machine.FsResult#refused": ["message", "reason", "status"],
+  "Machine.InputAction#0": ["click"],
+  "Machine.InputAction#1": ["type"],
+  "Machine.InputAction#2": ["key"],
+  "Machine.InputAction#3": ["move"],
+  "Machine.InputAction#4": ["scroll"],
+  "Machine.InputWriteRequest": ["actions", "captureId"],
+  "Machine.InputWriteResult#ok": ["status"],
+  "Machine.InputWriteResult#refused": ["message", "reason", "status"],
   "Machine.Offer": [
     "daemonVersion",
     "exports",
@@ -647,6 +659,15 @@
   ],
   "Machine.PeekCode": ["cellId"],
   "Machine.PeekResult": ["output", "running"],
+  "Machine.ScreenReadRequest": ["display", "region"],
+  "Machine.ScreenReadResult#ok": [
+    "accessibilityTree",
+    "captureId",
+    "png",
+    "status"
+  ],
+  "Machine.ScreenReadResult#refused": ["reason", "status"],
+  "Machine.ScreenRegion": ["height", "width", "x", "y"],
   "Machine.ToolCall": ["arguments", "cellId", "name"],
   "Machine.ToolCallResult#completed": ["status", "value"],
   "Machine.ToolCallResult#failed": ["error", "status"],
@@ -1220,6 +1241,7 @@
   "SessionTurn.Delivery": [
     "boundary",
     "content",
+    "delivery",
     "inboxId",
     "kind",
     "origin",

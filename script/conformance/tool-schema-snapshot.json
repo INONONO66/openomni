@@ -1,7 +1,7 @@
 [
   {
     "name": "read",
-    "description": "Read a local path or machineId:/absolute/path. UTF-8 text by default with an optional line window (offset, limit); base64 preserves binary bytes.",
+    "description": "Read an /absolute path (on the default machine) or machineId:/absolute/path. UTF-8 text by default with an optional line window (offset, limit); base64 preserves binary bytes.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -34,7 +34,7 @@
   },
   {
     "name": "write",
-    "description": "Create or overwrite one local or machineId:/absolute/path file. Parent directories must exist.",
+    "description": "Create or overwrite one /absolute (default machine) or machineId:/absolute/path file. Parent directories must exist.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -59,7 +59,7 @@
   },
   {
     "name": "edit",
-    "description": "Apply one or more exact literal UTF-8 replacements to a local or machineId:/absolute/path file. Each oldText must match exactly once in the original and edits must not overlap. Read/write composition is not atomic against external writers.",
+    "description": "Apply one or more exact literal UTF-8 replacements to one /absolute (default machine) or machineId:/absolute/path file. Each oldText must match exactly once in the original and edits must not overlap. Read/write composition is not atomic against external writers.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -94,7 +94,7 @@
   },
   {
     "name": "ls",
-    "description": "List immediate directory entries at a local path or machineId:/absolute/path, without following symlinks. limit caps the entries returned.",
+    "description": "List immediate directory entries at an /absolute path (on the default machine) or machineId:/absolute/path, without following symlinks. limit caps the entries returned.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -115,7 +115,7 @@
   },
   {
     "name": "find",
-    "description": "Find files and directories whose path relative to the search root matches a glob (e.g. **/*.ts). path defaults to the current directory; machineId:/absolute/path searches a machine. Symlinks are not followed.",
+    "description": "Find files and directories whose path relative to the search root matches a glob (e.g. **/*.ts). path is /absolute (searched on the default machine) or machineId:/absolute/path. Symlinks are not followed.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -124,7 +124,6 @@
           "minLength": 1
         },
         "path": {
-          "default": ".",
           "type": "string",
           "minLength": 1
         },
@@ -134,14 +133,14 @@
           "maximum": 9007199254740991
         }
       },
-      "required": ["pattern"],
+      "required": ["pattern", "path"],
       "additionalProperties": false
     },
     "safe": true
   },
   {
     "name": "grep",
-    "description": "Search UTF-8 file content with a regular expression (literal=true for plain text) at a local path or machineId:/absolute/path. Directories recurse in name order without following symlinks; glob filters file names; context adds surrounding lines; binary files refuse.",
+    "description": "Search UTF-8 file content with a regular expression (literal=true for plain text) at an /absolute path (searched on the default machine) or machineId:/absolute/path. Directories recurse in name order without following symlinks; glob filters file names; context adds surrounding lines; binary files refuse.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -150,7 +149,6 @@
           "minLength": 1
         },
         "path": {
-          "default": ".",
           "type": "string",
           "minLength": 1
         },
@@ -178,14 +176,14 @@
           "maximum": 9007199254740991
         }
       },
-      "required": ["pattern"],
+      "required": ["pattern", "path"],
       "additionalProperties": false
     },
     "safe": true
   },
   {
     "name": "bash",
-    "description": "Run a shell command locally, or on the named machine. Local cwd is the host process cwd; remote cwd is /. Use cd in command to change directory. Remote / must be an offered export. No persistent cwd state.",
+    "description": "Run a shell command on a machine daemon: the named machine, or the configured default when machine is omitted. cwd must be an absolute path inside an offered export (default /). Execution time is bounded by the daemon. No persistent cwd state.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -193,13 +191,12 @@
           "type": "string",
           "minLength": 1
         },
-        "timeout": {
-          "description": "Seconds before the local command is killed. Remote commands are bounded by the daemon.",
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
-        },
         "machine": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cwd": {
+          "description": "Absolute working directory inside an offered export; defaults to /.",
           "type": "string",
           "minLength": 1
         }

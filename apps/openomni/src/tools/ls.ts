@@ -7,7 +7,7 @@ export function createLsTool(ports: FilePorts) {
   return defineTool({
     name: "ls",
     description:
-      "List immediate directory entries at a local path or machineId:/absolute/path, without following symlinks. limit caps the entries returned.",
+      "List immediate directory entries at an /absolute path (on the default machine) or machineId:/absolute/path, without following symlinks. limit caps the entries returned.",
     category: "query",
     input: z
       .object({ path: z.string().min(1), limit: z.number().int().positive().optional() })

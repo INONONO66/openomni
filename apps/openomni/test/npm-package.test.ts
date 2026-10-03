@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { Bus } from "./helpers/bus";
 import { PROCESS_SESSION_NO_REQUEST_EXIT } from "../src/process-entry";
 import { startOpenOmni } from "../src";
+import { testMachinesPlane } from "./helpers/self-machine";
 
 const appDir = join(import.meta.dir, "..");
 
@@ -36,6 +37,7 @@ describe("health endpoint", () => {
         host: "127.0.0.1",
         wsPort: 0,
         kek: { kind: "locked", reason: "no vault key in this fixture" },
+        machines: testMachinesPlane(),
         model: { provider: "fake", id: "health-test", apiKey: "test-key" },
       },
     });
@@ -61,6 +63,12 @@ describe("npm package staging", () => {
       OPENOMNI_MODELS_PATH: join(home, "models.json"),
       OPENOMNI_DISABLE_MODELS_FETCH: "1",
       OPENOMNI_MACHINES_SOCKET: join(home, "machines.sock"),
+      // #1271: a boot without a machine plane refuses; the packaged smoke
+      // boot carries a minimal self export.
+      OPENOMNI_MACHINES_SELF: JSON.stringify({
+        capabilities: ["fs.read"],
+        exports: [{ name: "home", path: home }],
+      }),
       OPENOMNI_WS_HOST: "127.0.0.1",
       OPENOMNI_WS_PORT: "0",
       OPENOMNI_MODEL_PROVIDER: "fake",

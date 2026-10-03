@@ -72,6 +72,12 @@ esac
     OPENOMNI_DB_PATH: join(home, "storage.db"),
     OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
     OPENOMNI_MACHINES_SOCKET: join(home, "machines.sock"),
+    // #1271: a boot without a machine plane refuses; CLI boots carry a
+    // minimal self export.
+    OPENOMNI_MACHINES_SELF: JSON.stringify({
+      capabilities: ["fs.read"],
+      exports: [{ name: "home", path: home }],
+    }),
     OPENOMNI_MODELS_PATH: join(home, "models.json"),
     OPENOMNI_DISABLE_MODELS_FETCH: "1",
     OPENOMNI_MODEL_PROVIDER: "anthropic",

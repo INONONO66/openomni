@@ -21,16 +21,24 @@ import { testIds } from "./helpers/test-entropy";
 const context = { sessionId: "locus", turnId: "turn" };
 
 describe("parseLocus", () => {
-  for (const path of ["/tmp/a", "a/b", "./a:b", "/tmp/a:b", "../relative"]) {
-    test(`local ${path}`, () => expect(parseLocus(path)).toEqual({ kind: "local", path }));
+  const options = { defaultMachine: "self" };
+  for (const path of ["/tmp/a", "/tmp/a:b"]) {
+    test(`default machine ${path}`, () =>
+      expect(parseLocus(path, options)).toEqual({ kind: "machine", machine: "self", path }));
   }
+  test("the CONFIGURED default applies — no process-local state", () =>
+    expect(parseLocus("/x", { defaultMachine: "node-1" })).toEqual({
+      kind: "machine",
+      machine: "node-1",
+      path: "/x",
+    }));
   for (const [input, machine, path] of [
     ["m:/tmp/a:b", "m", "/tmp/a:b"],
     ["c:/", "c", "/"],
     ["node-1:/a", "node-1", "/a"],
   ] as const) {
-    test(`remote ${input}`, () =>
-      expect(parseLocus(input)).toEqual({ kind: "machine", machine, path }));
+    test(`explicit ${input} is never rewritten to the default`, () =>
+      expect(parseLocus(input, options)).toEqual({ kind: "machine", machine, path }));
   }
   for (const path of [
     "",
@@ -43,14 +51,19 @@ describe("parseLocus", () => {
     "/machines/m/a",
     " /a\0",
     "a b:/x",
+    // No process working directory exists: relative paths are refusals (#1271).
+    "a/b",
+    "./a:b",
+    "../relative",
+    ".",
   ]) {
     test(`refuses ${JSON.stringify(path)}`, () =>
-      expect(() => parseLocus(path)).toThrow(ToolRefused));
+      expect(() => parseLocus(path, options)).toThrow(ToolRefused));
   }
 });
 
 async function fixture(
-  remote: boolean,
+  explicit: boolean,
   run: (api: {
     root: string;
     machine: MachineHandle;
@@ -69,12 +82,13 @@ async function fixture(
   capabilities = ["fs.read", "fs.write", "shell.exec"],
 ) {
   const root = await mkdtemp(join(tmpdir(), "locus-"));
+  const machineId = explicit ? "c" : "self";
   const socket = socketPath();
   const host = await acquireEffect(createMachineHost({
     listen: { unix: socket },
     id: testIds("locus-host"),
     enrollment: () => ({
-      machineId: "c",
+      machineId,
       name: "test",
       allowedCapabilities: capabilities,
       allowedExports: ["data", "shell"],
@@ -88,7 +102,7 @@ async function fixture(
     socketPath: socket,
     id: testIds("locus-daemon"),
     offer: {
-      machineId: "c",
+      machineId,
       daemonVersion: "test",
       platform: "darwin-arm64",
       offeredAt: 1,
@@ -103,7 +117,7 @@ async function fixture(
       ["shell", "/"],
     ]),
   }));
-  const handle = host.get("c");
+  const handle = host.get(machineId);
   const spies = {
     get: spyOn(host, "get"),
     read: spyOn(handle.fs, "read"),
@@ -132,14 +146,16 @@ async function fixture(
     if (!result.isError) {
       for (const name of operations[tool] ?? []) {
         const count = spies[name].mock.calls.length - (before[name] ?? 0);
-        if (remote) expect(count).toBeGreaterThan(0);
-        else expect(count).toBe(0);
+        expect(count).toBeGreaterThan(0);
       }
+      const resolved = spies.get.mock.calls.slice(before.get ?? 0).map(([id]) => id);
+      expect(resolved.length).toBeGreaterThan(0);
+      expect(resolved.every((id) => id === machineId)).toBe(true);
     }
     return result;
   }
   try {
-    const dispatcher = dispatcherFixture(catalogDefinitions({ ...testToolPorts, machines: testMachinePorts(host) }), { executor });
+    const dispatcher = dispatcherFixture(catalogDefinitions({ ...testToolPorts, machines: testMachinePorts(host, "self") }), { executor });
     let call = 0;
     await run({
       root,
@@ -149,7 +165,7 @@ async function fixture(
         get: spies.get.mock.calls.length,
         exec: spies.exec.mock.calls.length,
       }),
-      path: (name) => `${remote ? "c:" : ""}${join(root, name)}`,
+      path: (name) => `${explicit ? "c:" : ""}${join(root, name)}`,
       cell: (tool, input) =>
         observe(tool, () => runEffect(dispatcher.executeCell({ id: `cell-${++call}`, tool, input }, context))),
       model: (tool, input) =>
@@ -163,10 +179,10 @@ async function fixture(
   }
 }
 
-for (const remote of [false, true]) {
-  describe(remote ? "real Unix daemon tools" : "local tools", () => {
+for (const explicit of [false, true]) {
+  describe(explicit ? "explicit machine prefix tools" : "default-machine prefix-less tools", () => {
     test("all five filesystem verbs preserve values and route mutations", async () => {
-      await fixture(remote, async ({ root, path, cell, model }) => {
+      await fixture(explicit, async ({ root, path, cell, model }) => {
         const file = path("file");
         expect((await cell("write", { path: file, content: "alpha\nbeta\n" })).output).toEqual({
           bytesWritten: 11,
@@ -238,7 +254,7 @@ for (const remote of [false, true]) {
       });
     });
     test("binary encoding, exact edit conflict, missing files, and full cell output", async () => {
-      await fixture(remote, async ({ root, path, cell, model }) => {
+      await fixture(explicit, async ({ root, path, cell, model }) => {
         const binary = Buffer.from([0, 255, 128, 1]).toString("base64");
         expect(
           (await cell("write", { path: path("binary"), content: binary, encoding: "base64" }))
@@ -281,8 +297,8 @@ for (const remote of [false, true]) {
       });
     });
     test("bash returns stdout, stderr, exit status and has no persistent cwd", async () => {
-      await fixture(remote, async ({ root, cell }) => {
-        const machine: Record<string, PlainValue> = remote ? { machine: "c" } : {};
+      await fixture(explicit, async ({ root, cell }) => {
+        const machine: Record<string, PlainValue> = explicit ? { machine: "c" } : {};
         expect(
           (
             await cell("bash", {
@@ -296,11 +312,10 @@ for (const remote of [false, true]) {
           exitCode: 7,
           signal: null,
           truncated: false,
-          timedOut: false,
         });
         expect(
           (await cell("bash", { command: "printf '%s' \"$PWD\"", ...machine })).output,
-        ).toMatchObject({ stdout: remote ? "/" : process.cwd(), exitCode: 0 });
+        ).toMatchObject({ stdout: "/", exitCode: 0 });
       });
     });
   });
@@ -330,51 +345,29 @@ test("R1 bash rejects composite machine IDs before endpoint lookup even with an 
 });
 
 test.each([
-  ".",
-  "./",
-])("R2 recursive search preserves local colon escapes under %s", async (path) => {
-  await fixture(false, async ({ root, cell, model, endpointCalls }) => {
+  [false, ""],
+  [true, "c:"],
+])("R2 recursive search preserves colon-containing names (explicit=%p)", async (explicit, prefix) => {
+  await fixture(explicit, async ({ root, cell, model }) => {
     await writeFile(join(root, "a:b"), "needle in file\n");
     await mkdir(join(root, "d:e"));
     await writeFile(join(root, "d:e", "f:g"), "needle in directory\n");
-    const absolute = await cell("grep", { path: root, pattern: "needle" });
-    expect(absolute.output).toEqual({
+    const file = `${prefix}${join(root, "a:b")}`;
+    const nested = `${prefix}${join(root, "d:e", "f:g")}`;
+    expect((await cell("grep", { path: `${prefix}${root}`, pattern: "needle" })).output).toEqual({
       matches: [
-        { path: join(root, "a:b"), line: 1, text: "needle in file", before: [], after: [] },
-        {
-          path: join(root, "d:e", "f:g"),
-          line: 1,
-          text: "needle in directory",
-          before: [],
-          after: [],
-        },
+        { path: file, line: 1, text: "needle in file", before: [], after: [] },
+        { path: nested, line: 1, text: "needle in directory", before: [], after: [] },
       ],
       truncated: false,
     });
-    const before = endpointCalls();
-    const cwd = process.cwd();
-    try {
-      process.chdir(root);
-      const relative = await cell("grep", { path, pattern: "needle" });
-      expect(relative.isError).toBeUndefined();
-      expect(relative.output).toEqual({
-        matches: [
-          { path: "./a:b", line: 1, text: "needle in file", before: [], after: [] },
-          { path: "./d:e/f:g", line: 1, text: "needle in directory", before: [], after: [] },
-        ],
-        truncated: false,
-      });
-      expect((await model("grep", { path, pattern: "needle" })).output).toBe(
-        "./a:b:1:needle in file\n./d:e/f:g:1:needle in directory",
-      );
-      expect((await cell("find", { path, pattern: "d:e/*" })).output).toEqual({
-        paths: ["./d:e/f:g"],
-        truncated: false,
-      });
-      expect(endpointCalls()).toEqual(before);
-    } finally {
-      process.chdir(cwd);
-    }
+    expect((await model("grep", { path: `${prefix}${root}`, pattern: "needle" })).output).toBe(
+      `${file}:1:needle in file\n${nested}:1:needle in directory`,
+    );
+    expect((await cell("find", { path: `${prefix}${root}`, pattern: "d:e/*" })).output).toEqual({
+      paths: [nested],
+      truncated: false,
+    });
   });
 });
 

@@ -19,6 +19,7 @@ import { planeOf } from "./ledger";
 import { nextResidentTurn } from "./resident-turn";
 
 import { messageStart, messageEnd } from "./anthropic-sse";
+import { testMachinesPlane } from "./self-machine";
 
 // A local provider speaks real Anthropic SSE to the installed SDK, not a run/SDK mock.
 function response(tool: boolean): Response {
@@ -112,6 +113,7 @@ try {
       wsPort: 0,
       wsToken: "fixture-token",
       kek: { kind: "locked", reason: "no vault key in this fixture" },
+      machines: testMachinesPlane(),
       compactionSummarizer: false,
       model: {
         provider: "anthropic",
