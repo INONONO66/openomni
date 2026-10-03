@@ -1,6 +1,6 @@
 # packages/machines
 
-Refreshed 2026-10-03 (#1272, branch `machines/1272-codemode-package`).
+Refreshed 2026-10-03 (#1274, branch `machines/1274-screen-input`; previously #1272).
 
 Machine execution package (`@openomni/machines`): a machine is WHERE execution happens, never WHO is delegated to. Owns the machine host/daemon lifecycle, confined fs/exec drivers, and the Unix-socket NDJSON IPC transport (`src/ipc/`; the standalone ipc package was absorbed here in #1246; code mode was extracted to `packages/codemode` in #1272 — machines keeps only the structural contracts it consumes: `CodeRunner`, `MachineHost`/`MachineHandle`/`MachineInfo`, `onAbort`, `machinesFallback`). The public surface is Effect-typed on Effect `4.0.0-rc.118`. Serializable message schemas stay in `@openomni/protocol` (`Ipc` and `Machine` namespaces); this package never validates run semantics or evaluates policy.
 
@@ -10,8 +10,10 @@ Machine execution package (`@openomni/machines`): a machine is WHERE execution h
 src/
 ├── index.ts             # Barrel: host/daemon, typedCall, ipc transport, errors, structural codemode contracts
 ├── host.ts              # createMachineHost — machine.attach server side
-├── daemon.ts            # attachMachineDaemon — daemon client side, serves fs/exec/run_code
+├── daemon.ts            # attachMachineDaemon — daemon client side, serves fs/exec/run_code/screen_read/input_write
 ├── exec.ts / fs.ts      # Confined exec and filesystem drivers
+├── commands.ts          # CommandRunner port + systemCommandRunner (argv spawn, no shell, 256KiB cap) (#1274)
+├── computer-use.ts      # macOS screen.read/input.write adapter: probes, bounds cache, capture registry (#1274)
 ├── errors.ts            # MachinesFailure (single untyped-Cause fallback) + machine error classes
 ├── failure.ts           # decodeMachineFailure / decodeIpcFailure + machinesFallback — one MachinesFailure fallback
 ├── typed-call.ts        # Schema-derived typedCall facade for known Ipc.Methods (machine wire vocabulary lives here, beside its callers)
