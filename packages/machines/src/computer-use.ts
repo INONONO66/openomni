@@ -173,7 +173,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
     accessibility: false,
     cliclick: undefined as string | undefined,
     bounds: new Map<number, DisplayBounds>(),
-    latest: undefined as { captureId: string; bounds: DisplayBounds } | undefined,
+    latest: undefined as { captureId: string; display: number; bounds: DisplayBounds } | undefined,
   };
 
   const run = (argv: readonly [string, ...string[]]) =>
@@ -353,7 +353,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
       if (fitted === undefined) return refusedScreen("capture_failed");
       const tree = yield* accessibilityTree;
       const captureId = options.id();
-      state.latest = { captureId, bounds };
+      state.latest = { captureId, display, bounds };
       return yield* Effect.try({
         try: () =>
           Machine.ScreenReadResult.parse({
@@ -409,6 +409,15 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
       // refuses before ANY action executes — a request never partially runs.
       if (latest === undefined || latest.captureId !== request.captureId) {
         return refusedInput("stale_capture");
+      }
+      // cliclick takes GLOBAL (main-display-origin) coordinates; a capture of
+      // any other display would silently mistarget, so v1 refuses it typed.
+      if (latest.display !== 1) {
+        return {
+          status: "refused",
+          reason: "unsupported_action",
+          message: `input execution is main-display only in v1; the anchoring capture is of display ${latest.display}`,
+        } as const;
       }
       const mapped = mapActions(request.actions, latest.bounds);
       if ("refusal" in mapped) return refusedInput(mapped.refusal);

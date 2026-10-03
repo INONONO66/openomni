@@ -552,6 +552,9 @@ export type InputAction = z.infer<typeof InputAction>;
 /**
  * Actions are tied to the LATEST successful capture: any other id refuses
  * `stale_capture` and executes nothing — a request never partially executes.
+ * Input execution is main-display only in v1: a request anchored to a capture
+ * of any other display refuses `unsupported_action` (the refusal `message`
+ * names the display) rather than executing at translated global coordinates.
  */
 export const InputWriteRequest = z
   .object({
@@ -575,6 +578,8 @@ export const InputWriteResult = z.discriminatedUnion("status", [
         "unsupported_action",
         "input_failed",
       ]),
+      /** Human-readable detail, e.g. which display a refused anchor captured. */
+      message: z.string().min(1).max(256).optional(),
     })
     .strict(),
 ]);

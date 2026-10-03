@@ -119,7 +119,11 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
   validated against measured display bounds (`sips` pixel dims over dpi);
   out-of-bounds refuses `invalid_region` before any command runs.
 - `input.write` requires the `captureId` of the LATEST successful capture;
-  anything else refuses `stale_capture` and executes nothing. Actions
+  anything else refuses `stale_capture` and executes nothing. Input execution
+  is main-display only in v1: cliclick takes global (main-display-origin)
+  coordinates, so a request anchored to a capture of any other display refuses
+  `unsupported_action` with a message naming the display instead of silently
+  mistargeting. Actions
   (max 32: click/type/key/move/scroll) map to one `cliclick` invocation;
   middle-click and scroll refuse `unsupported_action` on this adapter
   (cliclick 5.1 has neither), and coordinates outside the captured display

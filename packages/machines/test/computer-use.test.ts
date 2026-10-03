@@ -263,6 +263,21 @@ describe("input.write", () => {
     });
   });
 
+  test("an anchor captured on a non-main display refuses typed before executing", async () => {
+    await fixture({}, async ({ handle, fake }) => {
+      const shot = await handle.screen({ display: 2 });
+      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const before = fake.invocations("cliclick").length;
+      expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
+        .toEqual({
+          status: "refused",
+          reason: "unsupported_action",
+          message: "input execution is main-display only in v1; the anchoring capture is of display 2",
+        });
+      expect(fake.invocations("cliclick")).toHaveLength(before);
+    });
+  });
+
   test("unsupported actions refuse typed without running anything", async () => {
     await fixture({}, async ({ handle, fake }) => {
       const shot = await handle.screen({});
