@@ -6,6 +6,7 @@ import * as Codemode from "../src/composition/codemode";
 import { startOpenOmni } from "../src";
 import { runEffect } from "./helpers/effect";
 import { socketPath } from "./helpers/socket-path";
+import { testSelfMachine } from "./helpers/self-machine";
 
 test("the app machine host translates a codemode failure at its callback boundary", async () => {
   const createHost = Machines.createMachineHost;
@@ -26,7 +27,7 @@ test("the app machine host translates a codemode failure at its callback boundar
       host: "127.0.0.1", wsPort: 0,
       kek: { kind: "locked", reason: "no vault key in this fixture" },
       model: { provider: "fake", id: "fixture", apiKey: "fixture" },
-      machines: { listen: { unix: socketPath() }, enrolled: [] },
+      machines: { self: testSelfMachine(), listen: { unix: socketPath() }, enrolled: [] },
     } });
     try {
       if (callTool === undefined) throw new Error("machine callback was not installed");

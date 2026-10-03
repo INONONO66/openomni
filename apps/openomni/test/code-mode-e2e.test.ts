@@ -28,6 +28,7 @@ import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { socketPath as testSocketPath } from "./helpers/socket-path";
+import { testSelfMachine } from "./helpers/self-machine";
 import { nextResidentTurn } from "./helpers/resident-turn";
 
 import { cellDaemonOptions } from "./helpers/cell-daemon";
@@ -103,7 +104,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   const config = suite.config("openomni-app-machine-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "app-machine-test", apiKey: "test-key" },
-    machines: { listen: { unix: socketPath }, enrolled: [appEnrollment] },
+    machines: { self: testSelfMachine(), listen: { unix: socketPath }, enrolled: [appEnrollment] },
   });
   const app = await suite.boot({
     config,
@@ -166,7 +167,7 @@ test("a cell creates three child sessions through send_message", async () => {
   const config = suite.config("openomni-code-mode-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-    machines: { listen: { unix: socketPath }, enrolled: [enrollment] },
+    machines: { self: testSelfMachine(), listen: { unix: socketPath }, enrolled: [enrollment] },
   });
   const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
   const app = await suite.boot({
@@ -266,7 +267,7 @@ test("the catalog remains available while machine execution refuses without atta
     config: suite.config("openomni-code-mode-off-", {
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-      machines: { listen: { unix: testSocketPath() }, enrolled: [enrollment] },
+      machines: { self: testSelfMachine(), listen: { unix: testSocketPath() }, enrolled: [enrollment] },
     }),
     llm: {
       resolveModel: fakeProviderModel,

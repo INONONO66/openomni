@@ -18,6 +18,8 @@ export namespace Machine {
   export const fingerprintOf = Schema.fingerprintOf;
   export const WireMethod = Schema.WireMethod;
   export const AbsolutePath = Schema.AbsolutePath;
+  export const ExportName = Schema.ExportName;
+  export type ExportName = Schema.ExportName;
   export const ExecRequest = Schema.ExecRequest;
   export type ExecRequest = Schema.ExecRequest;
   export const ExecResult = Schema.ExecResult;

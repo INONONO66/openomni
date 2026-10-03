@@ -13,6 +13,8 @@ export const ConfigurationError = NamedError.create(
       "invalid_compaction_summarizer",
       "invalid_entity_idle_ms",
       "invalid_env_json",
+      "invalid_machines_default",
+      "invalid_machines_self",
       "invalid_machines_tcp",
       "invalid_model_fallbacks",
       "invalid_ws_port",
@@ -71,11 +73,25 @@ export interface OpenOmniConfig {
     readonly fallbacks?: readonly Model.Ref[];
   };
   /**
-   * Absent means this brain has no body: no socket is bound and machine-placed
-   * tools are simply not offered. Present requires at least one enrollment,
-   * because a socket nothing is allowed to attach to is a contradiction.
+   * Absent means this brain has no body: no socket is bound and machine-backed
+   * tools refuse fail-closed. Present requires `self`, because the boot chain
+   * attaches the host's own in-process daemon before any tool port exists.
    */
   readonly machines?: {
+    /**
+     * The application host's own machine (#1271): the Owner-bounded
+     * capabilities and the mandatory absolute export roots the in-process
+     * daemon may expose. Boot attaches this machine over loopback before any
+     * tool port exists; there is no local filesystem or shell path beside it.
+     */
+    readonly self: {
+      /** Defaults to "self". */
+      readonly id?: string;
+      readonly capabilities: readonly string[];
+      readonly exports: readonly { readonly name: string; readonly path: string }[];
+    };
+    /** The machine a prefix-less path resolves to; defaults to the self id. */
+    readonly default?: string;
     /**
      * Where the host accepts daemons. Unix is always bound (same-box daemons
      * stay zero-config); tcp appears only when the Owner configured the full
@@ -282,6 +298,84 @@ function modelFallbacksFromEnv(env: Record<string, string | undefined>): readonl
 }
 
 const Enrollments = z.array(Machine.Enrollment).min(1);
+
+/**
+ * `OPENOMNI_MACHINES_SELF` — the host's own machine as env JSON (#1271):
+ *
+ *     OPENOMNI_MACHINES_SELF='{"capabilities":["fs.read","fs.write","shell.exec"],
+ *       "exports":[{"name":"workspace","path":"/absolute/host/root"}]}'
+ *
+ * `id` is optional and defaults to "self". Exports are mandatory and
+ * absolute: the daemon exposes nothing outside them, and an empty or relative
+ * root is a boot refusal, never an implicit process working directory.
+ */
+const SelfMachine = z
+  .object({
+    id: Machine.MachineId.default("self"),
+    capabilities: z
+      .array(Machine.CapabilityId)
+      .min(1)
+      .superRefine((capabilities, ctx) => {
+        if (new Set(capabilities).size !== capabilities.length)
+          ctx.addIssue({ code: "custom", message: "capabilities must be unique" });
+      }),
+    exports: z
+      .array(z.object({ name: Machine.ExportName, path: Machine.AbsolutePath }).strict())
+      .min(1)
+      .superRefine((entries, ctx) => {
+        if (new Set(entries.map((entry) => entry.name)).size !== entries.length)
+          ctx.addIssue({ code: "custom", message: "export names must be unique" });
+      }),
+  })
+  .strict();
+
+/** The machine plane with every default resolved; what boot composes from. */
+export interface MachinePlane {
+  readonly self: {
+    readonly id: string;
+    readonly capabilities: readonly string[];
+    readonly exports: readonly { readonly name: string; readonly path: string }[];
+  };
+  readonly defaultMachine: string;
+}
+
+/**
+ * The one semantic validator for a configured machine plane (#1271), run by
+ * `loadConfig` and again by boot for injected configs — BEFORE any listener
+ * exists: self shape (defaults applied, absolute non-empty exports),
+ * duplicate self/enrolled ids, and a default machine absent from the
+ * effective enrollments are all rejected here.
+ */
+export function validateMachinePlane(
+  machines: NonNullable<OpenOmniConfig["machines"]>,
+): MachinePlane {
+  const parsed = SelfMachine.safeParse(machines.self);
+  if (!parsed.success) {
+    throw new ConfigurationError({
+      code: "invalid_machines_self",
+      message: `machines.self is invalid: ${parsed.error.issues[0]?.message}`,
+    });
+  }
+  const self = parsed.data;
+  const ids = new Set<string>([self.id]);
+  for (const enrollment of machines.enrolled) {
+    if (ids.has(enrollment.machineId)) {
+      throw new ConfigurationError({
+        code: "invalid_machines_self",
+        message: `machines ids must be unique: ${enrollment.machineId}`,
+      });
+    }
+    ids.add(enrollment.machineId);
+  }
+  const defaultMachine = machines.default ?? self.id;
+  if (!ids.has(defaultMachine)) {
+    throw new ConfigurationError({
+      code: "invalid_machines_default",
+      message: `machines.default is not an enrolled machine: ${defaultMachine}`,
+    });
+  }
+  return { self, defaultMachine };
+}
 const SocialBudgets = z.array(Gateway.SocialBudget);
 
 const Actors = z
@@ -414,19 +508,38 @@ function machinesTcpFromEnv(env: Record<string, string | undefined>) {
   };
 }
 
+/**
+ * Env mapping (#1271): `OPENOMNI_MACHINES_SELF` declares the host's own
+ * machine, `OPENOMNI_MACHINES_DEFAULT` names the prefix-less target (defaults
+ * to the self id), `OPENOMNI_MACHINES_ENROLLED` admits remote machines. Any
+ * of the three configures the plane; a configured plane without self is a
+ * contradiction, because boot attaches the in-process daemon unconditionally.
+ */
 function machinesFromEnv(
   home: string,
   env: Record<string, string | undefined>,
 ): OpenOmniConfig["machines"] {
+  const self = parseEnvJson("OPENOMNI_MACHINES_SELF", SelfMachine, env);
   const enrolled = parseEnvJson("OPENOMNI_MACHINES_ENROLLED", Enrollments, env);
-  if (enrolled === undefined) return undefined;
+  const defaultMachine = env.OPENOMNI_MACHINES_DEFAULT?.trim() || undefined;
+  if (self === undefined && enrolled === undefined && defaultMachine === undefined) return undefined;
+  if (self === undefined) {
+    throw new ConfigurationError({
+      code: "invalid_machines_self",
+      message: "OPENOMNI_MACHINES_SELF is required when the machine plane is configured",
+    });
+  }
   const network = machinesTcpFromEnv(env);
   const unix = env.OPENOMNI_MACHINES_SOCKET?.trim() || join(home, ".openomni", "machines.sock");
-  return {
+  const machines: NonNullable<OpenOmniConfig["machines"]> = {
+    self,
+    ...(defaultMachine === undefined ? {} : { default: defaultMachine }),
     listen: { unix, ...(network === undefined ? {} : { tcp: network.tcp }) },
     ...(network === undefined ? {} : { tls: network.tls }),
-    enrolled,
+    enrolled: enrolled ?? [],
   };
+  validateMachinePlane(machines);
+  return machines;
 }
 
 export function loadConfig(
