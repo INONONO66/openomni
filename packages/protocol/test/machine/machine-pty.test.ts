@@ -86,13 +86,13 @@ describe("Machine.PtyOpenRequest / PtyOpenResult", () => {
       cursor: "g.0",
     });
     expect(Machine.PtyOpenResult.safeParse({ status: "ok" }).success).toBe(false);
-    for (const reason of ["machine_not_attached", "pty_not_available", "path_escapes_export"]) {
+    for (const reason of ["machine_not_attached", "pty_not_available", "path_escapes_export", "pty_not_found"]) {
       expect(Machine.PtyOpenResult.parse({ status: "refused", reason })).toEqual({
         status: "refused",
         reason: reason as "pty_not_available",
       });
     }
-    expect(Machine.PtyOpenResult.safeParse({ status: "refused", reason: "pty_not_found" }).success).toBe(false);
+    expect(Machine.PtyOpenResult.safeParse({ status: "refused", reason: "nonsense" }).success).toBe(false);
   });
 });
 
