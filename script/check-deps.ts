@@ -825,11 +825,10 @@ function agentRelativeImportViolation(
       ? undefined
       : `${band}/ may not import the package root barrel (it re-exports every band)`;
   }
-  // KNOWN HOLE (review r2 STOP branch): a band-root barrel (`../model`) is not
-  // classified as its band for non-plugin bands, because real core files import
-  // `../model`/`../inspect` and `core/retry.ts` (allowance 0) would exceed the
-  // frozen ratchet; re-keying is forbidden. #1255 owns the inversion.
-  const target = rest.includes("/") ? (rest.split("/")[0] ?? "") : "";
+  // Review r2 addendum: a band-root barrel (`../model`) classifies as its band,
+  // exactly like a deep path — the slash-only classifier undercounted it.
+  const head = rest.split("/")[0] ?? "";
+  const target = head.endsWith(".ts") ? head.slice(0, -3) : head;
   if (target !== "" && target in AGENT_BANDS && !internal.has(target)) {
     return `${band}/ may not import ${target}/`;
   }
@@ -891,7 +890,7 @@ export function agentBandViolations(filePath: string, source: string): string[] 
  * #1276 ratchet baseline, re-keyed after the kernel/+session/+store/ -> core/
  * move (#1247 pinned the same violations on the old paths). Counts are
  * UNCHANGED from the pre-move baseline so the totals prove the move neither
- * introduced nor hid an edge: pre-move total 36 = post-move total 36 (sum of
+ * introduced nor hid an edge: pre-move total 37 = post-move total 37 (sum of
  * this map; `agentBandRatchetTotal()` is asserted by
  * script/check-deps-agent-bands.test.ts and printed by the gate). Counts may
  * only shrink; a new file or a higher count fails. #1255 drives every entry
@@ -917,6 +916,10 @@ const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
   // core -> plugins/compaction/restore edge; #1255 owns the inversion and
   // #1252/#1253 delete the file with the single write path.
   ["packages/agent/src/core/mailbox.ts", 2],
+  // pre-existing value import (instanceof LlmRunFailure); undercounted by the
+  // slash-only classifier before #1276 (review r2 addendum, measurement
+  // correction flagged to the Owner: pre-move 37 = post-move 37).
+  ["packages/agent/src/core/retry.ts", 1],
   ["packages/agent/src/core/run.ts", 3],
   ["packages/agent/src/core/store/errors.ts", 1],
 ]);
@@ -1525,11 +1528,11 @@ function selfTest(): number {
       ).length === 1,
     ],
     [
-      "#1276: model/ may import the core barrel (public API)",
+      "#1276 (r2): model/ may not import the core band root barrel either",
       agentBandViolations(
         "packages/agent/src/model/errors.ts",
         'import { Core } from "../core";',
-      ).length === 0,
+      ).length === 1,
     ],
     [
       "#1276: testing/ may import anything in the package",
@@ -1611,8 +1614,9 @@ export async function main(): Promise<void> {
     ...goldenViolations,
   ];
 
-  // #1276: the re-keyed band ratchet total must equal the pre-move total (36).
-  console.log(`#1276 agent band ratchet total: ${agentBandRatchetTotal()} (pre-move total: 36)`);
+  // #1276: the re-keyed band ratchet total must equal the pre-move total,
+  // re-measured at 66d56edb with the corrected band-root classifier (37).
+  console.log(`#1276 agent band ratchet total: ${agentBandRatchetTotal()} (pre-move total: 37)`);
 
   // Print freshness warnings (non-blocking)
   for (const warning of freshnessWarnings) {

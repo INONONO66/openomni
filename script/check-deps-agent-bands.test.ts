@@ -1,7 +1,9 @@
 /**
  * #1276 five-band agent table: the three new edge checks and the re-keyed
  * ratchet. Each check gets one synthetic violating file and one legal edge;
- * the re-keyed ratchet total must equal the pre-move total (36). These cases
+ * the re-keyed ratchet total must equal the corrected pre-move total (37;
+ * review r2 addendum re-measured 66d56edb with band-root classification,
+ * which the slash-only classifier undercounted by core/retry.ts). These cases
  * fail against the pre-#1276 seven-band table: `core/` was not a band (its
  * files escaped every rule), plugins could import any core path, siblings
  * were legal inside one `plugins` band, and no rule covered `apps/`.
@@ -96,6 +98,17 @@ test("#1276 check b: a plugin importing a band root barrel fails", () => {
   expect(found[1]).toContain("may not import the package root barrel");
 });
 
+test("#1276 (r2): a core file importing a band root barrel fails (review r2 probe)", () => {
+  const found = agentBandViolations(
+    "packages/agent/src/core/review-probe.ts",
+    'import { Model } from "../model";',
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]).toBe(
+    "VIOLATION: packages/agent/src/core/review-probe.ts:1 imports ../model — #1247 bands: core/ may not import model/",
+  );
+});
+
 test("#1276: a core file importing the package root barrel fails; testing/ may", () => {
   const found = agentBandViolations(
     "packages/agent/src/core/review-probe.ts",
@@ -170,6 +183,6 @@ test("#1276 check c legal edges: the barrel and app-internal imports pass; non-a
 
 // ─── the re-keyed ratchet total ───
 
-test("#1276 ratchet: the re-keyed total equals the pre-move total", () => {
-  expect(agentBandRatchetTotal()).toBe(36);
+test("#1276 ratchet: the re-keyed total equals the corrected pre-move total", () => {
+  expect(agentBandRatchetTotal()).toBe(37);
 });
