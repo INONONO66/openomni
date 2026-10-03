@@ -1099,17 +1099,17 @@ describe("session lifecycle conformance", () => {
         expect(stale?.requests[0]).toMatchObject({ state: "resolved", outcome: "answered" });
         expect(resolutions(stale)).toEqual([
             ["request", "opened"],
-            ["reply", "rejected"],
-            ["reply", "rejected"],
-            ["reply", "rejected"],
-            ["reply", "resolved"],
+            ["request", "rejected"],
+            ["request", "rejected"],
+            ["request", "rejected"],
+            ["request", "resolved"],
             ["request", "resolved"],
             ["prompt", undefined],
         ]);
         // A misrouted answer is refused before any record: neither session keeps it.
         const misrouted = [...result.final.values()].flatMap((snapshot: SessionSnapshot) => snapshot.actions.filter((action: LedgerAction.Node) => action.id.includes("corrupt-session")));
         expect(misrouted).toEqual([]);
-        expect(resolutions(result.final.get("answer-refuse")).at(-1)).toEqual(["reply", "duplicate"]);
+        expect(resolutions(result.final.get("answer-refuse")).at(-1)).toEqual(["request", "duplicate"]);
     })));
     test("T11 refused stale executor CAS runs zero bodies and publishes zero observations", () => traceTest(() => Effect.gen(function* () {
         const runtime = runtimeFor();
@@ -1179,7 +1179,7 @@ function assertRequestRaces(result: TraceResult): void {
     });
     // Late reply settles the request as outcome_unknown once; the delayed timer
     // is recorded once as a duplicate input, its retry commits nothing.
-    expect(kinds(late).slice(4)).toEqual(["request", "reply", "request", "request"]);
+    expect(kinds(late).slice(4)).toEqual(["request", "request", "request", "request"]);
     expect(late?.actions.slice(4).map((action: LedgerAction.Node) => objectValue(action.effect.value)?.resolution)).toEqual(["opened", "late_unknown", "late_unknown", "duplicate"]);
     const cancelled = result.final.get("QCANCEL");
     expect(cancelled?.requests[0]).toMatchObject({
@@ -1192,7 +1192,7 @@ function assertRequestRaces(result: TraceResult): void {
         ["request", "opened"],
         ["request", "cancelled"],
         ["request", "cancelled"],
-        ["reply", "duplicate"],
+        ["request", "duplicate"],
     ]);
     expect(cancelled?.inbox).toEqual([]);
     const answered = result.final.get("QANSWER");
@@ -1205,7 +1205,7 @@ function assertRequestRaces(result: TraceResult): void {
     // later Owner cancel is recorded once as a duplicate and changes nothing.
     expect(resolutions(answered)).toEqual([
         ["request", "opened"],
-        ["reply", "resolved"],
+        ["request", "resolved"],
         ["request", "resolved"],
         ["prompt", undefined],
         ["request", "duplicate"],
@@ -1217,9 +1217,9 @@ function assertRequestRaces(result: TraceResult): void {
     expect(rejected?.requests[0]).toMatchObject({ state: "open", seenReplyIds: [], replies: [] });
     expect(resolutions(rejected)).toEqual([
         ["request", "opened"],
-        ["reply", "rejected"],
-        ["reply", "rejected"],
-        ["reply", "rejected"],
+        ["request", "rejected"],
+        ["request", "rejected"],
+        ["request", "rejected"],
     ]);
 }
 /** The complete snapshot of `sessionId` after the named step; a missing one fails the trace. */

@@ -91,6 +91,11 @@ export namespace SessionHistory {
     "result",
     "state",
     "record",
+    // The request lifecycle phases (#1252): answers are `answered` rows.
+    "open",
+    "answered",
+    "resolved",
+    "expired",
   ]);
   export type Phase = z.infer<typeof Phase>;
 

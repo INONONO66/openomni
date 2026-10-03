@@ -214,8 +214,20 @@ const KIND_PHASES: Partial<Record<LedgerAction.Kind, SessionHistory.Phase>> = {
   "policy.decision": "decision",
 };
 
+const EFFECT_PHASES: ReadonlySet<PlainValue> = new Set([
+  "checkpoint",
+  "terminal",
+  "state",
+  "open",
+  "answered",
+  "resolved",
+  "expired",
+]);
+
 function effectPhase(phase: PlainValue | undefined): SessionHistory.Phase | undefined {
-  return phase === "checkpoint" || phase === "terminal" || phase === "state" ? phase : undefined;
+  return typeof phase === "string" && EFFECT_PHASES.has(phase)
+    ? SessionHistory.Phase.parse(phase)
+    : undefined;
 }
 
 function intentPhase(phase: PlainValue | undefined): SessionHistory.Phase {
@@ -390,7 +402,7 @@ function requestRecord(
   action: LedgerAction.Node,
   turnOf: TurnOf,
 ): SessionHistory.Request | undefined {
-  if (action.kind !== "request" && action.kind !== "reply") return undefined;
+  if (action.kind !== "request") return undefined;
   const parsed = SessionTransition.Request.safeParse(object(action.effect.value).request);
   return parsed.success ? requestSummary(parsed.data, action, turnOf) : undefined;
 }

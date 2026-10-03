@@ -357,7 +357,7 @@ test("request state pages select the latest identity and cross page boundaries",
       "request",
       { inputId: requestId },
       {
-        phase: "state",
+        phase: "open",
         request: { ...request, sessionId: "bounded", requestId },
       },
     );
@@ -372,9 +372,9 @@ test("request state pages select the latest identity and cross page boundaries",
   };
   const update = append(
     "r000:cancelled",
-    "reply",
+    "request",
     { inputId: "answer" },
-    { phase: "state", request: cancelled },
+    { phase: "resolved", request: cancelled },
   );
   expect(kernel.requestById(requestId)).toEqual(cancelled);
   expect(kernel.requestInputById("bounded", "answer")).toEqual(update);

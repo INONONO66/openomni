@@ -70,7 +70,7 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
      WHERE kind = 'session.configure' AND json_valid(effect)`,
   `CREATE INDEX IF NOT EXISTS idx_action_input
      ON action(session_id, json_extract(intent, '$.inputId'), ordinal DESC)
-     WHERE kind IN ('request', 'reply')`,
+     WHERE kind = 'request'`,
   "CREATE INDEX IF NOT EXISTS idx_action_kind_revision ON action(session_id, kind, ordinal DESC)",
   `CREATE INDEX IF NOT EXISTS idx_action_outbound_state
      ON action(session_id, json_extract(effect, '$.outbound.message.messageId'), ordinal DESC)
@@ -78,7 +78,7 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
   "CREATE INDEX IF NOT EXISTS idx_action_parent ON action(session_id, parent_id, ordinal)",
   `CREATE INDEX IF NOT EXISTS idx_action_request_state
      ON action(json_extract(effect, '$.request.requestId'))
-     WHERE kind IN ('request', 'reply') AND json_extract(effect, '$.phase') = 'state'`,
+     WHERE kind = 'request'`,
   `CREATE INDEX IF NOT EXISTS idx_action_turn_effect
      ON action(session_id, json_extract(effect, '$.turnId'), ordinal DESC)
      WHERE kind IN ('turn', 'inbox.deliver')`,
@@ -254,7 +254,7 @@ function createActionReads(db: Database): Reads {
       return decodeOne(
         db
           .query<ActionSqlRow, [string, string]>(`
-        SELECT * FROM action WHERE session_id = ? AND kind IN ('request', 'reply')
+        SELECT * FROM action WHERE session_id = ? AND kind = 'request'
           AND json_extract(intent, '$.inputId') = ?
         ORDER BY ordinal DESC LIMIT 1`)
           .get(sessionId, inputId),
@@ -264,8 +264,7 @@ function createActionReads(db: Database): Reads {
       return decodeOne(
         db
           .query<ActionSqlRow, [string]>(`
-        SELECT * FROM action WHERE kind IN ('request', 'reply')
-          AND json_extract(effect, '$.phase') = 'state'
+        SELECT * FROM action WHERE kind = 'request'
           AND json_extract(effect, '$.request.requestId') = ?
         ORDER BY rowid DESC LIMIT 1`)
           .get(id),
@@ -275,11 +274,9 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string | null, string | null, string, number]>(`
-        SELECT a.* FROM action a WHERE a.kind IN ('request', 'reply')
-          AND json_extract(a.effect, '$.phase') = 'state'
+        SELECT a.* FROM action a WHERE a.kind = 'request'
           AND (? IS NULL OR a.session_id = ?) AND json_extract(a.effect, '$.request.requestId') > ?
-          AND a.rowid = (SELECT max(b.rowid) FROM action b WHERE b.kind IN ('request', 'reply')
-            AND json_extract(b.effect, '$.phase') = 'state'
+          AND a.rowid = (SELECT max(b.rowid) FROM action b WHERE b.kind = 'request'
             AND json_extract(b.effect, '$.request.requestId') = json_extract(a.effect, '$.request.requestId'))
         ORDER BY json_extract(a.effect, '$.request.requestId') LIMIT ?`)
           .all(sessionId ?? null, sessionId ?? null, cursor, pageSize.parse(limit)),
@@ -457,14 +454,15 @@ export function createActions(
           .query(
             `SELECT * FROM action WHERE session_id = ? AND kind = 'prompt' AND id = ?
            UNION ALL
-           SELECT * FROM action WHERE session_id = ? AND kind = 'reply'
+           SELECT * FROM action WHERE session_id = ? AND kind = 'request'
+           AND json_extract(effect, '$.phase') = 'answered'
            AND json_extract(effect, '$.answer.outbound.messageId') = ? ORDER BY ordinal`,
           )
           .all(destinationSessionId, messageId, destinationSessionId, messageId),
       );
       for (const row of rows) {
         const action = decodeAction(row);
-        if (action.kind === "reply") {
+        if (action.kind === "request") {
           const effect = action.effect.value;
           if (effect === null || typeof effect !== "object" || Array.isArray(effect)) continue;
           const answer = SessionTransition.Answer.safeParse(effect.answer);

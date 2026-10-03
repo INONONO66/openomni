@@ -154,22 +154,22 @@ test("outboundReceipt returns prompt by id scoped to destination", () => {
   expect(stores.kernel.outboundReceipt("source", "missing")).toBeUndefined();
 });
 
-test("outboundReceipt decodes matching replies and skips invalid answers before a valid receipt", () => {
-  append("wrong-session", "reply", null, { answer: answer("outbound") }, "other");
-  append("wrong-kind", "turn", null, { answer: answer("outbound") });
-  append("wrong-message", "reply", null, { answer: answer("different") });
-  append("malformed", "reply", null, { answer: { outbound: { messageId: "outbound" } } });
+test("outboundReceipt decodes matching answered requests and skips invalid answers before a valid receipt", () => {
+  append("wrong-session", "request", null, { phase: "answered", answer: answer("outbound") }, "other");
+  append("wrong-kind", "turn", null, { phase: "answered", answer: answer("outbound") });
+  append("wrong-message", "request", null, { phase: "answered", answer: answer("different") });
+  append("malformed", "request", null, { phase: "answered", answer: { outbound: { messageId: "outbound" } } });
   expect(stores.kernel.outboundReceipt("source", "outbound")).toBeUndefined();
-  const receipt = append("valid", "reply", null, { answer: answer("outbound") });
-  append("later", "reply", null, { answer: answer("outbound") });
+  const receipt = append("valid", "request", null, { phase: "answered", answer: answer("outbound") });
+  append("later", "request", null, { phase: "answered", answer: answer("outbound") });
   expect(stores.kernel.outboundReceipt("source", "outbound")).toEqual(receipt);
 });
 
 test("outboundReceipt preserves ordinal precedence across both SQL arms", () => {
-  const reply = append("reply-first", "reply", null, { answer: answer("prompt-later") });
+  const reply = append("reply-first", "request", null, { phase: "answered", answer: answer("prompt-later") });
   append("prompt-later", "prompt");
   expect(stores.kernel.outboundReceipt("source", "prompt-later")).toEqual(reply);
   const prompt = append("prompt-first", "prompt");
-  append("reply-later", "reply", null, { answer: answer("prompt-first") });
+  append("reply-later", "request", null, { phase: "answered", answer: answer("prompt-first") });
   expect(stores.kernel.outboundReceipt("source", "prompt-first")).toEqual(prompt);
 });

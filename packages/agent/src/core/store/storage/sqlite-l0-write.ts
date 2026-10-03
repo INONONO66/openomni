@@ -232,7 +232,7 @@ function pendingRequestCount(db: Database, since: number): number {
         PARTITION BY json_extract(effect, '$.request.requestId') ORDER BY ordinal DESC
       ) AS latest
       FROM action
-      WHERE kind IN ('request', 'reply') AND json_extract(effect, '$.phase') = 'state'
+      WHERE kind = 'request'
     )
     WHERE latest = 1
       AND json_extract(effect, '$.request.state') = 'open'
