@@ -120,6 +120,12 @@ function configEnvFor(directory: string): Record<string, string> {
     OPENOMNI_MODEL_PROVIDER: "fake",
     OPENOMNI_MODEL_ID: "resident-test",
     OPENOMNI_MODEL_API_KEY: "test-key",
+    // #1271: a boot without a machine plane refuses.
+    OPENOMNI_MACHINES_SOCKET: join(directory, "machines.sock"),
+    OPENOMNI_MACHINES_SELF: JSON.stringify({
+      capabilities: ["fs.read"],
+      exports: [{ name: "workspace", path: directory }],
+    }),
   };
 }
 
@@ -144,6 +150,8 @@ const CONFIG_ENV = [
   "OPENOMNI_SOCIAL_BUDGETS",
   "OPENOMNI_MACHINES_ENROLLED",
   "OPENOMNI_MACHINES_SOCKET",
+  "OPENOMNI_MACHINES_SELF",
+  "OPENOMNI_MACHINES_DEFAULT",
   "OPENOMNI_VAULT_KEY",
 ] as const;
 

@@ -36,6 +36,21 @@ function track<S extends { mockRestore(): void }>(spy: S): S {
   return spy;
 }
 
+test("a config without a machines block refuses boot with machines_required and opens no listener (#1271 r1 M4)", async () => {
+  const createHost = Machines.createMachineHost;
+  const hostSpy = track(
+    spyOn(Machines, "createMachineHost").mockImplementation((options) => createHost(options)),
+  );
+  const failed = startOpenOmni({ config: fixtureConfig(undefined) });
+  await expect(failed).rejects.toThrow(
+    expect.objectContaining({
+      name: "OpenOmniConfigurationError",
+      data: expect.objectContaining({ code: "machines_required" }),
+    }),
+  );
+  expect(hostSpy.mock.calls.length).toBe(0);
+});
+
 test("boot reaches the attached self state before any tool port exists", async () => {
   const seen: string[][] = [];
   const original = Gateway.toolPorts;

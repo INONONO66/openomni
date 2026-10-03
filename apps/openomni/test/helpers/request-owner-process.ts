@@ -8,6 +8,7 @@ import { appFixture } from "./app-fixture";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 import { planeOf } from "./ledger";
 import { assistantMessage, requestToolStep } from "./assistant-message";
+import { testMachinesPlane } from "./self-machine";
 
 export const OWNER_TOKEN = "request-owner-e2e-token";
 export const PERSON = {
@@ -148,6 +149,7 @@ async function serve() {
       wsPort: 0,
       wsToken: OWNER_TOKEN,
       kek: { kind: "locked", reason: "no vault key in this fixture" },
+      machines: testMachinesPlane(),
       actors: [{ actorId: "owner", externalId: "owner", kind: "human", trustTier: "owner" }],
       model: { provider: "fake", id: "request-owner-e2e", apiKey: "fixture-key" },
     },

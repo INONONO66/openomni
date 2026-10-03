@@ -18,6 +18,9 @@ export const ConfigurationError = NamedError.create(
       "invalid_machines_tcp",
       "invalid_model_fallbacks",
       "invalid_ws_port",
+      // #1271 r1 M4: the machine plane is not optional — a boot without a
+      // `machines` block refuses before any listener exists.
+      "machines_required",
       "legacy_channel_credentials",
       "missing_env",
       "ws_token_required",

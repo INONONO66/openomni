@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpenOmniConfig } from "../../src/config";
+import { testMachinesPlane } from "./self-machine";
 import { appFixture } from "./app-fixture";
 import { closeSocket, openSocket } from "./ws";
 
@@ -92,6 +93,7 @@ export function residentSuite(beforeReset?: () => Promise<void> | void): Residen
         wsPort: 0,
         kek: { kind: "locked", reason: "no vault key in this fixture" },
         model: { provider: "fake", id: "resident-test", apiKey: "test-key" },
+        machines: testMachinesPlane(),
         ...overrides,
       };
     },

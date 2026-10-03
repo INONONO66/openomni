@@ -57,6 +57,7 @@ import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/
 import type { ProvisionPort } from "./provisioning/channels";
 import {
   assertWsExposure,
+  ConfigurationError,
   loadConfig,
   modelTransport,
   resolveClusterStorage,
@@ -251,6 +252,16 @@ function residentModelOptions(
 export async function startOpenOmni(options: StartOptions = {}) {
   const config = options.config ?? loadConfig();
   assertWsExposure(config);
+  // #1271: the brain host is itself a machine — a boot without a machine
+  // plane would publish every tool with no self daemon behind it. Refuse
+  // before any listener exists; there is no local-execution posture.
+  const machinesConfig = config.machines;
+  if (machinesConfig === undefined) {
+    throw new ConfigurationError({
+      code: "machines_required",
+      message: "machines.self is required: the host boots only as an attached machine (#1271)",
+    });
+  }
   const authenticateOwner = (credential: string, requestId: string) => {
     const expected = Buffer.from(config.wsToken ?? "");
     const presented = Buffer.from(credential);
@@ -442,37 +453,28 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
     let cells: ComposedCodemode | undefined;
-    const machines = config.machines;
-    const machinery =
-      machines === undefined
-        ? undefined
-        : await composeMachinePlane(runtime, machines, {
-            events: services.observations,
-            id: services.entropy.id,
-            now: services.now,
-            callTool: (call) =>
-              cells === undefined
-                ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
-                : cells.callTool(call).pipe(
-                    Effect.mapError(
-                      (error) =>
-                        new MachinesFailure({
-                          operation: "codemode.callTool",
-                          cause: String(error),
-                        }),
-                    ),
-                  ),
-          });
-    const host: MachineHost | undefined = machinery?.host;
+    const machinery = await composeMachinePlane(runtime, machinesConfig, {
+      events: services.observations,
+      id: services.entropy.id,
+      now: services.now,
+      callTool: (call) =>
+        cells === undefined
+          ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
+          : cells.callTool(call).pipe(
+              Effect.mapError(
+                (error) =>
+                  new MachinesFailure({ operation: "codemode.callTool", cause: String(error) }),
+              ),
+            ),
+    });
+    const host: MachineHost = machinery.host;
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createCompletionPort(
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       { now: services.now, id: services.entropy.id },
     );
-    if (host !== undefined) {
-      cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
-    }
+    cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
 
     // Watch plane (#1253): native sources deliver occurrences through the
     // entity's one `alarm` door; the occurrence id is the durable dedupe and
@@ -530,7 +532,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     );
     // Boot order (#1271): the self machine must answer over its loopback
     // attachment BEFORE any tool port exists; a dead attachment fails boot.
-    if (machinery !== undefined) await runAppEffect(runtime, machinery.self.ready);
+    await runAppEffect(runtime, machinery.self.ready);
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
@@ -538,9 +540,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       bundles: services.bundles.names,
       tools: {
         ...toolPorts(runtime, {
-          ...(machinery === undefined
-            ? {}
-            : { machines: { host: machinery.host, defaultMachine: machinery.defaultMachine } }),
+          machines: { host: machinery.host, defaultMachine: machinery.defaultMachine },
           cells, completion: llmPort, messages,
           now: services.now, id: services.entropy.id,
         }),

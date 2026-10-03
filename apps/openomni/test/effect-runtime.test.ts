@@ -13,12 +13,14 @@ import { runEffect, runRuntimeEffect, runRuntimeExit } from "./helpers/effect";
 import { testIds } from "./helpers/test-entropy";
 import { testEntropy } from "./helpers/test-entropy";
 import { Bus } from "./helpers/bus";
+import { testMachinesPlane } from "./helpers/self-machine";
 
 const config = {
   host: "127.0.0.1",
   wsPort: 0,
   kek: { kind: "locked", reason: "no vault key in this fixture" },
   model: { provider: "fake", id: "fixture", apiKey: "fixture" },
+  machines: testMachinesPlane(),
 } as const;
 
 
