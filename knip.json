@@ -49,7 +49,6 @@
     "packages/agent": {
       "entry": [
         "src/index.ts",
-        "src/plugins/*/index.ts",
         "test/**/*.test.ts",
         "test/helpers/cluster-crash-child.ts"
       ],

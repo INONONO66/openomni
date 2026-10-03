@@ -901,12 +901,12 @@ export function agentBandViolations(filePath: string, source: string): string[] 
  */
 const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
   ["packages/agent/src/core/commit.ts", 2],
-  // core -> plugins/compaction/restore edge; #1255 owns the inversion and
-  // #1252/#1253 delete the file with the single write path.
   ["packages/agent/src/core/compaction.ts", 3],
   ["packages/agent/src/core/failure.ts", 1],
   ["packages/agent/src/core/gate/decide.ts", 2],
   ["packages/agent/src/core/index.ts", 1],
+  // core -> plugins/compaction/restore edge; #1255 owns the inversion and
+  // #1252/#1253 delete the file with the single write path.
   ["packages/agent/src/core/mailbox.ts", 2],
   ["packages/agent/src/core/ports.ts", 1],
   // pre-existing value import (instanceof LlmRunFailure); undercounted by the
