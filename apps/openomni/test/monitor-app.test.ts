@@ -206,20 +206,27 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
   });
   // The terminal's owner is the tmux server: feed it directly, as any other
   // writer (a bash{session} call, a human) would. printf's format string keeps
-  // the typed keystroke echo from matching; only the one output line fires.
+  // the typed keystroke echo from matching (-l types it literally; Enter is a
+  // separate key event, immune to key-name parsing differences).
   expect(
-    Bun.spawnSync(["tmux", "-L", tmuxSocket, "send-keys", "-t", "qa", "printf 'WAKE-%d\n' 7342", "Enter"]).exitCode,
+    Bun.spawnSync(["tmux", "-L", tmuxSocket, "send-keys", "-t", "qa", "-l", "printf 'WAKE-%d\\n' 7342"]).exitCode,
   ).toBe(0);
+  expect(Bun.spawnSync(["tmux", "-L", tmuxSocket, "send-keys", "-t", "qa", "Enter"]).exitCode).toBe(0);
   await woke.promise;
-  expect(calls).toBe(2);
+  // attach is a screen-oriented client: tmux re-delivers already-visible lines
+  // in initial-paint passes (measured: 3.4 and 3.7 both repaint the marker
+  // line on attach), so when the paint races the live update on a slow runner
+  // the watch lawfully fires more than once. The call count therefore has no
+  // exact value; every wake body is pinned to the marker instead.
+  expect(calls).toBeGreaterThanOrEqual(2);
   const tree = sessionTree(arm.sessionId, plane.sessionStore(arm.sessionId).actions);
-  const prompt = tree.find((action) => {
+  const prompts = tree.filter((action) => {
     if (action.kind !== "prompt") return false;
     const intent = action.intent.value as { kind?: string; watchId?: string };
     return intent.kind === "alarm" && intent.watchId === arm.watchId;
   });
-  if (prompt === undefined) throw new Error("missing watch prompt");
-  expect((prompt.effect.value as { content?: string }).content).toContain("WAKE-7342");
+  if (prompts.length === 0) throw new Error("missing watch prompt");
+  for (const prompt of prompts) expect((prompt.effect.value as { content?: string }).content).toContain("WAKE-7342");
   // Watch completion unsubscribed from the terminal without closing it.
   const probe = Bun.spawnSync(["tmux", "-L", tmuxSocket, "has-session", "-t", "qa"], { stderr: "pipe" });
   expect(probe.exitCode).toBe(0);
