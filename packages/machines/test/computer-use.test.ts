@@ -53,6 +53,29 @@ async function fixture(
   }
 }
 
+type Fixture = Parameters<Parameters<typeof fixture>[1]>[0];
+
+/** The ok branch of a capture; a refusal fails the test naming the reason. */
+async function latestCapture(handle: Fixture["handle"], request: Machine.ScreenReadRequest = {}) {
+  const shot = await handle.screen(request);
+  if (shot.status !== "ok") throw new Error(`screen refused: ${shot.reason}`);
+  return shot;
+}
+
+/** A cached-bounds region refusal must spend ZERO capture invocations. */
+async function expectRegionRefusedFromCache(context: Fixture, request: Machine.ScreenReadRequest) {
+  const captures = context.fake.invocations("screencapture").length;
+  expect(await context.handle.screen(request)).toEqual({ status: "refused", reason: "invalid_region" });
+  expect(context.fake.invocations("screencapture")).toHaveLength(captures);
+}
+
+/** Asserts the body refuses without ever invoking cliclick. */
+async function expectNoCliclick(fake: Fixture["fake"], body: () => Promise<void>) {
+  const before = fake.invocations("cliclick").length;
+  await body();
+  expect(fake.invocations("cliclick")).toHaveLength(before);
+}
+
 describe("computer-use capability probes", () => {
   test("both capabilities are offered when every prerequisite probe passes", async () => {
     await fixture({}, async ({ host, fake }) => {
@@ -82,8 +105,7 @@ describe("computer-use capability probes", () => {
   test("denied accessibility withholds input.write and omits the tree", async () => {
     await fixture({ behavior: { accessibilityExitCode: 1 } }, async ({ host, handle }) => {
       expect(host.list()[0]?.capabilities).toEqual(["screen.read"]);
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const shot = await latestCapture(handle);
       expect("accessibilityTree" in shot).toBe(false);
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
         .toEqual({ status: "refused", reason: "input_not_available" });
@@ -93,8 +115,7 @@ describe("computer-use capability probes", () => {
   test("enrollment can withhold input.write even when the daemon offers it", async () => {
     await fixture({ allowed: ["screen.read"] }, async ({ host, handle, fake }) => {
       expect(host.list()[0]?.capabilities).toEqual(["screen.read"]);
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const shot = await latestCapture(handle);
       const before = fake.invocations("cliclick").length;
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
         .toEqual({ status: "refused", reason: "input_not_available" });
@@ -106,8 +127,7 @@ describe("computer-use capability probes", () => {
 describe("screen.read", () => {
   test("returns the capture bytes, a capture id, and the accessibility tree", async () => {
     await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const shot = await latestCapture(handle);
       expect(Buffer.from(shot.png).equals(fake.behavior.capturePng)).toBe(true);
       expect(shot.captureId.length).toBeGreaterThan(0);
       expect(shot.accessibilityTree).toEqual([{ app: "TextEdit", windows: [] }]);
@@ -115,14 +135,10 @@ describe("screen.read", () => {
   });
 
   test("a region is validated against cached point bounds before any command runs", async () => {
-    await fixture({}, async ({ handle, fake }) => {
-      const first = await handle.screen({});
-      expect(first.status).toBe("ok");
-      const captures = fake.invocations("screencapture").length;
+    await fixture({}, async (context) => {
+      await latestCapture(context.handle);
       // Main display measures 1000x500 points (2000x1000 px at 2x).
-      expect(await handle.screen({ region: { x: 900, y: 0, width: 200, height: 100 } }))
-        .toEqual({ status: "refused", reason: "invalid_region" });
-      expect(fake.invocations("screencapture")).toHaveLength(captures);
+      await expectRegionRefusedFromCache(context, { region: { x: 900, y: 0, width: 200, height: 100 } });
     });
   });
 
@@ -138,16 +154,12 @@ describe("screen.read", () => {
   });
 
   test("a non-main display is captured with -D and measured separately", async () => {
-    await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({ display: 2 });
-      expect(shot.status).toBe("ok");
-      const last = fake.invocations("screencapture").at(-1);
+    await fixture({}, async (context) => {
+      await latestCapture(context.handle, { display: 2 });
+      const last = context.fake.invocations("screencapture").at(-1);
       expect(last?.slice(4, 6)).toEqual(["-D", "2"]);
       // Display 2 measures 800x600 points; a wider region refuses from cache.
-      const captures = fake.invocations("screencapture").length;
-      expect(await handle.screen({ display: 2, region: { x: 700, y: 0, width: 200, height: 100 } }))
-        .toEqual({ status: "refused", reason: "invalid_region" });
-      expect(fake.invocations("screencapture")).toHaveLength(captures);
+      await expectRegionRefusedFromCache(context, { display: 2, region: { x: 700, y: 0, width: 200, height: 100 } });
     });
   });
 
@@ -164,8 +176,7 @@ describe("screen.read", () => {
     const big = png(Machine.SCREEN_PNG_MAX_BYTES + 1000);
     const small = png(4096);
     await fixture({ behavior: { capturePng: big, scaledPng: small } }, async ({ handle, fake }) => {
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const shot = await latestCapture(handle);
       expect(Buffer.from(shot.png).equals(small)).toBe(true);
       const zoom = fake.invocations("sips").filter((argv) => argv[1] === "-Z");
       expect(zoom).toHaveLength(1);
@@ -213,8 +224,7 @@ describe("screen.read mid-session failures", () => {
   test("a failing tree fetch omits the tree and stops asking until re-probed", async () => {
     await fixture({}, async ({ handle, fake }) => {
       fake.behavior.treeExitCode = 1;
-      const first = await handle.screen({});
-      if (first.status !== "ok") throw new Error(`refused: ${first.reason}`);
+      const first = await latestCapture(handle);
       expect("accessibilityTree" in first).toBe(false);
       const asked = fake.invocations("osascript").filter((argv) => argv[1] === "-l").length;
       const second = await handle.screen({});
@@ -228,8 +238,7 @@ describe("screen.read mid-session failures", () => {
 describe("input.write", () => {
   test("maps the action list onto one cliclick invocation", async () => {
     await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const shot = await latestCapture(handle);
       const result = await handle.input({
         captureId: shot.captureId,
         actions: [
@@ -265,55 +274,51 @@ describe("input.write", () => {
 
   test("an anchor captured on a non-main display refuses typed before executing", async () => {
     await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({ display: 2 });
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
-      const before = fake.invocations("cliclick").length;
-      expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
-        .toEqual({
-          status: "refused",
-          reason: "unsupported_action",
-          message: "input execution is main-display only in v1; the anchoring capture is of display 2",
-        });
-      expect(fake.invocations("cliclick")).toHaveLength(before);
+      const shot = await latestCapture(handle, { display: 2 });
+      await expectNoCliclick(fake, async () => {
+        expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
+          .toEqual({
+            status: "refused",
+            reason: "unsupported_action",
+            message: "input execution is main-display only in v1; the anchoring capture is of display 2",
+          });
+      });
     });
   });
 
   test("unsupported actions refuse typed without running anything", async () => {
     await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
-      const before = fake.invocations("cliclick").length;
-      for (const actions of [
-        [{ click: { x: 1, y: 1, button: "middle" as const } }],
-        [{ scroll: { deltaY: -3 } }],
-        [{ key: { name: "hyper-launch" } }],
-      ]) {
-        expect(await handle.input({ captureId: shot.captureId, actions })).toEqual({
-          status: "refused",
-          reason: "unsupported_action",
-        });
-      }
-      expect(fake.invocations("cliclick")).toHaveLength(before);
+      const shot = await latestCapture(handle);
+      await expectNoCliclick(fake, async () => {
+        for (const actions of [
+          [{ click: { x: 1, y: 1, button: "middle" as const } }],
+          [{ scroll: { deltaY: -3 } }],
+          [{ key: { name: "hyper-launch" } }],
+        ]) {
+          expect(await handle.input({ captureId: shot.captureId, actions })).toEqual({
+            status: "refused",
+            reason: "unsupported_action",
+          });
+        }
+      });
     });
   });
 
   test("coordinates outside the captured display refuse invalid_region", async () => {
     await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
-      const before = fake.invocations("cliclick").length;
-      expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1000, y: 10 } }] }))
-        .toEqual({ status: "refused", reason: "invalid_region" });
-      expect(await handle.input({ captureId: shot.captureId, actions: [{ move: { x: 10, y: 500 } }] }))
-        .toEqual({ status: "refused", reason: "invalid_region" });
-      expect(fake.invocations("cliclick")).toHaveLength(before);
+      const shot = await latestCapture(handle);
+      await expectNoCliclick(fake, async () => {
+        expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1000, y: 10 } }] }))
+          .toEqual({ status: "refused", reason: "invalid_region" });
+        expect(await handle.input({ captureId: shot.captureId, actions: [{ move: { x: 10, y: 500 } }] }))
+          .toEqual({ status: "refused", reason: "invalid_region" });
+      });
     });
   });
 
   test("a vanished cliclick binary refuses and withdraws until the probe passes", async () => {
     await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const shot = await latestCapture(handle);
       fake.behavior.cliclickMissing = true;
       fake.behavior.cliclickPath = undefined;
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
@@ -327,8 +332,7 @@ describe("input.write", () => {
 
   test("an accessibility complaint on stderr refuses permission_denied", async () => {
     await fixture({}, async ({ handle, fake }) => {
-      const shot = await handle.screen({});
-      if (shot.status !== "ok") throw new Error(`refused: ${shot.reason}`);
+      const shot = await latestCapture(handle);
       fake.behavior.cliclickStderr = "cliclick requires Accessibility access";
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
         .toEqual({ status: "refused", reason: "permission_denied" });
