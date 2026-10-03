@@ -7,7 +7,7 @@ export function requestFixture(
     sessionId: "owner-session",
     turnId: null,
     callId: "call",
-    mode: "reply",
+    mode: "answer",
     parsedInput: { content: "question" },
     inputHash: "input",
     effectHash: "effect",

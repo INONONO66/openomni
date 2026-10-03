@@ -24,6 +24,7 @@ export * from "./ipc/index.js";
 export * from "./provisioning/index.js";
 export * from "./machine/index.js";
 export * from "./transcript/index.js";
+export * from "./journal/index.js";
 export * from "./ledger/index.js";
 export * from "./storage/index.js";
 export * from "./ledger/l0.js";

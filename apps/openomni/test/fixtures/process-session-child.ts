@@ -24,7 +24,7 @@ const answer = (inputId: string, principalId: string) => ({
     generation: 1,
     toolsHash: "tools",
     domainRevisions: {},
-    decision: "reply",
+    decision: "answer",
     allowedAction: "report_result",
     content: inputId,
     outbound: {

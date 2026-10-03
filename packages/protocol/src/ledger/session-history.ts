@@ -177,7 +177,7 @@ export namespace SessionHistory {
       revision: z.number().int().positive(),
       turnId: Id.nullable(),
       callId: Id,
-      mode: z.enum(["approval", "reply"]),
+      mode: z.enum(["approval", "answer"]),
       inputHash: Id,
       state: z.enum(["open", "resolved", "refused", "expired", "cancelled"]),
       outcome: Outcome,

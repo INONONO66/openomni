@@ -1298,7 +1298,7 @@ function reply(q: SessionTransition.Request, inputId: string, receivedAt: number
         generation: q.generation,
         toolsHash: q.toolsHash,
         domainRevisions: q.domainRevisions,
-        decision: "reply",
+        decision: "answer",
         allowedAction: "report_result",
         content: "ok",
     };

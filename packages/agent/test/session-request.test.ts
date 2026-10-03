@@ -177,7 +177,7 @@ it("refuses an answer addressed to another request before any record", () => {
 it("counts distinct responders, not repeated replies, for all and quorum", () => {
   const pending = {
     ...request(),
-    mode: "reply" as const,
+    mode: "answer" as const,
     expectedResponders: ["alice", "bob"],
     resolution: "all" as const,
     threshold: 2,
@@ -185,7 +185,7 @@ it("counts distinct responders, not repeated replies, for all and quorum", () =>
   pending.bindingDigest = requestBindingDigest(pending);
   const first = {
     ...answer(pending),
-    decision: "reply" as const,
+    decision: "answer" as const,
     principal: { kind: "actor" as const, principalId: "alice", evidenceId: "driver" },
   };
   const attached = decide({ kind: "request.answer", answer: first }, pending);
@@ -239,7 +239,7 @@ it("never borrows a foreign lease or accepts an obsolete revision", () => {
   ).toBe("rejected");
 });
 it("accepts an expected responder's refusal as the single terminal winner", () => {
-  const pending = { ...request(), mode: "reply" as const, expectedResponders: ["alice"] };
+  const pending = { ...request(), mode: "answer" as const, expectedResponders: ["alice"] };
   pending.bindingDigest = requestBindingDigest(pending);
   const result = decide(
     {
@@ -293,7 +293,7 @@ it("proposes observed global approval count only for a new approval open", () =>
   const requests = [
     ...recent,
     { ...pending, requestId: "boundary", createdAt: 20 - 3_600_000 },
-    { ...pending, requestId: "reply", mode: "reply" as const },
+    { ...pending, requestId: "reply", mode: "answer" as const },
     { ...pending, requestId: "closed", state: "resolved" as const, outcome: "answered" as const },
   ];
   const snapshot = { row, invocation: original, requests };
@@ -319,7 +319,7 @@ it("proposes observed global approval count only for a new approval open", () =>
       inputRecord: persisted.find((action) => PlainObjectSchema.parse(action.intent.value).inputId === command.inputId),
     }),
   ).not.toHaveProperty("requestCount");
-  const reply = { ...pending, mode: "reply" as const };
+  const reply = { ...pending, mode: "answer" as const };
   reply.bindingDigest = requestBindingDigest(reply);
   const replyOpened = decideRequestTransition(
     {
@@ -366,9 +366,9 @@ it("pins unknown physical receipts and deduplicates without their local timestam
 });
 
 it("checks answer bindings before terminal duplication and never receives a rejected reply", () => {
-  const pending = { ...request(), mode: "reply" as const };
+  const pending = { ...request(), mode: "answer" as const };
   pending.bindingDigest = requestBindingDigest(pending);
-  const reply = { ...answer(pending), decision: "reply" as const };
+  const reply = { ...answer(pending), decision: "answer" as const };
   const resolved = decide({ kind: "request.answer", answer: reply }, pending);
   expect(resolved.receive).toMatchObject({
     id: reply.inputId,

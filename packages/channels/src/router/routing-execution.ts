@@ -97,7 +97,7 @@ export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
   );
   let outcome: SessionTransition.Resolution = "rejected";
   if (
-    record.mode === "reply" &&
+    record.mode === "answer" &&
     candidates.length === 1 &&
     actor?.actorId !== undefined &&
     actor.actorId === candidates[0] &&
@@ -120,7 +120,7 @@ export function executeRequestRoute<Event extends Gateway.DeliveredEvent>(
       generation: record.generation,
       toolsHash: record.toolsHash,
       domainRevisions: record.domainRevisions,
-      decision: "reply",
+      decision: "answer",
       allowedAction: matched.requestedAction,
       content,
     });

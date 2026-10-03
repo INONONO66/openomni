@@ -89,7 +89,7 @@ describe("SQLite global request count CAS", () => {
       }),
     );
     expectCommitted(
-      commit([requestStateAction({ ...request, mode: "reply" }, "reply-mode", "reply")]),
+      commit([requestStateAction({ ...request, mode: "answer" }, "reply-mode", "reply")]),
     );
     expectCommitted(commitRaw({ ...proposal(request, 0), actions: [] }));
   });

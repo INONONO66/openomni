@@ -47,7 +47,7 @@ function answer(messageId: string): SessionTransition.Answer {
     generation: 0,
     toolsHash: "tools-hash",
     domainRevisions: {},
-    decision: "reply",
+    decision: "answer",
     allowedAction: "report_result",
     content: "answer",
     outbound: {

@@ -134,7 +134,7 @@ test("late reply lazily expires the request while retaining partial progress", a
       generation: request.generation,
       toolsHash: request.toolsHash,
       domainRevisions: request.domainRevisions,
-      decision: "reply",
+      decision: "answer",
       allowedAction: "report_result",
       content: "partial",
     })),

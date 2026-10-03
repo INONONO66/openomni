@@ -211,7 +211,7 @@ function receivesReply(
   request: SessionTransition.Request,
   resolution: SessionTransition.Resolution,
 ): boolean {
-  return request.mode === "reply" && (resolution === "attached" || resolution === "resolved");
+  return request.mode === "answer" && (resolution === "attached" || resolution === "resolved");
 }
 
 function replyIntake(
@@ -461,7 +461,7 @@ function principalValid(
   request: SessionTransition.Request,
 ): boolean {
   if (request.mode === "approval")
-    return answer.principal.kind === "owner" && answer.decision !== "reply";
+    return answer.principal.kind === "owner" && answer.decision !== "answer";
   return answer.decision !== "approve";
 }
 
@@ -630,7 +630,7 @@ function openedRequest(
     sessionId: input.sessionId,
     turnId,
     callId: typeof intent.callId === "string" ? intent.callId : input.requestId,
-    mode: "reply",
+    mode: "answer",
     parsedInput: value,
     inputHash: canonicalDigest(value),
     effectHash: typeof intent.effectHash === "string" ? intent.effectHash : canonicalDigest({}),

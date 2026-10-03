@@ -126,7 +126,7 @@ test("a reply deadline publishes a timeout from its original source identity", (
     sessionId: "session",
     turnId: null,
     callId: "call",
-    mode: "reply",
+    mode: "answer",
     parsedInput: {},
     inputHash: "input",
     effectHash: "effect",

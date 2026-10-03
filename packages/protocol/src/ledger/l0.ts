@@ -4,10 +4,14 @@ import { NamedError } from "../error/index.js";
 import { canonicalDigest, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 import { Message as ModelMessage } from "../message/index.js";
+import { Journal } from "../journal/index.js";
 
 export { SessionTransition } from "./session-transition.js";
 
 const Identifier = z.string().min(1);
+
+/** The one definition of deliverable input kinds (#1252); `Inbox.Kind` aliases it. */
+const InputKind = z.enum(["prompt", "interrupt", "resume"]);
 const NullableIdentifier = Identifier.nullable();
 
 export const EncodedPayload = z
@@ -30,25 +34,12 @@ export namespace LedgerAction {
     .catchall(PlainValueSchema);
   export type Intent = z.infer<typeof Intent>;
 
-  export const Kind = z.enum([
-    "prompt",
-    "turn",
-    "llm",
-    "attempt",
-    "tool",
-    "message",
-    "request",
-    "reply",
-    "outbound",
-    "inbox.deliver",
-    "compaction",
-    "fold.checkpoint",
-    "alarm.arm",
-    "alarm.fired",
-    "alarm.paused",
-    "session.configure",
-    "policy.decision",
-  ]);
+  /**
+   * Storage-admitted action kinds (#1252): the closed 12-kind journal set
+   * (`Journal.KINDS`) plus `fold.checkpoint`, the store-internal read
+   * accelerator that is not a journal kind.
+   */
+  export const Kind = z.enum([...Journal.KINDS, "fold.checkpoint"]);
   export type Kind = z.infer<typeof Kind>;
 
   const BaseNode = z
@@ -450,9 +441,11 @@ export namespace SessionTurn {
       phase: z.literal("delivery"),
       turnId: Identifier,
       inboxId: Identifier,
-      kind: z.enum(["prompt", "interrupt", "resume"]),
+      kind: InputKind,
       content: z.string(),
       origin: EncodedPayload,
+      /** Loop-consumption width (#1252); absent means the `followUp` default. */
+      delivery: z.enum(["steer", "followUp"]).optional(),
       boundary: Boundary,
     })
     .strict();
@@ -558,7 +551,7 @@ export namespace Inbox {
     .strict();
   export type MessageOrigin = z.infer<typeof MessageOrigin>;
 
-  export const Kind = z.enum(["prompt", "interrupt", "resume"]);
+  export const Kind = InputKind;
   export type Kind = z.infer<typeof Kind>;
 
   export const Status = z.enum(["pending", "consumed"]);
