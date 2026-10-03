@@ -210,7 +210,7 @@ export interface TerminalWatchMachines {
  * so one matching line fires exactly once — there is no screen client whose
  * repaint could re-deliver already-observed bytes (PR #1283 CI finding 4).
  */
-export function terminalSource(
+function terminalSource(
   pty: TerminalPty,
   session: string,
   line: (content: string) => void,
