@@ -55,6 +55,8 @@ export function createCodemode(options: {
       ls: (...args: Parameters<Handle["ls"]>) => run(handle.ls(...args)),
       bash: (...args: Parameters<Handle["bash"]>) => run(handle.bash(...args)),
       eval: (...args: Parameters<Handle["eval"]>) => run(handle.eval(...args)),
+      screen: (...args: Parameters<Handle["screen"]>) => run(handle.screen(...args)),
+      input: (...args: Parameters<Handle["input"]>) => run(handle.input(...args)),
     };
   }
   const handles = new Map<Handle, ReturnType<typeof wrapHandle>>();

@@ -269,7 +269,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
         return "screen_not_available" as const;
       }
       if (result.exitCode !== 0) {
-        if (result.stderr.toLowerCase().includes("display")) return "invalid_region" as const;
+        if (result.stderr.toLowerCase().includes("invalid display")) return "invalid_region" as const;
         yield* reprobeScreen;
         return "permission_denied" as const;
       }
