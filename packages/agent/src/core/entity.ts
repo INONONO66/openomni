@@ -10,7 +10,7 @@ import { type SessionAdmissionSnapshot, type SessionEntityAuthority, type Sessio
 import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit";
 import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
-import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeadlineRpc, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, InterruptRpc, PromptRpc, type ReadPage, ReadRpc, RequestCancelRpc, RequestResolveRpc, ResolveRefused, ResolveRpc, ResumeRpc, RetryAlarmBody, RetryScheduledRpc, WatchFiredAlarmBody, WatchFiredRpc, WatchTimeoutAlarmBody, WatchTimeoutRpc, type ChainAppendReceipt } from "./messages";
+import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, type ReadPage, ReadRpc, ResolveRefused, ResolveRpc, RetryAlarmBody, WatchFiredAlarmBody, WatchTimeoutAlarmBody } from "./messages";
 import { alarmAction } from "./alarm";
 import { renderReadModel } from "../inspect/read";
 
@@ -46,21 +46,7 @@ export class SessionEntityContext extends Context.Service<SessionEntityContext, 
   "@openomni/agent/cluster/SessionEntityContext",
 ) {}
 
-export const SessionEntity = Entity.make("Session", [
-  DeliverRpc,
-  ResolveRpc,
-  AlarmRpc,
-  ReadRpc,
-  PromptRpc,
-  InterruptRpc,
-  ResumeRpc,
-  RequestResolveRpc,
-  RequestCancelRpc,
-  RetryScheduledRpc,
-  DeadlineRpc,
-  WatchFiredRpc,
-  WatchTimeoutRpc,
-]);
+export const SessionEntity = Entity.make("Session", [DeliverRpc, ResolveRpc, AlarmRpc, ReadRpc]);
 
 interface ActivationHandle {
   readonly env: SessionEntityEnv;
@@ -128,7 +114,7 @@ function appendReceived(
   kind: Inbox.Kind,
   message: { readonly messageId: string; readonly content: string; readonly origin: string },
   delivery?: "steer" | "followUp",
-): Effect.Effect<Omit<ChainAppendReceipt, "admission">, LedgerError> {
+): Effect.Effect<{ readonly ordinal: number; readonly actionHash: string; readonly deduped: boolean }, LedgerError> {
   return retryRevision(() => Effect.gen(function* () {
     const { kernel, authority, env } = handle;
     const existing = kernel.actionById(message.messageId);
@@ -524,18 +510,6 @@ function appendStaleAlarm(
 }
 
 
-function receive(
-  handle: ActivationHandle,
-  kind: Inbox.Kind,
-  message: { readonly messageId: string; readonly content: string; readonly origin: string },
-): Effect.Effect<ChainAppendReceipt> {
-  return Effect.gen(function* () {
-    const receipt = yield* appendReceived(handle, kind, message);
-    const outcome = yield* drain(handle);
-    return { ...receipt, admission: outcome.kind };
-  }).pipe(Effect.orDie);
-}
-
 /**
  * One request command through the pure request authority (C3). The command's
  * `inputId` is the durable idempotency key; a reply intake from the decision
@@ -609,18 +583,6 @@ function requestCommand(
   }).pipe(Effect.orDie);
 }
 
-/** Timer wakes (C2): the port owns the chain-guarded fold; `applied` wakes the drain. */
-function timerWake(
-  handle: ActivationHandle,
-  run: (context: SessionEntityTimerContext) => Effect.Effect<SessionTimerOutcome, SessionError>,
-): Effect.Effect<{ readonly outcome: SessionTimerOutcome }> {
-  return Effect.gen(function* () {
-    const outcome = yield* run({ authority: handle.authority, kernel: handle.kernel, now: handle.env.clock() });
-    if (outcome === "applied") yield* drain(handle);
-    return { outcome };
-  }).pipe(Effect.orDie);
-}
-
 /**
  * One activation per session (plan §3): open the per-session store, rotate the
  * catalog fence, adopt it into the file lease, publish the kernel handle, and
@@ -645,36 +607,11 @@ export const SessionEntityLive = SessionEntity.toLayer(
     const gate = yield* Semaphore.make(1);
     const handle: ActivationHandle = { env, kernel, authority, scope, gate, live: { current: undefined } };
     yield* drain(handle).pipe(Effect.orDie);
-    const { timers } = env.ports;
     return {
       Deliver: (envelope: Entity.Request<typeof DeliverRpc>) => deliver(handle, envelope.payload),
       Resolve: (envelope: Entity.Request<typeof ResolveRpc>) => resolveCommand(handle, envelope.payload),
       Alarm: (envelope: Entity.Request<typeof AlarmRpc>) => alarmOccurrence(handle, envelope.payload),
       Read: (envelope: Entity.Request<typeof ReadRpc>) => readProjection(handle, envelope.payload),
-      Prompt: (envelope: Entity.Request<typeof PromptRpc>) => receive(handle, "prompt", envelope.payload),
-      Interrupt: (envelope: Entity.Request<typeof InterruptRpc>) => receive(handle, "interrupt", envelope.payload),
-      Resume: (envelope: Entity.Request<typeof ResumeRpc>) => receive(handle, "resume", envelope.payload),
-      RequestResolve: (envelope: Entity.Request<typeof RequestResolveRpc>) =>
-        requestCommand(
-          handle,
-          envelope.payload.requestId,
-          envelope.payload.inputId,
-          SessionTransition.Payload.parse(JSON.parse(envelope.payload.payload)),
-        ),
-      RequestCancel: (envelope: Entity.Request<typeof RequestCancelRpc>) =>
-        requestCommand(handle, envelope.payload.requestId, envelope.payload.inputId, {
-          kind: "request.cancel",
-          requestId: envelope.payload.requestId,
-          principal: SessionTransition.Principal.parse(JSON.parse(envelope.payload.principal)),
-        }),
-      RetryScheduled: (envelope: Entity.Request<typeof RetryScheduledRpc>) =>
-        timerWake(handle, (context) => timers.retryScheduled(context, envelope.payload)),
-      Deadline: (envelope: Entity.Request<typeof DeadlineRpc>) =>
-        timerWake(handle, (context) => timers.deadline(context, envelope.payload)),
-      WatchFired: (envelope: Entity.Request<typeof WatchFiredRpc>) =>
-        timerWake(handle, (context) => timers.watchFired(context, envelope.payload)),
-      WatchTimeout: (envelope: Entity.Request<typeof WatchTimeoutRpc>) =>
-        timerWake(handle, (context) => timers.watchTimeout(context, envelope.payload)),
     };
   }),
 );

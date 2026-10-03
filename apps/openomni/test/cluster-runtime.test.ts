@@ -112,8 +112,11 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
   const decisions: SessionEntityTurnInput["decision"]["kind"][] = [];
   const ports: SessionEntityPorts = {
     runTurn: (input) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         decisions.push(input.decision.kind);
+        // Detach a never-sealing body (W5.2 S4): the delivering RPC acks at
+        // the durable boundary and later drains defer to the live turn.
+        return input.detach(Effect.never);
       }),
     timers: sessionTimerPort(),
   };
@@ -125,51 +128,67 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
   });
   try {
     await provisionSession(catalogPath, sessionsDir, sessionId);
-    const message = { messageId: "m-1", content: "hello", origin: origin(sessionId, "m-1") };
-    const { first, replay, timer, deadline, fired, timeout } = await runAppEffect(
+    const message = {
+      kind: "prompt",
+      body: JSON.stringify({ content: "hello" }),
+      source: origin(sessionId, "m-1"),
+      idempotencyKey: "m-1",
+    };
+    const { first, replay, retry, deadline, fired, timeout } = await runAppEffect(
       runtime,
       Effect.scoped(
         Effect.gen(function* () {
           const makeClient = yield* SessionEntity.client;
           const entity = makeClient(sessionId);
-          const first = yield* entity.Prompt(message);
-          const replay = yield* entity.Prompt(message);
-          // Chain-guarded timer folds (F2): unknown alarm/request keys ack
-          // durable no-ops; watch wakes without a composed watch plane
-          // (sessionTimerPort() has no hooks here) ack no-ops — fail-closed.
-          const timer = yield* entity.RetryScheduled({
-            alarmId: "missing-alarm",
-            attempt: 1,
-            notBefore: Date.now(),
-          });
-          const deadline = yield* entity.Deadline({
-            requestId: "missing-request",
-            deadlineAt: Date.now(),
-          });
-          const fired = yield* entity.WatchFired({
-            watchId: "missing-watch",
-            epoch: 1,
-            sourceKey: "missing-source",
-            batch: "[]",
-          });
-          const timeout = yield* entity.WatchTimeout({
-            watchId: "missing-watch",
-            epoch: 1,
+          const first = yield* entity.Deliver(message);
+          // Same idempotency key: the persisted envelope replays the recorded
+          // receipt byte-identically; nothing runs twice.
+          const replay = yield* entity.Deliver(message);
+          // Chain-guarded alarm folds (F2/#1253): unknown alarm/request keys
+          // and watch wakes without a composed watch plane (sessionTimerPort()
+          // has no hooks here) fold to recorded stale facts — fail-closed.
+          const retry = yield* entity.Alarm({
+            occurrenceId: "missing-alarm:retry:1",
+            purpose: "retry",
+            body: JSON.stringify({ alarmId: "missing-alarm", attempt: 1 }),
             fireAt: Date.now(),
           });
-          return { first, replay, timer, deadline, fired, timeout };
+          const deadline = yield* entity.Alarm({
+            occurrenceId: "missing-request:deadline",
+            purpose: "deadline",
+            body: JSON.stringify({ requestId: "missing-request" }),
+            fireAt: Date.now(),
+          });
+          const fired = yield* entity.Alarm({
+            occurrenceId: "missing-watch:1:missing-source",
+            purpose: "watch.fired",
+            body: JSON.stringify({
+              watchId: "missing-watch",
+              epoch: 1,
+              sourceKey: "missing-watch:1:missing-source",
+              batch: "[]",
+            }),
+            fireAt: Date.now(),
+          });
+          const timeout = yield* entity.Alarm({
+            occurrenceId: "missing-watch:timeout:1",
+            purpose: "watch.timeout",
+            body: JSON.stringify({ watchId: "missing-watch", epoch: 1 }),
+            fireAt: Date.now(),
+          });
+          return { first, replay, retry, deadline, fired, timeout };
         }),
       ),
     );
-    expect(first).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: false, admission: "turn" });
-    expect(replay).toEqual({ ordinal: 2, actionHash: first.actionHash, deduped: true, admission: "turn" });
-    expect(timer).toEqual({ outcome: "noop" });
-    expect(deadline).toEqual({ outcome: "noop" });
-    expect(fired).toEqual({ outcome: "noop" });
-    expect(timeout).toEqual({ outcome: "noop" });
-    // The unconsumed prompt stays pending: both receives each drain into one
-    // start decision; noop timer wakes never drain.
-    expect(decisions).toEqual(["start", "start"]);
+    expect(first).toEqual({ seq: 2, existed: false });
+    expect(replay).toEqual(first);
+    expect(retry).toEqual({ outcome: "stale" });
+    expect(deadline).toEqual({ outcome: "stale" });
+    expect(fired).toEqual({ outcome: "stale" });
+    expect(timeout).toEqual({ outcome: "stale" });
+    // The one admitted prompt started one (detached, never-sealing) turn;
+    // the replay and the stale alarms never reach the turn port.
+    expect(decisions).toEqual(["start"]);
     // One activation rotated the catalog fence exactly once (F5).
     expect(readFence(catalogPath, sessionId)).toBe(1);
   } finally {

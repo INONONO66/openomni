@@ -487,7 +487,7 @@ describe("Integration: entity mailbox is a single writer with whole-backlog drai
       ),
     );
 
-    const ordinals = replies.map((reply) => reply.ordinal);
+    const ordinals = replies.map((reply) => reply.seq);
     expect(new Set(ordinals).size).toBe(3);
     // Single writer: start/end events come in strict pairs — each handler run
     // observed the previous one finished before its own start was admitted.

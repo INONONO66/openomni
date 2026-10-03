@@ -22,6 +22,7 @@ const ObservationSink = Core.ObservationSink;
 const createSessionEntityRunTurn = Core.createSessionEntityRunTurn;
 const createSessionRequests = Core.createSessionRequests;
 const SessionEntity = Core.SessionEntity;
+type AlarmPurpose = Core.AlarmPurpose;
 type SessionHandle = Core.SessionHandle;
 type SessionRuntime = Core.SessionRuntime;
 const AgentFailure = Core.AgentFailure;
@@ -293,9 +294,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
     );
     // An out-of-turn answer on an entity session must land through the
-    // entity's own RequestResolve RPC: the RPC handler commits AND drains, so
+    // entity's own Resolve RPC (#1253): the RPC handler commits AND drains, so
     // a suspended chain (including a crashed-"running" session whose acked
-    // Prompt will never redeliver) recovers its open turn before the ack.
+    // delivery will never redeliver) recovers its open turn before the ack.
     // Only a turn LIVE IN THIS PROCESS keeps the borrowed-authority direct
     // commit — its approval gate needs the app-side notify, and the entity
     // drain defers to the detached turn anyway (W5.2 S4: `row.state` no
@@ -308,11 +309,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
           if (liveTurns.get(answer.sessionId) !== undefined || sessionRunner(answer.sessionId) === "process")
             return bootRequests.answer(answer);
           return entityClient(answer.sessionId)
-            .RequestResolve({
+            .Resolve({
               requestId: answer.requestId,
-              inputId: answer.inputId,
+              outcome: "resolved",
               payload: JSON.stringify({ kind: "request.answer", answer }),
-              principal: JSON.stringify(answer.principal),
+              inputId: answer.inputId,
             })
             .pipe(
               Effect.map((receipt) => SessionTransition.Resolution.parse(receipt.resolution)),
@@ -404,28 +405,47 @@ export async function startOpenOmni(options: StartOptions = {}) {
       cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
     }
 
-    // Watch plane: native sources deliver occurrences as WatchFired entity
-    // messages; the occurrence chain id is the durable dedupe (plan F2).
+    // Watch plane (#1253): native sources deliver occurrences through the
+    // entity's one `alarm` door; the occurrence id is the durable dedupe and
+    // the chain-guard identity (plan F2). A superseded occurrence folds to a
+    // recorded stale fact on the chain, never a rejection.
+    const sendAlarm = (
+      sessionId: string,
+      occurrence: {
+        readonly occurrenceId: string;
+        readonly purpose: AlarmPurpose;
+        readonly body: string;
+        readonly fireAt: number;
+      },
+    ) => entityClient(sessionId).Alarm(occurrence).pipe(Effect.asVoid);
     const watchSources = createWatchSources(
       {
-        watchFired: (fire) =>
-          runAppEffect(
+        watchFired: (fire) => {
+          const sourceKey = watchOccurrenceKey(fire.watchId, fire.epoch, fire.sourceKey);
+          return runAppEffect(
             runtime,
-            entityClient(fire.sessionId)
-              .WatchFired({
+            sendAlarm(fire.sessionId, {
+              occurrenceId: sourceKey,
+              purpose: "watch.fired",
+              body: JSON.stringify({
                 watchId: fire.watchId,
                 epoch: fire.epoch,
-                sourceKey: watchOccurrenceKey(fire.watchId, fire.epoch, fire.sourceKey),
+                sourceKey,
                 batch: JSON.stringify({ content: fire.content, terminal: fire.terminal }),
-              })
-              .pipe(Effect.asVoid),
-          ),
+              }),
+              fireAt: services.now(),
+            }),
+          );
+        },
         watchTimeout: (arm) =>
           runAppEffect(
             runtime,
-            entityClient(arm.sessionId)
-              .WatchTimeout({ watchId: arm.watchId, epoch: arm.epoch, fireAt: arm.fireAt })
-              .pipe(Effect.asVoid),
+            sendAlarm(arm.sessionId, {
+              occurrenceId: `${arm.watchId}:timeout:${arm.epoch}`,
+              purpose: "watch.timeout",
+              body: JSON.stringify({ watchId: arm.watchId, epoch: arm.epoch }),
+              fireAt: arm.fireAt,
+            }),
           ),
       },
       {
@@ -551,8 +571,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       client: entityClient,
       clock: services.now,
     });
-    // Deadline-carrying requests arm one persisted DeliverAt wake on the
-    // owning session; the chain fold decides applied-versus-noop at delivery.
+    // Deadline-carrying requests arm one persisted DeliverAt alarm occurrence
+    // on the owning session; the chain fold decides applied-versus-stale at
+    // delivery (#1253).
     // The arm is forked, never awaited: requests open inside the owning
     // entity's own turn RPC, and awaiting a second RPC on that same entity
     // from within its handler would deadlock the mailbox. The fork joins the
@@ -567,10 +588,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
           Effect.tap((request) =>
             request.deadline === undefined
               ? Effect.void
-              : entityClient(request.sessionId)
-                  .Deadline({ requestId: request.requestId, deadlineAt: request.deadline })
-                  .pipe(
-                    Effect.asVoid,
+              : sendAlarm(request.sessionId, {
+                  occurrenceId: `${request.requestId}:deadline`,
+                  purpose: "deadline",
+                  body: JSON.stringify({ requestId: request.requestId }),
+                  fireAt: request.deadline,
+                }).pipe(
                     Effect.catch((error) =>
                       Effect.sync(() => {
                         console.error(`deadline arm failed: ${request.requestId}`, error);

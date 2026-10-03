@@ -241,7 +241,7 @@ function attemptRouteChange(
 }
 
 export interface ExecutorOptions {
-  /** Durable retry schedule port; the default commits the `retry.scheduled` chain action through the ledger (cluster/timers). */
+  /** Durable retry schedule port; the default commits the `retry.scheduled` chain action through the ledger (core/alarm). */
   readonly retryAlarm?: RetryAlarmPort;
   readonly signal?: AbortSignal;
   readonly retainEffect?: (effect: Promise<void>) => void;

@@ -36,6 +36,7 @@ export { createSessionRequests, decideRequestTransition, requestBindingDigest } 
 export { receivedMessageAction, receivedMessages } from "./commit";
 export { alarmAction } from "./alarm";
 export { SessionEntity, SessionEntityContext, SessionEntityLive, createSessionEntityRunTurn, type SessionKernel } from "./entity";
+export type { AlarmPurpose } from "./messages";
 export { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads } from "./alarm";
 export { makeObservationBus, observationBusLayer, scopeObservation } from "./bus";
 

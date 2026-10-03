@@ -202,7 +202,7 @@ export function createController(
       });
     }
 
-    function driveInbox(): Effect.Effect<{ readonly stop: boolean; readonly result?: SessionRunnerResult }, SessionError> {
+    function driveBacklog(): Effect.Effect<{ readonly stop: boolean; readonly result?: SessionRunnerResult }, SessionError> {
       return Effect.gen(function* () {
         const decision = decideSessionAdmission({
           row: kernel.row(sessionId),
@@ -229,7 +229,7 @@ export function createController(
         while (!state.closed) {
           if (kernel.outboundRows(sessionId).some((item) => item.state === "pending"))
             yield* dispatchSessionOutbound(kernel, sessionId, runtime, owner, state.fence, clock);
-          const next = yield* driveInbox();
+          const next = yield* driveBacklog();
           if (next.stop) break;
           result = next.result ?? result;
         }

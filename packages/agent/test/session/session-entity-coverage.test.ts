@@ -5,8 +5,8 @@ import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
 import { Effect } from "effect";
-import { SessionEntity } from "../../src/core/entity";
-import { clusterTempDir, readChain, runCluster, sendPrompt, sessionFileFor, } from "../helpers/cluster-runtime";
+import { clusterTempDir, readChain, runCluster, sendDeliver, sendPrompt, sendResolve, sessionFileFor, } from "../helpers/cluster-runtime";
+import type { ResolveRefused } from "../../src/core/messages";
 import { runAgent } from "../helpers/executor";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-session-entity-coverage-");
@@ -15,15 +15,6 @@ const options = { sessionsDir, catalogFile };
 afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
-
-function origin(sessionId: string, messageId: string): string {
-  return JSON.stringify({
-    kind: "message",
-    messageId,
-    senderSessionId: sessionId,
-    sourceActionId: messageId,
-  });
-}
 
 async function materializeSession(
   sessionId: string,
@@ -60,33 +51,31 @@ test("an unindexed session file self-heals before mailbox admission", async () =
   const result = await runCluster(
     options,
     Effect.gen(function* () {
-      const makeClient = yield* SessionEntity.client;
-      const client = makeClient(sessionId);
-      const prompt = yield* client.Prompt({
-        messageId: "self-heal-prompt",
-        content: "recover the catalog index",
-        origin: origin(sessionId, "self-heal-prompt"),
-      });
-      yield* client.Interrupt({
-        messageId: "self-heal-interrupt",
+      const prompt = yield* sendPrompt(sessionId, "self-heal-prompt", "recover the catalog index");
+      yield* sendDeliver(sessionId, {
+        kind: "signal",
+        idempotencyKey: "self-heal-interrupt",
         content: "consume while idle",
-        origin: origin(sessionId, "self-heal-interrupt"),
+        control: "interrupt",
       });
-      const cancellation = yield* client.RequestCancel({
+      // #1253: a cancel against a missing request is a typed `unknown_request`
+      // rejection with zero new facts, not a folded "rejected" resolution.
+      const cancellation = yield* sendResolve(sessionId, {
         requestId: "missing-request",
-        inputId: "self-heal-cancel",
-        principal: JSON.stringify({
+        outcome: "cancelled",
+        payload: JSON.stringify({
           kind: "owner",
           principalId: "owner",
           evidenceId: "self-heal-cancel",
         }),
-      });
+        inputId: "self-heal-cancel",
+      }).pipe(Effect.flip);
       return { prompt, cancellation };
     }),
   );
 
-  expect(result.prompt.deduped).toBe(false);
-  expect(result.cancellation.resolution).toBe("rejected");
+  expect(result.prompt.existed).toBe(false);
+  expect((result.cancellation as ResolveRefused).code).toBe("unknown_request");
   expect(
     readChain(sessionFileFor(sessionsDir, sessionId), sessionId).some(
       (row) => row.id === "self-heal-interrupt:delivery",
@@ -114,17 +103,10 @@ test("a stale activation yields until a later fence can adopt the session", asyn
 
   const reply = await runCluster(
     options,
-    Effect.gen(function* () {
-      const makeClient = yield* SessionEntity.client;
-      return yield* makeClient(sessionId).Prompt({
-        messageId: "stale-prompt",
-        content: "must not enter a stale activation",
-        origin: origin(sessionId, "stale-prompt"),
-      });
-    }),
+    sendPrompt(sessionId, "stale-prompt", "must not enter a stale activation"),
   );
 
-  expect(reply.deduped).toBe(false);
+  expect(reply.existed).toBe(false);
   const catalog = openCatalogStore(catalogFile, { now: () => 1 });
   try {
     expect(catalog.sessionIndex(sessionId)?.fence).toBe(3);
@@ -196,7 +178,7 @@ test("a received prompt retries exactly one revision refusal", async () => {
   });
   try {
     const receipt = await runCluster(options, sendPrompt(sessionId, "received-race", "retry"));
-    expect(receipt.deduped).toBe(false);
+    expect(receipt.existed).toBe(false);
     expect(commits).toBe(2);
     expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId).filter((row) => row.id === "received-race")).toHaveLength(1);
   } finally {

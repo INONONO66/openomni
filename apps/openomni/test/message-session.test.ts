@@ -140,15 +140,10 @@ test("entity inbox refuses bytes that do not match the outbound letter", async (
   const commit = createMessageInboxCommit({
     plane,
     client: () => ({
-      Prompt: unreachable,
-      Interrupt: unreachable,
-      Resume: unreachable,
-      RequestResolve: unreachable,
-      RequestCancel: unreachable,
-      RetryScheduled: unreachable,
-      Deadline: unreachable,
-      WatchFired: unreachable,
-      WatchTimeout: unreachable,
+      Deliver: unreachable,
+      Resolve: unreachable,
+      Alarm: unreachable,
+      Read: unreachable,
     }),
     clock: () => 100,
   });
