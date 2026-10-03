@@ -98,6 +98,8 @@ function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "
                   origin: { encodingVersion: 1, value: { source: "fixture" } },
                   createdAt: Date.now(),
                   parentActionId: null,
+                  // #1253: continuation input must steer to drain mid-turn.
+                  delivery: "steer",
                 });
               request.resolve("ok");
             }),

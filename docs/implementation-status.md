@@ -1,5 +1,57 @@
 # Implementation Status
 
+## #1253 four session entity RPCs (epic #1260, draft PR #1279)
+
+On `epic1260/1253-four-entity-rpcs` (2026-10-03, base `58b7f18d`). The session
+entity's outside surface is exactly four RPCs in
+`packages/agent/src/core/messages.ts` — `deliver`, `resolve`, `alarm`, `read`
+— handled in `core/entity.ts`. `deliver{kind, body, source, idempotencyKey}`
+is the one input door: the kind is checked against the activation's input
+registration table (core registers `prompt` and `signal`; `action` arrives
+with its capability, #1255), a blank key is a typed `missing_key`, a replayed
+key resolves to the original seq as success (`{seq, existed: true}`) with zero
+new facts (`deliver-idempotency.test.ts`), and a refused admission is a typed
+`denied` rejection that appends nothing — never a success ack
+(`entity-admission-refusal.test.ts`). `resolve{requestId, outcome, payload,
+inputId}` settles one request: a missing request is `unknown_request`, a
+settled one `already_resolved`, both with zero new facts, and a redelivered
+`inputId` replays the recorded resolution through the pure request authority's
+dedup (`resolve-stale.test.ts`). `alarm` carries one `AlarmOccurrence`
+(cluster PrimaryKey = `occurrenceId`, DeliverAt = `fireAt`): an applied
+occurrence drives the chain-guarded fold and wakes the loop; a superseded one
+is recorded as an `alarm{fired, outcome: stale}` fact — a fact, not a
+rejection (`rpc-surface.test.ts`). `read{model, cursor}` is the fourth RPC and
+deliberately not cluster-persisted: nine models (`history`, `decisions`,
+`requests`, `alarms`, `generations`, `tree`, `metrics`, `control`, `outbound`,
+`packages/agent/src/core/read.ts`) are pure paged projections over the
+journal fold covering all 12 public kinds with `fold.checkpoint` excluded by
+construction (`inspect-renderers.test.ts`); the app `session_read` surface
+stays thin and `attemptUsage` is byte-equal to the fold DTO
+(`gateway-frame.test.ts`). Consumers switched: the gateway inbox commits
+through `deliver` (interrupt/resume as `signal` + control op,
+`apps/openomni/src/composition/message-session.ts`), out-of-turn answers
+through `resolve`, and watch fires, watch timeouts and request deadlines
+through `alarm` occurrences (`apps/openomni/src/index.ts`). The nine legacy
+RPCs (`Prompt`/`Interrupt`/`Resume`/`RequestResolve`/`RequestCancel`/
+`RetryScheduled`/`Deadline`/`WatchFired`/`WatchTimeout`), the `receive` and
+`timerWake` handler bodies and the `driveInbox` name are deleted; the four
+issue sweeps (`RetryScheduledRpc|DeadlineRpc|WatchFiredRpc|WatchTimeoutRpc`,
+`timerWake`, `cluster/timers`, `driveInbox`) grep to zero. The cluster host
+takes `SqlClient` and `Crypto.Crypto` as injected layers
+(`apps/openomni/src/composition/cluster-runtime.ts`); a deterministic Crypto
+layer hosts the full deliver round-trip (`deterministic-crypto.test.ts`).
+Boundary consumption (C2): inputs are consumed at loop boundaries only —
+`steer` at `after_tools` and turn end, `followUp` at turn end — with widths
+from the latest `session.configure` settings and consumed seqs recorded on the
+turn checkpoint (`boundary-consumption.test.ts`). Deviations: the queue
+table/drain were already fold-based since #1252; the keyless-frame
+`missing_key` refusal shipped with #1245; the kernel timer imports were
+relocated by #1276 (only two comment tokens remained to sweep); dedup is
+two-layer (cluster envelope replay is byte-identical for the same envelope,
+the handler returns `{seq, existed: true}` for keys already on the journal).
+Deferrals: the `action` writer and `turn.consumed.stale` land with #1255;
+alarm purpose registration/occurrence ownership with #1254.
+
 ## #1274 macOS computer use: screen.read / input.write
 
 On `machines/1274-screen-input` (2026-10-03, base `3e36a657`, draft PR #1282).
@@ -51,6 +103,7 @@ and model rendering stay in the app. `script/topology.ts` carries the
 `codemode` row (own CI test + coverage lane, knip workspace, tsconfig
 verification); the app allowlist gained `@openomni/codemode`.
 
+||||||| parent of fb19bf2c (docs: #1253 receipts — AGENTS stamp + implementation-status section)
 ## #1252 twelve journal kinds (epic #1260, draft PR #1278)
 
 On `epic1260/1252-journal-kinds-12` (2026-10-04, base `6a9063d7`). The journal

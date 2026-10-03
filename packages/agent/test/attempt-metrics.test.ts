@@ -8,7 +8,7 @@ import { allowAllPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
 import { runChatAttempts } from "./helpers/chat-attempts";
 import { isolated, isolatedLedger } from "./helpers/isolated";
-import { attemptUsage, toolWallMs } from "../src/inspect/metrics";
+import { attemptUsage, toolWallMs } from "../src/core/metrics";
 import { createTestAgent, recordingExecutor } from "./helpers/effect-g2";
 import { mockProviderModel } from "./helpers/mock-llm";
 import { runInput } from "./helpers/run-input";

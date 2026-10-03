@@ -487,7 +487,7 @@ describe("Integration: entity mailbox is a single writer with whole-backlog drai
       ),
     );
 
-    const ordinals = replies.map((reply) => reply.ordinal);
+    const ordinals = replies.map((reply) => reply.seq);
     expect(new Set(ordinals).size).toBe(3);
     // Single writer: start/end events come in strict pairs — each handler run
     // observed the previous one finished before its own start was admitted.
@@ -524,9 +524,12 @@ describe("Integration: entity mailbox is a single writer with whole-backlog drai
     );
 
     // The resume behind the prompt was selected from the WHOLE backlog: the
-    // interrupted turn resumed exactly once; the prompt stayed pending.
-    expect(calls).toHaveLength(2);
+    // interrupted turn resumed exactly once without consuming the prompt;
+    // #1253 turn-end consumption then ran the pending prompt as its own
+    // follow-up turn before the entity went idle.
+    expect(calls).toHaveLength(3);
     expect(calls[1]?.resumeCount).toBe(1);
+    expect(calls[2]?.resumeCount).toBe(0);
     const file = sessionFileFor(sessionsDir, "a17");
     const chain = readChain(file, "a17");
     expect(chain.filter((row) => row.id === "a17-p2")).toHaveLength(1);
@@ -534,10 +537,11 @@ describe("Integration: entity mailbox is a single writer with whole-backlog drai
     try {
       const delivered = db
         .query<{ n: number }, [string]>(
-          "SELECT COUNT(*) AS n FROM action WHERE kind = 'inbox.deliver' AND intent LIKE ?",
+          "SELECT COUNT(*) AS n FROM action WHERE kind = 'prompt' AND effect LIKE '%\"phase\":\"delivery\"%' AND intent LIKE ?",
         )
         .get("%a17-p2%");
-      expect(delivered?.n ?? 0).toBe(0);
+      // Delivered exactly once, by the follow-up turn — not by the resume.
+      expect(delivered?.n ?? 0).toBe(1);
     } finally {
       db.close();
     }

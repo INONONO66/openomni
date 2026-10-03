@@ -102,8 +102,8 @@ test("R3: a duplicate client send of the same messageId appends exactly one chai
   );
   const rows = readChain(sessionFile, sessionId).filter((row) => row.id === "crash-m1");
   expect(rows).toHaveLength(1);
-  expect(reply.deduped).toBe(true);
-  expect(reply.actionHash).toBe(rows[0]?.action_hash ?? "");
+  expect(reply.existed).toBe(true);
+  expect(reply.seq).toBe(rows[0]?.ordinal ?? -1);
   // The duplicate acked without growing the chain with a second received row.
   expect(rows[0]?.ordinal).toBeLessThanOrEqual(chainBefore.length);
 }, 60_000);

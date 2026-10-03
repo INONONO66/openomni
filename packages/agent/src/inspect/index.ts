@@ -474,4 +474,4 @@ function text(value: PlainValue | undefined): string | undefined {
 }
 
 // Inspect metrics surface (#1247).
-export { attemptUsage, toolWallMs } from "./metrics";
+export { attemptUsage, toolWallMs } from "../core/metrics";

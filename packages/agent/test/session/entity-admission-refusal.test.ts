@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
+import type { DeliverRefused } from "../../src/core/messages";
 import * as SessionHandleStore from "../../src/core/store/fence";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
-import { SessionEntity } from "../../src/core/entity";
 import { receivedMessageAction } from "../../src/core/commit";
 import { runAgent } from "../helpers/executor";
-import { clusterTempDir, runCluster, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
+import { clusterTempDir, readChain, runCluster, sendDeliver, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
 
 const seedClock = () => 1_000;
 
@@ -41,30 +41,35 @@ function seedWedgedSession(sessionsDir: string, catalogFile: string) {
   });
 }
 
-// Issue #1245 (3): a refused admission is a typed receipt outcome; RPC callers
-// distinguish it from a clean stop and from an admitted turn.
-test("admission receipts distinguish turn, stop and refused drains", async () => {
+// #1253 (was #1245 (3)): a refused admission is a typed `deliver` rejection,
+// never a success ack, and it appends zero new journal facts; RPC callers
+// distinguish it from an admitted turn and from a consumed signal.
+test("deliver distinguishes an admitted turn, a consumed signal and a typed denial", async () => {
   const { sessionsDir, catalogFile } = clusterTempDir("1245-admission-refusal-");
   await runAgent(seedWedgedSession(sessionsDir, catalogFile));
   await runCluster({ sessionsDir, catalogFile }, Effect.gen(function* () {
     // A healthy prompt is admitted and runs a turn.
     const turn = yield* sendPrompt("healthy", "m1", "hello");
-    expect(turn.admission).toBe("turn");
-    expect(turn.deduped).toBe(false);
+    expect(turn.existed).toBe(false);
+    expect(readChain(sessionFileFor(sessionsDir, "healthy"), "healthy").some(
+      (row) => row.kind === "turn",
+    )).toBe(true);
 
-    // An interrupt on the now-idle session is consumed; the drain stops cleanly.
-    const makeClient = yield* SessionEntity.client;
-    const stop = yield* makeClient("healthy").Interrupt({
-      messageId: "m2", content: "", origin: JSON.stringify({ kind: "session", id: "healthy" }),
+    // An interrupt signal on the now-idle session is appended and consumed by
+    // the drain: its delivery record lands on the chain.
+    const stop = yield* sendDeliver("healthy", {
+      kind: "signal", idempotencyKey: "m2", content: "", control: "interrupt",
     });
-    expect(stop.admission).toBe("stop");
+    expect(stop.existed).toBe(false);
+    expect(readChain(sessionFileFor(sessionsDir, "healthy"), "healthy").some(
+      (row) => row.id === "m2:delivery",
+    )).toBe(true);
 
-    // The wedged session's backlog admission is refused: the message is still
-    // durably appended, and the receipt carries the typed refusal outcome
-    // instead of folding into a successful stop.
-    const refused = yield* sendPrompt("wedged", "m3", "are you there?");
-    expect(refused.admission).toBe("refused");
-    expect(refused.ordinal).toBeGreaterThan(0);
-    expect(refused.deduped).toBe(false);
+    // The wedged session's admission is refused: a typed `denied` rejection
+    // with zero new facts — the message is NOT appended.
+    const before = readChain(sessionFileFor(sessionsDir, "wedged"), "wedged").length;
+    const refused = yield* sendPrompt("wedged", "m3", "are you there?").pipe(Effect.flip);
+    expect((refused as DeliverRefused).code).toBe("denied");
+    expect(readChain(sessionFileFor(sessionsDir, "wedged"), "wedged").length).toBe(before);
   }));
 });

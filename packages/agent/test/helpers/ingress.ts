@@ -12,6 +12,8 @@ export interface ReceivedMessageInput {
   readonly origin: Inbox.Origin;
   readonly createdAt: number;
   readonly parentActionId: string | null;
+  /** Loop-consumption mode (#1253); absent folds to `followUp`. */
+  readonly delivery?: "steer" | "followUp";
 }
 
 /**
@@ -49,6 +51,7 @@ export function commitReceivedMessage(
               origin: input.origin,
               parentActionId: input.parentActionId,
               at: input.createdAt,
+              ...(input.delivery === undefined ? {} : { delivery: input.delivery }),
             }),
           ],
           state: current.state,

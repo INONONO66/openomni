@@ -125,23 +125,28 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
       }
       yield* materializeInboxTarget(deps.plane, input, deps.clock);
       const entity = deps.client(input.sessionId);
-      const payload = {
-        messageId: input.id,
-        content: input.content,
-        origin: JSON.stringify(input.origin.value),
-      };
-      const send =
-        input.kind === "interrupt"
-          ? entity.Interrupt(payload)
-          : input.kind === "resume"
-            ? entity.Resume(payload)
-            : entity.Prompt(payload);
-      const receipt = yield* send.pipe(
-        Effect.mapError(
-          (error) => new AgentFailure({ operation: "message.deliver", cause: String(error) }),
-        ),
-      );
-      return pendingInboxRow(input, receipt.ordinal);
+      // #1253: every input lands through the entity's one `deliver` door. An
+      // interrupt/resume rides the `signal` kind with its control op in the
+      // body; the message id is the caller-chosen idempotency key, so a
+      // redelivered commit resolves to the original seq. A typed refusal
+      // (`unknown_kind | missing_key | closed | denied`) appends nothing.
+      const control = input.kind === "interrupt" || input.kind === "resume" ? input.kind : undefined;
+      const receipt = yield* entity
+        .Deliver({
+          kind: control === undefined ? input.kind : "signal",
+          body: JSON.stringify({
+            content: input.content,
+            ...(control === undefined ? {} : { control }),
+          }),
+          source: JSON.stringify(input.origin.value),
+          idempotencyKey: input.id,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) => new AgentFailure({ operation: "message.deliver", cause: String(error) }),
+          ),
+        );
+      return pendingInboxRow(input, receipt.seq);
     });
   };
 }

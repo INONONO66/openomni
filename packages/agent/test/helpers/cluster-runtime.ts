@@ -5,11 +5,11 @@
  * ledger files under `sessionsDir`. Every Effect here is executed through the
  * allowlisted `runAgent` helper so the runner-site ratchet does not grow.
  *
- * The wire contract is `src/cluster/messages.ts`: `Prompt`/`Interrupt`/
- * `Resume` payloads are `{ messageId, content, origin }` (origin = canonical
- * JSON of the protocol origin value) acked with `ChainAppendReceipt`
- * `{ ordinal, actionHash, deduped }`; `Deadline` is `{ requestId, deadlineAt }`
- * (DeliverAt = deadlineAt) acked with `TimerReceipt { outcome }`.
+ * The wire contract is `src/core/messages.ts` (#1253): exactly four RPCs.
+ * `Deliver` payloads are `{ kind, body, source, idempotencyKey }` (body/source
+ * = canonical JSON) acked with `DeliverReceipt { seq, existed }`; `Resolve`
+ * settles one request; `Alarm` carries one `AlarmOccurrence` (DeliverAt =
+ * fireAt) acked `delivered | stale`; `Read` serves one model page.
  *
  * The composition seam is `SessionEntityContext` (`SessionEntityEnv`): this
  * file supplies the catalog handle, the per-session store opener and a
@@ -62,6 +62,8 @@ export interface TestClusterOptions {
   readonly runner?: TestTurnRunner;
   /** Exercise the production post-boundary fork instead of running the body inline. */
   readonly detachTurns?: boolean;
+  /** Crypto service for the cluster host; defaults to Bun webcrypto. */
+  readonly crypto?: Layer.Layer<Crypto.Crypto>;
 }
 
 /** What the test turn port hands the pluggable runner for one admitted turn. */
@@ -253,7 +255,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
     }).pipe(Effect.orDie);
 }
 
-/** Chain-guarded timer folds straight from `src/cluster/timers` (C2/F2). */
+/** Chain-guarded alarm folds straight from `src/core/alarm` (C2/F2). */
 function makeTimerPort(): SessionEntityPorts["timers"] {
   const reads = (context: SessionEntityTimerContext): AlarmChainReads => ({
     actionById: context.kernel.actionById,
@@ -314,7 +316,7 @@ function clusterHostLayer(options: TestClusterOptions) {
     },
   }).pipe(
     Layer.provide(SqliteClient.layer({ filename: options.catalogFile })),
-    Layer.provide(BunTestCrypto),
+    Layer.provide(options.crypto ?? BunTestCrypto),
   );
 }
 
@@ -403,33 +405,21 @@ function testOrigin(sessionId: string, messageId: string): string {
   return JSON.stringify(origin);
 }
 
+/** One prompt through the `deliver` door; `messageId` is the idempotency key. */
 export const sendPrompt = (sessionId: string, messageId: string, content: string) =>
-  Effect.gen(function* () {
-    yield* provisionSession(yield* TestClusterEnv, sessionId);
-    const makeClient = yield* SessionEntity.client;
-    return yield* makeClient(sessionId).Prompt({
-      messageId,
-      content,
-      origin: testOrigin(sessionId, messageId),
-    });
-  });
+  sendDeliver(sessionId, { kind: "prompt", idempotencyKey: messageId, content });
 
+/** One resume signal through the `deliver` door. */
 export const sendResume = (sessionId: string, messageId: string, content: string) =>
-  Effect.gen(function* () {
-    yield* provisionSession(yield* TestClusterEnv, sessionId);
-    const makeClient = yield* SessionEntity.client;
-    return yield* makeClient(sessionId).Resume({
-      messageId,
-      content,
-      origin: testOrigin(sessionId, messageId),
-    });
-  });
+  sendDeliver(sessionId, { kind: "signal", idempotencyKey: messageId, content, control: "resume" });
 
+/** One request-deadline alarm occurrence (DeliverAt = deadlineAt). */
 export const sendDeadline = (sessionId: string, requestId: string, deadlineAt: number) =>
-  Effect.gen(function* () {
-    yield* provisionSession(yield* TestClusterEnv, sessionId);
-    const makeClient = yield* SessionEntity.client;
-    return yield* makeClient(sessionId).Deadline({ requestId, deadlineAt });
+  sendAlarm(sessionId, {
+    occurrenceId: `${requestId}:deadline`,
+    purpose: "deadline",
+    body: JSON.stringify({ requestId }),
+    fireAt: deadlineAt,
   });
 
 export function sessionFileFor(sessionsDir: string, sessionId: string): string {
@@ -583,3 +573,81 @@ export async function readUntil(
     reader.releaseLock();
   }
 }
+
+// ─── #1253 four-RPC send helpers ───
+
+/** One `deliver` through the four-RPC surface; body/source are canonical JSON. */
+export const sendDeliver = (
+  sessionId: string,
+  input: {
+    readonly kind: string;
+    readonly idempotencyKey: string;
+    readonly content: string;
+    readonly control?: "interrupt" | "resume";
+    readonly delivery?: "steer" | "followUp";
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Deliver({
+      kind: input.kind,
+      body: JSON.stringify({
+        content: input.content,
+        ...(input.control === undefined ? {} : { control: input.control }),
+        ...(input.delivery === undefined ? {} : { delivery: input.delivery }),
+      }),
+      source: testOrigin(sessionId, input.idempotencyKey),
+      idempotencyKey: input.idempotencyKey,
+    });
+  });
+
+/** One `resolve` through the four-RPC surface. */
+export const sendResolve = (
+  sessionId: string,
+  input: {
+    readonly requestId: string;
+    readonly outcome: "resolved" | "cancelled";
+    readonly payload: string;
+    readonly inputId: string;
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Resolve(input);
+  });
+
+/** One `alarm` occurrence through the four-RPC surface. */
+export const sendAlarm = (
+  sessionId: string,
+  occurrence: {
+    readonly occurrenceId: string;
+    readonly purpose: "retry" | "deadline" | "watch.fired" | "watch.timeout";
+    readonly body: string;
+    readonly fireAt: number;
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Alarm(occurrence);
+  });
+
+// ─── #1253 `read` send helper ───
+
+/** One `read` model page through the four-RPC surface. */
+export const sendRead = (
+  sessionId: string,
+  input: {
+    readonly model:
+      | "history" | "decisions" | "requests" | "alarms" | "generations"
+      | "tree" | "metrics" | "control" | "outbound";
+    readonly cursor: number;
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Read(input);
+  });

@@ -5,15 +5,16 @@
  *   bun test/helpers/cluster-crash-child.ts <sessionsDir> <catalogFile> <sessionId> crash|restart
  *
  * crash:   boots the cluster runtime with a turn runner that reports entry and
- *          then blocks forever. The entity handler has already committed the
- *          msg.received chain action when the runner starts, so the child
- *          prints "APPENDED turn=<id>" and keeps the envelope unacknowledged
- *          until the parent SIGKILLs this process.
+ *          then blocks forever. The entity's `deliver` handler has already
+ *          committed the received chain action when the runner starts, so the
+ *          child prints "APPENDED turn=<id>" and keeps the envelope
+ *          unacknowledged until the parent SIGKILLs this process.
  * restart: boots the runtime on the SAME files with a completing runner. The
  *          crashed envelope is redelivered from SqlMessageStorage; the chain
  *          dedupes it (action.id = messageId, plan D3). Prints REDELIVERED
  *          (dedupe evidence), SHAPES (real turn action kinds, F12 chain-level
- *          proxy), and DELIVER_AT (Deadline residual against its not-before).
+ *          proxy), and DELIVER_AT (a deadline alarm occurrence's residual
+ *          against its not-before instant).
  *
  * All Effects run through the allowlisted `runAgent` helper.
  */
@@ -53,7 +54,7 @@ if (
 const sessionFile = sessionFileFor(sessionsDir, sessionId);
 
 if (mode === "crash") {
-  // The Prompt reply never arrives (the runner blocks forever); the process
+  // The deliver ack never arrives (the runner blocks forever); the process
   // stays alive inside runCluster until the parent SIGKILLs it.
   await runCluster(
     {
@@ -108,8 +109,9 @@ if (mode === "crash") {
       console.log(`SHAPES count=${kinds.length} kinds=${kinds.join(",")}`);
       console.log(`CHAIN_OK ${verifyChain(sessionFile, sessionId)}`);
 
-      // 4. DeliverAt: a Deadline for an unknown request no-ops (plan D5) but
-      //    must not be handed to the entity before its not-before instant.
+      // 4. DeliverAt: a deadline occurrence for an unknown request folds to a
+      //    recorded stale alarm fact (#1253), but must not be handed to the
+      //    entity before its not-before instant.
       const tSend = Date.now();
       yield* sendDeadline(sessionId, "no-such-request", tSend + 1500);
       console.log(`DELIVER_AT residual_ms=${Date.now() - tSend}`);

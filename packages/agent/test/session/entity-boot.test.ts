@@ -54,10 +54,10 @@ test("prompts reply with chain receipts; the chain links from genesis and the en
     }),
   );
 
-  expect(first.ordinal).toBeGreaterThanOrEqual(1);
-  expect(first.actionHash).toMatch(/^[0-9a-f]{64}$/);
-  expect(second.ordinal).toBeGreaterThan(first.ordinal);
-  expect(second.actionHash).toMatch(/^[0-9a-f]{64}$/);
+  expect(first.seq).toBeGreaterThanOrEqual(1);
+  expect(first.existed).toBe(false);
+  expect(second.seq).toBeGreaterThan(first.seq);
+  expect(second.existed).toBe(false);
 
   const file = sessionFileFor(sessionsDir, "s1");
   const chain = readChain(file, "s1");
@@ -67,15 +67,17 @@ test("prompts reply with chain receipts; the chain links from genesis and the en
   const m2 = chain.filter((row) => row.id === "boot-m2");
   expect(m1).toHaveLength(1);
   expect(m2).toHaveLength(1);
-  expect(m1[0]?.action_hash).toBe(first.actionHash);
-  expect(m2[0]?.action_hash).toBe(second.actionHash);
+  expect(m1[0]?.ordinal).toBe(first.seq);
+  expect(m2[0]?.ordinal).toBe(second.seq);
+  expect(m1[0]?.action_hash).toMatch(/^[0-9a-f]{64}$/);
+  expect(m2[0]?.action_hash).toMatch(/^[0-9a-f]{64}$/);
   // Every hash recomputes and every prev_hash links (verifyChain throws else).
   expect(verifyChain(file, "s1")).toBe(chain.length);
 });
 
 test("each session gets its own ledger file", async () => {
   const reply = await runCluster(options, sendPrompt("s2", "boot-s2-m1", "own file"));
-  expect(reply.actionHash).toMatch(/^[0-9a-f]{64}$/);
+  expect(reply.existed).toBe(false);
 
   const s1 = sessionFileFor(sessionsDir, "s1");
   const s2 = sessionFileFor(sessionsDir, "s2");

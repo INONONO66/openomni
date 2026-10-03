@@ -267,6 +267,7 @@ function commitInbox(input: {
   readonly origin: Inbox.Origin;
   readonly createdAt: number;
   readonly parentActionId: string | null;
+  readonly delivery?: "steer" | "followUp";
 }) {
   return commitReceivedMessage(kernel(), input).pipe(
     Effect.mapError((error: LedgerError) => new CommitFailed({ error })),
@@ -892,17 +893,15 @@ describe("durable session handle", () => {
           ),
         );
 
-        expect(runs).toBe(1);
+        // #1253: the mid-turn backlog is followUp by default, so the first
+        // turn's boundary drains nothing and the queued prompts feed one
+        // follow-up turn at turn end — still a single serialized runner.
+        expect(runs).toBe(2);
         expect(maximumActive).toBe(1);
         expect(firstInput.messages).toEqual([
           { id: inboxRows(handle.id)[0]?.id, role: "user", text: "first prompt" },
         ]);
-        expect(drained).toEqual([
-          [
-            { id: inboxRows(handle.id)[1]?.id, role: "user", text: "second prompt" },
-            { id: inboxRows(handle.id)[2]?.id, role: "user", text: "third prompt" },
-          ],
-        ]);
+        expect(drained).toEqual([[], []]);
         expect(inboxRows(handle.id).map((row) => [row.content, row.status])).toEqual([
           ["first prompt", "consumed"],
           ["second prompt", "consumed"],
@@ -1935,6 +1934,7 @@ describe("session crash recovery and observation", () => {
         const drained = signal<Effect.Error<ReturnType<SessionRunnerInput["boundary"]>>>();
         const runner: SessionRunner = (input: SessionRunnerInput) =>
           Effect.gen(function* () {
+            // #1253: a steer row is the mid-turn consumable; followUp waits for turn end.
             yield* commitInbox({
               id: "boundary-deny:late",
               sessionId: input.sessionId,
@@ -1943,8 +1943,9 @@ describe("session crash recovery and observation", () => {
               origin: { encodingVersion: 1, value: { source: "test" } },
               createdAt: now,
               parentActionId: tree(input.sessionId).at(-1)?.id ?? null,
+              delivery: "steer",
             });
-            const boundary = yield* Effect.result(input.boundary("after_llm"));
+            const boundary = yield* Effect.result(input.boundary("after_tools"));
             if (boundary._tag === "Failure") {
               drained.resolve(boundary.failure);
               return yield* Effect.fail(boundary.failure);

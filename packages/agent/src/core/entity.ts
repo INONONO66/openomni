@@ -1,8 +1,8 @@
 
 import * as SessionHandleStore from "./store/fence";
 import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "./store/errors";
-import { PlainValueSchema, SessionTransition, type Inbox } from "@openomni/protocol";
-import { Cause, Context, Effect, Exit, Option, type Scope, Semaphore } from "effect";
+import { Inbox as InboxSchema, PlainValueSchema, SessionTransition, type Inbox } from "@openomni/protocol";
+import { Cause, Context, Effect, Exit, Option, Schema, type Scope, Semaphore } from "effect";
 import { Entity } from "effect/cluster";
 import { LeaseLost, SessionAdmissionRefused, type SessionError } from "./failure";
 import { createSessionAdmission, decideSessionAdmission } from "./mailbox";
@@ -10,7 +10,9 @@ import { type SessionAdmissionSnapshot, type SessionEntityAuthority, type Sessio
 import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit";
 import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
-import { DeadlineRpc, InterruptRpc, PromptRpc, RequestCancelRpc, RequestResolveRpc, ResumeRpc, RetryScheduledRpc, WatchFiredRpc, WatchTimeoutRpc, type ChainAppendReceipt } from "./messages";
+import { type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, type ReadPage, ReadRpc, ResolveRefused, ResolveRpc, RetryAlarmBody, WatchFiredAlarmBody, WatchTimeoutAlarmBody } from "./messages";
+import { alarmAction } from "./alarm";
+import { renderReadModel } from "./read";
 
 // ─── from cluster/kernel-registry.ts (#1247) ───
 /**
@@ -44,17 +46,7 @@ export class SessionEntityContext extends Context.Service<SessionEntityContext, 
   "@openomni/agent/cluster/SessionEntityContext",
 ) {}
 
-export const SessionEntity = Entity.make("Session", [
-  PromptRpc,
-  InterruptRpc,
-  ResumeRpc,
-  RequestResolveRpc,
-  RequestCancelRpc,
-  RetryScheduledRpc,
-  DeadlineRpc,
-  WatchFiredRpc,
-  WatchTimeoutRpc,
-]);
+export const SessionEntity = Entity.make("Session", [DeliverRpc, ResolveRpc, AlarmRpc, ReadRpc]);
 
 interface ActivationHandle {
   readonly env: SessionEntityEnv;
@@ -121,7 +113,8 @@ function appendReceived(
   handle: ActivationHandle,
   kind: Inbox.Kind,
   message: { readonly messageId: string; readonly content: string; readonly origin: string },
-): Effect.Effect<Omit<ChainAppendReceipt, "admission">, LedgerError> {
+  delivery?: "steer" | "followUp",
+): Effect.Effect<{ readonly ordinal: number; readonly actionHash: string; readonly deduped: boolean }, LedgerError> {
   return retryRevision(() => Effect.gen(function* () {
     const { kernel, authority, env } = handle;
     const existing = kernel.actionById(message.messageId);
@@ -137,6 +130,7 @@ function appendReceived(
       origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(message.origin)) },
       parentActionId: null,
       at: now,
+      ...(delivery === undefined ? {} : { delivery }),
     });
     const committed = yield* kernel.commit({
       sessionId: authority.sessionId,
@@ -241,13 +235,16 @@ function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, Led
   const { authority, kernel, env } = handle;
   const detach = (body: Effect.Effect<void, SessionError>) => detachTurn(handle, body);
   return handle.gate.withPermits(1)(Effect.gen(function* () {
+    // #1253 turn end consumption: after a turn seals, the loop re-decides so a
+    // pending `followUp` backlog starts its follow-up turn before the ack.
+    let ranTurn = false;
     for (;;) {
       if (handle.live.current !== undefined) return { kind: "turn" as const };
       const snapshot = admissionSnapshot(handle);
       const decision = decideSessionAdmission(snapshot);
       switch (decision.kind) {
         case "stop":
-          return { kind: "stop" as const };
+          return ranTurn ? { kind: "turn" as const } : { kind: "stop" as const };
         case "refused": {
           const refusal = new SessionAdmissionRefused(authority.sessionId);
           yield* Effect.logWarning(refusal.message);
@@ -258,26 +255,257 @@ function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, Led
           continue;
         case "start":
           yield* env.ports.runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach });
-          return { kind: "turn" as const };
+          ranTurn = true;
+          continue;
         default:
           yield* env.ports.runTurn({ authority, kernel, decision, snapshot, detach });
-          return { kind: "turn" as const };
+          ranTurn = true;
+          continue;
       }
     }
   }));
 }
 
-function receive(
+/** The core input registration table (#1253): `action` arrives with its capability. */
+const CORE_INPUT_REGISTRATIONS: readonly string[] = Object.freeze(["prompt", "signal"]);
+
+const decodeDeliverBody = Schema.decodeUnknownSync(DeliverBody);
+const decodeRetryBody = Schema.decodeUnknownSync(RetryAlarmBody);
+const decodeDeadlineBody = Schema.decodeUnknownSync(DeadlineAlarmBody);
+const decodeWatchFiredBody = Schema.decodeUnknownSync(WatchFiredAlarmBody);
+const decodeWatchTimeoutBody = Schema.decodeUnknownSync(WatchTimeoutAlarmBody);
+
+/**
+ * `deliver` (#1253): the one input door. The kind is checked against the
+ * activation's input registration table, a replayed `idempotencyKey` resolves
+ * to the existing seq as success with zero new facts, and a refused admission
+ * is a typed rejection (`unknown_kind | missing_key | closed | denied`), never
+ * a success ack. An admitted input is appended as its own journal row and the
+ * loop wakes.
+ */
+function deliver(
   handle: ActivationHandle,
-  kind: Inbox.Kind,
-  message: { readonly messageId: string; readonly content: string; readonly origin: string },
-): Effect.Effect<ChainAppendReceipt> {
+  payload: {
+    readonly kind: string;
+    readonly body: string;
+    readonly source: string;
+    readonly idempotencyKey: string;
+  },
+): Effect.Effect<DeliverReceipt, DeliverRefused> {
+  const { kernel, authority, env } = handle;
   return Effect.gen(function* () {
-    const receipt = yield* appendReceived(handle, kind, message);
-    const outcome = yield* drain(handle);
-    return { ...receipt, admission: outcome.kind };
+    if (payload.idempotencyKey.trim().length === 0)
+      return yield* new DeliverRefused({ code: "missing_key" });
+    const registered = env.ports.inputRegistrations ?? CORE_INPUT_REGISTRATIONS;
+    if (!registered.includes(payload.kind))
+      return yield* new DeliverRefused({ code: "unknown_kind" });
+    // Unguarded by construction: every activation already read this row
+    // (rotateActivationFence / adoptFence) and no API deletes one, so a
+    // session absent from both planes never reaches this handler — it dies at
+    // activation (pinned by rpc-surface "absent from both planes"). `closed`
+    // stays a reserved refusal code for the wire contract.
+    const row = kernel.row(authority.sessionId);
+    const body = decodeDeliverBody(JSON.parse(payload.body));
+    const inboxKind: Inbox.Kind =
+      payload.kind === "prompt"
+        ? "prompt"
+        : payload.kind === "action"
+          ? "action"
+          : (body.control ??
+            (yield* Effect.die(new Error("signal delivery without a control op"))));
+    const existing = kernel.actionById(payload.idempotencyKey);
+    if (existing !== undefined) return { seq: existing.ordinal, existed: true };
+    const candidate = InboxSchema.Row.parse({
+      id: payload.idempotencyKey,
+      sessionId: authority.sessionId,
+      kind: inboxKind,
+      content: body.content,
+      origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(payload.source)) },
+      ...(body.delivery === undefined ? {} : { delivery: body.delivery }),
+      status: "pending",
+      consumedBy: null,
+      consumedAt: null,
+      createdAt: env.clock(),
+      ordinal: pendingBacklog(kernel, authority.sessionId).length + 1,
+    });
+    const snapshot = admissionSnapshot(handle);
+    const decision = decideSessionAdmission({
+      ...snapshot,
+      pending: [...snapshot.pending, candidate],
+      row,
+    });
+    if (decision.kind === "refused")
+      return yield* new DeliverRefused({
+        code: decision.reason === "unknown_kind" ? "unknown_kind" : "denied",
+      });
+    const receipt = yield* appendReceived(
+      handle,
+      inboxKind,
+      {
+        messageId: payload.idempotencyKey,
+        content: body.content,
+        origin: payload.source,
+      },
+      body.delivery,
+    ).pipe(Effect.orDie);
+    yield* drain(handle).pipe(Effect.orDie);
+    return { seq: receipt.ordinal, existed: receipt.deduped };
+  });
+}
+
+/**
+ * `resolve` (#1253): settle one open request. A missing request is
+ * `unknown_request`, a settled one `already_resolved` — both typed, both with
+ * zero new journal facts. A redelivered `inputId` replays through the pure
+ * request authority's dedup instead of refusing.
+ */
+function resolveCommand(
+  handle: ActivationHandle,
+  payload: {
+    readonly requestId: string;
+    readonly outcome: "resolved" | "cancelled";
+    readonly payload: string;
+    readonly inputId: string;
+  },
+): Effect.Effect<{ readonly resolution: string }, ResolveRefused> {
+  const { kernel, authority } = handle;
+  return Effect.gen(function* () {
+    const replayed = kernel.requestInputById(authority.sessionId, payload.inputId) !== undefined;
+    if (!replayed) {
+      const request = kernel.requestById(payload.requestId);
+      if (request === undefined) return yield* new ResolveRefused({ code: "unknown_request" });
+      if (request.state !== "open") return yield* new ResolveRefused({ code: "already_resolved" });
+    }
+    const transition: SessionTransition.Payload =
+      payload.outcome === "resolved"
+        ? SessionTransition.Payload.parse(JSON.parse(payload.payload))
+        : {
+            kind: "request.cancel",
+            requestId: payload.requestId,
+            principal: SessionTransition.Principal.parse(JSON.parse(payload.payload)),
+          };
+    return yield* requestCommand(handle, payload.requestId, payload.inputId, transition);
+  });
+}
+
+/**
+ * `alarm` (#1253): one occurrence through the chain-guarded fold. An applied
+ * occurrence wakes the loop; a superseded one is recorded as an
+ * `alarm{fired, outcome: stale}` fact — never a rejection — and the loop
+ * stays asleep. #1254 owns the purpose set and re-registration.
+ */
+function alarmOccurrence(
+  handle: ActivationHandle,
+  occurrence: AlarmOccurrence,
+): Effect.Effect<AlarmReceipt> {
+  const { timers } = handle.env.ports;
+  const context: SessionEntityTimerContext = {
+    authority: handle.authority,
+    kernel: handle.kernel,
+    now: handle.env.clock(),
+  };
+  const dispatch = (): Effect.Effect<SessionTimerOutcome, SessionError> => {
+    switch (occurrence.purpose) {
+      case "retry": {
+        const body = decodeRetryBody(JSON.parse(occurrence.body));
+        return timers.retryScheduled(context, {
+          alarmId: body.alarmId,
+          attempt: body.attempt,
+          notBefore: occurrence.fireAt,
+        });
+      }
+      case "deadline": {
+        const body = decodeDeadlineBody(JSON.parse(occurrence.body));
+        return timers.deadline(context, {
+          requestId: body.requestId,
+          deadlineAt: occurrence.fireAt,
+        });
+      }
+      case "watch.fired": {
+        const body = decodeWatchFiredBody(JSON.parse(occurrence.body));
+        return timers.watchFired(context, body);
+      }
+      case "watch.timeout": {
+        const body = decodeWatchTimeoutBody(JSON.parse(occurrence.body));
+        return timers.watchTimeout(context, {
+          watchId: body.watchId,
+          epoch: body.epoch,
+          fireAt: occurrence.fireAt,
+        });
+      }
+    }
+  };
+  return Effect.gen(function* () {
+    const outcome = yield* dispatch();
+    if (outcome === "applied") {
+      yield* drain(handle);
+      return { outcome: "delivered" as const };
+    }
+    yield* appendStaleAlarm(handle, occurrence);
+    return { outcome: "stale" as const };
   }).pipe(Effect.orDie);
 }
+
+/**
+ * `read` (#1253): one model page from the journal fold. A pure, bounded
+ * projection over committed history — it appends nothing and never wakes the
+ * loop. Pagination follows the chain's own revision cursor.
+ */
+function readProjection(
+  handle: ActivationHandle,
+  payload: { readonly model: Parameters<typeof renderReadModel>[0]; readonly cursor: number },
+): Effect.Effect<ReadPage> {
+  const { kernel, authority } = handle;
+  return Effect.sync(() => {
+    const page = kernel.historyPage(authority.sessionId, { afterRevision: payload.cursor, limit: 256 });
+    return {
+      body: JSON.stringify(renderReadModel(payload.model, page.actions)),
+      nextCursor: page.nextRevision,
+    };
+  });
+}
+
+/** The recorded stale-occurrence fact; idempotent on `<occurrenceId>:stale`. */
+function appendStaleAlarm(
+  handle: ActivationHandle,
+  occurrence: AlarmOccurrence,
+): Effect.Effect<void, LedgerError> {
+  const { kernel, authority, env } = handle;
+  const id = `${occurrence.occurrenceId}:stale`;
+  return retryRevision(() =>
+    Effect.suspend(() => {
+      if (kernel.actionById(id) !== undefined) return Effect.void;
+      const row = kernel.row(authority.sessionId);
+      const now = env.clock();
+      return kernel
+        .commit({
+          sessionId: authority.sessionId,
+          owner: authority.owner,
+          fence: authority.fence,
+          now,
+          expectedRevision: row.revision,
+          actions: [
+            alarmAction({
+              id,
+              parentId: kernel.latestAction(authority.sessionId)?.id ?? null,
+              sessionId: authority.sessionId,
+              intent: {
+                op: "fired",
+                outcome: "stale",
+                purpose: occurrence.purpose,
+                occurrenceId: occurrence.occurrenceId,
+              },
+              effect: { op: "fired", outcome: "stale", occurrenceId: occurrence.occurrenceId },
+              ts: now,
+            }),
+          ],
+          state: row.state,
+        })
+        .pipe(Effect.asVoid);
+    }),
+  );
+}
+
 
 /**
  * One request command through the pure request authority (C3). The command's
@@ -352,18 +580,6 @@ function requestCommand(
   }).pipe(Effect.orDie);
 }
 
-/** Timer wakes (C2): the port owns the chain-guarded fold; `applied` wakes the drain. */
-function timerWake(
-  handle: ActivationHandle,
-  run: (context: SessionEntityTimerContext) => Effect.Effect<SessionTimerOutcome, SessionError>,
-): Effect.Effect<{ readonly outcome: SessionTimerOutcome }> {
-  return Effect.gen(function* () {
-    const outcome = yield* run({ authority: handle.authority, kernel: handle.kernel, now: handle.env.clock() });
-    if (outcome === "applied") yield* drain(handle);
-    return { outcome };
-  }).pipe(Effect.orDie);
-}
-
 /**
  * One activation per session (plan §3): open the per-session store, rotate the
  * catalog fence, adopt it into the file lease, publish the kernel handle, and
@@ -388,32 +604,11 @@ export const SessionEntityLive = SessionEntity.toLayer(
     const gate = yield* Semaphore.make(1);
     const handle: ActivationHandle = { env, kernel, authority, scope, gate, live: { current: undefined } };
     yield* drain(handle).pipe(Effect.orDie);
-    const { timers } = env.ports;
     return {
-      Prompt: (envelope: Entity.Request<typeof PromptRpc>) => receive(handle, "prompt", envelope.payload),
-      Interrupt: (envelope: Entity.Request<typeof InterruptRpc>) => receive(handle, "interrupt", envelope.payload),
-      Resume: (envelope: Entity.Request<typeof ResumeRpc>) => receive(handle, "resume", envelope.payload),
-      RequestResolve: (envelope: Entity.Request<typeof RequestResolveRpc>) =>
-        requestCommand(
-          handle,
-          envelope.payload.requestId,
-          envelope.payload.inputId,
-          SessionTransition.Payload.parse(JSON.parse(envelope.payload.payload)),
-        ),
-      RequestCancel: (envelope: Entity.Request<typeof RequestCancelRpc>) =>
-        requestCommand(handle, envelope.payload.requestId, envelope.payload.inputId, {
-          kind: "request.cancel",
-          requestId: envelope.payload.requestId,
-          principal: SessionTransition.Principal.parse(JSON.parse(envelope.payload.principal)),
-        }),
-      RetryScheduled: (envelope: Entity.Request<typeof RetryScheduledRpc>) =>
-        timerWake(handle, (context) => timers.retryScheduled(context, envelope.payload)),
-      Deadline: (envelope: Entity.Request<typeof DeadlineRpc>) =>
-        timerWake(handle, (context) => timers.deadline(context, envelope.payload)),
-      WatchFired: (envelope: Entity.Request<typeof WatchFiredRpc>) =>
-        timerWake(handle, (context) => timers.watchFired(context, envelope.payload)),
-      WatchTimeout: (envelope: Entity.Request<typeof WatchTimeoutRpc>) =>
-        timerWake(handle, (context) => timers.watchTimeout(context, envelope.payload)),
+      Deliver: (envelope: Entity.Request<typeof DeliverRpc>) => deliver(handle, envelope.payload),
+      Resolve: (envelope: Entity.Request<typeof ResolveRpc>) => resolveCommand(handle, envelope.payload),
+      Alarm: (envelope: Entity.Request<typeof AlarmRpc>) => alarmOccurrence(handle, envelope.payload),
+      Read: (envelope: Entity.Request<typeof ReadRpc>) => readProjection(handle, envelope.payload),
     };
   }),
 );
