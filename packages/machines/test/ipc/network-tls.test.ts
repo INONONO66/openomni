@@ -13,7 +13,7 @@ import { certificateKeyFingerprint } from "../../src";
 import { captureError, deferred, within } from "./helpers/signal";
 import { expectOversizeFailFast } from "./helpers/oversize";
 import { socketPath } from "./helpers/socket-path";
-import { daemonIdentity, daemonFingerprint, hostIdentity, hostFingerprint, wrongIdentity, wrongFingerprint } from "./helpers/tls-fixtures";
+import { daemonIdentity, daemonFingerprint, hostIdentity, hostFingerprint, hostIssuedFingerprint, hostIssuedIdentity, wrongIdentity, wrongFingerprint } from "./helpers/tls-fixtures";
 
 describe("TLS-over-TCP IPC transport", () => {
   const cleanups: (() => Promise<void> | void)[] = [];
@@ -46,13 +46,17 @@ describe("TLS-over-TCP IPC transport", () => {
   }
 
   test("mutual TLS succeeds when both pins match, and port 0 reports the bound port", async () => {
+    // The production client dials with `rejectUnauthorized: true` and the host
+    // certificate as its only trust anchor: reaching secureConnect (and thus a
+    // served call) IS the authorized handshake — the raw-probe variant below
+    // ("a client that presents no certificate…") asserts `authorized` directly.
     const { server, fingerprintsSeen } = await pinnedServer();
     expect(server.port).toBeGreaterThan(0);
 
     const client = await connectIpcTcpClient({
       tcp: { host: "127.0.0.1", port: server.port },
       tls: daemonIdentity,
-      hostPublicKey: hostFingerprint,
+      hostCertificate: hostIdentity.certificate,
     });
     cleanups.push(client.close);
 
@@ -65,7 +69,7 @@ describe("TLS-over-TCP IPC transport", () => {
     const impostor = await connectIpcTcpClient({
       tcp: { host: "127.0.0.1", port: server.port },
       tls: wrongIdentity,
-      hostPublicKey: hostFingerprint,
+      hostCertificate: hostIdentity.certificate,
     });
     cleanups.push(impostor.close);
 
@@ -81,37 +85,60 @@ describe("TLS-over-TCP IPC transport", () => {
     return captureError(connectIpcTcpClient({
       tcp: { host: "127.0.0.1", port: address.port },
       tls: daemonIdentity,
-      hostPublicKey: hostFingerprint,
+      hostCertificate: hostIdentity.certificate,
     }));
   }
 
-  test("a wrong host key fails the client with a typed peer_key_mismatch before any frame reaches the server", async () => {
+  test("a certificate outside the host chain fails the client typed before the handshake ever completes", async () => {
     const framesReceived: Buffer[] = [];
-    let connections = 0;
-    const handshakeDone = deferred<void>();
+    let tcpConnections = 0;
+    let secureConnections = 0;
     const impostorHost = tls.createServer(
-      // The probe VERIFIES its peer: the committed daemon cert is the CA, so
-      // the handshake it observes is a fully validated mutual-TLS handshake.
       { cert: wrongIdentity.certificate, key: wrongIdentity.privateKey, requestCert: true, rejectUnauthorized: true, ca: [daemonIdentity.certificate] },
       (socket) => {
-        connections += 1;
+        secureConnections += 1;
         socket.on("data", (chunk) => framesReceived.push(chunk));
         socket.on("error", () => undefined);
-        socket.on("close", () => handshakeDone.resolve());
       },
     );
+    impostorHost.on("connection", () => { tcpConnections += 1; });
     const failure = await dialRogue(impostorHost);
     expect(failure).toBeInstanceOf(IpcPeerKeyMismatchError);
     const mismatch = failure as InstanceType<typeof IpcPeerKeyMismatchError>;
     expect(mismatch.expected).toBe(hostFingerprint);
-    expect(mismatch.presented).toBe(wrongFingerprint);
+    // Chain validation aborts the handshake BEFORE a peer certificate is
+    // readable and before checkServerIdentity runs — the typed failure still
+    // carries the OpenSSL verify code.
+    expect(mismatch.presented).toBe("unverified");
+    expect(mismatch.code).toBe("DEPTH_ZERO_SELF_SIGNED_CERT");
 
-    // The pinned client hung up during verification: the handshake completed
-    // (the server saw exactly one connection) but not one application byte —
-    // and therefore not one frame — ever reached it.
-    await within(handshakeDone.promise, "impostor host connection teardown");
-    expect(connections).toBe(1);
+    // The impostor saw the TCP dial but never a completed TLS connection —
+    // and therefore not one application byte, so not one frame.
+    expect(tcpConnections).toBe(1);
+    expect(secureConnections).toBe(0);
     expect(framesReceived).toEqual([]);
+  });
+
+  test("a chain-valid certificate carrying a different key is refused by the pin, with zero frames served", async () => {
+    // host-issued-cert.pem IS signed by host-key.pem: the chain validates and
+    // only the checkServerIdentity fingerprint compare can refuse it.
+    const requestsSeen: string[] = [];
+    const server = await createIpcTcpServer(
+      { host: "127.0.0.1", port: 0, tls: hostIssuedIdentity },
+      (method, _params, respond) => { requestsSeen.push(method); respond({ ok: true }); },
+    );
+    cleanups.push(server.close);
+    const failure = await captureError(connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: server.port },
+      tls: daemonIdentity,
+      hostCertificate: hostIdentity.certificate,
+    }));
+    expect(failure).toBeInstanceOf(IpcPeerKeyMismatchError);
+    const mismatch = failure as InstanceType<typeof IpcPeerKeyMismatchError>;
+    expect(mismatch.expected).toBe(hostFingerprint);
+    expect(mismatch.presented).toBe(hostIssuedFingerprint);
+    expect(mismatch.code).toBeUndefined();
+    expect(requestsSeen).toEqual([]);
   });
 
   test("a TLS handshake failure is a typed failure, never a fallback to plaintext frames", async () => {
@@ -149,6 +176,8 @@ describe("TLS-over-TCP IPC transport", () => {
       checkServerIdentity: (_host: string, peer: tls.PeerCertificate) =>
         certificateKeyFingerprint(peer.raw) === hostFingerprint ? undefined : new Error("unexpected host certificate"),
     }, () => {
+      // The probe's own handshake chain-validated the host certificate.
+      expect(certless.authorized).toBe(true);
       // Mutual TLS was not satisfied; this frame must fall on the floor.
       certless.write('{"id":"r-1","method":"machine.attach"}\n');
     });
@@ -175,7 +204,7 @@ describe("TLS-over-TCP IPC transport", () => {
     const client = await connectIpcTcpClient({
       tcp: { host: "127.0.0.1", port: server.port },
       tls: daemonIdentity,
-      hostPublicKey: hostFingerprint,
+      hostCertificate: hostIdentity.certificate,
     });
     cleanups.push(client.close);
 
@@ -204,7 +233,7 @@ describe("TLS-over-TCP IPC transport", () => {
     const client = await connectIpcTcpClient({
       tcp: { host: "127.0.0.1", port: server.port },
       tls: daemonIdentity,
-      hostPublicKey: hostFingerprint,
+      hostCertificate: hostIdentity.certificate,
     });
     cleanups.push(client.close);
 
