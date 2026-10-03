@@ -1,13 +1,16 @@
-import { afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpenOmniConfig } from "../../src/config";
 import { socketPath } from "./socket-path";
 
-/** Default export roots created by this helper; removed after the importing file's run (r1 L4). */
+/**
+ * Default export roots created by this helper; removed when the owning process
+ * exits (r1 L4). An exit hook — not bun:test afterAll — because this module is
+ * also imported by plain child-process fixtures outside any test runner.
+ */
 const createdRoots: string[] = [];
-afterAll(() => {
+process.on("exit", () => {
   for (const root of createdRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
