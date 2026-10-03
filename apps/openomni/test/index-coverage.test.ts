@@ -7,7 +7,7 @@ type ExecutionApprovalRequest = Core.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
 const CommitRefused = Core.CommitRefused;
-import { L0Observation } from "@openomni/protocol";
+import { canonicalDigest, L0Observation } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src";
 import {
   assistantMessage,
@@ -178,6 +178,81 @@ test("live approval readiness notifies the facade and arms its deadline", async 
       Effect.flip(handle.requests.timeout("stale-request", Date.now())).pipe(Effect.orDie),
     ),
   ).toMatchObject({ code: "approval_authority_unavailable" });
+});
+
+test("a stale owner answer with no live turn rides the entity Resolve and is rejected", async () => {
+  // #1253: a session that is neither live in this process nor a process
+  // runner answers out-of-turn through the entity's Resolve RPC; a typed
+  // ResolveRefused (unknown request here) surfaces as the `rejected`
+  // resolution and the receipt frame, never a dead socket.
+  const app = await suite.boot({
+    config: suite.config("index-stale-resolve-", { wsToken: "stale-token" }),
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: () => Effect.sync(() => ({ type: "stop" as const })),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const sessionId = "stale-resolve-target";
+  await runEffect(
+    plane.openKernel(sessionId).materialize({
+      id: sessionId,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: 1,
+      actionId: `${sessionId}:materialize`,
+      at: 1,
+    }),
+  );
+  plane.catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: 1 });
+  const parsedInput = { slot: "ghost" };
+  const request = {
+    requestId: "ghost-request",
+    sessionId,
+    turnId: null,
+    callId: "ghost-call",
+    mode: "approval",
+    parsedInput,
+    inputHash: canonicalDigest(parsedInput),
+    effectHash: "ghost-effect",
+    generation: 1,
+    toolsGeneration: 1,
+    toolsHash: "ghost-tools",
+    systemHash: "ghost-system",
+    domainRevisions: {},
+    deadline: Date.now() + 60_000,
+    expectedResponders: ["owner"],
+    correlation: {},
+    allowedActions: ["report_result"],
+    bindingDigest: "ghost-binding",
+    resolution: "first",
+    threshold: 1,
+    seenReplyIds: [],
+    replies: [],
+    state: "open",
+    outcome: null,
+    createdAt: 1,
+  };
+  const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "stale-token"]);
+  const receipt = nextFrame(
+    socket,
+    (frame) => frame.type === "receipt" && frame.inputId === "stale-entity-answer",
+  );
+  socket.send(
+    JSON.stringify({
+      type: "request_answer",
+      inputId: "stale-entity-answer",
+      request,
+      decision: "approve",
+      credential: "stale-token",
+    }),
+  );
+  expect(await bounded(receipt)).toMatchObject({
+    inputId: "stale-entity-answer",
+    result: { status: "blocked_pre", reasonCode: "request_answer.rejected" },
+  });
 });
 
 test("a path watch timeout reaches the session entity", async () => {
