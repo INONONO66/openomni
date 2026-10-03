@@ -79,8 +79,13 @@ export function connectIpcTcpClient(spec: IpcTcpConnectSpec, opts: ConnectIpcCli
         port: spec.tcp.port,
         cert: spec.tls.certificate,
         key: spec.tls.privateKey,
-        // Trust is the pin, not a CA chain or DNS identity (#1270):
-        // verifyPeer compares the presented key against hostPublicKey.
+        // CodeQL js/disabling-certificate-validation — intentional (#1270):
+        // daemon/host certs are self-signed, so OpenSSL chain validation can
+        // never succeed; the validation IS the SPKI pin in hostPinMismatch(),
+        // enforced on secureConnect with typed IpcPeerKeyMismatchError and no
+        // fallback (proof: network-tls.test.ts "a wrong host key fails the
+        // client with a typed peer_key_mismatch before any frame reaches the
+        // server").
         rejectUnauthorized: false,
       });
       return { socket, verifyPeer: () => hostPinMismatch(socket, spec.hostPublicKey) };

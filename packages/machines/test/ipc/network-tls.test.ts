@@ -9,6 +9,7 @@ import {
   createIpcServer,
   createIpcTcpServer,
 } from "./helpers/native";
+import { certificateKeyFingerprint } from "../../src";
 import { captureError, deferred, within } from "./helpers/signal";
 import { socketPath } from "./helpers/socket-path";
 import { daemonIdentity, daemonFingerprint, hostIdentity, hostFingerprint, wrongIdentity, wrongFingerprint } from "./helpers/tls-fixtures";
@@ -88,7 +89,9 @@ describe("TLS-over-TCP IPC transport", () => {
     let connections = 0;
     const handshakeDone = deferred<void>();
     const impostorHost = tls.createServer(
-      { cert: wrongIdentity.certificate, key: wrongIdentity.privateKey, requestCert: true, rejectUnauthorized: false },
+      // The probe VERIFIES its peer: the committed daemon cert is the CA, so
+      // the handshake it observes is a fully validated mutual-TLS handshake.
+      { cert: wrongIdentity.certificate, key: wrongIdentity.privateKey, requestCert: true, rejectUnauthorized: true, ca: [daemonIdentity.certificate] },
       (socket) => {
         connections += 1;
         socket.on("data", (chunk) => framesReceived.push(chunk));
@@ -133,7 +136,18 @@ describe("TLS-over-TCP IPC transport", () => {
   test("a client that presents no certificate never becomes a connection", async () => {
     const { server, fingerprintsSeen } = await pinnedServer();
     const closed = deferred<void>();
-    const certless = tls.connect({ host: "127.0.0.1", port: server.port, rejectUnauthorized: false }, () => {
+    // assumed: the committed fixtures carry no SAN (CN=openomni-test-host
+    // only), so Node hostname matching cannot apply; the probe verifies the
+    // chain against the committed host cert and checks identity by the SAME
+    // SPKI pin production uses.
+    const certless = tls.connect({
+      host: "127.0.0.1",
+      port: server.port,
+      rejectUnauthorized: true,
+      ca: [hostIdentity.certificate],
+      checkServerIdentity: (_host: string, peer: tls.PeerCertificate) =>
+        certificateKeyFingerprint(peer.raw) === hostFingerprint ? undefined : new Error("unexpected host certificate"),
+    }, () => {
       // Mutual TLS was not satisfied; this frame must fall on the floor.
       certless.write('{"id":"r-1","method":"machine.attach"}\n');
     });
