@@ -11,6 +11,7 @@ import {
 } from "./helpers/native";
 import { certificateKeyFingerprint } from "../../src";
 import { captureError, deferred, within } from "./helpers/signal";
+import { expectOversizeFailFast } from "./helpers/oversize";
 import { socketPath } from "./helpers/socket-path";
 import { daemonIdentity, daemonFingerprint, hostIdentity, hostFingerprint, wrongIdentity, wrongFingerprint } from "./helpers/tls-fixtures";
 
@@ -207,14 +208,7 @@ describe("TLS-over-TCP IPC transport", () => {
     });
     cleanups.push(client.close);
 
-    const call = client.call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000);
-    // Observe rejection immediately: the server's FIN must fail the request
-    // long before the 30s call timeout would.
-    const rejected = captureError(call);
-    const [error] = await within(
-      Promise.all([rejected, disconnected.promise]), "oversize FIN and server disconnect", 12_000,
-    );
-    expect(error).toBeInstanceOf(IpcConnectionError);
+    await expectOversizeFailFast(client, disconnected.promise);
   });
 
   test("unix connections expose no peer fingerprint — the pin is a TLS-only fact", async () => {
