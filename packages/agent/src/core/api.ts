@@ -4,7 +4,7 @@
 export type { ExecutionRequest, Executor } from "./gate/decide";
 export {
   AgentFailure, AgentInvariantViolation, CompactionExecutionError, ContextRestoreError,
-  type ExecutionError,
+  type ExecutionError, pretty,
 } from "./failure";
 export type { SessionKernel } from "./entity";
 export { Entropy } from "./ports";

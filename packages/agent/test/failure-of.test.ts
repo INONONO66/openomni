@@ -31,3 +31,30 @@ describe("Failure.fromCause", () => {
     expect(Failure.fromCause(Cause.die("bad"), synthesize)).toEqual({ synthesized: expect.stringContaining("bad") });
   });
 });
+
+describe("Failure.pretty", () => {
+  const withoutStacks = <A>(body: () => A): A => {
+    const limit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 0;
+    try {
+      return body();
+    } finally {
+      Error.stackTraceLimit = limit;
+    }
+  };
+
+  it("renders byte-identically to Cause.pretty while stacks are captured", () => {
+    const cause = Cause.die(new Error("outer", { cause: new Error("inner") }));
+    expect(Failure.pretty(cause)).toBe(Cause.pretty(cause));
+    expect(Failure.pretty(Cause.die("bad"))).toBe(Cause.pretty(Cause.die("bad")));
+  });
+
+  it("falls back to name and message when an Error carries no stack string", () => {
+    expect(withoutStacks(() => Cause.pretty(Cause.die("bad")))).toBe("");
+    expect(withoutStacks(() => Failure.pretty(Cause.die("bad")))).toBe("Error: bad");
+    expect(withoutStacks(() => Failure.pretty(Cause.die(new Error("outer", { cause: "crash" }))))).toBe(
+      "Error: outer {\n  [cause]: Error: crash\n}",
+    );
+    expect(withoutStacks(() => Failure.fromCause(Cause.die("bad"), (pretty) => pretty))).toBe("Error: bad");
+  });
+});
