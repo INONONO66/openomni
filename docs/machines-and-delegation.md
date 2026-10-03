@@ -193,8 +193,10 @@ ports. Every failure in that chain is the one typed startup refusal
 local locus: `parseLocus(input, { defaultMachine })` maps `/absolute/path`
 to the configured default machine and preserves explicit
 `machineId:/absolute/path`; relative paths refuse (no process cwd exists).
-A self daemon that disconnects after boot closes the machine-backed tools
-and surfaces `self_attach_failed` for lifecycle handling. `openomni machine
+A self daemon that disconnects after boot keeps the tools published but
+every call refuses with the typed `disconnected` reason; the lifecycle
+surface is the typed `machine.detached` event plus a logged
+`self_attach_failed` cause. `openomni machine
 attach` is unchanged: a remote daemon attaches alongside `self` over the
 same protocol and negotiates capabilities through the same
 enrollment/offer intersection.
