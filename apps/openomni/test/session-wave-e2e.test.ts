@@ -873,6 +873,12 @@ test("approval-time prompts retain durable identities and enter the next model s
     handle.approvals.answer({ request, decision: "approve", credential: "wave-token" }),
   );
   await bounded(response);
+  // #1253 boundary rule: prompts default `delivery: followUp` and are consumed
+  // only at turn end - never mid-turn at a tool boundary - so the two held
+  // prompts enter a separate follow-up turn (the follow-up terminal below
+  // cannot precede this subscription: it requires another provider roundtrip).
+  const followUp = nextResidentTurn(plane(), 5000);
+  await bounded(followUp, "follow-up turn");
   // Then: canonical next-model admission names the original ordered prompt IDs.
   // #1252: attempt rows share the llm kind and spread the invocation fields;
   // only the logical intent (no attempt ordinal) names the admission.
@@ -890,22 +896,37 @@ test("approval-time prompts retain durable identities and enter the next model s
         ? [parsed.data.value.messageIds]
         : [];
     });
-  expect(inputs).toHaveLength(2);
   const promptIds = prompts.map((row) => row.id);
   const [initialId, firstId, secondId] = promptIds;
   if (initialId === undefined || firstId === undefined || secondId === undefined)
     throw new Error("missing prompt IDs");
   expect(inputs[0]).toEqual([initialId]);
-  expect(inputs[1]?.filter((id) => promptIds.includes(id))).toEqual(promptIds);
+  // The held prompts never merge into the suspended turn's model steps...
+  for (const step of inputs.slice(0, -1)) {
+    expect(step.filter((id) => id === firstId || id === secondId)).toEqual([]);
+  }
+  // ...and the follow-up turn's model names every durable prompt id, with the
+  // two held prompts as separate ordered entries after the initial one.
+  const last = inputs.at(-1);
+  expect(last?.filter((id) => promptIds.includes(id))).toEqual(promptIds);
   const delivered = tree(handle.id).flatMap((action) => {
     const delivery = Core.SessionHandleStore.delivery(action);
     return delivery?.kind === "prompt" ? [delivery] : [];
   });
+  const initialTurn = delivered[0]?.turnId;
   expect(delivered.slice(1).map((delivery) => [delivery.inboxId, delivery.boundary])).toEqual([
-    [firstId, "after_tools"],
-    [secondId, "after_tools"],
+    [firstId, "before_llm"],
+    [secondId, "before_llm"],
   ]);
-  expect(received).toHaveLength(2);
+  expect(delivered.slice(1).every((delivery) => delivery.turnId !== initialTurn)).toBe(true);
+  // Nothing is dropped: no pending prompt rows remain after the follow-up turn.
+  expect(
+    plane()
+      .openKernel(handle.id)
+      .pendingMessages(handle.id)
+      .filter((row) => row.kind === "prompt"),
+  ).toEqual([]);
+  expect(received).toHaveLength(3);
 });
 
 test("an exact approval deadline refuses only B and cannot grant late authority", async () => {
