@@ -194,7 +194,10 @@ async function composeMachinePlane(
       socketPath: machines.listen.unix,
       id: deps.id,
       now: deps.now,
-      onClose: (error) => console.error("self machine detached", error),
+      // Typed lifecycle surface (r1 M1): the host already publishes the typed
+      // Detached event for the closed connection; this records the typed
+      // self_attach_failed cause on the app log, never a bare console line.
+      onClose: (error) => runAppEffect(runtime, Effect.logError("self machine detached", error)),
     }),
   );
   return { host, self, defaultMachine: plane.defaultMachine };

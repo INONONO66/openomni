@@ -135,15 +135,17 @@ test("a capability-poor self still boots: a typed refusal proves liveness", asyn
 
 test("a self daemon closing after boot detaches the handle and surfaces the typed refusal", async () => {
   const bus = testBus();
-  const detached = new Promise<void>((resolve, reject) => {
+  // The typed lifecycle surface (r1 M1): the host's Detached event is the
+  // observable contract for a post-boot self daemon close.
+  const detached = new Promise<{ machineId: string }>((resolve, reject) => {
     bus.observe((observation) => {
-      if (observation.name === Machine.Events.Detached.name) resolve();
+      if (observation.name === Machine.Events.Detached.name)
+        resolve(observation.data as { machineId: string });
     });
     AbortSignal.timeout(15_000).addEventListener("abort", () =>
       reject(new Error("timed out waiting for detach")),
     );
   });
-  const errors = track(spyOn(console, "error").mockImplementation(() => undefined));
   const real = Machines.attachMachineDaemon;
   let daemon: Machines.MachineDaemon | undefined;
   track(
@@ -166,15 +168,10 @@ test("a self daemon closing after boot detaches the handle and surfaces the type
   try {
     if (daemon === undefined || host === undefined) throw new Error("self plane was not captured");
     await runEffect(daemon.close());
-    await detached;
+    expect((await detached).machineId).toBe("self");
     const exportPath = root.exports[0]?.path ?? "/";
     const refusal = await runEffect(Effect.flip(host.get("self").fs.stat(exportPath)));
     expect(refusal).toMatchObject({ _tag: "MachineRefusalError", reason: "disconnected" });
-    expect(
-      errors.mock.calls.some(
-        ([label, error]) => label === "self machine detached" && error instanceof SelfAttachError,
-      ),
-    ).toBe(true);
   } finally {
     await app.stop();
     bus.close();
