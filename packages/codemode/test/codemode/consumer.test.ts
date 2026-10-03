@@ -234,7 +234,9 @@ test("host disconnect closes the injected runner and awaits its processes", asyn
     );
     await entered.promise;
     host.close();
-    expect(await outcome).toMatchObject({ _tag: "TransportFailure", operation: "cell.call" });
+    // #1270: a dropped transport surfaces as the typed disconnected refusal,
+    // the same contract the host side exposes for its dropped in-flight calls.
+    expect(await outcome).toMatchObject({ _tag: "MachineRefusalError", reason: "disconnected" });
     await da.closed;
     release.resolve();
   }, gate.tools);

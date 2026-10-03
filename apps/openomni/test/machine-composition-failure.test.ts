@@ -26,7 +26,7 @@ test("the app machine host translates a codemode failure at its callback boundar
       host: "127.0.0.1", wsPort: 0,
       kek: { kind: "locked", reason: "no vault key in this fixture" },
       model: { provider: "fake", id: "fixture", apiKey: "fixture" },
-      machines: { socketPath: socketPath(), enrolled: [] },
+      machines: { listen: { unix: socketPath() }, enrolled: [] },
     } });
     try {
       if (callTool === undefined) throw new Error("machine callback was not installed");

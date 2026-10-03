@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Actor, Gateway, Machine, NamedError, type Model, type PlainValue } from "@openomni/protocol";
@@ -12,6 +13,7 @@ export const ConfigurationError = NamedError.create(
       "invalid_compaction_summarizer",
       "invalid_entity_idle_ms",
       "invalid_env_json",
+      "invalid_machines_tcp",
       "invalid_model_fallbacks",
       "invalid_ws_port",
       "legacy_channel_credentials",
@@ -74,7 +76,17 @@ export interface OpenOmniConfig {
    * because a socket nothing is allowed to attach to is a contradiction.
    */
   readonly machines?: {
-    readonly socketPath: string;
+    /**
+     * Where the host accepts daemons. Unix is always bound (same-box daemons
+     * stay zero-config); tcp appears only when the Owner configured the full
+     * network tuple, because a network listener without TLS is a non-option.
+     */
+    readonly listen: {
+      readonly unix: string;
+      readonly tcp?: { readonly host: string; readonly port: number };
+    };
+    /** Host TLS identity (PEM contents, read at boot) — present iff tcp is. */
+    readonly tls?: { readonly certificate: string; readonly privateKey: string };
     readonly enrolled: readonly Machine.Enrollment[];
   };
   /**
@@ -360,14 +372,59 @@ function modelFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["
  * rather than inferred from whoever connects. Ledger-backed enrollment is a
  * later slice; the shape the host consumes is already the protocol's.
  */
+function machinesTcpFromEnv(env: Record<string, string | undefined>) {
+  const host = env.OPENOMNI_MACHINES_TCP_HOST?.trim() || undefined;
+  const port = env.OPENOMNI_MACHINES_TCP_PORT?.trim() || undefined;
+  const certPath = env.OPENOMNI_MACHINES_TLS_CERT?.trim() || undefined;
+  const keyPath = env.OPENOMNI_MACHINES_TLS_KEY?.trim() || undefined;
+  if (host === undefined && port === undefined && certPath === undefined && keyPath === undefined) {
+    return undefined;
+  }
+  // A partial tuple is a misconfiguration, never a silently-unencrypted bind.
+  if (host === undefined || port === undefined || certPath === undefined || keyPath === undefined) {
+    throw new ConfigurationError({
+      code: "invalid_machines_tcp",
+      message:
+        "OPENOMNI_MACHINES_TCP_HOST, OPENOMNI_MACHINES_TCP_PORT, OPENOMNI_MACHINES_TLS_CERT and OPENOMNI_MACHINES_TLS_KEY must be set together",
+    });
+  }
+  const parsedPort = z.coerce.number().int().min(1).max(65535).safeParse(port);
+  if (!parsedPort.success) {
+    throw new ConfigurationError({
+      code: "invalid_machines_tcp",
+      message: `OPENOMNI_MACHINES_TCP_PORT is invalid: ${port}`,
+    });
+  }
+  const pem = (name: string, path: string): string => {
+    try {
+      return readFileSync(path, "utf8");
+    } catch (error) {
+      throw new ConfigurationError({
+        code: "invalid_machines_tcp",
+        message: `${name} is unreadable: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  };
+  return {
+    tcp: { host, port: parsedPort.data },
+    tls: {
+      certificate: pem("OPENOMNI_MACHINES_TLS_CERT", certPath),
+      privateKey: pem("OPENOMNI_MACHINES_TLS_KEY", keyPath),
+    },
+  };
+}
+
 function machinesFromEnv(
   home: string,
   env: Record<string, string | undefined>,
 ): OpenOmniConfig["machines"] {
   const enrolled = parseEnvJson("OPENOMNI_MACHINES_ENROLLED", Enrollments, env);
   if (enrolled === undefined) return undefined;
+  const network = machinesTcpFromEnv(env);
+  const unix = env.OPENOMNI_MACHINES_SOCKET?.trim() || join(home, ".openomni", "machines.sock");
   return {
-    socketPath: env.OPENOMNI_MACHINES_SOCKET?.trim() || join(home, ".openomni", "machines.sock"),
+    listen: { unix, ...(network === undefined ? {} : { tcp: network.tcp }) },
+    ...(network === undefined ? {} : { tls: network.tls }),
     enrolled,
   };
 }

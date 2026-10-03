@@ -103,7 +103,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   const config = suite.config("openomni-app-machine-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "app-machine-test", apiKey: "test-key" },
-    machines: { socketPath, enrolled: [appEnrollment] },
+    machines: { listen: { unix: socketPath }, enrolled: [appEnrollment] },
   });
   const app = await suite.boot({
     config,
@@ -166,7 +166,7 @@ test("a cell creates three child sessions through send_message", async () => {
   const config = suite.config("openomni-code-mode-", {
     wsToken: WS_TOKEN,
     model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-    machines: { socketPath, enrolled: [enrollment] },
+    machines: { listen: { unix: socketPath }, enrolled: [enrollment] },
   });
   const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
   const app = await suite.boot({
@@ -266,7 +266,7 @@ test("the catalog remains available while machine execution refuses without atta
     config: suite.config("openomni-code-mode-off-", {
       wsToken: WS_TOKEN,
       model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
-      machines: { socketPath: testSocketPath(), enrolled: [enrollment] },
+      machines: { listen: { unix: testSocketPath() }, enrolled: [enrollment] },
     }),
     llm: {
       resolveModel: fakeProviderModel,

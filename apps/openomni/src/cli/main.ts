@@ -185,7 +185,11 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
       // the SIGTERM path into a rejection here. daemon.closed needs no context,
       // so await it outside the runtime; a MachineError still rejects as in v3.
       await Effect.runPromise(daemon.closed);
-      return 0;
+      // A daemon that closed because a reattach was REFUSED exits nonzero so
+      // supervisors see the revocation instead of a clean shutdown. (Read
+      // through a parameter: TS otherwise keeps the pre-await narrowing.)
+      const refusedAtExit = ((status: string) => status === "refused")(daemon.attachment.status);
+      return refusedAtExit ? 1 : 0;
       } finally {
         await runtime.dispose();
       }
