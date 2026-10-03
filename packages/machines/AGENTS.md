@@ -1,6 +1,6 @@
 # packages/machines
 
-Refreshed 2026-10-03 (#1270 lane A, branch `machines/1270-network-transport`; previously #1274, #1272).
+Refreshed 2026-10-03 (#1270 lanes A+B, branch `machines/1270-network-transport`; previously #1274, #1272).
 
 Machine execution package (`@openomni/machines`): a machine is WHERE execution happens, never WHO is delegated to. Owns the machine host/daemon lifecycle, confined fs/exec drivers, and the NDJSON IPC transport over Unix sockets and pin-trusted mutual-TLS TCP (`src/ipc/`; the TCP listener and pinned client landed with #1270; the standalone ipc package was absorbed here in #1246; code mode was extracted to `packages/codemode` in #1272 — machines keeps only the structural contracts it consumes: `CodeRunner`, `MachineHost`/`MachineHandle`/`MachineInfo`, `onAbort`, `machinesFallback`). The public surface is Effect-typed on Effect `4.0.0-rc.118`. Serializable message schemas stay in `@openomni/protocol` (`Ipc` and `Machine` namespaces); this package never validates run semantics or evaluates policy.
 
@@ -9,8 +9,9 @@ Machine execution package (`@openomni/machines`): a machine is WHERE execution h
 ```
 src/
 ├── index.ts             # Barrel: host/daemon, typedCall, ipc transport, errors, structural codemode contracts
-├── host.ts              # createMachineHost — machine.attach server side
-├── daemon.ts            # attachMachineDaemon — daemon client side, serves fs/exec/run_code/screen_read/input_write
+├── host.ts              # createMachineHost — machine.attach server side; listener SET (unix + optional pinned-TLS tcp) into one registry
+├── daemon.ts            # attachMachineDaemon — daemon client side, serves fs/exec/run_code/screen_read/input_write; unix or tcp+pinned-host-key connection
+├── reconnect.ts         # Full-jitter backoff reconnector (injected scheduler/random; base 250ms, cap 30s)
 ├── exec.ts / fs.ts      # Confined exec and filesystem drivers
 ├── commands.ts          # CommandRunner port + systemCommandRunner (argv spawn, no shell, 256KiB cap) (#1274)
 ├── computer-use.ts      # macOS screen.read/input.write adapter: probes, bounds cache, capture registry (#1274)
@@ -34,10 +35,17 @@ src/
 - Failure classification is per connection: a dying connection rejects its in-flight calls as `IpcConnectionError` immediately; response ids are honored only on the connection their request was written to. A malformed line costs only itself (server answers 4001 and stays up; client drains valid frames then tears down); an oversize frame (>16 MiB) desyncs the decode buffer, so the server closes that connection after answering.
 - Server writes are backpressure-safe through a per-connection queue flushed on `drain`. `createIpcServer` probes an existing socket file and only unlinks it when provably dead; `notify()` yields `false` when no client is connected; `onDisconnect(connectionId)` fires exactly once per torn-down connection after its in-flight requests were failed.
 
+## KEY PATTERNS (host/daemon network, #1270 lane B)
+
+- The host's `listen: {unix?, tcp?}` listeners feed ONE registry/dispatcher; `tcp` requires the host `tls` identity (typed startup failure otherwise), and a failed bind releases whichever listener already bound. `endpoints` reports the bound addresses (port 0 resolves).
+- Admission pins keys: on TCP the offered machineId's `Enrollment.publicKey` must equal the presented peer key fingerprint or the attach refuses `peer_key_mismatch` (a mismatched intruder never displaces a valid attachment). Unix connections carry no peer key and skip the pin.
+- Disconnection is typed: a known machine's dropped in-flight and reconnect-window calls fail ONCE as `MachineRefusalError` `disconnected` (never replayed); never-attached stays `machine_not_attached`.
+- Daemon `reconnect` is opt-in: absent keeps close-on-disconnect; present keeps drivers alive and redials via `createReconnector` (injected `scheduler`/`random` — tests drive time explicitly, production passes setTimeout/Math.random from the CLI). Successful reattach resets the backoff; a REFUSED reattach closes the daemon terminally.
+
 
 ## TESTS
 
-`test/` (host/daemon/fs/exec lifecycle), `test/ipc/` (framing split-multibyte and oversized frames, frame-schema, failure classes, backpressure, resilience, bidirectional, peer-request-table, callbacks, client/server edges, disconnect, socket-path, native client, typed facade + `typed-facade-fixtures/compile-red.ts`). `packages/codemode/test/` shares this harness (`test/helpers/native.ts`, `test/ipc/helpers/effects.ts`) by relative import. Effect execution goes only through the package runner owners (`test/helpers/effect.ts`, `test/ipc/helpers/effects.ts` — `script/check-effect-boundaries.ts` `RUNNER_OWNERS`).
+`test/` (host/daemon/fs/exec lifecycle, `reattach.test.ts` fake-scheduler reconnect proofs, `host-listen.test.ts` listener-set/pinning), `test/ipc/` (framing split-multibyte and oversized frames, frame-schema, failure classes, backpressure, resilience, bidirectional, peer-request-table, callbacks, client/server edges, disconnect, socket-path, native client, typed facade + `typed-facade-fixtures/compile-red.ts`). `packages/codemode/test/` shares this harness (`test/helpers/native.ts`, `test/ipc/helpers/effects.ts`) by relative import. Effect execution goes only through the package runner owners (`test/helpers/effect.ts`, `test/ipc/helpers/effects.ts` — `script/check-effect-boundaries.ts` `RUNNER_OWNERS`).
 
 ## ANTI-PATTERNS
 
