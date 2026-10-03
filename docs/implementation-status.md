@@ -1,5 +1,32 @@
 # Implementation Status
 
+## #1274 macOS computer use: screen.read / input.write
+
+On `machines/1274-screen-input` (2026-10-03, base `3e36a657`, draft PR #1282).
+The machine protocol gains `screen.read`/`input.write` capabilities with wire
+methods `machine.screen_read`/`machine.input_write` and bounded schemas
+(`SCREEN_PNG_MAX_BYTES` 4 MiB, `SCREEN_AX_MAX_BYTES` 256 KiB,
+`INPUT_MAX_ACTIONS` 32, `INPUT_MAX_TEXT_CHARS` 10k; the accessibility tree is
+bounded JSON, not `unknown`). `packages/machines/src/computer-use.ts` is the
+macOS adapter — `screencapture`/`sips`/`osascript` (JXA)/`cliclick` behind the
+injectable `CommandRunner` port in `src/commands.ts` (argv spawn, no shell,
+256 KiB cap) — owning attach-time probes (screen = tiny real capture, input =
+cliclick on PATH + Accessibility grant; failing probes withhold the offer and
+mid-session failures re-probe and withdraw), a per-display point-bounds cache
+(regions and coordinates refuse `invalid_region` before any command),
+`sips -Z` downscaling to the PNG cap (never truncation; unfittable refuses
+`capture_failed`) and the latest-capture registry (`input.write` with any
+other capture id refuses `stale_capture` before executing). cliclick 5.1 has
+no middle-click/scroll: both refuse `unsupported_action` while staying in the
+protocol vocabulary. daemon.ts only registers the two wire handlers and the
+attach probe filter; host handles gain `screen`/`input`. No model tool: code
+mode exposes `m.screen()`/`m.input(actions)` (Python remembers the last
+captureId) and SDK handle `screen/input`; `codemode.screen` is query-class in
+the app composition. Tests drive host+daemon over the real socket wire with a
+recorded fake runner (probes, crop offsets, downscale, every refusal,
+withdrawal) plus an opt-in real-surface capture test
+(`OPENOMNI_REAL_SCREEN=1`).
+
 ## #1272 code mode extracted into packages/codemode (reverses part of #1246)
 
 On `machines/1272-codemode-package` (2026-10-03, base `58b7f18d`). The
