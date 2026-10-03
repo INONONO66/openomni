@@ -23,7 +23,7 @@ is recorded as an `alarm{fired, outcome: stale}` fact — a fact, not a
 rejection (`rpc-surface.test.ts`). `read{model, cursor}` is the fourth RPC and
 deliberately not cluster-persisted: nine models (`history`, `decisions`,
 `requests`, `alarms`, `generations`, `tree`, `metrics`, `control`, `outbound`,
-`packages/agent/src/inspect/read.ts`) are pure paged projections over the
+`packages/agent/src/core/read.ts`) are pure paged projections over the
 journal fold covering all 12 public kinds with `fold.checkpoint` excluded by
 construction (`inspect-renderers.test.ts`); the app `session_read` surface
 stays thin and `attemptUsage` is byte-equal to the fold DTO
