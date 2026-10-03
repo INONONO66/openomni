@@ -478,6 +478,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
     );
     cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
 
+    // Boot order (#1271): the self machine must answer over its loopback
+    // attachment BEFORE any tool port exists; a dead attachment fails boot.
+    await runAppEffect(runtime, machinery.self.ready);
+    const tools = toolPorts(runtime, {
+      machines: { host: machinery.host, defaultMachine: machinery.defaultMachine },
+      cells, completion: llmPort, messages,
+      now: services.now, id: services.entropy.id,
+    });
     // Watch plane (#1253): native sources deliver occurrences through the
     // entity's one `alarm` door; the occurrence id is the durable dedupe and
     // the chain-guard identity (plan F2). A superseded occurrence folds to a
@@ -491,6 +499,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         readonly fireAt: number;
       },
     ) => entityClient(sessionId).Alarm(occurrence).pipe(Effect.asVoid);
+    // Terminal watches drain the same machines surface the bash door uses.
     const watchSources = createWatchSources(
       {
         watchFired: (fire) => {
@@ -524,6 +533,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       {
         clock: services.now,
         failure: (watchId, error) => console.error(`watch ${watchId} send failed`, error),
+        ...(tools.machines === undefined ? {} : { machines: tools.machines }),
       },
     );
     await acquire(Effect.succeed(watchSources), (resource) =>
@@ -532,20 +542,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("watches.close"),
       }),
     );
-    // Boot order (#1271): the self machine must answer over its loopback
-    // attachment BEFORE any tool port exists; a dead attachment fails boot.
-    await runAppEffect(runtime, machinery.self.ready);
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, { now: services.now, id: services.entropy.id }),
       bundles: services.bundles.names,
       tools: {
-        ...toolPorts(runtime, {
-          machines: { host: machinery.host, defaultMachine: machinery.defaultMachine },
-          cells, completion: llmPort, messages,
-          now: services.now, id: services.entropy.id,
-        }),
+        ...tools,
         alarms: await createMonitorPorts(runtime, watchSources),
         provisioning: provisioningPort,
       },

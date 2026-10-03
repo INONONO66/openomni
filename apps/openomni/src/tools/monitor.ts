@@ -21,6 +21,15 @@ const source = z
       .strict(),
     z
       .object({
+        kind: z.literal("terminal"),
+        machine: z.string().min(1),
+        session: z.string().min(1),
+        filter: z.string().optional(),
+        ...lifetime,
+      })
+      .strict(),
+    z
+      .object({
         kind: z.literal("path"),
         path: z.string().min(1),
         event: z.enum(["create", "modify"]),
@@ -36,7 +45,7 @@ const source = z
       });
     if (spec.kind === "path" && !isAbsolute(spec.path))
       context.addIssue({ code: "custom", path: ["path"], message: "path must be absolute" });
-    if (spec.kind === "command" && spec.filter !== undefined) {
+    if (spec.kind !== "path" && spec.filter !== undefined) {
       try {
         new RegExp(spec.filter);
       } catch {
@@ -61,7 +70,7 @@ export function createMonitorTool(ports?: MonitorPorts) {
     name: "monitor",
     category: "mutation",
     description:
-      "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
+      "Watch command output in a PTY, a machine terminal session, or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
     input,
     output: WatchState,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },

@@ -183,13 +183,13 @@
   },
   {
     "name": "bash",
-    "description": "Run a shell command on a machine daemon: the named machine, or the configured default when machine is omitted. cwd must be an absolute path inside an offered export (default /). Execution time is bounded by the daemon. No persistent cwd state.",
+    "description": "Run a shell command on a machine daemon: the named machine, or the configured default when machine is omitted. cwd must be an absolute path inside an offered export (default /). Execution time is bounded by the daemon. No persistent cwd state. With machine+session, the command is typed into a named persistent terminal (survives daemon restarts; same session name reattaches) and stdout carries terminal output since the previous call; an empty command just reads.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "command": {
           "type": "string",
-          "minLength": 1
+          "description": "Shell command. With session it is typed into the terminal; empty reads pending session output."
         },
         "machine": {
           "type": "string",
@@ -199,6 +199,12 @@
           "description": "Absolute working directory inside an offered export; defaults to /.",
           "type": "string",
           "minLength": 1
+        },
+        "session": {
+          "description": "Named persistent terminal on the machine. Survives between calls and daemon restarts; same name reattaches.",
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
         }
       },
       "required": ["command"],
@@ -279,7 +285,7 @@
   },
   {
     "name": "monitor",
-    "description": "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
+    "description": "Watch command output in a PTY, a machine terminal session, or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -323,6 +329,37 @@
                         }
                       },
                       "required": ["kind", "command"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "terminal"
+                        },
+                        "machine": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "session": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "filter": {
+                          "type": "string"
+                        },
+                        "persistent": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "timeout_ms": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["kind", "machine", "session"],
                       "additionalProperties": false
                     },
                     {

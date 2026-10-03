@@ -1,6 +1,6 @@
 # packages/machines
 
-Refreshed 2026-10-03 (#1270 lanes A+B, branch `machines/1270-network-transport`; previously #1274, #1272).
+Refreshed 2026-10-03 (#1273, branch `machines/1273-pty-session`; previously #1270 lanes A+B, #1274, #1272).
 
 Machine execution package (`@openomni/machines`): a machine is WHERE execution happens, never WHO is delegated to. Owns the machine host/daemon lifecycle, confined fs/exec drivers, and the NDJSON IPC transport over Unix sockets and pin-trusted mutual-TLS TCP (`src/ipc/`; the TCP listener and pinned client landed with #1270; the standalone ipc package was absorbed here in #1246; code mode was extracted to `packages/codemode` in #1272 — machines keeps only the structural contracts it consumes: `CodeRunner`, `MachineHost`/`MachineHandle`/`MachineInfo`, `onAbort`, `machinesFallback`). The public surface is Effect-typed on Effect `4.0.0-rc.118`. Serializable message schemas stay in `@openomni/protocol` (`Ipc` and `Machine` namespaces); this package never validates run semantics or evaluates policy.
 
@@ -10,11 +10,16 @@ Machine execution package (`@openomni/machines`): a machine is WHERE execution h
 src/
 ├── index.ts             # Barrel: host/daemon, typedCall, ipc transport, errors, structural codemode contracts
 ├── host.ts              # createMachineHost — machine.attach server side; listener SET (unix + optional pinned-TLS tcp) into one registry
-├── daemon.ts            # attachMachineDaemon — daemon client side, serves fs/exec/run_code/screen_read/input_write; unix or tcp+pinned-host-key connection
+├── daemon.ts            # attachMachineDaemon — daemon client side, serves fs/exec/run_code/screen_read/input_write/pty_*; unix or tcp+pinned-host-key connection
 ├── reconnect.ts         # Full-jitter backoff reconnector (injected scheduler/random; base 250ms, cap 30s)
 ├── exec.ts / fs.ts      # Confined exec and filesystem drivers
 ├── commands.ts          # CommandRunner port + systemCommandRunner (argv spawn, no shell, 256KiB cap) (#1274)
 ├── computer-use.ts      # macOS screen.read/input.write adapter: probes, bounds cache, capture registry (#1274)
+├── pty.ts               # tmux session adapter: pty.session offer probe, open/write/read/resize/close/list (#1273)
+├── pty-control.ts       # one tmux -C control client per daemon: command FIFO, %output routing, server-exit fanout
+├── pty-decode.ts        # control-mode line decoder: %begin/%end blocks, octal-escaped %output, malformed records
+├── pty-registry.ts      # per-session replay+live streams, opaque p1:<generation>:<offset> cursors, retention bound
+├── pty-host.ts          # host-side pty handle: schemas/codecs/timeouts over one routed wire-call seam
 ├── errors.ts            # MachinesFailure (single untyped-Cause fallback) + machine error classes
 ├── failure.ts           # decodeMachineFailure / decodeIpcFailure + machinesFallback — one MachinesFailure fallback
 ├── typed-call.ts        # Schema-derived typedCall facade for known Ipc.Methods (machine wire vocabulary lives here, beside its callers)
@@ -45,7 +50,7 @@ src/
 
 ## TESTS
 
-`test/` (host/daemon/fs/exec lifecycle, `reattach.test.ts` fake-scheduler reconnect proofs, `host-listen.test.ts` listener-set/pinning), `test/ipc/` (framing split-multibyte and oversized frames, frame-schema, failure classes, backpressure, resilience, bidirectional, peer-request-table, callbacks, client/server edges, disconnect, socket-path, native client, typed facade + `typed-facade-fixtures/compile-red.ts`). `packages/codemode/test/` shares this harness (`test/helpers/native.ts`, `test/ipc/helpers/effects.ts`) by relative import. Effect execution goes only through the package runner owners (`test/helpers/effect.ts`, `test/ipc/helpers/effects.ts` — `script/check-effect-boundaries.ts` `RUNNER_OWNERS`).
+`test/` (host/daemon/fs/exec lifecycle, `reattach.test.ts` fake-scheduler reconnect proofs, `host-listen.test.ts` listener-set/pinning; `pty.test.ts` runs real tmux on a private `-L` socket plus a scripted control client for malformed-record faults), `test/ipc/` (framing split-multibyte and oversized frames, frame-schema, failure classes, backpressure, resilience, bidirectional, peer-request-table, callbacks, client/server edges, disconnect, socket-path, native client, typed facade + `typed-facade-fixtures/compile-red.ts`). `packages/codemode/test/` shares this harness (`test/helpers/native.ts`, `test/ipc/helpers/effects.ts`) by relative import. Effect execution goes only through the package runner owners (`test/helpers/effect.ts`, `test/ipc/helpers/effects.ts` — `script/check-effect-boundaries.ts` `RUNNER_OWNERS`).
 
 ## ANTI-PATTERNS
 

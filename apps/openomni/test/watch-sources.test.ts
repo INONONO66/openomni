@@ -82,7 +82,7 @@ test("command watch sends filtered lines in source order and a terminal exit sum
   expect(fires.map((fire) => [fire.sourceKey, fire.content])).toEqual([
     ["line:3:1", "keep:1"],
     ["line:3:3", "keep:2"],
-    ["exit:3", JSON.stringify({ watchId: "watch-cmd", epoch: 3, reason: "exit", exitCode: 3 })],
+    ["exit:3", JSON.stringify({ watchId: "watch-cmd", epoch: 3, reason: "exit", exitCode: 3, output: "keep:2" })],
   ]);
   expect(summary.terminal).toBe(true);
   expect(fires.every((fire) => fire.watchId === "watch-cmd" && fire.epoch === 3)).toBe(true);
@@ -267,6 +267,99 @@ test("a faulting path source sends a terminal source_error summary and the typed
     await sources.closeAll();
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+type ScriptedView = { status: "ok"; data: Uint8Array; cursor: string; truncated: boolean };
+/** A scripted pty door: retained history before subscribe, then one live line. */
+function scriptedTerminal() {
+  const hanging: ((view: ScriptedView) => void)[] = [];
+  let reads = 0;
+  return {
+    hanging,
+    reads: () => reads,
+    pty: {
+      open: () => Promise.resolve({ status: "ok", cursor: "c0" } as const),
+      read: (_name: string, options?: { cursor?: string; waitMs?: number }) => {
+        reads += 1;
+        // Subscribe baseline: everything retained before the watch existed —
+        // including bytes that MATCH the filter — and a cursor past it all.
+        if (options?.cursor === "c0")
+          return Promise.resolve({
+            status: "ok",
+            data: Buffer.from("scrollback WAKE-7342 already on screen\n"),
+            cursor: "c1",
+            truncated: false,
+          } as ScriptedView);
+        // First drain round: the one new matching line, delivered once.
+        if (options?.cursor === "c1")
+          return Promise.resolve({
+            status: "ok",
+            data: Buffer.from("WAKE-7342\n"),
+            cursor: "c2",
+            truncated: false,
+          } as ScriptedView);
+        // Later rounds block on the daemon's output gate.
+        return new Promise<ScriptedView>((resolve) => hanging.push(resolve));
+      },
+    },
+  };
+}
+
+test("a terminal watch drains by cursor: retained bytes never fire, one new line is one fire", async () => {
+  const { fires, senders } = recordingSenders();
+  const wake = eventSignal<WatchFire>("terminal wake", SPAWNED_PTY_MS);
+  const scripted = scriptedTerminal();
+  const sources = createWatchSources(
+    {
+      ...senders,
+      watchFired: (fire) => {
+        wake.resolve(fire);
+        return senders.watchFired(fire);
+      },
+    },
+    {
+      clock: () => 0,
+      failure: () => undefined,
+      machines: { get: () => ({ pty: scripted.pty }) },
+    },
+  );
+  try {
+    await sources.install({
+      sessionId: "monitor-session",
+      id: "watch-terminal",
+      epoch: 1,
+      watch: { machine: "m-1", session: "qa", filter: "WAKE-7342", description: "terminal", persistent: true },
+    });
+    // install returned => subscribed: the baseline read already happened.
+    expect(scripted.reads()).toBeGreaterThanOrEqual(1);
+    const fired = await wake.promise;
+    expect(fired).toMatchObject({
+      watchId: "watch-terminal",
+      epoch: 1,
+      sourceKey: "pty:1:1",
+      content: "WAKE-7342",
+      terminal: false,
+    });
+    // The retained matching line before subscription never fired.
+    expect(fires.filter((fire) => fire.watchId === "watch-terminal")).toHaveLength(1);
+  } finally {
+    await sources.closeAll();
+    for (const resolve of scripted.hanging)
+      resolve({ status: "ok", data: new Uint8Array(), cursor: "cx", truncated: false });
+  }
+});
+
+test("a terminal watch without a machines plane refuses at create", async () => {
+  const { senders } = recordingSenders();
+  const sources = createWatchSources(senders, { clock: () => 0, failure: () => undefined });
+  await expect(
+    sources.install({
+      sessionId: "monitor-session",
+      id: "watch-bodyless",
+      epoch: 1,
+      watch: { machine: "m-1", session: "qa", description: "terminal", persistent: true },
+    }),
+  ).rejects.toThrow("alarm source failed at terminal.open");
 });
 
 test("a rejecting watchFired send routes through the failure callback with the watch id", async () => {

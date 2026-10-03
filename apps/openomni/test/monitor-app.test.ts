@@ -8,6 +8,10 @@ import { watchState } from "../src/composition/monitor-ports";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { planeOf } from "./helpers/ledger";
 import { residentSuite, fakeProviderModel } from "./helpers/resident-suite";
+import { attachMachineDaemon } from "@openomni/machines";
+import { acquireEffect, runEffect } from "./helpers/scoped-effect";
+import { testIds } from "./helpers/test-entropy";
+import { testSelfMachine } from "./helpers/self-machine";
 
 const suite = residentSuite();
 
@@ -117,3 +121,148 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   expect(kernel.pendingMessages(arm.sessionId)).not.toContain(prompt.id);
   expect(tree.filter((action) => action.kind === "alarm" && action.id.includes(":occ:"))).toHaveLength(1);
 });
+
+/**
+ * Monitor door for #1273 item 6: a terminal watch subscribes to the daemon's
+ * pty cursor and drains reads beyond it — never a screen client. A tmux
+ * attach repaint re-delivers already-visible lines (CI runs 37148697651 red /
+ * 37149686062 green on the same test: a paint/live race), which the cursor
+ * makes impossible: each retained byte is returned at most once, so one new
+ * matching line is exactly one wake. Watch completion never closes the terminal.
+ */
+test("a monitor watch observes a named tmux terminal and leaves it open", async () => {
+  const tmuxSocket = `oo-1273-monitor-${process.pid}`;
+  suite.defer(() => {
+    Bun.spawnSync(["tmux", "-L", tmuxSocket, "kill-server"]);
+  });
+  const machinesSocket = join(suite.tempDir("monitor-pty-machines-"), "machines.sock");
+  let calls = 0;
+  const app = await suite.boot({
+    config: suite.config("monitor-pty-db-", {
+      wsToken: "monitor-test",
+      compactionSummarizer: false,
+      machines: {
+        self: testSelfMachine(),
+        listen: { unix: machinesSocket },
+        enrolled: [{
+          name: "workstation",
+          machineId: "m-1",
+          allowedCapabilities: ["pty.session"],
+          allowedExports: ["shell"],
+          publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          enrolledAt: 1000,
+        }],
+      },
+    }),
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) => Effect.sync(() => {
+        calls += 1;
+        if (calls === 1)
+          requestToolStep(input, sink, {
+            id: "monitor-pty-create",
+            tool: "monitor",
+            input: {
+              operation: {
+                op: "create",
+                description: "named terminal signal",
+                source: {
+                  kind: "terminal",
+                  machine: "m-1",
+                  session: "qa",
+                  filter: "WAKE-7342",
+                  persistent: true,
+                },
+              },
+            },
+          });
+        else sink.onMessage(assistantMessage(input, { text: "observed terminal" }));
+        return { type: "stop" as const };
+      }),
+    },
+  });
+  // The machine body: a daemon offering pty.session over a private tmux socket.
+  const daemon = await acquireEffect(attachMachineDaemon({
+    socketPath: machinesSocket,
+    id: testIds("monitor-pty-daemon"),
+    offer: {
+      machineId: "m-1",
+      daemonVersion: "0.1.0",
+      platform: "darwin",
+      offeredAt: 2000,
+      offeredCapabilities: ["pty.session"],
+      exports: [{ name: "shell", path: "/" }],
+    },
+    fsExports: new Map([["shell", "/"]]),
+    pty: { socketName: tmuxSocket },
+  }));
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "monitor-test"]);
+  const waiting = Promise.withResolvers<void>();
+  const unsubscribeWaiting = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind !== "turn") return;
+    const snapshot = plane.openKernel(event.sessionId).getSnapshot(event.sessionId);
+    if (snapshot.turns.at(-1)?.terminal?.kind === "waiting") waiting.resolve();
+  });
+  const waitTimer = setTimeout(() => waiting.reject(new Error("terminal watch did not suspend")), 10_000);
+  try {
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "watch the terminal" }));
+    // The waiting commit lands only after install's subscribe (open-or-reattach
+    // + cursor baseline), so the trigger below cannot race the subscription.
+    await waiting.promise;
+  } finally {
+    clearTimeout(waitTimer);
+    unsubscribeWaiting();
+  }
+  // The watch's open created the terminal through the daemon.
+  expect(Bun.spawnSync(["tmux", "-L", tmuxSocket, "has-session", "-t", "qa"], { stderr: "pipe" }).exitCode).toBe(0);
+  const arm = plane
+    .listSessions()
+    .flatMap((row) =>
+      sessionTree(row.id, plane.sessionStore(row.id).actions)
+        .filter((action) => action.kind === "alarm" && action.id.includes(":arm:"))
+        .map((action) => ({ sessionId: row.id, watchId: action.id.split(":arm:")[0] ?? "" })),
+    )[0];
+  if (arm === undefined) throw new Error("no created watch");
+  const kernel = plane.openKernel(arm.sessionId);
+  const woke = Promise.withResolvers<void>();
+  const guard = AbortSignal.timeout(15_000);
+  const abort = () => woke.reject(new Error("terminal watch wake timed out"));
+  guard.addEventListener("abort", abort, { once: true });
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.sessionId !== arm.sessionId || event.kind !== "turn") return;
+    if (kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind === "result") woke.resolve();
+  });
+  suite.defer(() => {
+    unsubscribe();
+    guard.removeEventListener("abort", abort);
+  });
+  // The terminal's owner is the tmux server: feed it directly, as any other
+  // writer (a bash{session} call, a human) would. printf's format string keeps
+  // the typed keystroke echo from matching (-l types it literally; Enter is a
+  // separate key event, immune to key-name parsing differences).
+  expect(
+    Bun.spawnSync(["tmux", "-L", tmuxSocket, "send-keys", "-t", "qa", "-l", "printf 'WAKE-%d\\n' 7342"]).exitCode,
+  ).toBe(0);
+  expect(Bun.spawnSync(["tmux", "-L", tmuxSocket, "send-keys", "-t", "qa", "Enter"]).exitCode).toBe(0);
+  await woke.promise;
+  // Exactly one wake for one new matching line: the cursor drain returns each
+  // retained byte at most once, so no repaint or replay can double-fire.
+  expect(calls).toBe(2);
+  const tree = sessionTree(arm.sessionId, plane.sessionStore(arm.sessionId).actions);
+  const prompts = tree.filter((action) => {
+    if (action.kind !== "prompt") return false;
+    const intent = action.intent.value as { kind?: string; watchId?: string };
+    return intent.kind === "alarm" && intent.watchId === arm.watchId;
+  });
+  expect(prompts).toHaveLength(1);
+  const prompt = prompts[0];
+  if (prompt === undefined) throw new Error("missing watch prompt");
+  expect((prompt.effect.value as { content?: string }).content).toContain("WAKE-7342");
+  expect(tree.filter((action) => action.kind === "alarm" && action.id.includes(":occ:"))).toHaveLength(1);
+  // Watch cancellation/daemon shutdown never close the terminal: the tmux
+  // server owns it.
+  await runEffect(daemon.close());
+  const probe = Bun.spawnSync(["tmux", "-L", tmuxSocket, "has-session", "-t", "qa"], { stderr: "pipe" });
+  expect(probe.exitCode).toBe(0);
+}, 60_000);

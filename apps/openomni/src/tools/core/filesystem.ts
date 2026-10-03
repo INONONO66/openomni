@@ -14,6 +14,12 @@ interface ToolMachine {
     stat(path: string): Promise<FsValue<"stat">>;
   };
   exec(cmd: string, cwd: string): Promise<Exclude<Machine.ExecResult, { status: "completed" }> | (Omit<Extract<Machine.ExecResult, { status: "completed" }>, "stdout" | "stderr"> & { readonly stdout: Uint8Array; readonly stderr: Uint8Array })>;
+  /** Persistent terminals (#1273): the subset bash{session} drives. */
+  readonly pty: {
+    open(name: string, cwd: string): Promise<Machine.PtyOpenResult>;
+    write(name: string, data: Uint8Array): Promise<Machine.PtyWriteResult>;
+    read(name: string, options?: { cursor?: string; waitMs?: number }): Promise<Exclude<Machine.PtyReadResult, { status: "ok" }> | (Omit<Extract<Machine.PtyReadResult, { status: "ok" }>, "data"> & { readonly data: Uint8Array })>;
+  };
 }
 
 export interface FilePorts {

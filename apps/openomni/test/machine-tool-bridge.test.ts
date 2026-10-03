@@ -2,14 +2,17 @@ import { runEffect, acquireEffect, acquireSyncEffect } from "./helpers/scoped-ef
 import { Effect } from "effect";
 import { createCodemode } from "@openomni/codemode";
 import { describe, expect, test } from "bun:test";
-import { connectIpcClient, typedCall } from "@openomni/machines";
+import { connectIpcClient, createMachineHost, typedCall } from "@openomni/machines";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon } from "@openomni/machines";
 import type { MachineHost } from "@openomni/machines";
+import type { PlainObject } from "@openomni/protocol";
 import { MachineCellError } from "@openomni/machines";
 import { socketPath } from "./helpers/socket-path";
 
 import { bridgeDaemon, bridgeHost, bridgeOffer, bridgeProbe } from "./helpers/machine-bridge";
+import { dispatchModelTool } from "./helpers/tool-dispatch";
+import { testMachinePorts } from "./helpers/native-tool-ports";
 import { testIds } from "./helpers/test-entropy";
 
 function deferred<T>() {
@@ -592,4 +595,108 @@ describe("code-mode tool bridge", () => {
       await runEffect(host.close());
     }
   });
+});
+
+/**
+ * bash{session} door (#1273): the existing bash tool drives a named
+ * persistent tmux terminal on the daemon. Real tmux on a private socket.
+ */
+describe("bash session door", () => {
+  const TMUX_SOCKET = `oo-1273-bridge-${process.pid}`;
+  const offer: Machine.Offer = {
+    machineId: "m-1",
+    daemonVersion: "0.1.0",
+    platform: "darwin",
+    offeredAt: 2000,
+    offeredCapabilities: ["pty.session"],
+    exports: [{ name: "shell", path: "/" }],
+  };
+  async function sessionFixture(
+    run: (api: {
+      bash: ReturnType<typeof dispatchModelTool>;
+      stdoutUntil: (marker: string, command: string) => Promise<string>;
+      restartDaemon: () => Promise<void>;
+    }) => Promise<void>,
+  ) {
+    const path = socketPath();
+    const host = await acquireEffect(createMachineHost({
+      listen: { unix: path },
+      id: testIds("pty-bridge-host"),
+      enrollment: () => ({
+        name: "workstation",
+        machineId: "m-1",
+        allowedCapabilities: ["pty.session"],
+        allowedExports: ["shell"],
+        publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        enrolledAt: 1000,
+      }),
+      events: { publish: () => undefined },
+      now: () => 5000,
+    }));
+    // Each daemon generation mints ids from its own stream, as production
+    // entropy does: reusing the registry generation id across a restart lets
+    // a pre-restart cursor parse as a native offset into the new daemon's
+    // stream and skip output (PR #1283 CI, tmux 3.4 runner).
+    let generation = 0;
+    const daemonOptions = () => {
+      generation += 1;
+      return {
+        socketPath: path,
+        id: testIds(`pty-bridge-daemon-g${generation}`),
+        offer,
+        fsExports: new Map([["shell", "/"]]),
+        pty: { socketName: TMUX_SOCKET },
+      };
+    };
+    let daemon = await acquireEffect(attachMachineDaemon(daemonOptions()));
+    const bash = dispatchModelTool("bash", { machines: testMachinePorts(host) });
+    // Each bash call long-polls the daemon for terminal output; the loop
+    // re-reads (empty command = just read) until the marker byte arrives.
+    async function stdoutUntil(marker: string, command: string): Promise<string> {
+      let seen = "";
+      for (let call = 0; call < 10 && !seen.includes(marker); call += 1) {
+        const result = await bash({ machine: "m-1", session: "qa", command: call === 0 ? command : "" } satisfies PlainObject);
+        expect(result.isError).toBeUndefined();
+        seen += (JSON.parse(String(result.output)) as { stdout: string }).stdout;
+      }
+      return seen;
+    }
+    try {
+      await run({
+        bash,
+        stdoutUntil,
+        restartDaemon: async () => {
+          await runEffect(daemon.close());
+          daemon = await acquireEffect(attachMachineDaemon(daemonOptions()));
+        },
+      });
+    } finally {
+      await runEffect(daemon.close());
+      await runEffect(host.close());
+      Bun.spawnSync(["tmux", "-L", TMUX_SOCKET, "kill-server"]);
+    }
+  }
+
+  test("a named session keeps shell state across calls and across a daemon restart", async () => {
+    await sessionFixture(async ({ stdoutUntil, restartDaemon }) => {
+      expect(await stdoutUntil("$", "export BRIDGE_X=42")).toContain("BRIDGE_X");
+      expect(await stdoutUntil("door-42", "echo door-$BRIDGE_X")).toContain("door-42");
+      // Restart ONLY the daemon; the tmux server owns the terminal.
+      await restartDaemon();
+      expect(await stdoutUntil("again-42", "echo again-$BRIDGE_X")).toContain("again-42");
+    });
+  }, 60_000);
+
+  test("session calls refuse exactly the inputs the terminal cannot honour", async () => {
+    await sessionFixture(async ({ bash }) => {
+      expect(await bash({ session: "qa", command: "true" })).toMatchObject({ isError: true });
+      expect(await bash({ machine: "m-1", session: "qa", command: "true", timeout: 5 })).toMatchObject({ isError: true });
+      expect(await bash({ machine: "m-1", command: "" })).toMatchObject({ isError: true });
+      // The daemon's reserved control session is a typed refusal end to end.
+      expect(await bash({ machine: "m-1", session: "omo-pty-control", command: "" })).toMatchObject({ isError: true });
+      // An unknown name is not an error at this door: open-or-reattach creates it.
+      const created = await bash({ machine: "m-1", session: "fresh", command: "" });
+      expect(created.isError).toBeUndefined();
+    });
+  }, 60_000);
 });

@@ -1,6 +1,6 @@
 import { Exit, Cause } from "effect";
 import { describe, expect, test } from "bun:test";
-import { statSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { statSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IpcRemoteError, connectIpcClient, createIpcServer } from "./ipc/helpers/native";
@@ -553,6 +553,88 @@ describe("machine attach handshake", () => {
       );
     } finally {
       rogue.close();
+    }
+  });
+
+  test("pty.session is offered only when tmux resolves at attach time, and enrollment can withhold it (#1273)", async () => {
+    const ptyOffer = offer({ offeredCapabilities: ["pty.session"] });
+    await withHost(
+      () => ({ ...enrollment, allowedCapabilities: ["pty.session"] }),
+      async ({ path }) => {
+        const withTmux = await attachMachineDaemon({ socketPath: path, offer: ptyOffer });
+        expect(withTmux.attachment).toEqual({
+          status: "attached",
+          effectiveCapabilities: ["pty.session"],
+          effectiveExports: [],
+        });
+        await withTmux.close();
+        const withoutTmux = await attachMachineDaemon({
+          socketPath: path,
+          offer: ptyOffer,
+          pty: { tmux: "openomni-test-no-such-tmux" },
+        });
+        expect(withoutTmux.attachment).toEqual({
+          status: "attached",
+          effectiveCapabilities: [],
+          effectiveExports: [],
+        });
+        await withoutTmux.close();
+      },
+    );
+    await withHost(
+      // The default enrollment never granted pty.session: the intersection
+      // withholds it even though tmux is installed and the daemon offers it.
+      () => enrollment,
+      async ({ host, path }) => {
+        const daemon = await attachMachineDaemon({
+          socketPath: path,
+          offer: offer({ offeredCapabilities: ["shell.exec", "pty.session"] }),
+        });
+        expect(daemon.attachment).toEqual({
+          status: "attached",
+          effectiveCapabilities: ["shell.exec"],
+          effectiveExports: [],
+        });
+        expect(await host.get("mac-studio").pty.open("qa", "/")).toEqual({
+          status: "refused",
+          reason: "pty_not_available",
+        });
+        daemon.close();
+      },
+    );
+  });
+
+  test("pty_open confines cwd under the same export rule as exec and refuses before any session exists (#1273)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "pty-export-"));
+    const outside = mkdtempSync(join(tmpdir(), "pty-outside-"));
+    symlinkSync(outside, join(root, "leak"));
+    try {
+      await withHost(
+        () => ({ ...enrollment, allowedCapabilities: ["pty.session"], allowedExports: ["work"] }),
+        async ({ host, path }) => {
+          const daemon = await attachMachineDaemon({
+            socketPath: path,
+            offer: offer({ offeredCapabilities: ["pty.session"], exports: [{ name: "work", path: root }] }),
+            fsExports: new Map([["work", root]]),
+          });
+          expect(daemon.attachment).toEqual({
+            status: "attached",
+            effectiveCapabilities: ["pty.session"],
+            effectiveExports: ["work"],
+          });
+          const handle = host.get("mac-studio");
+          expect(await handle.pty.open("qa", "/")).toEqual({ status: "refused", reason: "path_escapes_export" });
+          // A symlink under the export escapes it: refused before tmux runs.
+          expect(await handle.pty.open("qa", join(root, "leak"))).toEqual({
+            status: "refused",
+            reason: "path_escapes_export",
+          });
+          daemon.close();
+        },
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });

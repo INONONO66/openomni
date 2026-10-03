@@ -104,6 +104,56 @@ describe("host listener set (#1270)", () => {
     }
   });
 
+  test("a pty round trip completes through the tcp listener of a dual-listener host (#1273 r1 F4)", async () => {
+    const tmuxSocket = `om-listen-pty-${process.pid}`;
+    const unix = socketPath();
+    const host = await createMachineHost({
+      listen: { unix, tcp: { host: "127.0.0.1", port: 0 } },
+      tls: hostIdentity,
+      enrollment: () => ({ ...enrollment("via-tcp", daemonFingerprint), allowedCapabilities: ["pty.session"] }),
+      events: silent,
+      now: () => 3,
+    });
+    try {
+      const port = host.endpoints.tcp?.port ?? 0;
+      const daemon = await acquire(
+        nativeDaemon({
+          tcp: { host: "127.0.0.1", port },
+          hostCertificate: hostIdentity.certificate,
+          tlsCertificate: daemonIdentity.certificate,
+          tlsPrivateKey: daemonIdentity.privateKey,
+          id: sequentialIds("tcp-pty-daemon"),
+          offer: { ...offer("via-tcp", "/"), offeredCapabilities: ["pty.session"] },
+          fsExports: new Map([["docs", "/"]]),
+          pty: { socketName: tmuxSocket },
+        }),
+      );
+      try {
+        expect(daemon.value.attachment.status).toBe("attached");
+        const pty = host.get("via-tcp").pty;
+        const opened = await pty.open("qa", "/");
+        if (opened.status !== "ok") throw new Error(`open refused: ${opened.reason}`);
+        await pty.write("qa", Buffer.from("printf 'TCP-PTY-%s\\n' OK\n", "utf8"));
+        // Event-driven drain on the daemon's long-poll; no sleeps.
+        let seen = "";
+        let cursor = opened.cursor;
+        for (let round = 0; round < 200 && !seen.includes("TCP-PTY-OK"); round += 1) {
+          const view = await pty.read("qa", { cursor, waitMs: 2000 });
+          if (view.status !== "ok") throw new Error(`read refused: ${view.reason}`);
+          seen += Buffer.from(view.data).toString("utf8");
+          cursor = view.cursor;
+        }
+        expect(seen).toContain("TCP-PTY-OK");
+        expect(await pty.close("qa")).toEqual({ status: "ok" });
+      } finally {
+        await daemon.close();
+      }
+    } finally {
+      await host.close();
+      Bun.spawnSync(["tmux", "-L", tmuxSocket, "kill-server"], { stderr: "pipe" });
+    }
+  }, 30_000);
+
   test("a TCP peer whose key is not the enrollment pin is refused peer_key_mismatch before admission", async () => {
     const host = await createMachineHost({
       listen: { tcp: { host: "127.0.0.1", port: 0 } },

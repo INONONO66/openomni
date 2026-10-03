@@ -148,6 +148,11 @@ export function toolPorts(
                   stat: (path) => runAppEffect(runtime, handle.fs.stat(path)),
                 },
                 exec: (cmd, cwd) => runAppEffect(runtime, handle.exec(cmd, cwd)),
+                pty: {
+                  open: (name, cwd) => runAppEffect(runtime, handle.pty.open(name, cwd)),
+                  write: (name, data) => runAppEffect(runtime, handle.pty.write(name, data)),
+                  read: (name, options) => runAppEffect(runtime, handle.pty.read(name, options)),
+                },
               };
             },
           },
