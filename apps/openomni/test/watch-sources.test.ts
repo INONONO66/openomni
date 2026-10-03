@@ -2,12 +2,13 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Alarm } from "@openomni/protocol";
 import {
   AlarmRuntimeError,
   commandSource,
   createWatchSources,
-  type WatchFire,
-  type WatchTimeoutArm,
+  type ArmedWatch,
+  type WatchHitSend,
 } from "../src/composition/watch-sources";
 import { eventSignal } from "./helpers/event-signal";
 
@@ -15,19 +16,49 @@ import { eventSignal } from "./helpers/event-signal";
 // spawn can stall past the 5 s default (#1027). Only the failure ceiling.
 const SPAWNED_PTY_MS = 15_000;
 
-function recordingSenders() {
-  const fires: WatchFire[] = [];
-  const timeouts: WatchTimeoutArm[] = [];
+function armed(input: {
+  readonly id: string;
+  readonly watch: Alarm.Watch;
+  readonly armSeq?: number;
+  readonly occurrenceId?: string;
+  readonly notifications?: number;
+}): ArmedWatch {
   return {
-    fires,
-    timeouts,
+    sessionId: "monitor-session",
+    id: input.id,
+    occurrence: {
+      occurrenceId: input.occurrenceId ?? `occ-${input.id}-${input.armSeq ?? 1}`,
+      alarmId: input.id,
+      armSeq: input.armSeq ?? 1,
+    },
+    base: {
+      spec: { watch: input.watch, policyGeneration: 1, notificationLimit: 8 },
+      notifications: input.notifications ?? 0,
+    },
+  };
+}
+
+interface SentHit {
+  readonly send: WatchHitSend;
+  readonly hit: { content: string; terminal: boolean; detail: string };
+  readonly notifications: number;
+}
+
+function parseHit(send: WatchHitSend): SentHit {
+  const payload = JSON.parse(send.payload) as {
+    notifications: number;
+    hit: { content: string; terminal: boolean; detail: string };
+  };
+  return { send, hit: payload.hit, notifications: payload.notifications };
+}
+
+function recordingSenders() {
+  const sends: WatchHitSend[] = [];
+  return {
+    sends,
     senders: {
-      watchFired: (fire: WatchFire) => {
-        fires.push(fire);
-        return Promise.resolve();
-      },
-      watchTimeout: (arm: WatchTimeoutArm) => {
-        timeouts.push(arm);
+      deliver: (send: WatchHitSend) => {
+        sends.push(send);
         return Promise.resolve();
       },
     },
@@ -49,74 +80,126 @@ test("watch-sources composition refuses a missing PTY builtin with the typed run
   }
 });
 
-test("command watch sends filtered lines in source order and a terminal exit summary", async () => {
-  const { fires, timeouts, senders } = recordingSenders();
-  const terminal = eventSignal<WatchFire>("terminal watch fire", SPAWNED_PTY_MS);
+test("command watch resends the armed occurrence per filtered line and a terminal exit summary", async () => {
+  const sends: WatchHitSend[] = [];
+  const terminal = eventSignal<WatchHitSend>("terminal watch hit", SPAWNED_PTY_MS);
   const sources = createWatchSources(
     {
-      ...senders,
-      watchFired: (fire) => {
-        fires.push(fire);
-        if (fire.terminal) terminal.resolve(fire);
+      deliver: (send) => {
+        sends.push(send);
+        if (JSON.parse(send.payload).hit.terminal === true) terminal.resolve(send);
         return Promise.resolve();
       },
     },
     { clock: () => 41_000, failure: (_id, error) => terminal.reject(error) },
   );
-  await sources.install({
-    sessionId: "monitor-session",
-    id: "watch-cmd",
-    epoch: 3,
-    watch: {
-      command: "printf 'keep:1\\nskip\\nkeep:2\\n'; exit 3",
-      filter: "^keep:",
-      description: "filtered lines",
-      timeout_ms: 1000,
-    },
-  });
-  const summary = await terminal.promise;
+  await sources.install(
+    armed({
+      id: "watch-cmd",
+      armSeq: 3,
+      watch: {
+        command: "printf 'keep:1\\nskip\\nkeep:2\\n'; exit 3",
+        filter: "^keep:",
+        description: "filtered lines",
+        timeout_ms: 1000,
+      },
+    }),
+  );
+  await terminal.promise;
   await sources.closeAll();
-  expect(timeouts).toEqual([
-    { sessionId: "monitor-session", watchId: "watch-cmd", epoch: 3, fireAt: 42_000 },
+  const hits = sends.map(parseHit);
+  expect(hits.map((entry) => [entry.hit.detail, entry.hit.content])).toEqual([
+    ["line:1", "keep:1"],
+    ["line:3", "keep:2"],
+    ["exit:3", JSON.stringify({ watchId: "watch-cmd", reason: "exit", exitCode: 3 })],
   ]);
-  expect(fires.map((fire) => [fire.sourceKey, fire.content])).toEqual([
-    ["line:3:1", "keep:1"],
-    ["line:3:3", "keep:2"],
-    ["exit:3", JSON.stringify({ watchId: "watch-cmd", epoch: 3, reason: "exit", exitCode: 3 })],
-  ]);
-  expect(summary.terminal).toBe(true);
-  expect(fires.every((fire) => fire.watchId === "watch-cmd" && fire.epoch === 3)).toBe(true);
+  // Every resend carries the SAME armed occurrence: the chain is the dedupe.
+  expect(
+    sends.every(
+      (send) =>
+        send.occurrenceId === "occ-watch-cmd-3" &&
+        send.alarmId === "watch-cmd" &&
+        send.armSeq === 3 &&
+        send.purpose === "monitor.hit" &&
+        send.sourceKey === "monitor" &&
+        send.fireAt === 41_000,
+    ),
+  ).toBe(true);
 });
 
-test("path watch fires on observed modification with the stat-identity source key", async () => {
+test("path watch fires on observed modification with the stat-identity transport detail", async () => {
   const directory = mkdtempSync(join(tmpdir(), "watch-sources-path-"));
   const path = join(directory, "target");
   writeFileSync(path, "before");
-  const { fires, timeouts, senders } = recordingSenders();
-  const sources = createWatchSources(senders, {
-    clock: () => 0,
-    failure: () => undefined,
-  });
+  const { sends, senders } = recordingSenders();
+  const sources = createWatchSources(senders, { clock: () => 7, failure: () => undefined });
   try {
-    await sources.install({
-      sessionId: "monitor-session",
-      id: "watch-path",
-      epoch: 1,
-      watch: { path, event: "modify", description: "path modify", persistent: true },
-    });
+    await sources.install(
+      armed({
+        id: "watch-path",
+        watch: { path, event: "modify", description: "path modify", persistent: true },
+      }),
+    );
     writeFileSync(path, "after with more bytes");
     sources.observe("watch-path");
     await sources.close("watch-path");
-    expect(timeouts).toEqual([]);
-    expect(fires).toHaveLength(1);
-    const fire = fires[0];
-    expect(fire).toMatchObject({
-      watchId: "watch-path",
-      epoch: 1,
+    expect(sends).toHaveLength(1);
+    const entry = parseHit(sends[0] as WatchHitSend);
+    expect(entry.send).toMatchObject({ alarmId: "watch-path", purpose: "monitor.hit" });
+    expect(entry.hit).toMatchObject({
       terminal: false,
       content: JSON.stringify({ path, event: "modify" }),
     });
-    expect(fire?.sourceKey.startsWith("path:modify:")).toBe(true);
+    expect(entry.hit.detail.startsWith("path:modify:")).toBe(true);
+  } finally {
+    await sources.closeAll();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("refresh swaps the armed occurrence without touching the native handle", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "watch-sources-refresh-"));
+  const path = join(directory, "target");
+  writeFileSync(path, "v1");
+  const { sends, senders } = recordingSenders();
+  const sources = createWatchSources(senders, { clock: () => 0, failure: () => undefined });
+  try {
+    const first = armed({
+      id: "watch-swap",
+      armSeq: 1,
+      watch: { path, event: "modify", description: "swap", persistent: true },
+    });
+    await sources.install(first);
+    writeFileSync(path, "v2 grows the file");
+    sources.observe("watch-swap");
+    // Re-arm: the chain's new occurrence and spent budget ride the holder.
+    expect(
+      sources.refresh(
+        armed({
+          id: "watch-swap",
+          armSeq: 2,
+          notifications: 1,
+          watch: { path, event: "modify", description: "swap", persistent: true },
+        }),
+      ),
+    ).toBe(true);
+    writeFileSync(path, "v3 grows the file even more");
+    sources.observe("watch-swap");
+    await sources.close("watch-swap");
+    expect(sends.map((send) => [send.occurrenceId, send.armSeq])).toEqual([
+      ["occ-watch-swap-1", 1],
+      ["occ-watch-swap-2", 2],
+    ]);
+    expect(sends.map((send) => parseHit(send).notifications)).toEqual([0, 1]);
+    // A refresh for an uninstalled id reports false: the caller installs.
+    expect(
+      sources.refresh(
+        armed({
+          id: "unknown",
+          watch: { path, event: "modify", description: "none", persistent: true },
+        }),
+      ),
+    ).toBe(false);
   } finally {
     await sources.closeAll();
     rmSync(directory, { recursive: true, force: true });
@@ -126,32 +209,32 @@ test("path watch fires on observed modification with the stat-identity source ke
 test("path watch native callback observes a created target", async () => {
   const directory = mkdtempSync(join(tmpdir(), "watch-sources-create-"));
   const path = join(directory, "target");
-  const created = eventSignal<WatchFire>("native path create", SPAWNED_PTY_MS);
+  const created = eventSignal<WatchHitSend>("native path create", SPAWNED_PTY_MS);
   const sources = createWatchSources(
     {
-      watchFired: (fire) => {
-        created.resolve(fire);
+      deliver: (send) => {
+        created.resolve(send);
         return Promise.resolve();
       },
-      watchTimeout: () => Promise.resolve(),
     },
     { clock: () => 0, failure: (_id, error) => created.reject(error) },
   );
   try {
-    await sources.install({
-      sessionId: "monitor-session",
-      id: "watch-create",
-      epoch: 1,
-      watch: { path, event: "create", description: "native create", persistent: true },
-    });
+    await sources.install(
+      armed({
+        id: "watch-create",
+        watch: { path, event: "create", description: "native create", persistent: true },
+      }),
+    );
     writeFileSync(path, "created");
-    const fire = await created.promise;
-    expect(fire).toMatchObject({
-      watchId: "watch-create",
+    const send = await created.promise;
+    const entry = parseHit(send);
+    expect(send.alarmId).toBe("watch-create");
+    expect(entry.hit).toMatchObject({
       content: JSON.stringify({ path, event: "create" }),
       terminal: false,
     });
-    expect(fire.sourceKey.startsWith("path:create:")).toBe(true);
+    expect(entry.hit.detail.startsWith("path:create:")).toBe(true);
   } finally {
     await sources.closeAll();
     rmSync(directory, { recursive: true, force: true });
@@ -226,38 +309,33 @@ test("a faulting path source sends a terminal source_error summary and the typed
   const path = join(directory, "target");
   writeFileSync(path, "present");
   const failures: [string, Error][] = [];
-  const summary = eventSignal<WatchFire>("source_error summary", SPAWNED_PTY_MS);
+  const summary = eventSignal<WatchHitSend>("source_error summary", SPAWNED_PTY_MS);
   const sources = createWatchSources(
     {
-      watchFired: (fire) => {
-        if (fire.terminal) summary.resolve(fire);
+      deliver: (send) => {
+        if (JSON.parse(send.payload).hit.terminal === true) summary.resolve(send);
         return Promise.resolve();
       },
-      watchTimeout: () => Promise.resolve(),
     },
     { clock: () => 0, failure: (id, error) => failures.push([id, error]) },
   );
   try {
-    await sources.install({
-      sessionId: "monitor-session",
-      id: "watch-fault",
-      epoch: 2,
-      watch: { path, event: "modify", description: "faulting stat", persistent: true },
-    });
+    await sources.install(
+      armed({
+        id: "watch-fault",
+        armSeq: 2,
+        watch: { path, event: "modify", description: "faulting stat", persistent: true },
+      }),
+    );
     chmodSync(directory, 0o000);
     sources.observe("watch-fault");
-    const fired = await summary.promise;
-    expect(fired).toMatchObject({
-      watchId: "watch-fault",
-      epoch: 2,
-      sourceKey: "source_error:2",
+    const send = await summary.promise;
+    const entry = parseHit(send);
+    expect(send).toMatchObject({ alarmId: "watch-fault", occurrenceId: "occ-watch-fault-2" });
+    expect(entry.hit).toMatchObject({
       terminal: true,
-      content: JSON.stringify({
-        watchId: "watch-fault",
-        epoch: 2,
-        reason: "source_error",
-        exitCode: null,
-      }),
+      detail: "source_error",
+      content: JSON.stringify({ watchId: "watch-fault", reason: "source_error", exitCode: null }),
     });
     expect(failures).toMatchObject([
       ["watch-fault", { name: "AlarmSourceError", site: "path.observe" }],
@@ -269,57 +347,56 @@ test("a faulting path source sends a terminal source_error summary and the typed
   }
 });
 
-test("a rejecting watchFired send routes through the failure callback with the watch id", async () => {
+test("a rejecting deliver routes through the failure callback with the watch id", async () => {
   const failed = eventSignal<[string, Error]>("send failure", SPAWNED_PTY_MS);
   const sources = createWatchSources(
-    {
-      watchFired: () => Promise.reject(new Error("entity send refused")),
-      watchTimeout: () => Promise.resolve(),
-    },
+    { deliver: () => Promise.reject(new Error("entity send refused")) },
     { clock: () => 0, failure: (id, error) => failed.resolve([id, error]) },
   );
-  await sources.install({
-    sessionId: "monitor-session",
-    id: "watch-refused",
-    epoch: 1,
-    watch: { command: "printf 'ONE\\n'; exit 0", description: "refused sends", persistent: true },
-  });
+  await sources.install(
+    armed({
+      id: "watch-refused",
+      watch: { command: "printf 'ONE\\n'; exit 0", description: "refused sends", persistent: true },
+    }),
+  );
   const [id, error] = await failed.promise;
   await sources.closeAll();
   expect(id).toBe("watch-refused");
   expect(error.message).toBe("entity send refused");
 });
 
-test("reinstalling a watch id replaces the previous epoch's handle before new occurrences", async () => {
-  const { fires, senders } = recordingSenders();
-  const secondExit = eventSignal<WatchFire>("second epoch exit", SPAWNED_PTY_MS);
+test("reinstalling a watch id replaces the previous handle before new occurrences", async () => {
+  const sends: WatchHitSend[] = [];
+  const secondExit = eventSignal<WatchHitSend>("second handle exit", SPAWNED_PTY_MS);
   const sources = createWatchSources(
     {
-      ...senders,
-      watchFired: (fire) => {
-        fires.push(fire);
-        if (fire.terminal && fire.epoch === 2) secondExit.resolve(fire);
+      deliver: (send) => {
+        sends.push(send);
+        if (JSON.parse(send.payload).hit.terminal === true && send.armSeq === 2)
+          secondExit.resolve(send);
         return Promise.resolve();
       },
     },
     { clock: () => 0, failure: (_id, error) => secondExit.reject(error) },
   );
-  await sources.install({
-    sessionId: "monitor-session",
-    id: "watch-epoch",
-    epoch: 1,
-    watch: { command: "read hold", description: "first epoch", persistent: true },
-  });
-  await sources.install({
-    sessionId: "monitor-session",
-    id: "watch-epoch",
-    epoch: 2,
-    watch: { command: "printf 'E2\\n'; exit 0", description: "second epoch", persistent: true },
-  });
+  await sources.install(
+    armed({
+      id: "watch-replace",
+      armSeq: 1,
+      watch: { command: "read hold", description: "first handle", persistent: true },
+    }),
+  );
+  await sources.install(
+    armed({
+      id: "watch-replace",
+      armSeq: 2,
+      watch: { command: "printf 'E2\\n'; exit 0", description: "second handle", persistent: true },
+    }),
+  );
   await secondExit.promise;
   await sources.closeAll();
-  // The first epoch's holder was closed by the reinstall: closing emits no
-  // occurrence, so every recorded fire belongs to epoch 2.
-  expect(fires.length).toBeGreaterThanOrEqual(2);
-  expect(fires.every((fire) => fire.epoch === 2)).toBe(true);
+  // The first holder was closed by the reinstall: closing emits no occurrence,
+  // so every recorded send names the second armed occurrence.
+  expect(sends.length).toBeGreaterThanOrEqual(2);
+  expect(sends.every((send) => send.armSeq === 2)).toBe(true);
 });

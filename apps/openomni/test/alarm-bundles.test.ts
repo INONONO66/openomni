@@ -1,0 +1,147 @@
+import { expect, test } from "bun:test";
+import { Bundle, Core } from "@openomni/agent";
+import { Effect } from "effect";
+import {
+  AlarmCapabilityService,
+  selectAlarmBundles,
+} from "../src/composition/bundles/alarm";
+import { CRON_TICK, cronPurposes } from "../src/composition/bundles/cron";
+import { monitorBundle, monitorPurposes } from "../src/composition/bundles/monitor";
+import { cronBundle } from "../src/composition/bundles/cron";
+import { runEffect } from "./helpers/effect";
+
+// #1254 S4: ctx.prompt — recorded for assertion, typed as Lane 4's verb.
+function recordingPrompt() {
+  const prompts: { content: string; payload?: unknown }[] = [];
+  const prompt: Bundle.AlarmPromptVerb = (input) => {
+    prompts.push(input);
+    return Effect.succeed({ seq: prompts.length });
+  };
+  return { prompts, prompt };
+}
+
+async function composedCapability(): Promise<Bundle.AlarmCapabilityDefinition> {
+  const { prompt } = recordingPrompt();
+  return await runEffect(
+    Bundle.alarmCapability({
+      bundles: [monitorPurposes({ prompt, close: () => undefined }), cronPurposes({ prompt })],
+      compose: Core.composeAlarmPurposes,
+      arm: () => () => Effect.die(new Error("unused arm")),
+      watch: { install: () => Effect.void },
+    }),
+  );
+}
+
+test("selectAlarmBundles cascades capability-off into recorded disabled facts", async () => {
+  const off = selectAlarmBundles({ alarm: undefined, dependents: [monitorBundle, cronBundle] });
+  expect(off.definitions).toEqual([]);
+  expect(off.disabled).toEqual([
+    {
+      bundle: "monitor",
+      reason: "requires @openomni/bundle/alarm/Capability: alarm capability not composed",
+    },
+    {
+      bundle: "cron",
+      reason: "requires @openomni/bundle/alarm/Capability: alarm capability not composed",
+    },
+  ]);
+  const capability = await composedCapability();
+  const on = selectAlarmBundles({ alarm: capability, dependents: [monitorBundle, cronBundle] });
+  expect(on.disabled).toEqual([]);
+  expect(on.definitions.map((definition) => definition.name)).toEqual(["alarm", "monitor", "cron"]);
+  // The composed registry binds each purpose to its owning bundle.
+  expect([...capability.registry.entries()].filter(([, owner]) => owner !== "core")).toEqual([
+    ["monitor.hit", "monitor"],
+    ["monitor.timeout", "monitor"],
+    ["cron.tick", "cron"],
+  ]);
+  // The bundle tag law: alarm provides the capability key, dependents require it.
+  expect(on.definitions.map((definition) => [
+    definition.provides.map((tag) => tag.key),
+    definition.requires.map((tag) => tag.key),
+  ])).toEqual([
+    [[AlarmCapabilityService.key], []],
+    [[], [AlarmCapabilityService.key]],
+    [[], [AlarmCapabilityService.key]],
+  ]);
+});
+
+const cronFired = (payload: unknown, fireAt: number): Bundle.AlarmFired => ({
+  occurrenceId: "grid:occ:1",
+  purpose: CRON_TICK,
+  alarmId: "grid",
+  armSeq: 1,
+  sourceKey: "cron",
+  payload: JSON.stringify(payload),
+  fireAt,
+});
+
+function cronWake() {
+  const { prompts, prompt } = recordingPrompt();
+  const arms: Parameters<Bundle.ArmVerb>[0][] = [];
+  const declaration = cronPurposes({ prompt }).purposes[0];
+  if (declaration === undefined) throw new Error("missing cron purpose");
+  const wake = (fired: Bundle.AlarmFired, now: number) =>
+    declaration.handler({
+      fired,
+      ctx: {
+        sessionId: "cron-session",
+        reads: { latestArm: () => undefined, settled: () => false },
+        arm: (input) => {
+          arms.push(input);
+          return Effect.succeed({ alarmId: input.alarmId ?? "grid", occurrenceId: "occ-next" });
+        },
+        now,
+      },
+    });
+  return { prompts, arms, wake };
+}
+
+const payload = { expr: "*/5 * * * *", tz: "UTC", description: "five-minute grid" };
+
+test("cron.tick prompts once and re-arms the chain at the next grid time", async () => {
+  const { prompts, arms, wake } = cronWake();
+  // On time: fired at 0:05, woken at 0:05 — nothing missed, next tick 0:10.
+  expect(await runEffect(wake(cronFired(payload, 300_000), 300_000))).toBe("delivered");
+  expect(prompts).toEqual([
+    {
+      content: JSON.stringify({
+        kind: CRON_TICK,
+        description: "five-minute grid",
+        expr: "*/5 * * * *",
+        firedAt: 300_000,
+        missed: 0,
+      }),
+      payload: { expr: "*/5 * * * *", missed: 0 },
+    },
+  ]);
+  expect(arms).toEqual([
+    {
+      purpose: CRON_TICK,
+      at: 600_000,
+      alarmId: "grid",
+      supersedes: "grid:occ:1",
+      sourceKey: "cron",
+      payload,
+    },
+  ]);
+  // Downtime: fired at 0:05, woken at 0:20:10 — 0:10 and 0:15 were missed
+  // (0:20 is the due tick), one prompt carries the count, no catch-up storm.
+  expect(await runEffect(wake(cronFired(payload, 300_000), 1_210_000))).toBe("delivered");
+  expect(prompts).toHaveLength(2);
+  expect(prompts.at(-1)).toMatchObject({ payload: { expr: "*/5 * * * *", missed: 2 } });
+  expect(arms.at(-1)).toMatchObject({ at: 1_500_000 });
+});
+
+test("cron.tick reports payload and expression faults as typed wake failures", async () => {
+  const { wake } = cronWake();
+  const bad = await runEffect(
+    Effect.flip(wake(cronFired({ not: "cron" }, 300_000), 300_000)),
+  );
+  expect(bad).toBeInstanceOf(Bundle.AlarmWakeError);
+  expect(bad.reason).toBe("payload");
+  const expr = await runEffect(
+    Effect.flip(wake(cronFired({ ...payload, expr: "not a cron line" }, 300_000), 300_000)),
+  );
+  expect(expr.reason).toBe("cron_expr");
+});

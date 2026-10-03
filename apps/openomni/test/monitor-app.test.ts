@@ -4,14 +4,14 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Bus, newTraceId } from "./helpers/bus";
 import { L0Observation } from "@openomni/protocol";
-import { watchState } from "../src/composition/monitor-ports";
+import { foldAlarmChains, watchStateOf } from "../src/composition/alarm-plane";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { planeOf } from "./helpers/ledger";
 import { residentSuite, fakeProviderModel } from "./helpers/resident-suite";
 
 const suite = residentSuite();
 
-test("app monitor source escapes the creating tool wave and wakes a hibernated session", async () => {
+test("app monitor source escapes the creating tool wave and records its hit on the chain", async () => {
   const directory = suite.tempDir("monitor-app-");
   const fifo = join(directory, "source");
   expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
@@ -75,21 +75,30 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   if (arm === undefined) throw new Error("no created watch");
   const kernel = plane.openKernel(arm.sessionId);
   expect(calls).toBe(1);
-  const armed = watchState(kernel, arm.sessionId, arm.watchId);
-  expect(armed?.state).toMatchObject({ status: "armed", epoch: 1 }); // Already started by the tool-origin bus publication.
+  const chain = foldAlarmChains(kernel, arm.sessionId).get(arm.watchId);
+  if (chain === undefined) throw new Error("no armed chain");
+  expect(watchStateOf(chain, arm.sessionId)).toMatchObject({
+    kind: "watch",
+    status: "armed",
+    notifications: 0,
+  });
   expect(kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind).toBe(
     "waiting",
   );
   expect(app.sessions.get(arm.sessionId)).toBeUndefined();
 
-  const woke = Promise.withResolvers<void>();
+  // #1254 interim (until Lane 4 wires the wake dispatch): the native hit
+  // resends the ARMED occurrence through the entity's alarm door, where the
+  // unregistered `monitor.hit` purpose folds to one recorded stale fact —
+  // delivery is durable and deduped, and no turn runs.
+  const staleId = `${chain.latest.occurrenceId}:stale`;
+  const recorded = Promise.withResolvers<void>();
   const guard = AbortSignal.timeout(5000);
-  const abort = () => woke.reject(new Error("monitor app wake timed out"));
+  const abort = () => recorded.reject(new Error("monitor hit was never recorded"));
   guard.addEventListener("abort", abort, { once: true });
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.sessionId !== arm.sessionId || event.kind !== "turn") return;
-    if (kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind === "result")
-      woke.resolve();
+    if (event.sessionId !== arm.sessionId || event.kind !== "alarm") return;
+    if (kernel.actionById(staleId) !== undefined) recorded.resolve();
   });
   suite.defer(() => {
     unsubscribe();
@@ -101,19 +110,18 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
     if (writer.exitCode === null) writer.kill();
     await writer.exited;
   });
-  await woke.promise;
+  await recorded.promise;
   expect(await writer.exited).toBe(0);
-  expect(calls).toBe(2);
+  // The hit is a chain fact, not a wake: no second turn, no prompt row yet.
+  expect(calls).toBe(1);
   const tree = sessionTree(arm.sessionId, plane.sessionStore(arm.sessionId).actions);
-  const prompts = tree.filter((action) => {
+  const alarmPrompts = tree.filter((action) => {
     if (action.kind !== "prompt") return false;
-    const intent = action.intent.value as { kind?: string; watchId?: string };
-    return intent.kind === "alarm" && intent.watchId === arm.watchId;
+    const intent = action.intent.value as { kind?: string };
+    return intent.kind === "alarm";
   });
-  expect(prompts).toHaveLength(1);
-  const prompt = prompts[0];
-  if (prompt === undefined) throw new Error("missing watch prompt");
-  expect((prompt.effect.value as { content?: string }).content).toContain("WAKE");
-  expect(kernel.pendingMessages(arm.sessionId)).not.toContain(prompt.id);
-  expect(tree.filter((action) => action.kind === "alarm" && action.id.includes(":occ:"))).toHaveLength(1);
+  expect(alarmPrompts).toEqual([]);
+  expect(kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind).toBe("waiting");
+  const settled = foldAlarmChains(kernel, arm.sessionId).get(arm.watchId);
+  expect(settled?.latest.occurrenceId).toBe(chain.latest.occurrenceId);
 });

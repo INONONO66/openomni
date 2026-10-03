@@ -14,6 +14,18 @@ import {
   type WatchVerb,
 } from "./watch";
 
+// The frozen core/api seam, surfaced through the Bundle namespace for the
+// app (the Core barrel does not export it; core/** is lane-untouchable).
+export {
+  AlarmWakeError,
+  ArmRefused,
+  RESERVED_PURPOSES,
+  type AlarmCapability,
+  type AlarmFired,
+  type AlarmWakeContext,
+  type AlarmWakeOutcome,
+  type ArmVerb,
+} from "../../core/api";
 export {
   MONITOR_HIT,
   MONITOR_SOURCE,

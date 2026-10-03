@@ -6,9 +6,8 @@ import { z } from "zod";
 const decodeJson: (content: string) => PlainValue = JSON.parse;
 const summary = z
   .object({
-    alarmId: z.string().min(1),
-    epoch: z.number().int().positive(),
-    reason: z.enum(["exit", "timeout", "restart", "source_error"]),
+    watchId: z.string().min(1),
+    reason: z.enum(["exit", "source_error"]),
     exitCode: z.number().int().nullable(),
   })
   .strict();

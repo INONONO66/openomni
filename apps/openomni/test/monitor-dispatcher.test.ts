@@ -1,22 +1,15 @@
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { expect, test } from "bun:test";
-import { Core } from "@openomni/agent";
+import { Bundle, Core } from "@openomni/agent";
 const eraseTool = Core.eraseTool;
 const ExecutorContextError = Core.ExecutorContextError;
 const ToolRefused = Core.ToolRefused;
-type SessionEntityTimerContext = Core.SessionEntityTimerContext;
 import { Effect, Exit, Cause } from "effect";
 import { createMonitorTool } from "../src/tools/monitor";
-import {
-  createWatchMonitorPorts,
-  watchFiredHook,
-  watchOccurrenceKey,
-  watchState,
-  type WatchSpec,
-} from "../src/composition/monitor-ports";
+import { alarmChainReads, createAlarmPromptPort, foldAlarmChains } from "../src/composition/alarm-plane";
 import { runEffect } from "./helpers/effect";
-import { watchFixture as createWatchFixture } from "./helpers/watch-fixture";
+import { alarmPortsFixture } from "./helpers/watch-fixture";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
   const monitorTool = createMonitorTool();
@@ -30,6 +23,11 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
       op: "create",
       description: "path",
       source: { kind: "path", path: "/tmp/target", event: "modify", timeout_ms: 20 },
+    },
+    {
+      op: "create",
+      description: "cron",
+      source: { kind: "cron", expr: "*/5 * * * *", tz: "UTC" },
     },
     { op: "rearm", id: "watch" },
     { op: "cancel", id: "watch" },
@@ -51,6 +49,12 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
       op: "create",
       description: "path",
       source: { kind: "path", path: "relative", event: "create", persistent: true },
+    },
+    {
+      // A cron chain's lifecycle is its grid: lifetime fields are a watch concept.
+      op: "create",
+      description: "cron",
+      source: { kind: "cron", expr: "*/5 * * * *", tz: "UTC", persistent: true },
     },
     { op: "cancel", id: "watch", source: { kind: "command", command: "echo wrong" } },
     { op: "rearm" },
@@ -89,119 +93,113 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
 const OWNER = "watch-test-owner";
 const SESSION = "monitor-session";
 
-const watchSpec = (notificationLimit: number): WatchSpec => ({
-  watch: { command: "true", description: "control", persistent: true },
+const watchSpec = (notificationLimit: number) => ({
+  watch: { command: "true", description: "control", persistent: true as const },
   policyGeneration: 1,
   notificationLimit,
 });
 
-async function watchFixture() {
-  const { plane, fence, sources, installed, closed } = await createWatchFixture(SESSION, OWNER);
-  const ports = createWatchMonitorPorts({
-    openKernel: plane.openKernel,
-    sources,
-    clock: () => 1000,
-    entropy: () => "entropy",
-    run: (effect) => runEffect(effect),
-  });
-  return { plane, ports, fence, installed, closed };
-}
-
-test("monitor controls fold arm/rearm/cancel as chain facts scoped to the arming session", async () => {
-  const fixture = await watchFixture();
-  const { plane, ports } = fixture;
+test("monitor controls fold create/rearm/cancel as chain facts scoped to the arming session", async () => {
+  const fixture = await alarmPortsFixture({ sessionId: SESSION, owner: OWNER });
+  const { state, ports } = fixture;
   try {
     const monitorTool = createMonitorTool(ports);
-    const armed = await ports.arm(
-      {
-        id: "control",
-        sessionId: SESSION,
-        kind: "watch",
-        fireAt: 1000,
-        spec: { encodingVersion: 1, value: watchSpec(8) },
-      },
+    const armed = await ports.create(
+      { id: "control", sessionId: SESSION, kind: "watch", spec: watchSpec(8) },
       new AbortController().signal,
     );
-    expect(armed).toMatchObject({ id: "control", status: "armed", epoch: 1 });
-    expect(fixture.installed).toEqual(["control"]);
+    expect(armed).toMatchObject({ id: "control", kind: "watch", status: "armed", fireAt: 1000 });
+    expect(state.installed.map((spec) => spec.id)).toEqual(["control"]);
     const context = {
       sessionId: SESSION,
       turnId: "turn",
       callId: "call",
       signal: new AbortController().signal,
     };
-    // Rearm of a live watch is a no-op: the armed epoch stands.
+    // Rearm of a live watch is a no-op: the armed chain stands.
     expect(
       await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
-    ).toMatchObject({ id: "control", status: "armed", epoch: 1 });
-    // A foreign session's chain holds no such watch: refused, not cancelled.
+    ).toMatchObject({ id: "control", status: "armed", occurrenceId: armed.occurrenceId });
+    // A chain the session never armed is refused, not cancelled.
     await expect(
-      monitorTool.execute(
-        { operation: { op: "cancel", id: "control" } },
-        { ...context, sessionId: "foreign" },
-      ),
+      monitorTool.execute({ operation: { op: "cancel", id: "ghost" } }, context),
     ).rejects.toMatchObject({ _tag: "MonitorRefused" });
     expect(
       await monitorTool.execute({ operation: { op: "cancel", id: "control" } }, context),
-    ).toMatchObject({ status: "cancelled", epoch: 1 });
-    expect(fixture.closed).toEqual(["control"]);
-    // Rearm revives a cancelled watch under the next epoch.
-    expect(
-      await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context),
-    ).toMatchObject({ id: "control", status: "armed", epoch: 2 });
-    expect(fixture.installed).toEqual(["control", "control"]);
+    ).toMatchObject({ status: "cancelled", fireAt: null });
+    expect(state.closed).toEqual(["control"]);
+    // Rearm revives the cancelled chain under a fresh occurrence.
+    const revived = await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context);
+    expect(revived).toMatchObject({ id: "control", status: "armed", notifications: 0 });
+    expect(revived.occurrenceId).not.toBe(armed.occurrenceId);
+    expect(state.installed.map((spec) => spec.id)).toEqual(["control", "control"]);
   } finally {
-    plane.close();
+    state.plane.close();
   }
 });
 
-test("watchFiredHook commits occurrence, wake prompt, and budget pause as one chain batch", async () => {
-  const fixture = await watchFixture();
-  const { plane, ports } = fixture;
+test("capability wakes spend the chain budget: prompt, re-arm, then exhaustion retire", async () => {
+  // #1254 S4: ctx.prompt — the test binds the real prompt port per wake origin
+  // exactly the way Lane 4's dispatch will.
+  let origin = { alarmId: "", occurrenceId: "", purpose: "", sourceKey: "" };
+  let promptFor: ReturnType<typeof createAlarmPromptPort> | undefined;
+  const prompt: Bundle.AlarmPromptVerb = (input) => {
+    if (promptFor === undefined) return Effect.die(new Error("prompt before fixture"));
+    return promptFor(SESSION, origin)(input);
+  };
+  const fixture = await alarmPortsFixture({ sessionId: SESSION, owner: OWNER, prompt });
+  promptFor = createAlarmPromptPort({ openKernel: fixture.state.plane.openKernel, clock: () => 1010 });
+  const { state, capability, arm } = fixture;
+  const kernel = state.plane.openKernel(SESSION);
+  const wake = (content: string) => {
+    const chain = foldAlarmChains(kernel, SESSION).get("budget");
+    if (chain === undefined || chain.latest.at === null) throw new Error("no armed chain");
+    const notice = [...fixture.notices]
+      .reverse()
+      .find((candidate) => candidate.occurrenceId === chain.latest.occurrenceId);
+    if (notice === undefined) throw new Error("unobserved arm");
+    origin = {
+      alarmId: "budget",
+      occurrenceId: chain.latest.occurrenceId,
+      purpose: Bundle.MONITOR_HIT,
+      sourceKey: Bundle.MONITOR_SOURCE,
+    };
+    return runEffect(
+      capability.wake(
+        {
+          occurrenceId: chain.latest.occurrenceId,
+          purpose: Bundle.MONITOR_HIT,
+          alarmId: "budget",
+          armSeq: notice.armSeq,
+          sourceKey: Bundle.MONITOR_SOURCE,
+          payload: JSON.stringify({
+            spec: chain.latest.payload.spec,
+            notifications: chain.latest.payload.notifications,
+            hit: { content, terminal: false, detail: "line:1" },
+          }),
+          fireAt: 1000,
+        },
+        { sessionId: SESSION, reads: alarmChainReads(kernel, SESSION), arm: arm(SESSION), now: 1010 },
+      ),
+    );
+  };
   try {
-    await ports.arm(
-      {
-        id: "budget",
-        sessionId: SESSION,
-        kind: "watch",
-        fireAt: 1000,
-        spec: { encodingVersion: 1, value: watchSpec(2) },
-      },
+    await fixture.ports.create(
+      { id: "budget", sessionId: SESSION, kind: "watch", spec: watchSpec(2) },
       new AbortController().signal,
     );
-    const hookClosed: string[] = [];
-    const hook = watchFiredHook({ closeSource: (id) => hookClosed.push(id) });
-    const kernel = plane.openKernel(SESSION);
-    const context: SessionEntityTimerContext = {
-      kernel,
-      authority: { sessionId: SESSION, owner: OWNER, fence: fixture.fence },
-      now: 1010,
-    };
-    const fire = (sourceKey: string) =>
-      runEffect(
-        hook(context, {
-          watchId: "budget",
-          epoch: 1,
-          sourceKey: watchOccurrenceKey("budget", 1, sourceKey),
-          batch: JSON.stringify({ content: `WAKE ${sourceKey}`, terminal: false }),
-        }),
-      );
-    expect(await fire("first")).toBe("applied");
-    const afterFirst = watchState(kernel, SESSION, "budget");
-    expect(afterFirst?.state).toMatchObject({
-      status: "armed",
-      notifications: 1,
-      lastBatch: "WAKE first",
-    });
-    expect(hookClosed).toEqual([]);
-    // Second occurrence exhausts the wake budget: fired + prompt + paused in one commit.
-    expect(await fire("second")).toBe("applied");
-    const afterSecond = watchState(kernel, SESSION, "budget");
-    expect(afterSecond?.state).toMatchObject({ status: "paused", notifications: 2 });
-    expect(hookClosed).toEqual(["budget"]);
-    // A superseded wake against the paused epoch resolves to noop, not a commit.
-    expect(await fire("third")).toBe("noop");
-    const prompts = sessionTree(SESSION, plane.sessionStore(SESSION).actions).filter(
+    expect(await wake("WAKE first")).toBe("delivered");
+    const afterFirst = foldAlarmChains(kernel, SESSION).get("budget");
+    expect(afterFirst?.latest).toMatchObject({ at: 1010, payload: { notifications: 1 } });
+    expect(state.closed).toEqual([]);
+    // The second wake spends the whole budget: prompt + exhaustion retire.
+    expect(await wake("WAKE second")).toBe("exhausted");
+    const afterSecond = foldAlarmChains(kernel, SESSION).get("budget");
+    expect(afterSecond?.latest).toMatchObject({ at: null, payload: { reason: "exhausted" } });
+    // The handler closes the native source AND the retiring arm's hook does:
+    // close is idempotent fire-and-forget, so the overlap is harmless.
+    expect(state.closed).toEqual(["budget", "budget"]);
+    const prompts = sessionTree(SESSION, state.plane.sessionStore(SESSION).actions).filter(
       (action) => action.kind === "prompt",
     );
     expect(prompts.map((action) => action.effect.value)).toEqual([
@@ -209,10 +207,10 @@ test("watchFiredHook commits occurrence, wake prompt, and budget pause as one ch
       { inboxKind: "prompt", content: "WAKE second" },
     ]);
     expect(prompts.map((action) => action.intent.value)).toEqual([
-      expect.objectContaining({ kind: "alarm", watchId: "budget", epoch: 1 }),
-      expect.objectContaining({ kind: "alarm", watchId: "budget", epoch: 1 }),
+      expect.objectContaining({ kind: "alarm", alarmId: "budget", purpose: "monitor.hit" }),
+      expect.objectContaining({ kind: "alarm", alarmId: "budget", purpose: "monitor.hit" }),
     ]);
   } finally {
-    plane.close();
+    state.plane.close();
   }
 });

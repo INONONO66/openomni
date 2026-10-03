@@ -69,11 +69,9 @@ import {
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
-import {
-  watchFiredHook,
-  watchOccurrenceKey,
-  watchTimeoutHook,
-} from "./composition/monitor-ports";
+import { createAlarmArmVerb } from "./composition/alarm-plane";
+import { monitorPurposes } from "./composition/bundles/monitor";
+import { cronPurposes } from "./composition/bundles/cron";
 import {
   acquireAppResource,
   channelRequests,
@@ -411,10 +409,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
     }
 
-    // Watch plane (#1253): native sources deliver occurrences through the
-    // entity's one `alarm` door; the occurrence id is the durable dedupe and
-    // the chain-guard identity (plan F2). A superseded occurrence folds to a
-    // recorded stale fact on the chain, never a rejection.
+    // Watch plane (#1253/#1254): native sources resend the chain's ARMED
+    // occurrence through the entity's one `alarm` door; the occurrence id is
+    // the durable dedupe and the chain-guard identity (plan F2). A superseded
+    // occurrence folds to a recorded stale fact on the chain, never a
+    // rejection.
     const sendAlarm = (
       sessionId: string,
       occurrence: {
@@ -429,42 +428,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     ) => entityClient(sessionId).Alarm(occurrence).pipe(Effect.asVoid);
     const watchSources = createWatchSources(
       {
-        watchFired: (fire) => {
-          const sourceKey = watchOccurrenceKey(fire.watchId, fire.epoch, fire.sourceKey);
-          return runAppEffect(
-            runtime,
-            // #1254 Lane 2: interim occurrence fields — the alarm capability's
-            // watch rewrite mints these from committed arm rows.
-            sendAlarm(fire.sessionId, {
-              occurrenceId: sourceKey,
-              purpose: "watch.fired",
-              alarmId: fire.watchId,
-              armSeq: fire.epoch,
-              sourceKey,
-              payload: JSON.stringify({
-                watchId: fire.watchId,
-                epoch: fire.epoch,
-                sourceKey,
-                batch: JSON.stringify({ content: fire.content, terminal: fire.terminal }),
-              }),
-              fireAt: services.now(),
-            }),
-          );
-        },
-        watchTimeout: (arm) =>
-          runAppEffect(
-            runtime,
-            // #1254 Lane 2: interim occurrence fields (see watch.fired above).
-            sendAlarm(arm.sessionId, {
-              occurrenceId: `${arm.watchId}:timeout:${arm.epoch}`,
-              purpose: "watch.timeout",
-              alarmId: arm.watchId,
-              armSeq: arm.epoch,
-              sourceKey: "watch.timeout",
-              payload: JSON.stringify({ watchId: arm.watchId, epoch: arm.epoch }),
-              fireAt: arm.fireAt,
-            }),
-          ),
+        deliver: ({ sessionId, ...occurrence }) =>
+          runAppEffect(runtime, sendAlarm(sessionId, occurrence)),
       },
       {
         clock: services.now,
@@ -477,6 +442,59 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("watches.close"),
       }),
     );
+    // #1254 S4: ctx.prompt — Lane 4 lands the prompt verb on the wake context
+    // and wires the entity's wake dispatch; until then no production wake
+    // reaches these handlers, and this injection is a typed refusal, never a
+    // silent drop.
+    const pendingPrompt: Bundle.AlarmPromptVerb = () =>
+      Effect.fail(new Bundle.AlarmWakeError({ purpose: "alarm", reason: "prompt_pending_s4" }));
+    const closeWatch = (watchId: string) => void watchSources.close(watchId);
+    const armVerb = createAlarmArmVerb({
+      openKernel: plane.openKernel,
+      clock: services.now,
+      entropy: services.entropy.id,
+      schedule: (sessionId, occurrence) => sendAlarm(sessionId, occurrence),
+      // Native handles follow committed arm rows: a scheduled `monitor.hit`
+      // arm installs or refreshes the source; a retiring arm closes it.
+      onArm: (notice) => {
+        if (notice.purpose !== Bundle.MONITOR_HIT) return;
+        if (notice.at === null) {
+          closeWatch(notice.alarmId);
+          return;
+        }
+        const payload = Bundle.WatchHitPayload.safeParse(notice.payload);
+        if (!payload.success) return;
+        const armed = {
+          sessionId: notice.sessionId,
+          id: notice.alarmId,
+          occurrence: {
+            occurrenceId: notice.occurrenceId,
+            alarmId: notice.alarmId,
+            armSeq: notice.armSeq,
+          },
+          base: { spec: payload.data.spec, notifications: payload.data.notifications },
+        };
+        if (!watchSources.refresh(armed))
+          void watchSources
+            .install(armed)
+            .catch((error: Error) =>
+              console.error(`watch ${notice.alarmId} install failed`, error),
+            );
+      },
+    });
+    const alarmPlane = await runAppBoot(
+      runtime,
+      Bundle.alarmCapability({
+        bundles: [
+          monitorPurposes({ prompt: pendingPrompt, close: closeWatch }),
+          cronPurposes({ prompt: pendingPrompt }),
+        ],
+        compose: Core.composeAlarmPurposes,
+        // Native install rides `onArm` above (the install seam has no armSeq).
+        watch: { install: () => Effect.void },
+        arm: armVerb,
+      }),
+    );
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
@@ -487,7 +505,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           machines: host, cells, completion: llmPort, messages,
           now: services.now, id: services.entropy.id,
         }),
-        alarms: await createMonitorPorts(runtime, watchSources),
+        alarms: await createMonitorPorts(runtime, alarmPlane),
         provisioning: provisioningPort,
       },
       sessionRuntime,
@@ -708,15 +726,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
               resolvedRuntime,
               services.scope,
             )(input),
-      timers: sessionTimerPort({
-        requestDomainRevisions: domainRevisions,
-        watchFired: watchFiredHook({
-          closeSource: (watchId) => void watchSources.close(watchId),
-        }),
-        watchTimeout: watchTimeoutHook({
-          closeSource: (watchId) => void watchSources.close(watchId),
-        }),
-      }),
+      // #1254: the legacy watch timer hooks are gone — watch wakes ride the
+      // alarm chain; Lane 4's wake dispatch (S4) consumes them in the entity.
+      timers: sessionTimerPort({ requestDomainRevisions: domainRevisions }),
       requestDomainRevisions: domainRevisions,
     });
 
