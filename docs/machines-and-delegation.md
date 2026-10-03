@@ -219,6 +219,13 @@ enrollment/offer intersection.
   open reattaches, never creates a second session; each session's window is
   linked into the reserved control session `omo-pty-control` because
   `%output` only flows for the attached session's panes.
+- The daemon shares the user's DEFAULT tmux server (the private `-L` socket
+  is test-only): granting `pty.session` exposes every grammar-conforming
+  session on that server — reattach-by-name reaches sessions the user created
+  (cwd confinement applies at open, not reattach) and `pty_close` can kill
+  them. This is the accepted #1273 design (restart rediscovery makes a prior
+  generation's sessions indistinguishable from the user's); names outside the
+  `PtySessionName` grammar stay invisible to list/discovery and refuse typed.
 - `pty_read` is the authoritative pull: one cursor sequence replays the
   `capture-pane -S -` scrollback snapshot taken at attach, then live decoded
   `%output` bytes, with no duplicate bytes across the transition. Cursors are
