@@ -194,13 +194,15 @@ describe("pty.session over real tmux", () => {
 describe("pty.session control-stream faults (scripted server)", () => {
   function scripted() {
     const names: string[] = [];
+    const lines: string[] = [];
     let hooks: Parameters<PtyControlFactory>[0] | undefined;
     const control: PtyControl = {
       command: (line) =>
         Effect.sync(() => {
+          lines.push(line);
           if (line.startsWith("list-sessions")) return [...names];
           if (line.startsWith("new-session")) {
-            names.push(line.split(" ")[2] ?? "");
+            names.push(line.split(" ")[3] ?? "");
             return [];
           }
           if (line.startsWith("list-panes")) return ["@9 %9"];
@@ -225,8 +227,44 @@ describe("pty.session control-stream faults (scripted server)", () => {
       if (hooks === undefined) throw new Error("control client never started");
       return hooks;
     };
-    return { adapter, faults };
+    return { adapter, faults, lines };
   }
+
+  // CI runs tmux 3.4 (ubuntu-24.04) while this Mac runs 3.7: the adapter may
+  // only speak the 3.4 grammar. This pins every command line the adapter can
+  // issue — no 3.5+ control-mode flow control (pause-after, refresh-client -A),
+  // no client flags on attach, literal-byte writes as hex send-keys.
+  test("the adapter's tmux command grammar stays within the tmux 3.4 flag set", async () => {
+    const { adapter, faults, lines } = scripted();
+    await run(adapter.offeredCapabilities([Machine.WellKnownCapability.ptySession]));
+    const opened = okOpen(await run(adapter.open({ name: "zeta", cwd: "/tmp" })));
+    okRead(await run(adapter.read({ name: "zeta", cursor: opened.cursor })));
+    await run(adapter.write({ name: "zeta", data: Buffer.from("hi\n", "utf8").toString("base64") }));
+    expect(await run(adapter.resize({ name: "zeta", cols: 100, rows: 30 }))).toEqual({ status: "ok" });
+    expect(await run(adapter.list({}))).toEqual({
+      status: "ok",
+      sessions: [{ name: "zeta", status: "live" }],
+      truncated: false,
+    });
+    expect(await run(adapter.close({ name: "zeta" }))).toEqual({ status: "ok" });
+    // The control client attaches with -C (a daemon has no tty for -CC) and
+    // -A so a daemon restart reattaches the reserved control session.
+    expect(faults().argv).toEqual(["tmux", "-C", "new-session", "-A", "-s", "omo-pty-control"]);
+    expect(lines).toEqual([
+      'list-sessions -F "#{session_name}"',
+      'list-sessions -F "#{session_name}"',
+      'new-session -d -s zeta -c "/tmp" -x 80 -y 24',
+      'list-panes -t =zeta: -F "#{window_id} #{pane_id}"',
+      "link-window -s @9 -t omo-pty-control:",
+      "capture-pane -p -t %9 -S - -E -",
+      "send-keys -t %9 -H 68 69 0a",
+      "set-option -w -t =zeta: window-size manual",
+      "resize-window -t =zeta: -x 100 -y 30",
+      'list-sessions -F "#{session_name}"',
+      "kill-session -t =zeta",
+      "kill-window -t @9",
+    ]);
+  });
 
   test("a malformed control record fails exactly the next read of the affected pane, then streaming resumes", async () => {
     const { adapter, faults } = scripted();

@@ -632,9 +632,14 @@ describe("bash session door", () => {
       events: { publish: () => undefined },
       now: () => 5000,
     }));
+    // Each daemon generation mints ids from its own stream, as production
+    // entropy does: reusing the registry generation id across a restart lets
+    // a pre-restart cursor parse as a native offset into the new daemon's
+    // stream and skip output (PR #1283 CI, tmux 3.4 runner).
+    let generation = 0;
     const daemonOptions = () => ({
       socketPath: path,
-      id: testIds("pty-bridge-daemon"),
+      id: testIds(`pty-bridge-daemon-g${(generation += 1)}`),
       offer,
       fsExports: new Map([["shell", "/"]]),
       pty: { socketName: TMUX_SOCKET },
