@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { Core } from "@openomni/agent";
 const createTurnDispatcher = Core.createTurnDispatcher;
-import { createCodemode } from "@openomni/machines";
+import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import { LedgerAction, type Machine } from "@openomni/protocol";
 import { catalogLayer, executorLayer } from "../../../packages/agent/test/helpers/service-layers";

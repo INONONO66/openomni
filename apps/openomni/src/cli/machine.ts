@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { attachMachineDaemon, MachinesFailure } from "@openomni/machines";
-import { createCodemode } from "@openomni/machines";
+import { createCodemode } from "@openomni/codemode";
 import { Machine } from "@openomni/protocol";
 import { z } from "zod";
 import { foreignFailure } from "../composition/failure";

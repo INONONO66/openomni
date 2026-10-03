@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { acquireEffect, acquireSyncEffect } from "./effect";
-import { createCodemode } from "@openomni/machines";
+import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import { testIds } from "./test-entropy";
 import type { Machine } from "@openomni/protocol";

@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { Core } from "@openomni/agent";
 const createTurnDispatcher = Core.createTurnDispatcher;
 const currentInvocation = Core.currentInvocation;
-import { createCodemode } from "@openomni/machines";
+import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost, type MachinesFailure } from "@openomni/machines";
 import { LedgerAction, type Machine, type PlainObject } from "@openomni/protocol";
 import { z } from "zod";

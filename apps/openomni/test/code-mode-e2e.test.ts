@@ -23,7 +23,7 @@ import type { CatalogOrigin } from "../src/tools/core/catalog";
 import type { ToolPorts } from "../src/tools/core/catalog";
 import { cellPorts } from "./helpers/cell-ports";
 import { composeCodemode } from "../src/composition/codemode";
-import { createCodemode } from "@openomni/machines";
+import { createCodemode } from "@openomni/codemode";
 import { dispatchModelTool, modelToolOutput } from "./helpers/tool-dispatch";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
