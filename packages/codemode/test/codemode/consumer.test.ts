@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { attachMachineDaemon, createMachineHost } from "../helpers/native";
+import { attachMachineDaemon, createMachineHost } from "../../../machines/test/helpers/native";
 import { CodemodeError, createCodemode } from "./helpers/native";
 
 const silent = {
