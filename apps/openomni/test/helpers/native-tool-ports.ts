@@ -22,6 +22,11 @@ export function testMachinePorts(
         stat: (path) => runTyped(handle.fs.stat(path)),
       },
       exec: (command, cwd) => runTyped(handle.exec(command, cwd)),
+      pty: {
+        open: (name, cwd) => runTyped(handle.pty.open(name, cwd)),
+        write: (name, data) => runTyped(handle.pty.write(name, data)),
+        read: (name, options) => runTyped(handle.pty.read(name, options)),
+      },
     };
   } };
 }

@@ -160,6 +160,91 @@ test("app root runs machine read write shell and code through one eval cell", as
   rmSync(directory, { recursive: true, force: true });
 }, 30_000);
 
+test("a cell drives a named persistent terminal through m.pty (#1273)", async () => {
+  const socketPath = testSocketPath();
+  const tmuxSocket = `oo-1273-e2e-${process.pid}`;
+  const appEnrollment = {
+    ...fullEnrollment(),
+    allowedCapabilities: ["kernel.py", "pty.session"],
+    allowedExports: ["shell"],
+  };
+  const config = suite.config("openomni-app-pty-", {
+    wsToken: WS_TOKEN,
+    model: { provider: "fake", id: "app-pty-test", apiKey: "test-key" },
+    machines: { socketPath, enrolled: [appEnrollment] },
+  });
+  const code = [
+    `m = codemode.getMachine('${MACHINE_ID}')`,
+    "t = m.pty('qa')",
+    "opened = t.open('/')",
+    "cur = opened['cursor']",
+    "first = t.read(cursor=cur, wait_ms=3000)",
+    "cur = first['cursor']",
+    "t.resize(120, 30)",
+    "t.write('echo py-$((40+2))\\r')",
+    "seen = b''",
+    "for _ in range(20):",
+    "    view = t.read(cursor=cur, wait_ms=1000)",
+    "    cur = view['cursor']",
+    "    seen += view['data']",
+    "    if b'py-42' in seen:",
+    "        break",
+    "names = [s['name'] for s in m.ptyList()['sessions']]",
+    "closed = t.close()['status']",
+    "after = t.read()['reason']",
+    "(b'py-42' in seen, names, closed, after)",
+  ].join("\n");
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
+        const call = requestToolStep(input, sink, {
+          id: "pty-cell",
+          tool: "eval",
+          input: { operation: { op: "run", code, timeout: 30 } },
+        });
+        if (call === undefined) return { type: "stop" };
+        // Second door, same terminal plane: the bash tool with a session,
+        // through the app's real gateway machine port. One step: the agent
+        // stop-guard treats repeated empty tool-step turns as a stall.
+        const echo = requestToolStep(input, sink, {
+          id: "pty-bash-echo",
+          tool: "bash",
+          input: { machine: MACHINE_ID, session: "door", command: "export DOOR_X=42; echo door-$DOOR_X" },
+        });
+        if (echo === undefined) return { type: "stop" };
+        sink.onMessage(assistantMessage(input, { text: `${call.output} || ${echo.output}` }));
+        return { type: "stop" };
+      }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const daemon = await attachMachineDaemon({
+    socketPath,
+    fsExports: new Map([["shell", "/"]]),
+    pty: { socketName: tmuxSocket },
+    offer: {
+      machineId: MACHINE_ID,
+      offeredCapabilities: appEnrollment.allowedCapabilities,
+      exports: [{ name: "shell", path: "/" }],
+      daemonVersion: "test",
+      platform: `${process.platform}-${process.arch}`,
+      offeredAt: 1,
+    },
+  });
+  suite.defer(() => runEffect(daemon.close()));
+  suite.defer(() => {
+    Bun.spawnSync(["tmux", "-L", tmuxSocket, "kill-server"]);
+  });
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", WS_TOKEN]);
+  const reply = nextResidentTurn(plane, 60_000);
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "exercise the terminal" }));
+  const answer = String((await reply).text);
+  expect(answer).toContain("(True, ['qa'], 'ok', 'pty_not_found')");
+  expect(answer).toContain("door-42");
+}, 90_000);
+
 test("a cell creates three child sessions through send_message", async () => {
   const socketPath = testSocketPath();
   const residentTurns: string[] = [];

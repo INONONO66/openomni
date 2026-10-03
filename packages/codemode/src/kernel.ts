@@ -200,6 +200,44 @@ class _Machine:
             raise ToolError('input requires a prior screen() capture or an explicit capture_id')
         return tool['codemode.input'](machineId=self.machine_id, captureId=anchor, actions=actions)
 
+    def pty(self, name):
+        return _PtySession(self.machine_id, name)
+
+    def ptyList(self):
+        return tool['codemode.ptyList'](machineId=self.machine_id)
+
+
+class _PtySession:
+    """Named persistent terminal (#1273); reattach is just pty(name) again."""
+
+    def __init__(self, machine_id, name):
+        self.machine_id = machine_id
+        self.name = name
+
+    def open(self, cwd):
+        return tool['codemode.ptyOpen'](machineId=self.machine_id, name=self.name, cwd=cwd)
+
+    def write(self, data):
+        payload = data.encode('utf-8') if isinstance(data, str) else data
+        return tool['codemode.ptyWrite'](machineId=self.machine_id, name=self.name, data=base64.b64encode(payload).decode('ascii'))
+
+    def read(self, cursor=None, wait_ms=None):
+        args = {'machineId': self.machine_id, 'name': self.name}
+        if cursor is not None:
+            args['cursor'] = cursor
+        if wait_ms is not None:
+            args['waitMs'] = wait_ms
+        value = tool['codemode.ptyRead'](**args)
+        if value['status'] == 'ok':
+            value['data'] = base64.b64decode(value['data'])
+        return value
+
+    def resize(self, cols, rows):
+        return tool['codemode.ptyResize'](machineId=self.machine_id, name=self.name, cols=cols, rows=rows)
+
+    def close(self):
+        return tool['codemode.ptyClose'](machineId=self.machine_id, name=self.name)
+
 
 class _Codemode:
     def listMachines(self):

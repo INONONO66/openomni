@@ -42,6 +42,12 @@ const RunInput = z.object({ machineId: Machine.MachineId, code: z.string() }).st
 const ScreenInput = Machine.ScreenReadRequest.extend({ machineId: Machine.MachineId });
 const InputInput = Machine.InputWriteRequest.extend({ machineId: Machine.MachineId });
 const FindInput = z.object({ tag: z.string().min(1) }).strict();
+const PtyOpenInput = Machine.PtyOpenRequest.extend({ machineId: Machine.MachineId });
+const PtyWriteInput = Machine.PtyWriteRequest.extend({ machineId: Machine.MachineId });
+const PtyReadInput = Machine.PtyReadRequest.extend({ machineId: Machine.MachineId });
+const PtyResizeInput = Machine.PtyResizeRequest.extend({ machineId: Machine.MachineId });
+const PtyCloseInput = Machine.PtyCloseRequest.extend({ machineId: Machine.MachineId });
+const PtyListInput = z.object({ machineId: Machine.MachineId }).strict();
 
 /** One app-owned scope retains background cells and tenant interpreters. */
 export function createCodemode(options: Options) {
@@ -80,6 +86,15 @@ export function createCodemode(options: Options) {
         eval: (cell: Machine.CellRequest, signal?: AbortSignal) => Effect.suspend(() => target().runCode(cell, signal)),
         screen: (request: Machine.ScreenReadRequest) => Effect.suspend(() => target().screen(request)),
         input: (request: Machine.InputWriteRequest) => Effect.suspend(() => target().input(request)),
+        // Persistent terminals (#1273): mirror of MachineHandle.pty.
+        pty: {
+          open: (name: string, cwd: string) => Effect.suspend(() => target().pty.open(name, cwd)),
+          write: (name: string, data: Uint8Array) => Effect.suspend(() => target().pty.write(name, data)),
+          read: (name: string, options?: { cursor?: string; waitMs?: number }) => Effect.suspend(() => target().pty.read(name, options)),
+          resize: (name: string, cols: number, rows: number) => Effect.suspend(() => target().pty.resize(name, cols, rows)),
+          close: (name: string) => Effect.suspend(() => target().pty.close(name)),
+          list: () => Effect.suspend(() => target().pty.list()),
+        },
       };
     }
     function getMachine(id: string) {
@@ -141,6 +156,39 @@ export function createCodemode(options: Options) {
         return undefined;
       });
     }
+    /** Persistent terminals (#1273): named tmux sessions over the same handle. */
+    function dispatchPtyOp(call: Machine.ToolCall): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
+      const args = <Shape extends z.ZodType>(schema: Shape, operation: string): Effect.Effect<z.output<Shape>, Failure> =>
+        Effect.try({ try: () => schema.parse(call.arguments), catch: decodeCodeFailure(`${operation}.arguments`) });
+      return Effect.gen(function* () {
+        if (call.name === "codemode.ptyOpen") {
+          const input = yield* args(PtyOpenInput, "ptyOpen");
+          return { status: "completed", value: yield* getMachine(input.machineId).pty.open(input.name, input.cwd) };
+        }
+        if (call.name === "codemode.ptyWrite") {
+          const input = yield* args(PtyWriteInput, "ptyWrite");
+          return { status: "completed", value: yield* getMachine(input.machineId).pty.write(input.name, Buffer.from(input.data, "base64")) };
+        }
+        if (call.name === "codemode.ptyRead") {
+          const { machineId, name, ...window } = yield* args(PtyReadInput, "ptyRead");
+          const value = yield* getMachine(machineId).pty.read(name, window);
+          return { status: "completed", value: value.status === "ok" ? { ...value, data: Buffer.from(value.data).toString("base64") } : value };
+        }
+        if (call.name === "codemode.ptyResize") {
+          const input = yield* args(PtyResizeInput, "ptyResize");
+          return { status: "completed", value: yield* getMachine(input.machineId).pty.resize(input.name, input.cols, input.rows) };
+        }
+        if (call.name === "codemode.ptyClose") {
+          const input = yield* args(PtyCloseInput, "ptyClose");
+          return { status: "completed", value: yield* getMachine(input.machineId).pty.close(input.name) };
+        }
+        if (call.name === "codemode.ptyList") {
+          const input = yield* args(PtyListInput, "ptyList");
+          return { status: "completed", value: yield* getMachine(input.machineId).pty.list() };
+        }
+        return undefined;
+      });
+    }
     function dispatchHostOp(call: Machine.ToolCall, binding: NonNullable<ReturnType<typeof live.get>>): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
       return Effect.gen(function* () {
         if (call.name === "codemode.eval") {
@@ -165,6 +213,8 @@ export function createCodemode(options: Options) {
         if (machineOp !== undefined) return machineOp;
         const computerOp = yield* dispatchComputerOp(call);
         if (computerOp !== undefined) return computerOp;
+        const ptyOp = yield* dispatchPtyOp(call);
+        if (ptyOp !== undefined) return ptyOp;
         const hostOp = yield* dispatchHostOp(call, binding);
         if (hostOp !== undefined) return hostOp;
         return yield* binding.caller(call);

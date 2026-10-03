@@ -7,6 +7,7 @@ import { Effect, Fiber, type Scope } from "effect";
 import { MachinesFailure, MachineCellError, MachineRefusalError, TransportFailure, type MachineError } from "./errors";
 import { decodeMachineFailure } from "./failure";
 import { onAbort } from "./interrupt-on";
+import { createPtyHandle, type PtyHandle } from "./pty-host";
 
 interface MachineHostOptions {
   /**
@@ -49,6 +50,8 @@ export interface MachineHandle {
   /** Computer use (#1274): bounded capture and guarded input over the same attachment. */
   screen(request: Machine.ScreenReadRequest): Effect.Effect<ScreenValue | Exclude<Machine.ScreenReadResult, { status: "ok" }>, MachineError>;
   input(request: Machine.InputWriteRequest): Effect.Effect<Machine.InputWriteResult, MachineError>;
+  /** Persistent terminals (#1273): named tmux sessions behind one routed call seam. */
+  readonly pty: PtyHandle;
   runCode(cell: Machine.CellRequest, signal?: AbortSignal): Effect.Effect<Machine.CellResult, MachineError>;
   peekCode(cellId: string): Effect.Effect<Machine.PeekResult, MachineError>;
 }
@@ -265,6 +268,13 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
           const raw = yield* typedCall(peer.server, Machine.WireMethod.InputWrite, parsed, Machine.EXEC_TIMEOUT_MS + 1000).pipe(Effect.mapError(transportFailure("input.call")));
           return yield* Effect.try({ try: () => Machine.InputWriteResult.parse(raw), catch: decodeMachineFailure("input.response") });
         }),
+        // Additive #1273 seam: pty-host owns schemas/codecs; only routing lives here.
+        pty: createPtyHandle((method, params, timeoutMs) => Effect.gen(function* () {
+          const peer = yield* Effect.try({ try: () => connection(id), catch: decodeMachineFailure("pty.connection") });
+          server.useConnection(peer.id);
+          // Safe: pty-host validated params against this method's wire schema.
+          return yield* server.call(method, params as Ipc.Request["params"], timeoutMs).pipe(Effect.mapError(transportFailure("pty.call")));
+        })),
         runCode: (cell, signal) => Effect.scoped(Effect.gen(function* () {
           const request = yield* Effect.try({ try: () => Machine.CellRequest.parse(cell), catch: decodeMachineFailure("cell.request") });
           if (signal?.aborted) return yield* Effect.interrupt;
