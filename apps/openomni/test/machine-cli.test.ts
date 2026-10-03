@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMachineHost } from "@openomni/machines";
-import { hostFingerprint, pinnedTcpHostOptions, qaOffer, spawnAttachCli, tlsFixturesDir } from "./helpers/machine-cli";
+import { pinnedTcpHostOptions, qaOffer, spawnAttachCli, tlsFixturesDir } from "./helpers/machine-cli";
 import { composeCodemode, type ComposedCodemode } from "../src/composition/codemode";
 import { modelToolOutput } from "./helpers/tool-dispatch";
 import { socketPath } from "./helpers/socket-path";
@@ -136,7 +136,7 @@ test("machine attach CLI reaches a network host over pinned TLS", async () => {
     configPath,
     JSON.stringify({
       tcp: { host: "127.0.0.1", port: host.endpoints.tcp?.port },
-      hostPublicKey: hostFingerprint,
+      hostCertificate: join(tlsFixturesDir, "host-cert.pem"),
       tlsCertificate: join(tlsFixturesDir, "daemon-cert.pem"),
       tlsPrivateKey: join(tlsFixturesDir, "daemon-key.pem"),
       offer: qaOffer("net-1", root, ["fs.read"]),

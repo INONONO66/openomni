@@ -11,7 +11,7 @@ import { acquire } from "./ipc/helpers/effects";
 import { connectIpcTcpClient } from "./ipc/helpers/native";
 import { exit as runExit } from "./helpers/effect";
 import { socketPath } from "./helpers/socket-path";
-import { daemonIdentity, daemonFingerprint, hostIdentity, hostFingerprint, wrongIdentity } from "./ipc/helpers/tls-fixtures";
+import { daemonIdentity, daemonFingerprint, hostIdentity, wrongIdentity } from "./ipc/helpers/tls-fixtures";
 
 const silent = { publish: () => undefined };
 function sequentialIds(prefix: string): () => string {
@@ -76,7 +76,7 @@ describe("host listener set (#1270)", () => {
       const overTcp = await acquire(
         nativeDaemon({
           tcp: { host: "127.0.0.1", port },
-          hostPublicKey: hostFingerprint,
+          hostCertificate: hostIdentity.certificate,
           tlsCertificate: daemonIdentity.certificate,
           tlsPrivateKey: daemonIdentity.privateKey,
           id: sequentialIds("tcp-daemon"),
@@ -120,7 +120,7 @@ describe("host listener set (#1270)", () => {
       const intruder = await acquire(
         nativeDaemon({
           tcp: { host: "127.0.0.1", port },
-          hostPublicKey: hostFingerprint,
+          hostCertificate: hostIdentity.certificate,
           tlsCertificate: wrongIdentity.certificate,
           tlsPrivateKey: wrongIdentity.privateKey,
           id: sequentialIds("intruder"),
@@ -153,7 +153,7 @@ describe("host listener set (#1270)", () => {
       const legitimate = await acquire(
         nativeDaemon({
           tcp: { host: "127.0.0.1", port },
-          hostPublicKey: hostFingerprint,
+          hostCertificate: hostIdentity.certificate,
           tlsCertificate: daemonIdentity.certificate,
           tlsPrivateKey: daemonIdentity.privateKey,
           id: sequentialIds("legit"),
@@ -164,7 +164,7 @@ describe("host listener set (#1270)", () => {
       const intruder = await connectIpcTcpClient({
         tcp: { host: "127.0.0.1", port },
         tls: wrongIdentity,
-        hostPublicKey: hostFingerprint,
+        hostCertificate: hostIdentity.certificate,
       });
       try {
         expect(legitimate.value.attachment.status).toBe("attached");

@@ -7,7 +7,7 @@ import { captureError, within } from "./ipc/helpers/signal";
 import { socketPath } from "./helpers/socket-path";
 import { eventCollector } from "./helpers/events";
 import { startProxy } from "./helpers/proxy";
-import { daemonFingerprint, daemonIdentity, hostFingerprint, hostIdentity, wrongIdentity } from "./ipc/helpers/tls-fixtures";
+import { daemonFingerprint, daemonIdentity, hostIdentity, wrongIdentity } from "./ipc/helpers/tls-fixtures";
 
 /**
  * #1270 reconnect proof: time is driven ONLY through the injected scheduler
@@ -236,7 +236,7 @@ describe("daemon reattach over a dropped transport", () => {
     const clock = fakeScheduler();
     const daemon = await attachMachineDaemon({
       tcp: { host: "127.0.0.1", port: proxy.port },
-      hostPublicKey: hostFingerprint,
+      hostCertificate: hostIdentity.certificate,
       tlsCertificate: daemonIdentity.certificate,
       tlsPrivateKey: daemonIdentity.privateKey,
       offer: offer(),
@@ -245,7 +245,8 @@ describe("daemon reattach over a dropped transport", () => {
     try {
       expect(daemon.attachment.status).toBe("attached");
 
-      // The key rotates while the transport is down.
+      // The host certificate rotates while the transport is down: the redial
+      // fails chain validation against the configured certificate — terminal.
       target.port = rotated.endpoints.tcp?.port ?? 0;
       const scheduled = clock.nextScheduled();
       proxy.sever();

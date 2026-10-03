@@ -4,11 +4,10 @@ import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { Machine } from "@openomni/protocol";
 import type { createMachineHost } from "@openomni/machines";
-import { daemonFingerprint, hostFingerprint, hostIdentity } from "../../../../packages/machines/test/ipc/helpers/tls-fixtures";
+import { daemonFingerprint, hostIdentity } from "../../../../packages/machines/test/ipc/helpers/tls-fixtures";
 
 /** The committed PEM fixture files the CLI config points at (paths, not contents). */
 export const tlsFixturesDir = join(import.meta.dir, "../../../../packages/machines/test/ipc/fixtures");
-export { hostFingerprint };
 
 /** One QA-flavored daemon offer exporting `root` as `data`. */
 export function qaOffer(machineId: string, root: string, capabilities: readonly string[]): Machine.Offer {

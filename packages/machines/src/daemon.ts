@@ -22,16 +22,20 @@ export interface CodeRunner {
 }
 /**
  * Where the daemon dials home (#1270): the existing Unix socket shape stays
- * top-level, or a TCP endpoint with the pinned host key and the daemon's own
- * TLS identity (PEM contents). One shape — the fields are mutually exclusive.
+ * top-level, or a TCP endpoint with the host's certificate and the daemon's
+ * own TLS identity (PEM contents). One shape — the fields are mutually
+ * exclusive.
  */
 type DaemonConnection =
   | { readonly socketPath: string; readonly tcp?: undefined }
   | {
       readonly socketPath?: undefined;
       readonly tcp: { readonly host: string; readonly port: number };
-      /** Pinned host key: sha256(SPKI DER) the presented server cert must match. */
-      readonly hostPublicKey: Machine.KeyFingerprint;
+      /**
+       * PEM of the HOST's certificate: the TLS chain must validate against it
+       * and the presented key must carry its fingerprint (#1270).
+       */
+      readonly hostCertificate: string;
       /** PEM contents of the daemon identity presented to mutual TLS. */
       readonly tlsCertificate: string;
       readonly tlsPrivateKey: string;
@@ -230,15 +234,16 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       const clientOptions = { idSource: options.id, onDisconnect: () => transportLoss(scope), onRequest };
       return options.tcp === undefined
         ? connectIpcClient(options.socketPath, clientOptions)
-        : connectIpcTcpClient({ tcp: options.tcp, tls: { certificate: options.tlsCertificate, privateKey: options.tlsPrivateKey }, hostPublicKey: options.hostPublicKey }, clientOptions);
+        : connectIpcTcpClient({ tcp: options.tcp, tls: { certificate: options.tlsCertificate, privateKey: options.tlsPrivateKey }, hostCertificate: options.hostCertificate }, clientOptions);
     }
     /** One connect-and-attach cycle; the connection lives in its own scope. */
     const establish: Effect.Effect<void, MachineError> = Effect.gen(function* () {
       const scope = yield* Scope.make();
       clientScope = scope;
       client = yield* dialWith(scope).pipe(Scope.provide(scope), Effect.mapError((error) =>
-        // The HOST's presented key no longer matches the pinned hostPublicKey
-        // (#1270 F5): that is a revocation-class refusal, not a transport blip.
+        // The HOST no longer passes certificate verification — chain or key —
+        // against the configured hostCertificate (#1270 F5): a revocation-class
+        // refusal, not a transport blip.
         error._tag === "IpcPeerKeyMismatchError"
           ? new MachineRefusalError({ reason: "peer_key_mismatch", message: error.message })
           : transportFailure("daemon.connect")(error)));
@@ -248,9 +253,10 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     /**
      * A scheduled reconnect attempt. Success resets the backoff counter; a
      * REFUSED reattach surfaces through `attachment` and closes the daemon —
-     * automatic reconnect stops until a restart or config change. A host key
-     * that stopped matching the pin is equally terminal (#1270 F5): the pin
-     * refusal surfaces and the daemon closes — key rotation needs new config.
+     * automatic reconnect stops until a restart or config change. A host
+     * certificate that stopped verifying (chain or key) is equally terminal
+     * (#1270 F5): the refusal surfaces and the daemon closes — certificate
+     * rotation needs new config.
      * Any other transport failure releases the half-made connection and backs
      * off. The failed in-flight calls of the dropped connection are never
      * replayed.

@@ -10,7 +10,7 @@ import { type BusEvent, Machine } from "@openomni/protocol";
 import { attachConfiguredMachine } from "../src/cli/machine";
 import { testIds } from "./helpers/test-entropy";
 import { startProxy } from "../../../packages/machines/test/helpers/proxy";
-import { hostFingerprint, pinnedTcpHostOptions, qaOffer, tlsFixturesDir } from "./helpers/machine-cli";
+import { pinnedTcpHostOptions, qaOffer, tlsFixturesDir } from "./helpers/machine-cli";
 
 /** Event-driven attach signal: no sleeps, no polling. */
 function attachSignal() {
@@ -45,7 +45,7 @@ test("attachConfiguredMachine dials a pinned network host in-process and redials
     configPath,
     JSON.stringify({
       tcp: { host: "127.0.0.1", port: proxy.port },
-      hostPublicKey: hostFingerprint,
+      hostCertificate: join(tlsFixturesDir, "host-cert.pem"),
       tlsCertificate: join(tlsFixturesDir, "daemon-cert.pem"),
       tlsPrivateKey: join(tlsFixturesDir, "daemon-key.pem"),
       offer: qaOffer("cfg-1", root, ["fs.read"]),
@@ -80,7 +80,7 @@ test("attachConfiguredMachine rejects an incomplete TLS configuration with a typ
     configPath,
     JSON.stringify({
       tcp: { host: "127.0.0.1", port: 4433 },
-      hostPublicKey: hostFingerprint,
+      hostCertificate: join(tlsFixturesDir, "host-cert.pem"),
       tlsCertificate: join(tlsFixturesDir, "daemon-cert.pem"),
       // tlsPrivateKey is missing: the config union must refuse, never dial.
       offer: qaOffer("cfg-bad", "/tmp", ["fs.read"]),
@@ -88,7 +88,7 @@ test("attachConfiguredMachine rejects an incomplete TLS configuration with a typ
   );
   try {
     const scope = await runEffect(Scope.make());
-    const result = await Effect.runPromise(
+    const result = await runEffect(
       Effect.result(Scope.provide(attachConfiguredMachine(configPath, testIds("cfg-bad")), scope)),
     );
     await runEffect(Scope.close(scope, Exit.void));

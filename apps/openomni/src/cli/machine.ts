@@ -12,9 +12,10 @@ import { foreignFailure } from "../composition/failure";
 
 /**
  * Two ways to reach a host, named explicitly: same-box over the unix socket,
- * or across the network with mutual key pinning — the daemon pins the host's
- * key, the host pins the daemon's via its enrollment. The TLS fields are PEM
- * file PATHS (read at attach time), so key material never sits in the JSON.
+ * or across the network — the daemon verifies the host's CERTIFICATE through
+ * the TLS chain (its key fingerprint is the pin), the host pins the daemon's
+ * key via its enrollment. The TLS fields and `hostCertificate` are PEM file
+ * PATHS (read at attach time), so key material never sits in the JSON.
  */
 const UnixConfiguration = z
   .object({ socketPath: z.string().min(1), offer: Machine.Offer })
@@ -22,7 +23,7 @@ const UnixConfiguration = z
 const TcpConfiguration = z
   .object({
     tcp: z.object({ host: z.string().min(1), port: z.number().int().min(1).max(65535) }).strict(),
-    hostPublicKey: Machine.KeyFingerprint,
+    hostCertificate: z.string().min(1),
     tlsCertificate: z.string().min(1),
     tlsPrivateKey: z.string().min(1),
     offer: Machine.Offer,
@@ -62,6 +63,7 @@ export function attachConfiguredMachine(configPath: string, id: () => string) {
     }
     const identity = yield* Effect.try({
       try: () => ({
+        hostCertificate: readFileSync(config.hostCertificate, "utf8"),
         tlsCertificate: readFileSync(config.tlsCertificate, "utf8"),
         tlsPrivateKey: readFileSync(config.tlsPrivateKey, "utf8"),
       }),
@@ -71,7 +73,6 @@ export function attachConfiguredMachine(configPath: string, id: () => string) {
       ...common,
       reconnect,
       tcp: config.tcp,
-      hostPublicKey: config.hostPublicKey,
       ...identity,
     });
   });
