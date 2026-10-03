@@ -279,13 +279,17 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
   const crop = (path: string, region: Machine.ScreenRegion, bounds: DisplayBounds) =>
     Effect.gen(function* () {
       const scale = bounds.pixelWidth / bounds.pointWidth;
+      // Offsets and extents round independently, so clamp both to the pixel
+      // image: offset + extent must never exceed what the capture contains.
+      const offsetX = Math.min(Math.round(region.x * scale), bounds.pixelWidth - 1);
+      const offsetY = Math.min(Math.round(region.y * scale), bounds.pixelHeight - 1);
       const pixels: PixelSize = {
-        width: Math.max(1, Math.round(region.width * scale)),
-        height: Math.max(1, Math.round(region.height * scale)),
+        width: Math.max(1, Math.min(Math.round(region.width * scale), bounds.pixelWidth - offsetX)),
+        height: Math.max(1, Math.min(Math.round(region.height * scale), bounds.pixelHeight - offsetY)),
       };
       const result = yield* run([
         SIPS,
-        "--cropOffset", String(Math.round(region.y * scale)), String(Math.round(region.x * scale)),
+        "--cropOffset", String(offsetY), String(offsetX),
         "-c", String(pixels.height), String(pixels.width),
         path,
       ]);
@@ -327,7 +331,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
       return undefined;
     }
     const text = result.stdout.trim();
-    if (text.length === 0 || text.length > Machine.SCREEN_AX_MAX_BYTES) return undefined;
+    if (text.length === 0 || Buffer.byteLength(text, "utf8") > Machine.SCREEN_AX_MAX_BYTES) return undefined;
     const parsed = yield* Effect.try({
       try: () => AccessibilityTree.parse(JSON.parse(text)),
       catch: decodeMachineFailure("computer.tree"),

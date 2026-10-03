@@ -11,7 +11,7 @@ export function png(size: number): Buffer {
 }
 
 /** `sips -g` stdout for a display measured at the given pixel size and dpi. */
-function sipsBounds(pixelWidth: number, pixelHeight: number, dpiWidth: number): string {
+export function sipsBounds(pixelWidth: number, pixelHeight: number, dpiWidth: number): string {
   return `/tmp/x.png\n  pixelWidth: ${pixelWidth}\n  pixelHeight: ${pixelHeight}\n  dpiWidth: ${dpiWidth.toFixed(3)}\n`;
 }
 

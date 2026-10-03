@@ -480,7 +480,7 @@ export type ScreenReadRequest = z.infer<typeof ScreenReadRequest>;
  * probe succeeds, and bounded so one capture can never flood the wire.
  */
 const BoundedAccessibilityTree = PlainValueSchema.superRefine((value, ctx) => {
-  if (JSON.stringify(value).length > SCREEN_AX_MAX_BYTES) {
+  if (new TextEncoder().encode(JSON.stringify(value)).length > SCREEN_AX_MAX_BYTES) {
     ctx.addIssue({
       code: "custom",
       message: `accessibility tree exceeds ${SCREEN_AX_MAX_BYTES} serialized bytes`,

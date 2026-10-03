@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon, createMachineHost } from "./helpers/native";
-import { fakeMac, type FakeMacBehavior, png } from "./helpers/fake-commands";
+import { fakeMac, type FakeMacBehavior, png, sipsBounds } from "./helpers/fake-commands";
 import { socketPath } from "./helpers/socket-path";
 import { silent } from "./helpers";
 
@@ -151,6 +151,20 @@ describe("screen.read", () => {
       // 2x display: points double into pixel offsets and pixel extents.
       expect(crop?.slice(1, 7)).toEqual(["--cropOffset", "40", "20", "-c", "100", "200"]);
     });
+  });
+
+  test("crop offsets and extents are clamped to the pixel image", async () => {
+    // 999x600 px at 1.5x -> 666x400 points; x=665 rounds to offset 998 and
+    // width 1 rounds to 2 px (998+2 > 999), which must clamp the width to 1.
+    await fixture(
+      { behavior: { boundsByDisplay: { 1: sipsBounds(999, 600, 108) }, croppedPng: png(512) } },
+      async ({ handle, fake }) => {
+        const shot = await handle.screen({ region: { x: 665, y: 0, width: 1, height: 100 } });
+        expect(shot.status).toBe("ok");
+        const crop = fake.invocations("sips").find((argv) => argv[1] === "--cropOffset");
+        expect(crop?.slice(1, 7)).toEqual(["--cropOffset", "0", "998", "-c", "150", "1"]);
+      },
+    );
   });
 
   test("a non-main display is captured with -D and measured separately", async () => {
