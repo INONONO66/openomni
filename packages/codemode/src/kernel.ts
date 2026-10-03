@@ -362,8 +362,13 @@ class BrowserClient:
         return None
 
     def _fail_launch(self, message):
-        """Launch never reached readiness: refuse with the retained transcript."""
+        """Launch never reached readiness (4b): the owned tmux session is torn
+        down so no dead session lingers, and the transcript rides the refusal."""
         self._drain()
+        try:
+            self._pty().close()
+        except ToolError:
+            pass
         raise BrowserLost(message, self._transcript)
 
     def _set_endpoint(self, port):
@@ -387,7 +392,23 @@ class BrowserClient:
                 '_p=sync_playwright().start();print(_p.chromium.executable_path);_p.stop()"'
                 ' 2>/dev/null)"'
             )
-        self._pty().write(resolve + "\r")
+        self._pty().write(
+            resolve
+            + '; [ -n "$OMO_EXE" ] || OMO_EXE=unresolved'
+            + "; if [ -x \"$OMO_EXE\" ]; then printf '%s %s %s\\n' '" + _BROWSER_MARK
+            + "' exe-ok \"$OMO_EXE\"; else printf '%s %s %s\\n' '" + _BROWSER_MARK
+            + "' exe-missing \"$OMO_EXE\"; fi\r"
+        )
+        marker = self._await_output(
+            [_BROWSER_MARK + " exe-ok", _BROWSER_MARK + " exe-missing"]
+        )
+        if marker != _BROWSER_MARK + " exe-ok":
+            found = re.search(re.escape(_BROWSER_MARK) + r" exe-missing (\S+)", self._transcript)
+            path = found.group(1) if found else (executable_path or "unresolved")
+            self._fail_launch(
+                "chromium executable missing at " + path
+                + "; install it with: " + _BROWSER_INSTALL_HINT
+            )
         mode_flags = "--headless " if self.headless else ""
         self._pty().write(
             "OMO_PORT=\"$(python3 -c \"import base64;exec(base64.b64decode('"
