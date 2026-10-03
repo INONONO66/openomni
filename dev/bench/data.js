@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791011805490,
+  "lastUpdate": 1791041099923,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76955,6 +76955,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 208584,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3e36a657bf860123353723cedb5a506145d55618",
+          "message": "#1272 Extract code mode into its own package (@openomni/codemode) (#1280)\n\n* codemode: add @openomni/codemode package, move src out of machines, wire topology/knip/ci\n\n* codemode: move test/codemode tree into packages/codemode with shared machines test harness\n\n* app: import code mode from @openomni/codemode\n\n* docs: codemode ownership moved to packages/codemode (root AGENTS.md, machines/codemode AGENTS.md, implementation-status)\n\n* script: retarget codemode fixture paths to packages/codemode\n\n* script: ci-plan rename fixture expects the codemode dependent lane\n\n* script: effect-service-contract crash guard covers the sixth workspace scan\n\n* app: cover attachConfiguredMachine typed configuration failures\n\n* docs: architecture ring diagram lists @openomni/codemode, machines band drops src/codemode (review r1 F1)",
+          "timestamp": "2026-10-04T00:22:30+09:00",
+          "tree_id": "64c516987d7307b547949906fde3b28af5049b43",
+          "url": "https://github.com/INONONO66/openomni/commit/3e36a657bf860123353723cedb5a506145d55618"
+        },
+        "date": 1791041098845,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 800,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1620,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1131,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1104322,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 324816,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5314092,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 570,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 127172,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 615584,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 362900,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2578,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9056807,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1168666,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14326,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 131319,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 636119,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 190957,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 11226828,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 72,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 140403,
             "unit": "ns/op"
           }
         ]
