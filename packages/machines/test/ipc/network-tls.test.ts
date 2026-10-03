@@ -1,0 +1,216 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { X509Certificate } from "node:crypto";
+import fs from "node:fs";
+import net from "node:net";
+import tls from "node:tls";
+import { certificateKeyFingerprint } from "../../src";
+import {
+  IpcConnectionError,
+  IpcPeerKeyMismatchError,
+  connectIpcClient,
+  connectIpcTcpClient,
+  createIpcServer,
+  createIpcTcpServer,
+} from "./helpers/native";
+import { captureError, deferred, within } from "./helpers/signal";
+import { socketPath } from "./helpers/socket-path";
+
+function fixture(name: string): string {
+  return fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
+}
+function fingerprintOfPem(certPem: string): string {
+  return certificateKeyFingerprint(new X509Certificate(certPem).raw);
+}
+
+const hostIdentity = { certificate: fixture("host-cert.pem"), privateKey: fixture("host-key.pem") };
+const daemonIdentity = { certificate: fixture("daemon-cert.pem"), privateKey: fixture("daemon-key.pem") };
+const wrongIdentity = { certificate: fixture("wrong-cert.pem"), privateKey: fixture("wrong-key.pem") };
+const hostFingerprint = fingerprintOfPem(hostIdentity.certificate);
+const daemonFingerprint = fingerprintOfPem(daemonIdentity.certificate);
+const wrongFingerprint = fingerprintOfPem(wrongIdentity.certificate);
+
+describe("TLS-over-TCP IPC transport", () => {
+  const cleanups: (() => Promise<void> | void)[] = [];
+  afterEach(async () => {
+    for (const cleanup of cleanups.splice(0)) await cleanup();
+  });
+
+  type TcpServer = Awaited<ReturnType<typeof createIpcTcpServer>>;
+
+  /** A pin-judging server: grants only the enrolled daemon fingerprint. */
+  async function pinnedServer() {
+    const fingerprintsSeen: (string | undefined)[] = [];
+    let server!: TcpServer;
+    server = await createIpcTcpServer(
+      { host: "127.0.0.1", port: 0, tls: hostIdentity },
+      (_method, _params, respond, _notify, connectionId) => {
+        // The transport only extracts the fingerprint — the handler judges it,
+        // exactly as the host will against the offered machineId's enrollment.
+        const presented = server.peerFingerprintOf(connectionId);
+        fingerprintsSeen.push(presented);
+        if (presented !== daemonFingerprint) {
+          respond({ status: "refused", reason: "peer_key_mismatch" });
+          return;
+        }
+        respond({ status: "attached" });
+      },
+    );
+    cleanups.push(server.close);
+    return { server, fingerprintsSeen };
+  }
+
+  test("mutual TLS succeeds when both pins match, and port 0 reports the bound port", async () => {
+    const { server, fingerprintsSeen } = await pinnedServer();
+    expect(server.port).toBeGreaterThan(0);
+
+    const client = await connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: server.port },
+      tls: daemonIdentity,
+      hostPublicKey: hostFingerprint,
+    });
+    cleanups.push(client.close);
+
+    expect(await client.call("machine.attach")).toEqual({ status: "attached" });
+    expect(fingerprintsSeen).toEqual([daemonFingerprint]);
+  });
+
+  test("a wrong daemon key reaches the handler as the mismatching fingerprint and is refused before any machine request is served", async () => {
+    const { server, fingerprintsSeen } = await pinnedServer();
+    const impostor = await connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: server.port },
+      tls: wrongIdentity,
+      hostPublicKey: hostFingerprint,
+    });
+    cleanups.push(impostor.close);
+
+    expect(await impostor.call("machine.attach")).toEqual({ status: "refused", reason: "peer_key_mismatch" });
+    expect(fingerprintsSeen).toEqual([wrongFingerprint]);
+  });
+
+  test("a wrong host key fails the client with a typed peer_key_mismatch before any frame reaches the server", async () => {
+    const framesReceived: Buffer[] = [];
+    let connections = 0;
+    const handshakeDone = deferred<void>();
+    const impostorHost = tls.createServer(
+      { cert: wrongIdentity.certificate, key: wrongIdentity.privateKey, requestCert: true, rejectUnauthorized: false },
+      (socket) => {
+        connections += 1;
+        socket.on("data", (chunk) => framesReceived.push(chunk));
+        socket.on("error", () => undefined);
+        socket.on("close", () => handshakeDone.resolve());
+      },
+    );
+    await new Promise<void>((resolve) => impostorHost.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => new Promise<void>((resolve) => impostorHost.close(() => resolve())));
+    const address = impostorHost.address() as net.AddressInfo;
+
+    const failure = await captureError(connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: address.port },
+      tls: daemonIdentity,
+      hostPublicKey: hostFingerprint,
+    }));
+    expect(failure).toBeInstanceOf(IpcPeerKeyMismatchError);
+    const mismatch = failure as InstanceType<typeof IpcPeerKeyMismatchError>;
+    expect(mismatch.expected).toBe(hostFingerprint);
+    expect(mismatch.presented).toBe(wrongFingerprint);
+
+    // The pinned client hung up during verification: the handshake completed
+    // (the server saw exactly one connection) but not one application byte —
+    // and therefore not one frame — ever reached it.
+    await within(handshakeDone.promise, "impostor host connection teardown");
+    expect(connections).toBe(1);
+    expect(framesReceived).toEqual([]);
+  });
+
+  test("a TLS handshake failure is a typed failure, never a fallback to plaintext frames", async () => {
+    const received: Buffer[] = [];
+    let connections = 0;
+    const plaintext = net.createServer((socket) => {
+      connections += 1;
+      socket.on("data", (chunk) => {
+        received.push(chunk);
+        // Garbage instead of a ServerHello: the client's TLS layer must abort.
+        socket.write("not a tls server\n");
+      });
+      socket.on("error", () => undefined);
+    });
+    await new Promise<void>((resolve) => plaintext.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => new Promise<void>((resolve) => plaintext.close(() => resolve())));
+    const address = plaintext.address() as net.AddressInfo;
+
+    const failure = await captureError(connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: address.port },
+      tls: daemonIdentity,
+      hostPublicKey: hostFingerprint,
+    }));
+    expect(failure).toBeInstanceOf(IpcConnectionError);
+    // One connection attempt, and what arrived was a TLS ClientHello record
+    // (0x16 handshake), never a plaintext NDJSON frame.
+    expect(connections).toBe(1);
+    expect(received[0]?.[0]).toBe(0x16);
+  });
+
+  test("a client that presents no certificate never becomes a connection", async () => {
+    const { server, fingerprintsSeen } = await pinnedServer();
+    const closed = deferred<void>();
+    const certless = tls.connect({ host: "127.0.0.1", port: server.port, rejectUnauthorized: false }, () => {
+      // Mutual TLS was not satisfied; this frame must fall on the floor.
+      certless.write('{"id":"r-1","method":"machine.attach"}\n');
+    });
+    certless.on("error", () => undefined);
+    certless.on("close", () => closed.resolve());
+    cleanups.push(() => certless.destroy());
+
+    await within(closed.promise, "certless client rejection");
+    expect(fingerprintsSeen).toEqual([]);
+    await expect(server.call("anything")).rejects.toThrow("no connected client");
+  });
+
+  test("an unexpected disconnect settles each pending call exactly once with a typed connection failure and never replays it", async () => {
+    const requestsSeen: string[] = [];
+    const firstRequest = deferred<void>();
+    const server = await createIpcTcpServer(
+      { host: "127.0.0.1", port: 0, tls: hostIdentity },
+      (method) => {
+        // Never respond: the call must be settled by the disconnect, not a reply.
+        requestsSeen.push(method);
+        firstRequest.resolve();
+      },
+    );
+    const client = await connectIpcTcpClient({
+      tcp: { host: "127.0.0.1", port: server.port },
+      tls: daemonIdentity,
+      hostPublicKey: hostFingerprint,
+    });
+    cleanups.push(client.close);
+
+    const pending = captureError(client.call("machine.run_code"));
+    await within(firstRequest.promise, "request arrival");
+    await server.close();
+
+    expect(await pending).toBeInstanceOf(IpcConnectionError);
+    expect(client.connected).toBe(false);
+    // Nothing was retained for replay: the dead client refuses new calls and
+    // the server saw the request exactly once.
+    await expect(client.call("machine.run_code")).rejects.toThrow("not connected");
+    expect(requestsSeen).toEqual(["machine.run_code"]);
+  });
+
+  test("unix connections expose no peer fingerprint — the pin is a TLS-only fact", async () => {
+    const fingerprints: (string | undefined)[] = [];
+    let server!: Awaited<ReturnType<typeof createIpcServer>>;
+    server = await createIpcServer(
+      socketPath("network-tls-unix"),
+      (_method, _params, respond, _notify, connectionId) => {
+        fingerprints.push(server.peerFingerprintOf(connectionId));
+        respond({ ok: true });
+      },
+    );
+    cleanups.push(server.close);
+    const client = await connectIpcClient(server.socketPath);
+    cleanups.push(client.close);
+
+    expect(await client.call("ping")).toEqual({ ok: true });
+    expect(fingerprints).toEqual([undefined]);
+  });
+});

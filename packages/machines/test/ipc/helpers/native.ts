@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { IdSource, Ipc } from "@openomni/protocol";
-import { connectIpcClient as connect, createIpcServer as listen, typedCall as nativeCall } from "../../../src";
+import { connectIpcClient as connect, connectIpcTcpClient as connectTcp, createIpcServer as listen, createIpcTcpServer as listenTcp, typedCall as nativeCall } from "../../../src";
+import type { IpcTcpConnectSpec, IpcTcpListenSpec } from "../../../src";
 import { PeerRequestTable as NativeTable } from "../../../src/ipc/peer-request-table";
 import { decodeIpcFailure } from "../../../src/failure";
 import { acquire, run, sync } from "./effects";
@@ -15,35 +16,59 @@ type Handler = (method: string, params: Ipc.Request["params"], respond: (result:
 function handlerEffect(body: () => void | Promise<void>) {
   return Effect.try({ try: body, catch: decodeIpcFailure("test.handler") }).pipe(Effect.flatMap((result) => result instanceof Promise ? Effect.tryPromise({ try: () => result, catch: decodeIpcFailure("test.handler") }) : Effect.void));
 }
-export async function connectIpcClient(path: string, options: {
+type ClientTestOptions = {
   idSource?: IdSource; connectTimeoutMs?: number; onDisconnect?: () => void;
   onRequest?: (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) => void | Promise<void>;
   onNotification?: (method: string, params: Ipc.Notification["params"]) => void | Promise<void>;
-} = {}) {
-  const { value: native, close } = await acquire(connect(path, {
+};
+function nativeClientOptions(options: ClientTestOptions) {
+  return {
     idSource: options.idSource ?? sequentialIds("client-req"),
     connectTimeoutMs: options.connectTimeoutMs,
     onDisconnect: options.onDisconnect ? () => handlerEffect(() => options.onDisconnect?.()) : undefined,
-    onRequest: options.onRequest ? (method, params, respond) => handlerEffect(() => options.onRequest?.(method, params, respond)) : undefined,
-    onNotification: options.onNotification ? (method, params) => handlerEffect(() => options.onNotification?.(method, params)) : undefined,
-  }));
+    onRequest: options.onRequest ? (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) => handlerEffect(() => options.onRequest?.(method, params, respond)) : undefined,
+    onNotification: options.onNotification ? (method: string, params: Ipc.Notification["params"]) => handlerEffect(() => options.onNotification?.(method, params)) : undefined,
+  };
+}
+function wrapClient(native: import("../../../src").IpcClient, close: () => Promise<void>) {
   return { native, get connected() { return native.connected; },
     call: (...args: Parameters<typeof native.call>) => run(native.call(...args)),
     close: async () => { await run(native.close()); await close(); },
   };
 }
+export async function connectIpcClient(path: string, options: ClientTestOptions = {}) {
+  const { value: native, close } = await acquire(connect(path, nativeClientOptions(options)));
+  return wrapClient(native, close);
+}
+export async function connectIpcTcpClient(spec: IpcTcpConnectSpec, options: ClientTestOptions = {}) {
+  const { value: native, close } = await acquire(connectTcp(spec, nativeClientOptions(options)));
+  return wrapClient(native, close);
+}
 export type IpcClient = Awaited<ReturnType<typeof connectIpcClient>>;
-export async function createIpcServer(path: string, handler: Handler, options: { idSource?: IdSource; onDisconnect?: (id: string) => void } = {}) {
-  const { value: native, close } = await acquire(listen(path, (...args) => handlerEffect(() => handler(...args)), {
+type ServerTestOptions = { idSource?: IdSource; onDisconnect?: (id: string) => void };
+function nativeServerOptions(options: ServerTestOptions) {
+  return {
     idSource: options.idSource ?? sequentialIds("server-req"),
-    onDisconnect: options.onDisconnect ? (id) => handlerEffect(() => options.onDisconnect?.(id)) : undefined,
-  }));
-  return { native, socketPath: native.socketPath,
-    call: (...args: Parameters<typeof native.call>) => run(native.call(...args)),
-    notify: (...args: Parameters<typeof native.notify>) => sync(native.notify(...args)),
+    onDisconnect: options.onDisconnect ? (id: string) => handlerEffect(() => options.onDisconnect?.(id)) : undefined,
+  };
+}
+type ServerNative = Pick<import("../../../src").IpcServer, "call" | "notify" | "useConnection" | "peerFingerprintOf" | "close">;
+function wrapServer<N extends ServerNative>(native: N, close: () => Promise<void>) {
+  return { native,
+    call: (...args: Parameters<ServerNative["call"]>) => run(native.call(...args)),
+    notify: (...args: Parameters<ServerNative["notify"]>) => sync(native.notify(...args)),
     useConnection: native.useConnection,
+    peerFingerprintOf: (connectionId: string) => native.peerFingerprintOf(connectionId),
     close: async () => { await run(native.close()); await close(); },
   };
+}
+export async function createIpcServer(path: string, handler: Handler, options: ServerTestOptions = {}) {
+  const { value: native, close } = await acquire(listen(path, (...args) => handlerEffect(() => handler(...args)), nativeServerOptions(options)));
+  return { ...wrapServer(native, close), socketPath: native.socketPath };
+}
+export async function createIpcTcpServer(spec: IpcTcpListenSpec, handler: Handler, options: ServerTestOptions = {}) {
+  const { value: native, close } = await acquire(listenTcp(spec, (...args) => handlerEffect(() => handler(...args)), nativeServerOptions(options)));
+  return { ...wrapServer(native, close), host: native.host, port: native.port };
 }
 export type IpcServer = Awaited<ReturnType<typeof createIpcServer>>;
 export function typedCall<M extends keyof typeof Ipc.Methods>(caller: Pick<IpcClient, "native"> | Pick<IpcServer, "native">, method: M, params: (typeof Ipc.Methods)[M]["params"]["_input"], timeoutMs?: number) {
