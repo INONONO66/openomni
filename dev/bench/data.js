@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790996711033,
+  "lastUpdate": 1791011805490,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76821,6 +76821,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 201790,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6a9063d75a2f4aff1b55191a7cc4e664c51facc8",
+          "message": "#1276 Relocate agent into core/ and five capability plugin directories (#1277)\n\n* #1276: core/ + five plugin directories (scaffold)\n\n* #1276: kernel/ + session/ + store/ -> core/ (move-only; imports rewritten, Core namespace barrel)\n\n* #1276: five plugin directories + core/api.ts single import target for plugins\n\n* #1276: parent-reply + model-selection -> apps/openomni/src/composition (core seams injected by the app)\n\n* #1276: five-band check-deps table, three new edge checks, re-keyed ratchet (36=36)\n\n* #1276: AGENTS/docs stamps — one core, five plugins, app composition seams\n\n* #1276: drop dead app copy of attemptRouteChange; baseline the four issue-mandated plugin scaffolds (sign-off surface)\n\n* #1276 gate+review r1: register bands test in scripts lanes, composition drift guard in the app, scaffold-name coverage (knip baseline back to []), live docs repointed to core/\n\n* #1276 review r2: close package-root barrel escape (STOP on band-root per real core/retry.ts offender), seeded pin/reply drift assertions, table-driven scaffold conformance, stamp honesty, gate comment reword\n\n* #1276 review r2 addendum: band-root barrels classify as their band for every band; core/retry.ts pinned at 1 (slash-only classifier undercount); corrected totals 37=37 verified against 66d56edb\n\n* #1276 review r3: tight band pins (25 at HEAD; 28 pre-move under the same classifier, 3 edges deleted by the move), slack fails closed, inert apps/ pins removed, errors.ts regression; one listing-driven plugins-layout test (compaction exports name); stamps carry the measured numbers\n\n* #1276 review r4: drop the false 28-3 edge-set proof (printed total is the computed pin sum; real reconciliation 45-16-4=25 in the receipt), delete the constant-only derivation test and the scaffold name-export pseudo-consumer; stamps carry the measured 45/16/4/25\n\n* #1276 gate r5 + review r5 LOW: scaffold plugin directories hold a README, no source (an unconsumed export is dead code under literal-zero and uncovered under patch coverage); knip entry reverted; mailbox ratchet comment moved to its entry",
+          "timestamp": "2026-10-03T16:14:01+09:00",
+          "tree_id": "c842a9045856711dbd21630ba0226045c08cdfe3",
+          "url": "https://github.com/INONONO66/openomni/commit/6a9063d75a2f4aff1b55191a7cc4e664c51facc8"
+        },
+        "date": 1791011805156,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1029,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1874,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1399,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1532814,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 401817,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6606356,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 129,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1135,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 729,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 194698,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 796989,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 482589,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3295,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11926967,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1475625,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18022,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 176885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 875534,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 290815,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14271160,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 94,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 208584,
             "unit": "ns/op"
           }
         ]
