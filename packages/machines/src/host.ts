@@ -20,6 +20,7 @@ interface MachineHostOptions {
 type Value<O extends Machine.FsValue["op"]> = Extract<Machine.FsValue, { op: O }>;
 type ReadValue = Omit<Value<"read">, "data"> & { readonly data: Uint8Array };
 type ExecValue = Omit<Extract<Machine.ExecResult, { status: "completed" }>, "stdout" | "stderr"> & { readonly stdout: Uint8Array; readonly stderr: Uint8Array };
+type ScreenValue = Omit<Extract<Machine.ScreenReadResult, { status: "ok" }>, "png"> & { readonly png: Uint8Array };
 export interface MachineHandle {
   readonly fs: {
     read(path: string, window?: { offset?: number; limit?: number }): Effect.Effect<ReadValue, MachineError>;
@@ -28,6 +29,9 @@ export interface MachineHandle {
     stat(path: string): Effect.Effect<Value<"stat">, MachineError>;
   };
   exec(cmd: string, cwd: string): Effect.Effect<ExecValue | Exclude<Machine.ExecResult, { status: "completed" }>, MachineError>;
+  /** Computer use (#1274): bounded capture and guarded input over the same attachment. */
+  screen(request: Machine.ScreenReadRequest): Effect.Effect<ScreenValue | Exclude<Machine.ScreenReadResult, { status: "ok" }>, MachineError>;
+  input(request: Machine.InputWriteRequest): Effect.Effect<Machine.InputWriteResult, MachineError>;
   runCode(cell: Machine.CellRequest, signal?: AbortSignal): Effect.Effect<Machine.CellResult, MachineError>;
   peekCode(cellId: string): Effect.Effect<Machine.PeekResult, MachineError>;
 }
@@ -147,6 +151,21 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
           const raw = yield* typedCall(server, Machine.WireMethod.Exec, request, Machine.EXEC_TIMEOUT_MS + 1000).pipe(Effect.mapError(transportFailure("exec.call")));
           const result = yield* Effect.try({ try: () => Machine.ExecResult.parse(raw), catch: decodeMachineFailure("exec.response") });
           return result.status === "completed" ? { ...result, stdout: Buffer.from(result.stdout, "base64"), stderr: Buffer.from(result.stderr, "base64") } : result;
+        }),
+        screen: (request) => Effect.gen(function* () {
+          const parsed = yield* Effect.try({ try: () => Machine.ScreenReadRequest.parse(request), catch: decodeMachineFailure("screen.request") });
+          const peer = yield* Effect.try({ try: () => connection(id), catch: decodeMachineFailure("screen.connection") });
+          server.useConnection(peer.id);
+          const raw = yield* typedCall(server, Machine.WireMethod.ScreenRead, parsed, Machine.EXEC_TIMEOUT_MS + 1000).pipe(Effect.mapError(transportFailure("screen.call")));
+          const result = yield* Effect.try({ try: () => Machine.ScreenReadResult.parse(raw), catch: decodeMachineFailure("screen.response") });
+          return result.status === "ok" ? { ...result, png: Buffer.from(result.png, "base64") } : result;
+        }),
+        input: (request) => Effect.gen(function* () {
+          const parsed = yield* Effect.try({ try: () => Machine.InputWriteRequest.parse(request), catch: decodeMachineFailure("input.request") });
+          const peer = yield* Effect.try({ try: () => connection(id), catch: decodeMachineFailure("input.connection") });
+          server.useConnection(peer.id);
+          const raw = yield* typedCall(server, Machine.WireMethod.InputWrite, parsed, Machine.EXEC_TIMEOUT_MS + 1000).pipe(Effect.mapError(transportFailure("input.call")));
+          return yield* Effect.try({ try: () => Machine.InputWriteResult.parse(raw), catch: decodeMachineFailure("input.response") });
         }),
         runCode: (cell, signal) => Effect.scoped(Effect.gen(function* () {
           const request = yield* Effect.try({ try: () => Machine.CellRequest.parse(cell), catch: decodeMachineFailure("cell.request") });
