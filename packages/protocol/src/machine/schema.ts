@@ -667,7 +667,9 @@ export type PtyOpenRequest = z.infer<typeof PtyOpenRequest>;
 /**
  * `refused` is a typed outcome, not a transport error: `pty_not_available`
  * reports a missing/withdrawn effective capability (tmux absent at attach or
- * its server gone), `path_escapes_export` the same confinement rule exec uses.
+ * its server gone), `path_escapes_export` the same confinement rule exec uses,
+ * and `pty_not_found` a name the session grammar cannot address (a guard for
+ * callers that bypass request validation; the wire parse rejects it first).
  * Opening an existing name reattaches; the returned cursor always points at
  * the start of the retained stream so a first read replays scrollback.
  */
@@ -676,7 +678,7 @@ export const PtyOpenResult = z.discriminatedUnion("status", [
   z
     .object({
       status: z.literal("refused"),
-      reason: z.enum(["machine_not_attached", "pty_not_available", "path_escapes_export"]),
+      reason: z.enum(["machine_not_attached", "pty_not_available", "path_escapes_export", "pty_not_found"]),
     })
     .strict(),
 ]);
