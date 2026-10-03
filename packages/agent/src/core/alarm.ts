@@ -3,7 +3,7 @@ import { interruptOn } from "./ports";
 import { Alarm, isReservedAlarmPurpose, RESERVED_ALARM_PURPOSES, type LedgerAction, type PlainObject } from "@openomni/protocol";
 import type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
-export type { WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
+export type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
 /**
  * Timer plane over cluster DeliverAt (#1254): a persisted timer message is
@@ -191,6 +191,13 @@ export type ArmVerb = (input: {
   readonly sourceKey: string;
 }) => Effect.Effect<{ readonly alarmId: string; readonly occurrenceId: string }, ArmRefused>;
 
+/**
+ * The accepted outcome a capability's wake returns (#1254): the core records
+ * `fired{outcome: <returned>}` through `firedAction` — a capability never
+ * builds an `alarm` append literal itself.
+ */
+export type AlarmWakeOutcome = "delivered" | "exhausted";
+
 /** Typed wake failure a capability's purpose handler reports. */
 export class AlarmWakeError extends Schema.TaggedError<AlarmWakeError>(
   "@openomni/agent/core/AlarmWakeError",
@@ -211,7 +218,7 @@ export interface AlarmWakeContext {
 /** One alarm capability: declared purposes plus their wake dispatch. */
 export interface AlarmCapability {
   readonly purposes: readonly string[];
-  readonly wake: (fired: AlarmFired, ctx: AlarmWakeContext) => Effect.Effect<void, AlarmWakeError>;
+  readonly wake: (fired: AlarmFired, ctx: AlarmWakeContext) => Effect.Effect<AlarmWakeOutcome, AlarmWakeError>;
 }
 
 /** Typed purpose-registry compose failure (#1254): no partial activation. */

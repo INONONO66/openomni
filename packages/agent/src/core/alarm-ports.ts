@@ -21,7 +21,7 @@ export interface DeadlineArm {
 }
 
 /** `WatchTimeout` DeliverAt payload; chain key = `<watchId>:timeout:<epoch>`. */
-export interface WatchTimeoutArm {
+interface WatchTimeoutArm {
   readonly watchId: string;
   readonly epoch: number;
   readonly fireAt: number;

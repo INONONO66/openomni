@@ -356,3 +356,25 @@ test("alarm(watch.fired/watch.timeout) replace WatchFired/WatchTimeout with chai
   );
   expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId).length).toBe(before);
 });
+
+test("alarm with an unregistered purpose folds to a recorded stale fact, zero execution", async () => {
+  const sessionId = "surface-unregistered-purpose";
+  const receipt = await runCluster(
+    options,
+    sendAlarm(sessionId, {
+      occurrenceId: "occ-unregistered-1",
+      purpose: "cron.tick",
+      alarmId: "cron-1",
+      armSeq: 1,
+      sourceKey: "cron",
+      payload: JSON.stringify({ expr: "*/30 * * * *" }),
+      fireAt: Date.now() - 1000,
+    }),
+  );
+  expect(receipt.outcome).toBe("stale");
+  const chain = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
+  const fact = chain.find((row) => row.id === "occ-unregistered-1:stale");
+  expect(fact?.kind).toBe("alarm");
+  // The loop was not woken: no turn envelope exists anywhere in the chain.
+  expect(chain.some((row) => row.kind === "turn")).toBe(false);
+});

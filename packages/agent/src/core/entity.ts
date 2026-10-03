@@ -434,7 +434,9 @@ function alarmOccurrence(
         });
       }
       // #1254: an unregistered purpose folds to a recorded stale fact with
-      // zero execution (capability wake dispatch lands with plugins/alarm).
+      // zero execution (capability wake dispatch lands with plugins/alarm);
+      // a wired wake returns AlarmWakeOutcome and the loop records
+      // `fired{outcome: <returned>}` through `firedAction`.
       default:
         return Effect.succeed("noop" as const);
     }

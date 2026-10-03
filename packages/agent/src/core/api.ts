@@ -13,5 +13,5 @@ export { RunEvents } from "./run-events";
 // later steps add, never rename.
 export {
   ArmRefused, AlarmWakeError, RESERVED_PURPOSES,
-  type AlarmCapability, type AlarmWakeContext, type ArmVerb, type AlarmFired,
+  type AlarmCapability, type AlarmWakeContext, type ArmVerb, type AlarmFired, type AlarmWakeOutcome,
 } from "./alarm";
