@@ -13,10 +13,11 @@ import { createAssistantMessage } from "../../../src/kernel/message-factory";
 import { recordingLedger } from "../../helpers/g0-effect";
 import { runInput } from "../../helpers/run-input";
 
-test("the final result consumes the executor-transformed canonical assistant rather than raw provider text", async () => {
-  const recording = recordingLedger();
-  const executor = testExecutor({
-    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
+// Message has no registered post point (#1251): a message post row cannot even
+// compile — the registry rejects the generation fail-closed at compose.
+test("a message post transform row rejects at compose: message has no post point", () => {
+  expect(() =>
+    compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
       kinds: LedgerAction.Kind.options,
       rows: [
@@ -33,22 +34,30 @@ test("the final result consumes the executor-transformed canonical assistant rat
           match: { encodingVersion: 1, value: { op: "assistant" } },
           verdict: {
             encodingVersion: 1,
-            value: {
-              type: "transform",
-              name: "redact",
-              paths: ["result.parts"],
-              replacement: [
-                {
-                  id: "redacted",
-                  sessionID: "session",
-                  messageID: "message",
-                  type: "text",
-                  text: "redacted",
-                },
-              ],
-            },
+            value: { type: "transform", name: "redact", paths: ["result.parts"] },
           },
         },
+      ],
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      data: expect.objectContaining({ code: "compose_rejected", composeCode: "unknown_point" }),
+    }),
+  );
+});
+
+// The canonical assistant passes through the admitted generation unchanged.
+test("the canonical assistant text is never rewritten after the turn", async () => {
+  const recording = recordingLedger();
+  const executor = testExecutor({
+    policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
+      generation: 1,
+      kinds: LedgerAction.Kind.options,
+      rows: [
+        ...SEEDED_POLICY_ROWS.map((row: (typeof SEEDED_POLICY_ROWS)[number]) => ({
+          ...row,
+          generation: 1,
+        })),
       ],
     }),
     ledger: recording.ledger,
@@ -74,6 +83,6 @@ test("the final result consumes the executor-transformed canonical assistant rat
       },
     }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(runInput([{ role: "user", content: "question" }]), acquiredConfig).pipe(Effect.provide(chatServices(fixture))); }),
   );
-  expect(result.text).toBe("redacted");
-  expect(result.steps).toEqual([{ type: "text", content: "redacted" }]);
+  expect(result.text).toBe("raw text");
+  expect(result.steps).toEqual([{ type: "text", content: "raw text" }]);
 });

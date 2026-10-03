@@ -25,6 +25,7 @@ import { z } from "zod";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
+import { AppPointTable } from "./point-table";
 import { captureNow } from "./platform";
 
 /** `select` throws `BundleError` for an unknown bundle; anything else is a foreign failure. */
@@ -46,6 +47,7 @@ export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (d
 export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(function* () {
   const scope = yield* Effect.scope;
   const plane = yield* AppLedger;
+  const pointTable = yield* AppPointTable;
   const installed = yield* BundleDefinitions;
   const process = yield* Effect.context<Entropy | ObservationSink>();
   const root = Context.get(process, ObservationSink);
@@ -91,7 +93,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       const layer = Layer.unwrap(Effect.gen(function* () {
         const registry = yield* NamedPolicyRegistry;
         const policy = yield* Effect.try({
-          try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry }),
+          try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry, table: pointTable }),
           catch: String,
         }).pipe(Effect.mapError((cause) => new AgentFailure({ operation: "generation.policy", cause })));
         return Layer.succeed(SessionLayer, { snapshot, policy });

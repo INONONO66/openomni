@@ -508,8 +508,8 @@ describe("durable session handle", () => {
         expect(result).toEqual({ kind: "result", text: "complete" });
         expect(actions.filter((action) => action.kind === "prompt")).toHaveLength(1);
         expect(actions.filter((action) => action.kind === "turn")).toHaveLength(2);
+        // Prompt has no post point (#1251): the executor consults prompt.pre only.
         expect(decisions.map(policyHook).sort()).toEqual([
-          "prompt.post",
           "prompt.pre",
           "turn.post",
           "turn.pre",
@@ -524,7 +524,7 @@ describe("durable session handle", () => {
             .filter((action) => policyHook(action)?.startsWith("turn."))
             .every((action) => action.parentId === turn?.id),
         ).toBe(true);
-        expect(decisions.map(policyGeneration)).toEqual([1, 1, 1, 1]);
+        expect(decisions.map(policyGeneration)).toEqual([1, 1, 1]);
         expect(observedDecisionIds).toEqual(new Set(decisions.map((action) => action.id)));
         expect(observedBeforeCommit).toEqual([]);
       }),
@@ -585,29 +585,25 @@ describe("durable session handle", () => {
       expect(inbox).toEqual(["consumed"]);
     }));
 
-  test("a prompt post denial records both prompt decisions but never starts a turn", () =>
-    promptDeniedAt("post", "prompt post refused", ({ hooks }) => {
-      expect(hooks).toEqual(["prompt.pre", "prompt.post"]);
-    }));
-
-  test("fails closed when prompt post policy transforms its immutable receipt", () =>
+  // Prompt has no post point (#1251): a generation carrying a prompt post row
+  // is rejected wholesale by the point registry at compile, and every
+  // execution against the rejected generation fails closed.
+  test("a generation with a prompt post row fails closed: the registry rejects it and no turn runs", () =>
     testProgram(
       Effect.gen(function* () {
         let calls = 0;
         const handle = yield* declare(
-          residentOptions("prompt-transform", () =>
+          residentOptions("prompt-post-rejected", () =>
             Effect.sync(() => {
               calls += 1;
               return { kind: "result", text: "must not run" };
             }),
           ),
         );
-
-        const result = yield* awaitSignal(handle.prompt("immutable prompt"));
-
+        const result = yield* awaitSignal(handle.prompt("rejected generation"));
         expect(result).toMatchObject({
           kind: "error",
-          cause: { _tag: "SessionPolicyRefusal", reason: "invalid_output" },
+          cause: { _tag: "SessionPolicyRefusal", reason: "unknown_point" },
         });
         expect(calls).toBe(0);
         expect(tree(handle.id).filter((action) => action.kind === "turn")).toEqual([]);
@@ -615,14 +611,11 @@ describe("durable session handle", () => {
       {
         policies: [
           {
-            name: "transform-prompt-receipt",
+            name: "deny-prompt-post",
             kind: "prompt",
             phase: "post",
             match: { encodingVersion: 1, value: { op: "inbox" } },
-            verdict: {
-              encodingVersion: 1,
-              value: { type: "transform", name: "redact", paths: ["result.status"] },
-            },
+            verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt post refused" } },
             priority: 2_000,
           },
         ],
@@ -799,8 +792,8 @@ describe("durable session handle", () => {
           expect(calls).toBe(phase === "pre" ? 0 : 1);
           expect(hooks).toEqual(
             phase === "pre"
-              ? ["prompt.pre", "prompt.post", "turn.pre"]
-              : ["prompt.pre", "prompt.post", "turn.pre", "turn.post"],
+              ? ["prompt.pre", "turn.pre"]
+              : ["prompt.pre", "turn.pre", "turn.post"],
           );
           expect(terminals(handle.id).at(0)).toMatchObject({ kind: "error" });
         }),

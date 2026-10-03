@@ -160,6 +160,29 @@ describe("policy row compiler enforcement", () => {
     }));
   });
 
+  it("a lower-priority deny beats a higher-priority approval and both ids are recorded (#1251 r2)", () => {
+    const snapshot = compilePolicySnapshot({
+      registry: KERNEL_POLICY_REGISTRY,
+      generation: 1,
+      rows: [
+        atGeneration(compaction, 1),
+        atGeneration(
+          draft("approval", "tool", "pre", { type: "require_approval", reason: "operator" }, { priority: 2_000 }),
+          1,
+        ),
+        atGeneration(
+          draft("deny-low", "tool", "pre", { type: "deny", reason: "blocked" }, { priority: 1_000 }),
+          1,
+        ),
+      ],
+    });
+    expect(snapshot.evaluate(input)).toMatchObject({
+      verdict: "deny",
+      matchedRuleIds: ["approval", "deny-low"],
+      reason: "blocked",
+    });
+  });
+
   it("requires approval before lower-priority rules can allow", () => {
     const snapshot = compilePolicySnapshot({
       registry: KERNEL_POLICY_REGISTRY,
@@ -185,7 +208,7 @@ describe("policy row compiler enforcement", () => {
 
     expect(snapshot.evaluate(input)).toMatchObject({
       verdict: "require_approval",
-      matchedRuleIds: ["approval"],
+      matchedRuleIds: ["approval", "allow-after"],
       reason: "operator",
     });
   });
@@ -293,7 +316,7 @@ describe("policy row compiler enforcement", () => {
     });
   });
 
-  it("orders by descending priority and deny short-circuits lower rules", () => {
+  it("orders by descending priority and deny outranks every other matched rule", () => {
     const snapshot = compilePolicySnapshot({
       registry: KERNEL_POLICY_REGISTRY,
       generation: 1,
@@ -317,8 +340,8 @@ describe("policy row compiler enforcement", () => {
 
     expect(snapshot.evaluate(input)).toMatchObject({
       verdict: "deny",
-      matchedRuleIds: ["highest-allow", "middle-deny"],
-      evaluatedRuleCount: 2,
+      matchedRuleIds: ["highest-allow", "middle-deny", "low-allow"],
+      evaluatedRuleCount: 3,
       reason: "blocked",
     });
   });

@@ -18,7 +18,7 @@ test("existing compiler executes the supplied captured named transform", () => {
         draft("replace", "tool", "pre", {
           type: "transform",
           ref: "demo/replace",
-          config: { command: "admitted" },
+          config: { fields: ["command"], command: "admitted" },
         }),
         1,
       ),

@@ -13,6 +13,7 @@ import {
 import { timingSafeEqual } from "node:crypto";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
+import { AppPointTable } from "./composition/point-table";
 import { Kernel, Session, Bundle, Journal } from "@openomni/agent";
 const BundleDefinitions = Bundle.BundleDefinitions;
 const Entropy = Kernel.Entropy;
@@ -217,6 +218,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           observations: yield* ObservationSink,
           bundles: yield* BundleDefinitions,
           generations: yield* GenerationLayers,
+          pointTable: yield* AppPointTable,
           // Late-bound entity ports: the runtime mounts the entity layer over
           // this seam; the real turn/timer ports resolve below.
           entityPorts: yield* SessionEntityBinding,
@@ -231,6 +233,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     seedKernelPolicyRows(
       plane.catalog.policies,
       services.bundles.select(services.bundles.names).rows,
+      services.pointTable,
     );
     // The Session entity client: THE delivery path for message and timer
     // traffic (W5.2 plan §1) — the RPC ack means the receiver committed.

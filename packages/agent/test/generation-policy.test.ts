@@ -77,7 +77,7 @@ function dispatch(rows: readonly BundleRow[], bodies: PlainValue[]) {
 test("captured bundle data resolves custom transforms and obligations alongside kernel refs", () => isolated(Effect.scoped(Effect.gen(function* () {
   const bodies: PlainValue[] = [];
   const { result, policy } = yield* dispatch([
-    policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { value: "bundle", secret: "hidden" } }, 300),
+    policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { fields: ["value", "secret"], value: "bundle", secret: "hidden" } }, 300),
     policyRow("demo/redact-row", { type: "transform", ref: "kernel/redact", config: { paths: ["secret"] } }, 200),
     policyRow("demo/cap-row", { type: "obligation", ref: "demo/cap", metric: "fanout", limit: 2 }),
   ], bodies);
@@ -87,6 +87,15 @@ test("captured bundle data resolves custom transforms and obligations alongside 
     .toEqual([{ ref: "demo/cap", metric: "fanout", limit: 2 }]);
   expect(policy.evaluate({ kind: "turn", phase: "post", op: "continue", value: {} }).obligations)
     .toEqual([{ ref: "kernel/budget-clamp", metric: "continuation", limit: 8 }]);
+}))));
+
+test("a transform's non-string declared field entry is skipped at projection; the string fields still rewrite (#1251 r5)", () => isolated(Effect.scoped(Effect.gen(function* () {
+  const bodies: PlainValue[] = [];
+  const { result } = yield* dispatch([
+    policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { fields: ["value", 7], value: "bundle" } }, 300),
+  ], bodies);
+  expect(result).toMatchObject({ toolCallId: "call", output: "bundle" });
+  expect(bodies).toEqual([{ value: "bundle", secret: "secret" }]);
 }))));
 
 for (const type of ["transform", "obligation"] as const) {

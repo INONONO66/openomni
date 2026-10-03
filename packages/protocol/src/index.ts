@@ -18,6 +18,8 @@ export * from "./gateway/index.js";
 export * from "./ingress/index.js";
 export * from "./policy/index.js";
 export * from "./policy/row-verdict.js";
+export * from "./policy/point.js";
+export * from "./policy/row.js";
 export * from "./ipc/index.js";
 export * from "./provisioning/index.js";
 export * from "./machine/index.js";

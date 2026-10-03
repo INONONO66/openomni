@@ -25,7 +25,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
     ...SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
     { name: "normalize", kind: "tool", phase: "pre", generation: 1, priority: 1,
       match: { encodingVersion: 1, value: { op: "write" } },
-      verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/normalize" } } },
+      verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/normalize", config: { fields: ["text"] } } } },
   ] });
   const definition = defineTool({ name: "write", description: "Write", category: "mutation",
     input: z.object({ text: z.string() }), output: z.string(), visibility: { model: ["resident"], cell: ["resident"] },
@@ -39,11 +39,25 @@ test("approval recovery executes recorded admitted bytes without transforming ag
     .toMatchObject({ _tag: "AgentFailure", operation: "crash" });
   expect(executed).toEqual([]);
   expect(transformations).toBe(1);
+  // Recovery replays the committed gate decision: the transformer is gone
+  // from this process (it throws), yet the recorded output still admits (r3).
+  const recoveredPolicy = compilePolicySnapshot({
+    registry: createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+      ...KERNEL_POLICY_REGISTRY.transformers,
+      { name: "demo/normalize", apply: () => { throw new Error("handler must not run during replay"); } },
+    ] }),
+    generation: 1, rows: [
+      ...SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
+      { name: "normalize", kind: "tool", phase: "pre", generation: 1, priority: 1,
+        match: { encodingVersion: 1, value: { op: "write" } },
+        verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/normalize", config: { fields: ["text"] } } } },
+    ] });
+  const recoveredProviders = executorLayer({ ...recorded, policy: recoveredPolicy, observations: { publish: () => undefined } });
   const ready = Promise.withResolvers<void>();
   const recovered = yield* createExecutor({ ...recorded, ledger: { ...recorded.ledger, requestById: (id) => {
     if ((recovered.approvals?.pending().length ?? 0) > 0) ready.resolve();
     return recorded.ledger.requestById?.(id);
-  } }, authorizeApproval: () => Effect.succeed({ kind: "owner", principalId: "owner", evidenceId: "proof" }) }).pipe(Effect.provide(providers));
+  } }, authorizeApproval: () => Effect.succeed({ kind: "owner", principalId: "owner", evidenceId: "proof" }) }).pipe(Effect.provide(recoveredProviders));
   const dispatcher = yield* createDispatcher({ executor: recovered }).pipe(Effect.provide(catalogLayer([definition])));
   const recovering = yield* Effect.forkScoped(recovered.recover().pipe(
     Effect.andThen(() => dispatcher.recover(sessionTree(isolatedLedger().kernel, recorded.identity.sessionId), context)),
@@ -118,7 +132,15 @@ for (const door of ["model", "cell", "wave"] as const) {
       const intent = actions.find((action) => action.kind === "tool" && PlainObjectSchema.parse(action.intent.value).phase === "intent");
       expect(intent?.intent.value).toMatchObject({ value: { text: replacement }, originalArgs: { text: "original" } });
       const decision = actions.find((action) => action.kind === "policy.decision");
-      expect(decision?.intent.value).toMatchObject({ transforms: [{ ruleId: "redact-input", ref: "kernel/redact" }], ref: "kernel/redact" });
+      // The committed receipt carries the gate's recorded responses: the
+      // consulted payload/digest and the replayable rewritten output (r3).
+      expect(decision?.intent.value).toMatchObject({
+        transforms: [{ ruleId: "redact-input", ref: "kernel/redact" }], ref: "kernel/redact",
+        gate: {
+          output: { text: replacement },
+          consulted: [expect.objectContaining({ ref: "kernel/redact", digest: expect.any(String) })],
+        },
+      });
     })));
   }
 }

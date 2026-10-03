@@ -126,7 +126,7 @@ describe("restore_context_projection", () => {
             ["fold.checkpoint", nth(appended, 3).id],
           ]);
           expect(nth(appended, 0).intent.value).toMatchObject({
-            hook: "turn.post",
+            hook: "compaction.pre",
             op: "restore_context_projection",
           });
           expect(nth(appended, 1).intent.value).toMatchObject({
@@ -186,6 +186,9 @@ describe("restore_context_projection", () => {
               foldSessionHistory("ctx", before),
             );
           }),
+        // The untouched base-era fixture: before #1251, restore restrictions
+        // lived on `turn/post` through the retired v3 point mapping.
+        // Migration must keep this exact historical row refusing restores.
         [{
           name: "no-restore", kind: "turn", phase: "post",
           match: { encodingVersion: 1, value: { op: "restore_context_projection" } },

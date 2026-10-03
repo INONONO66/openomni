@@ -39,6 +39,7 @@ import { createResident } from "./resident";
 import { materializeInboxTarget, pendingInboxRow, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
 import { seedKernelPolicyRows } from "./policy-seed";
+import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
 import { createProcessReplyChannel } from "./composition/process-replies";
 
@@ -128,7 +129,7 @@ export function serveProcessSession(
   const entropy = yield* Entropy;
   const observations = yield* ObservationSink;
   const owner = `process:${process.pid}`;
-  seedKernelPolicyRows(plane.catalog.policies, bundles.select(bundles.names).rows);
+  seedKernelPolicyRows(plane.catalog.policies, bundles.select(bundles.names).rows, yield* AppPointTable);
   const runtime: SessionRuntime = {
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,

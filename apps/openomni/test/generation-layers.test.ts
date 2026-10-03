@@ -10,6 +10,8 @@ const session = Testing.session;
 import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { seedKernelPolicyRows } from "../src/policy-seed";
+import { composedPointTable } from "../src/composition/point-table";
+import type { PolicyRow } from "@openomni/protocol";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
 import { allowConfigure } from "./helpers/generation-services";
 import { configureAuthority } from "../src/composition/generation-layers";
@@ -116,6 +118,111 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
     expect(acquired).toEqual([1, 2, 3, 4]);
   } finally { await runtime.dispose(); }
   expect(closed.sort()).toEqual(acquired.sort());
+});
+
+test("a capability omitted from the composition removes its points: tool rows fail closed; composed, they govern (#1251 r3)", async () => {
+  const reduced = Kernel.KERNEL_CAPABILITY_POINTS.filter((capability) => capability.bundle !== "tool");
+  const denyWrites: Omit<PolicyRow.Row, "generation"> = {
+    name: "no-writes", kind: "tool", phase: "pre", priority: 1_000,
+    match: { encodingVersion: 1, value: { op: "write" } },
+    verdict: { encodingVersion: 1, value: { type: "deny", reason: "frozen" } },
+  };
+  const governed: Omit<PolicyRow.Row, "generation">[] = [
+    {
+      name: "compaction", kind: "compaction", phase: "pre", priority: 1_000,
+      match: { encodingVersion: 1, value: {} },
+      verdict: { encodingVersion: 1, value: { type: "allow" } },
+    },
+    denyWrites,
+  ];
+  const withoutTool = gatewayRuntime({ observations: Bus, capabilities: reduced });
+  try {
+    await runAppEffect(withoutTool, Effect.scoped(Effect.gen(function* () {
+      const generations = yield* GenerationLayers;
+      const plane = yield* AppLedger;
+      // Boot fails closed: the kernel seed itself carries tool rows and this
+      // composition registers no tool points.
+      let seedError: unknown;
+      try {
+        seedKernelPolicyRows(plane.catalog.policies, [], composedPointTable(reduced));
+      } catch (error) {
+        seedError = error;
+      }
+      expect(Kernel.GateComposeError.isInstance(seedError) ? seedError.data : seedError)
+        .toMatchObject({ code: "unknown_point", point: "tool.pre" });
+      // A generation written elsewhere still fails closed at capture.
+      const generation = plane.catalog.policies.appendGeneration(() => governed);
+      yield* generations.initialize({ resident: [], worker: [] });
+      yield* plane.openKernel("no-tools").materialize({
+        id: "no-tools", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
+        policyGeneration: generation, actionId: "no-tools-create", at: 1,
+      });
+      const failure = yield* Effect.flip(Effect.gen(function* () {
+        const captured = yield* generations.capture({ sessionId: "no-tools", generation: 1 });
+        return yield* captured.provide(SessionLayer);
+      }));
+      expect(failure).toMatchObject({ _tag: "AgentFailure", operation: "generation.policy" });
+      expect(String(failure)).toContain("unknown_point");
+    })));
+  } finally { await withoutTool.dispose(); }
+
+  // The same rows govern once the tool capability is composed.
+  const composed = gatewayRuntime({ observations: Bus });
+  try {
+    await runAppEffect(composed, Effect.scoped(Effect.gen(function* () {
+      const generations = yield* GenerationLayers;
+      const plane = yield* AppLedger;
+      seedKernelPolicyRows(plane.catalog.policies);
+      const generation = plane.catalog.policies.appendGeneration((current) => [
+        ...current.map(({ generation: _generation, ...rest }) => rest),
+        denyWrites,
+      ]);
+      yield* generations.initialize({ resident: [], worker: [] });
+      yield* plane.openKernel("tooled").materialize({
+        id: "tooled", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
+        policyGeneration: generation, actionId: "tooled-create", at: 1,
+      });
+      const captured = yield* generations.capture({ sessionId: "tooled", generation: 1 });
+      const { policy } = yield* captured.provide(SessionLayer);
+      expect(policy.evaluate({ kind: "tool", phase: "pre", op: "write", value: { text: "x" } }))
+        .toMatchObject({ verdict: "deny", reason: "frozen" });
+    })));
+  } finally { await composed.dispose(); }
+});
+
+test("a generation carrying a row outside the composition's point table fails closed at capture (#1251 r2)", async () => {
+  const runtime = gatewayRuntime({ observations: Bus });
+  try {
+    await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
+      const generations = yield* GenerationLayers;
+      const plane = yield* AppLedger;
+      seedKernelPolicyRows(plane.catalog.policies);
+      // A later generation smuggles in a row no registered point can own:
+      // the generation Layer compiles against the composition's table and
+      // must fail closed instead of defaulting capabilities present.
+      const orphaned = plane.catalog.policies.appendGeneration((current) => [
+        ...current.map(({ generation: _generation, ...rest }) => rest),
+        {
+          name: "orphan", kind: "fold.checkpoint", phase: "pre", priority: 1,
+          match: { encodingVersion: 1, value: {} },
+          verdict: { encodingVersion: 1, value: { type: "allow" } },
+        },
+      ]);
+      yield* generations.initialize({ resident: [], worker: [] });
+      yield* plane.openKernel("orphaned").materialize({
+        id: "orphaned", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
+        policyGeneration: orphaned, actionId: "orphaned-create", at: 1,
+      });
+      const failure = yield* Effect.flip(Effect.gen(function* () {
+        const captured = yield* generations.capture({ sessionId: "orphaned", generation: 1 });
+        return yield* captured.provide(SessionLayer);
+      }));
+      expect(failure).toMatchObject({ _tag: "AgentFailure", operation: "generation.policy" });
+      // `fold.checkpoint` projects onto no registered point in ANY shipped
+      // composition: the registry itself refuses it.
+      expect(String(failure)).toContain("unknown_point");
+    })));
+  } finally { await runtime.dispose(); }
 });
 
 for (const verdict of ["require_approval", "deny"] as const) {
