@@ -525,6 +525,8 @@ export function receivedMessageAction(input: {
   readonly origin: Inbox.Origin;
   readonly parentActionId: string | null;
   readonly at: number;
+  /** Loop-consumption delivery the input row carries (#1253); absent folds to the `followUp` default. */
+  readonly delivery?: JournalKind.Delivery;
 }): LedgerAction.Append {
   return {
     id: input.id,
@@ -533,7 +535,14 @@ export function receivedMessageAction(input: {
     // #1252: control inputs (interrupt/resume) are signal rows; prompts are prompt rows.
     kind: inputRowKind(input.kind),
     intent: input.origin,
-    effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
+    effect: {
+      encodingVersion: 1,
+      value: {
+        inboxKind: input.kind,
+        content: input.content,
+        ...(input.delivery === undefined ? {} : { delivery: input.delivery }),
+      },
+    },
     irreversible: true,
     ts: input.at,
   };

@@ -324,6 +324,12 @@ export interface SessionEntityPorts {
   /** Runs one admitted decision to a durable boundary; the ack follows its commits. */
   readonly runTurn: (input: SessionEntityTurnInput) => Effect.Effect<void, SessionError>;
   readonly timers: SessionEntityTimerPort;
+  /**
+   * The input registration table `deliver` admits against (#1253): the core
+   * registers `prompt` and `signal`; the action capability registers `action`.
+   * Absent means exactly the core registrations.
+   */
+  readonly inputRegistrations?: readonly string[];
   /** Optional domain-revision capture for request bindings, as on `SessionRuntime`. */
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,

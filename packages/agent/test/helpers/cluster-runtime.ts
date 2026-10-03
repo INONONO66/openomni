@@ -583,3 +583,63 @@ export async function readUntil(
     reader.releaseLock();
   }
 }
+
+// ─── #1253 four-RPC send helpers ───
+
+/** One `deliver` through the four-RPC surface; body/source are canonical JSON. */
+export const sendDeliver = (
+  sessionId: string,
+  input: {
+    readonly kind: string;
+    readonly idempotencyKey: string;
+    readonly content: string;
+    readonly control?: "interrupt" | "resume";
+    readonly delivery?: "steer" | "followUp";
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Deliver({
+      kind: input.kind,
+      body: JSON.stringify({
+        content: input.content,
+        ...(input.control === undefined ? {} : { control: input.control }),
+        ...(input.delivery === undefined ? {} : { delivery: input.delivery }),
+      }),
+      source: testOrigin(sessionId, input.idempotencyKey),
+      idempotencyKey: input.idempotencyKey,
+    });
+  });
+
+/** One `resolve` through the four-RPC surface. */
+export const sendResolve = (
+  sessionId: string,
+  input: {
+    readonly requestId: string;
+    readonly outcome: "resolved" | "cancelled";
+    readonly payload: string;
+    readonly inputId: string;
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Resolve(input);
+  });
+
+/** One `alarm` occurrence through the four-RPC surface. */
+export const sendAlarm = (
+  sessionId: string,
+  occurrence: {
+    readonly occurrenceId: string;
+    readonly purpose: "retry" | "deadline" | "watch.fired" | "watch.timeout";
+    readonly body: string;
+    readonly fireAt: number;
+  },
+) =>
+  Effect.gen(function* () {
+    yield* provisionSession(yield* TestClusterEnv, sessionId);
+    const makeClient = yield* SessionEntity.client;
+    return yield* makeClient(sessionId).Alarm(occurrence);
+  });

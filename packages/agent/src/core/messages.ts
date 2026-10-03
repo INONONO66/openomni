@@ -1,4 +1,4 @@
-import { DateTime, Schema } from "effect";
+import { DateTime, PrimaryKey, Schema } from "effect";
 import { ClusterSchema, DeliverAt } from "effect/cluster";
 import { Rpc } from "effect/rpc";
 
@@ -158,3 +158,138 @@ export class SessionPolicyRefusal {
     return "session policy refused";
   }
 }
+
+// ─── #1253: the four-entity-RPC surface ───
+
+/**
+ * Typed `deliver` rejection (#1253): the closed code set is exactly
+ * `unknown_kind | missing_key | closed | denied`. A rejection appends
+ * nothing — zero new journal facts ride a refused delivery.
+ */
+export class DeliverRefused extends Schema.TaggedError<DeliverRefused>(
+  "@openomni/agent/cluster/DeliverRefused",
+)("DeliverRefused", {
+  code: Schema.Literals(["unknown_kind", "missing_key", "closed", "denied"]),
+}) {}
+
+/**
+ * Typed `resolve` rejection (#1253): a missing or already-settled request is
+ * refused before the request authority runs, so a stale response appends no
+ * journal fact.
+ */
+export class ResolveRefused extends Schema.TaggedError<ResolveRefused>(
+  "@openomni/agent/cluster/ResolveRefused",
+)("ResolveRefused", {
+  code: Schema.Literals(["unknown_request", "already_resolved"]),
+}) {}
+
+/** `deliver` success: the input row's seq; `existed` marks an idempotent replay. */
+export const DeliverReceipt = Schema.Struct({
+  seq: Schema.Number,
+  existed: Schema.Boolean,
+});
+export type DeliverReceipt = typeof DeliverReceipt.Type;
+
+/**
+ * One delivered input (#1253). `kind` is the journal row kind the input lands
+ * as and is checked against the activation's input registration table (the
+ * core registers `prompt` and `signal`; the action capability registers
+ * `action`). `body` is the canonical JSON of `{content, control?, delivery?}`
+ * — `control: interrupt|resume` selects the signal, `delivery: steer|followUp`
+ * the consumption boundary (default `followUp`). `source` is the canonical
+ * JSON of the protocol origin value. `idempotencyKey` is required and caller
+ * chosen: it is the durable row id and the cluster primary key, so replays
+ * resolve to the original seq.
+ */
+export const DeliverRpc = Rpc.make("Deliver", {
+  payload: {
+    kind: Schema.String,
+    body: Schema.String,
+    source: Schema.String,
+    idempotencyKey: Schema.String,
+  },
+  success: DeliverReceipt,
+  error: DeliverRefused,
+  primaryKey: (payload) => payload.idempotencyKey,
+}).annotate(ClusterSchema.Persisted, true);
+
+/**
+ * One request settlement (#1253). `payload` is the canonical JSON of a
+ * `SessionTransition.Payload` for `resolved`, or of the acting principal for
+ * `cancelled`. `inputId` is the durable idempotency key the pure request
+ * authority dedupes on.
+ */
+export const ResolveRpc = Rpc.make("Resolve", {
+  payload: {
+    requestId: Schema.String,
+    outcome: Schema.Literals(["resolved", "cancelled"]),
+    payload: Schema.String,
+    inputId: Schema.String,
+  },
+  success: RequestReceipt,
+  error: ResolveRefused,
+  primaryKey: (payload) => payload.inputId,
+}).annotate(ClusterSchema.Persisted, true);
+
+/** The alarm purposes the core dispatches today; #1254 owns the purpose set. */
+export const AlarmPurpose = Schema.Literals(["retry", "deadline", "watch.fired", "watch.timeout"]);
+export type AlarmPurpose = typeof AlarmPurpose.Type;
+
+/** Purpose-shaped alarm bodies (canonical JSON of `AlarmRpc.body`). */
+export const RetryAlarmBody = Schema.Struct({ alarmId: Schema.String, attempt: Schema.Number });
+export const DeadlineAlarmBody = Schema.Struct({ requestId: Schema.String });
+export const WatchFiredAlarmBody = Schema.Struct({
+  watchId: Schema.String,
+  epoch: Schema.Number,
+  sourceKey: Schema.String,
+  batch: Schema.String,
+});
+export const WatchTimeoutAlarmBody = Schema.Struct({
+  watchId: Schema.String,
+  epoch: Schema.Number,
+});
+
+/**
+ * One alarm occurrence (#1253): `occurrenceId` is the cluster primary key and
+ * the chain-guard identity; `fireAt` is the DeliverAt instant. A superseded
+ * occurrence folds to a recorded `alarm{fired, outcome: stale}` fact and never
+ * wakes the loop — a stale occurrence is a fact, not a rejection.
+ */
+export class AlarmOccurrence extends Schema.Class<AlarmOccurrence>(
+  "@openomni/agent/cluster/AlarmOccurrence",
+)({
+  occurrenceId: Schema.String,
+  purpose: AlarmPurpose,
+  body: Schema.String,
+  fireAt: Schema.Number,
+}) {
+  [PrimaryKey.symbol](): string {
+    return this.occurrenceId;
+  }
+  [DeliverAt.symbol](): DateTime.DateTime {
+    return DateTime.makeUnsafe(this.fireAt);
+  }
+}
+
+/** Alarm ack: the occurrence either drove the fold or folded to a stale fact. */
+export const AlarmReceipt = Schema.Struct({
+  outcome: Schema.Literals(["delivered", "stale"]),
+});
+export type AlarmReceipt = typeof AlarmReceipt.Type;
+
+export const AlarmRpc = Rpc.make("Alarm", {
+  payload: AlarmOccurrence,
+  success: AlarmReceipt,
+}).annotate(ClusterSchema.Persisted, true);
+
+/**
+ * The canonical JSON body one `deliver` carries: the input content, the
+ * signal control op when `kind` is `signal`, and the loop-consumption
+ * delivery (`steer | followUp`, default `followUp`).
+ */
+export const DeliverBody = Schema.Struct({
+  content: Schema.String,
+  control: Schema.optional(Schema.Literals(["interrupt", "resume"])),
+  delivery: Schema.optional(Schema.Literals(["steer", "followUp"])),
+});
+export type DeliverBody = typeof DeliverBody.Type;
