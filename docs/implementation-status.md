@@ -1,6 +1,33 @@
 # Implementation Status
 
-## #1251 fourteen-point gate registry (epic #1260, ⏳ pending merge)
+## #1276 one core, five plugins (epic #1260, draft PR #1277)
+
+On `epic1260/1276-core-plugins-move` (2026-10-03, base `66d56edb`).
+`packages/agent/src/{kernel,session,store}/` merged into one `src/core/` by
+`git mv` (store under `core/store/`; 61/63 moves detected as renames at
+R095-R100, the two directory barrels merged into `core/index.ts`); changes
+beyond import lines are the composition seams below. Exactly five plugin
+directories under `src/plugins/` — `alarm`, `action`, `hook`, `compaction`,
+`tool` — and `plugins/compaction` imports only `src/core/api.ts` (the one
+plugin-facing core surface) plus `@openomni/protocol`. The product
+compositions `parent-reply/` and `model-selection.ts` moved to
+`apps/openomni/src/composition/` and enter through new optional core seams
+(`ChatAgentConfig.restoreModelSelection`, `SessionChatRunnerOptions.pinnedModel`,
+`SessionRuntime.parentReply`) wired in `resident.ts`/`index.ts`/
+`process-entry.ts`; `attemptRouteChange` stays private inside
+`core/gate/decide.ts` (gate evidence, not a product choice). The root barrel
+exports five namespaces (`Core`, `Bundle`, `Model`, `Inspect`, `Testing`) and
+the unchanged pinned S8 named-export perimeter. `script/check-deps.ts` gates
+the five-band table with three new edge checks — core→plugin banned,
+plugin→sibling or non-api core banned, apps→agent internals banned
+(`appsAgentInternalViolations`) — each with fail-before tests in
+`script/check-deps-agent-bands.test.ts`; the band ratchet is re-keyed to the
+new paths with counts unchanged (total 36 = pre-move 36, printed by the gate).
+Deviation from the issue body: the app did NOT already compose
+parent-reply/model-selection — core called them directly at four sites — so
+the seams above were added (~10 lines) beyond import-line-only.
+
+## #1251 fourteen-point gate registry (epic #1260, merged as `66d56edb`, PR #1269)
 
 On `epic1260/1251-point-registry` (2026-10-03, base `d34218c6`). Unknown hooks
 no longer pass: `packages/protocol/src/policy/point.ts` defines fourteen

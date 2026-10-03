@@ -2,6 +2,8 @@
 
 `@openomni/agent` owns the invocation-scoped chat loop, generic durable-session controller, the compiled-policy L2 executor, and tool definition/dispatch mechanics. Product identity, routing, role policy, and endpoint binding remain in `apps/openomni`.
 
+2026-10-03, #1276: the former `src/kernel/`, `src/session/`, and `src/store/` directories are one `src/core/` (store under `src/core/store/`; the gate under `src/core/gate/`); earlier stamps below name pre-move paths. Exactly five plugin directories live under `src/plugins/` (`alarm`, `action`, `hook`, `compaction`, `tool`); a plugin imports only `src/core/api.ts` from the core and never a sibling plugin. The product compositions `parent-reply` and `model-selection` moved to `apps/openomni/src/composition/` and enter through core seams (`ChatAgentConfig.restoreModelSelection`, `SessionChatRunnerOptions.pinnedModel`, `SessionRuntime.parentReply`). The root barrel exports five namespaces (`Core`, `Bundle`, `Model`, `Inspect`, `Testing`) plus the pinned S8 named-export perimeter; `script/check-deps.ts` gates the five-band table and the re-keyed shrink-only ratchet (total 36, unchanged by the move).
+
 2026-10-03, #1251: the fourteen-point registration table gates every consultation. `src/kernel/points.ts` composes core+capability point records (`composePointTable`, typed `GateComposeError` on duplicates or core removal); `executionPoint` is the single kind/phase lookup — the executor fails closed (`unknown_point`) on unregistered points, prompt/message have no post consultation, compaction consults `compaction.pre/post`. `src/kernel/gate/compose.ts` compiles gate rows fail-closed with the #1255 rejection codes, folds deny > require_approval > allow recording every matched row id, guards handler requirements, replays by recorded inputHash, and owns the latest-only catalog derivation (`assertPointGenerationRows`) that preserves historical bytes and rejects unmappable rows at boot. The v3 point-mapping function is deleted.
 
 2026-10-02, #1246: the former policy, ledger, and llm packages fold in here. The policy gate lives in `src/kernel/gate/{compile,match}.ts`; the durable store plane in `src/store/` (`catalog.ts`, `session-file.ts`, `decision.ts`, `fence.ts`, `json.ts`, `atomic-file.ts`, with SQLite adapters under `store/storage/`); the LLM plane in `src/model/` (provider, processor, retry, token, auth, message, model subtrees). The channel-facing stores (actor, blacklist, channel-grant, reply-grant, egress, provisioning/vault) moved to `packages/channels/src/store/`. Everything external imports through the one root barrel `src/index.ts`; there is no second barrel and no re-export file at any old package path. `LedgerFailure`/`LlmFailure` are gone — `AgentFailure` is the single untyped-cause carrier.
@@ -34,15 +36,15 @@ Updated for #969 request convergence (2026-09-07): `session-request` owns pure r
 
 ## Boundaries
 
-- Core loop code may depend on protocol and package-local modules only (`src/model/` and `src/kernel/gate/` are package-local since #1246).
-- Durable session mechanics may consume the package-local `src/store/` session/action ports.
+- Core loop code may depend on protocol and package-local modules only (`src/model/` and `src/core/gate/` are package-local since #1246).
+- Durable session mechanics may consume the package-local `src/core/store/` session/action ports.
 - No OpenOmni product identity, channel routing, actor grants, or endpoint semantics belong here.
 - No callback policy engine, middleware registration, or alternate tool wrapper may be introduced.
 - Async tests subscribe to exact state/event signals before triggering and use bounded timeouts only as failure guards.
 
-## Store plane (formerly packages/ledger — key patterns kept, 2026-10-02 #1246)
+## Store plane (formerly packages/ledger — key patterns kept, 2026-10-02 #1246; `src/core/store/` since #1276)
 
-- `openSessionStore`/`openCatalogStore` are the storage factories; the caller owns and explicitly closes each handle. `SessionHandleStore.createSessionKernel` (`src/store/fence.ts`) binds one session-file handle to the catalog and keeps the fence compare-and-set ownership check.
+- `openSessionStore`/`openCatalogStore` are the storage factories; the caller owns and explicitly closes each handle. `SessionHandleStore.createSessionKernel` (`src/core/store/fence.ts`) binds one session-file handle to the catalog and keeps the fence compare-and-set ownership check.
 - Activation rotates the catalog fence exactly once; passivation closes the handle without deleting durable rows. Each session file holds `session`, `action`, `decision_fact`; the catalog holds the session index and cross-session facts. No lease, timer, mailbox, or migration store here.
 - Stored JSON decodes into validated plain values before row/domain assembly. No ad-hoc delegated state beside canonical session actions, no second completion/terminal authority, no compatibility readers for old database files.
 - Store tests use real SQLite and canonical handle fixtures; corruption is tested at the persisted-data boundary and rollback across the complete write unit.
