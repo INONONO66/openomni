@@ -1,18 +1,18 @@
 import { sessionTree } from "./helpers/session-tree";
 import { testExecutor } from "./helpers/executor";
-import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
+import type { ResolvedExecutorOptions } from "../src/core/gate/decide";
 import { executorLayer, catalogLayer } from "./helpers/service-layers";
 import { expect, it } from "bun:test";
 
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { Deferred, Effect, Fiber } from "effect";
-import { ExecutionApprovalError, AgentFailure } from "../src/kernel/failure";
-import { createExecutor, } from "../src/kernel/gate/decide";
+import { ExecutionApprovalError, AgentFailure } from "../src/core/failure";
+import { createExecutor, } from "../src/core/gate/decide";
 import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { z } from "zod";
-import { createDispatcher, defineTool } from "../src/kernel/tool";
+import { createDispatcher, defineTool } from "../src/core/tool";
 import { bounded } from "./helpers/bounded";
 
 const policy = compiledPolicy([approveWriteRow]);

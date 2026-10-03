@@ -1,10 +1,10 @@
 import { testExecutor } from "../../helpers/executor";
-import { KERNEL_POLICY_REGISTRY } from "../../../src/kernel/gate/compile";
+import { KERNEL_POLICY_REGISTRY } from "../../../src/core/gate/compile";
 import type { LedgerAction } from "@openomni/protocol";
 import { isolated } from "../../helpers/isolated";
 import { expect, test } from "bun:test";
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
-import { stopState, type StopObservation } from "../../../src/kernel/turn";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
+import { stopState, type StopObservation } from "../../../src/core/turn";
 import { recordingLedger } from "../../helpers/g0-effect";
 
 function harness(limit = 3) {

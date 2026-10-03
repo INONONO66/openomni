@@ -14,8 +14,8 @@ import { activeIsolation, isolatedLedger, isolatedRun } from "./isolated";
 import { openCrashStores } from "./crash-stores";
 import { runnerTestLayer } from "./isolated";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./session-services";
-import { createExecutor } from "../../src/kernel/gate/decide";
-import { resolveSessionRuntime, type SessionRunnerInput } from "../../src/session/run";
+import { createExecutor } from "../../src/core/gate/decide";
+import { resolveSessionRuntime, type SessionRunnerInput } from "../../src/core/run";
 import { createController } from "../../src/testing/controller";
 import {
   FoldCheckpointIntegrityError,

@@ -1,7 +1,7 @@
-import { Kernel, type Model } from "@openomni/agent";
-type ObservationSink = Kernel.ObservationSink;
-const AgentFailure = Kernel.AgentFailure;
-type CompactionOptions = Kernel.CompactionOptions;
+import { Core, type Model } from "@openomni/agent";
+type ObservationSink = Core.ObservationSink;
+const AgentFailure = Core.AgentFailure;
+type CompactionOptions = Core.CompactionOptions;
 type Llm = Model.Llm;
 type RunInput = Model.RunInput;
 import { Effect, Result } from "effect";

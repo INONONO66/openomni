@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Clock, Effect, Layer } from "effect";
-import type { Kernel } from "@openomni/agent";
-type EntropySource = Kernel.EntropySource;
+import type { Core } from "@openomni/agent";
+type EntropySource = Core.EntropySource;
 
 /**
  * The composition root's only ambient entropy (#1245): node's CSPRNG for ids,

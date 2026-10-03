@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import * as SessionHandleStore from "../src/store/fence";
+import * as SessionHandleStore from "../src/core/store/fence";
 import { sessionTree } from "./helpers/session-tree";
 import { canonicalDigest, PlainValueSchema, SessionTurn } from "@openomni/protocol";
 import { FoldCheckpointIntegrityError, foldHistoryState, hydrateSessionHistory, } from "../src/inspect/history";

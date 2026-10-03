@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import { Kernel, Model } from "@openomni/agent";
+import { Core, Model } from "@openomni/agent";
 const LlmLive = Model.LlmLive;
-const ObservationSink = Kernel.ObservationSink;
+const ObservationSink = Core.ObservationSink;
 import { Bus, newTraceId } from "./helpers/bus";
 import { runSyncEffect } from "./helpers/effect";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";

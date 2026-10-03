@@ -1,6 +1,6 @@
-import { Kernel } from "@openomni/agent";
-const createDispatcher = Kernel.createDispatcher;
-const ToolCatalog = Kernel.ToolCatalog;
+import { Core } from "@openomni/agent";
+const createDispatcher = Core.createDispatcher;
+const ToolCatalog = Core.ToolCatalog;
 import type { AnyToolDefinition } from "@openomni/protocol";
 import { Effect } from "effect";
 import { runSyncEffect } from "./effect";

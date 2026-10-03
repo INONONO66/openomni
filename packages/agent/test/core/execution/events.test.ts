@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { RunEvents } from "../../../src/kernel/turn";
+import { RunEvents } from "../../../src/core/turn";
 import { Operational, type PlainObject } from "@openomni/protocol";
-import { createBudgetState, publishBudgetTelemetry } from "../../../src/kernel/budget";
+import { createBudgetState, publishBudgetTelemetry } from "../../../src/core/budget";
 import { collector } from "../../helpers/observation-collector";
 describe("RunEvents BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: 1 };

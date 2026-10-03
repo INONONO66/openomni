@@ -28,7 +28,7 @@ const excludedSuffixes = [".d.ts", ".generated.ts", ".gen.ts"];
 // Only the canonical permission evaluator leaf may implement raw allowlist/denylist
 // membership; every public caller still routes through evaluatePermission
 // (the agent gate, the engine's owner since #498 W1; folded into agent by #1246).
-const canonicalPolicyEvaluator = new Set(["packages/agent/src/kernel/gate/match.ts"]);
+const canonicalPolicyEvaluator = new Set(["packages/agent/src/core/gate/match.ts"]);
 const canonicalPolicyRequiredFiles = new Set(["packages/channels/src/authn/decision.ts"]);
 
 const listMembershipPattern = /\b(?:denylist|allowlist)\s*\??\.\s*includes\s*\(/g;
@@ -39,7 +39,7 @@ const inlineAuthorizationThrowPatterns = [
 ];
 /**
  * The run loop's closed reason-code vocabulary, declared once in
- * `packages/agent/src/kernel/reason-codes.ts` and produced from another
+ * `packages/agent/src/core/reason-codes.ts` and produced from another
  * package, so a literal at the producer is a coupling the compiler cannot see:
  * rename one end and the loop silently stops reacting.
  *
@@ -52,7 +52,7 @@ const inlineAuthorizationThrowPatterns = [
  * reaching a `reasonCodes` array through a variable or helper parameter is
  * also out of reach; the test pins are the layer that catches a wrong value.
  */
-const runReasonCodeSource = "packages/agent/src/kernel/reason-codes.ts";
+const runReasonCodeSource = "packages/agent/src/core/reason-codes.ts";
 const runReasonCodeLiteralPattern =
   /reasonCodes:\s*\[[^\]]*?["'`](stalled|budget_warning|budget_reassurance)["'`]/g;
 const runReasonCodeComparisonPattern =

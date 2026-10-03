@@ -7,10 +7,10 @@ import {
   legacyPointOf,
   POINT_GENERATION_ROW,
   translateLegacyPolicyRow,
-} from "../src/kernel/gate/migrate";
-import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY } from "../src/kernel/gate/compile";
-import { GateComposeError } from "../src/kernel/points";
-import { openCatalogStore } from "../src/store/catalog";
+} from "../src/core/gate/migrate";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
+import { GateComposeError } from "../src/core/points";
+import { openCatalogStore } from "../src/core/store/catalog";
 import { atGeneration, compaction, draft } from "./kernel/gate/row-fixtures";
 import { fullPointTable } from "./helpers/gate-rows";
 

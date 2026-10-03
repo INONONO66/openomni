@@ -1,16 +1,16 @@
 import { AppInvariantError } from "./invariant";
-import { Kernel, Session, Bundle, type Journal, Model } from "@openomni/agent";
+import { Core, Bundle, Model } from "@openomni/agent";
 type BundleDefinitions = Bundle.BundleDefinitions;
 const BundlesLive = Bundle.BundlesLive;
-type Entropy = Kernel.Entropy;
-type EntropySource = Kernel.EntropySource;
-const ObservationSink = Kernel.ObservationSink;
-type ObservationSink = Kernel.ObservationSink;
-type SessionEntityPorts = Session.SessionEntityPorts;
-type SessionError = Kernel.SessionError;
-type GenerationLayers = Kernel.GenerationLayers;
+type Entropy = Core.Entropy;
+type EntropySource = Core.EntropySource;
+const ObservationSink = Core.ObservationSink;
+type ObservationSink = Core.ObservationSink;
+type SessionEntityPorts = Core.SessionEntityPorts;
+type SessionError = Core.SessionError;
+type GenerationLayers = Core.GenerationLayers;
 import { AgentProcessLive } from "./agent-layers";
-type LedgerError = Journal.LedgerError;
+type LedgerError = Core.LedgerError;
 const LlmLive = Model.LlmLive;
 type Llm = Model.Llm;
 import { pid } from "node:process";
@@ -79,7 +79,7 @@ export interface AppRuntimeOptions {
   readonly llm?: Layer.Layer<Llm>;
   readonly bundles?: Layer.Layer<BundleDefinitions>;
   /** The capability registrations this composition selects (#1251); absent = every built-in this app ships. */
-  readonly capabilities?: readonly Kernel.CapabilityPointRegistration[];
+  readonly capabilities?: readonly Core.CapabilityPointRegistration[];
 }
 
 export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ?? BundlesLive([])) {
@@ -93,7 +93,7 @@ function appLayer(options: AppRuntimeOptions, bundles: Layer.Layer<BundleDefinit
   // runtime's lifetime. Injected fixture sinks mount as plain values.
   const sinkLayer: Layer.Layer<ObservationSink> =
     options.observations === undefined
-      ? Session.observationBusLayer({ id: entropy.id, now })
+      ? Core.observationBusLayer({ id: entropy.id, now })
       : Layer.succeed(ObservationSink, options.observations);
   return Layer.unwrap(Effect.gen(function* () {
     const observations = yield* ObservationSink;

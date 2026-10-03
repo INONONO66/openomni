@@ -3,7 +3,7 @@ const Llm = Model.Llm;
 const LlmLive = Model.LlmLive;
 import { Context, Effect, Layer } from "effect";
 import { gatewayRuntime } from "../../src/gateway";
-import { startOpenOmni } from "../../src/index";
+import { startOpenOmni } from "../../src";
 import { testEntropy } from "./test-entropy";
 import { Bus } from "./bus";
 

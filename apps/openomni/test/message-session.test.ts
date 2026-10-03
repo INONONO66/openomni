@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { Kernel } from "@openomni/agent";
-const createExecutor = Kernel.createExecutor;
+import { Core } from "@openomni/agent";
+const createExecutor = Core.createExecutor;
 import { Inbox, type LedgerSession, type SessionTransition } from "@openomni/protocol";
 import { Effect } from "effect";
 import {

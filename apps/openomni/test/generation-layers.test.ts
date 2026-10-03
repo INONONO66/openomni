@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { Bundle, Kernel, Testing } from "@openomni/agent";
+import { Core, Bundle, Testing } from "@openomni/agent";
 const bundle = Bundle.bundle;
 const BundlesLive = Bundle.BundlesLive;
-const AgentFailure = Kernel.AgentFailure;
-const GenerationLayers = Kernel.GenerationLayers;
-const ObservationSink = Kernel.ObservationSink;
-const SessionLayer = Kernel.SessionLayer;
+const AgentFailure = Core.AgentFailure;
+const GenerationLayers = Core.GenerationLayers;
+const ObservationSink = Core.ObservationSink;
+const SessionLayer = Core.SessionLayer;
 const session = Testing.session;
 import { Effect, Layer } from "effect";
 import { z } from "zod";
@@ -121,7 +121,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
 });
 
 test("a capability omitted from the composition removes its points: tool rows fail closed; composed, they govern (#1251 r3)", async () => {
-  const reduced = Kernel.KERNEL_CAPABILITY_POINTS.filter((capability) => capability.bundle !== "tool");
+  const reduced = Core.KERNEL_CAPABILITY_POINTS.filter((capability) => capability.bundle !== "tool");
   const denyWrites: Omit<PolicyRow.Row, "generation"> = {
     name: "no-writes", kind: "tool", phase: "pre", priority: 1_000,
     match: { encodingVersion: 1, value: { op: "write" } },
@@ -148,7 +148,7 @@ test("a capability omitted from the composition removes its points: tool rows fa
       } catch (error) {
         seedError = error;
       }
-      expect(Kernel.GateComposeError.isInstance(seedError) ? seedError.data : seedError)
+      expect(Core.GateComposeError.isInstance(seedError) ? seedError.data : seedError)
         .toMatchObject({ code: "unknown_point", point: "tool.pre" });
       // A generation written elsewhere still fails closed at capture.
       const generation = plane.catalog.policies.appendGeneration(() => governed);

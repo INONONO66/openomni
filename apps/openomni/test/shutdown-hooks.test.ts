@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { installShutdownHandlers } from "../src/index";
+import { installShutdownHandlers } from "../src";
 
 describe("entry-point shutdown handlers", () => {
   test("SIGINT/SIGTERM handler awaits stop() completion before exiting", async () => {

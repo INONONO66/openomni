@@ -1,10 +1,10 @@
 import { Clock, Effect, Result } from "effect";
-import { AgentFailure, type ExecutionError } from "../../kernel/failure";
+import { AgentFailure, type ExecutionError } from "../../core/failure";
 import type { Message } from "@openomni/protocol";
 import type { CompactionOptions, AnchoredCutAttempt } from "./contract";
 import { latestAnchorBody, isAnchorMessage } from "./candidate";
 import { prepareSummarizerInput, estimateContentChars, userTextChars } from "./estimate";
-import { Entropy } from "../../kernel/ports";
+import { Entropy } from "../../core/ports";
 
 const DEFAULT_SUMMARIZER_DEADLINE_MS = 60_000;
 

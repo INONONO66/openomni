@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlainValue } from "@openomni/protocol";
-import { compilePolicySnapshot } from "../../../src/kernel/gate/compile";
+import { compilePolicySnapshot } from "../../../src/core/gate/compile";
 import { atGeneration, compaction, draft } from "./row-fixtures";
 
 test("existing compiler executes the supplied captured named transform", () => {

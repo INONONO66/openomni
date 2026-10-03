@@ -1,6 +1,6 @@
-import { Bundle, Kernel, Testing } from "@openomni/agent";
+import { Core, Bundle, Testing } from "@openomni/agent";
 const BundlesLive = Bundle.BundlesLive;
-const GenerationLayers = Kernel.GenerationLayers;
+const GenerationLayers = Core.GenerationLayers;
 const session = Testing.session;
 import { Deferred, Effect } from "effect";
 import { z } from "zod";

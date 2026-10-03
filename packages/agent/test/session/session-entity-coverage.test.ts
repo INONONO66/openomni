@@ -1,11 +1,11 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { rmSync } from "node:fs";
-import { CommitRefused, StorageUnavailable } from "../../src/store/errors";
-import { openCatalogStore } from "../../src/store/catalog";
-import { openSessionStore } from "../../src/store/session-file";
-import * as SessionHandleStore from "../../src/store/fence";
+import { CommitRefused, StorageUnavailable } from "../../src/core/store/errors";
+import { openCatalogStore } from "../../src/core/store/catalog";
+import { openSessionStore } from "../../src/core/store/session-file";
+import * as SessionHandleStore from "../../src/core/store/fence";
 import { Effect } from "effect";
-import { SessionEntity } from "../../src/session/entity";
+import { SessionEntity } from "../../src/core/entity";
 import { clusterTempDir, readChain, runCluster, sendPrompt, sessionFileFor, } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 

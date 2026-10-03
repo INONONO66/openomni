@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { CORE_POINT_RECORDS } from "@openomni/protocol";
-import { compileGateRows } from "../src/kernel/gate/compose";
+import { compileGateRows } from "../src/core/gate/compose";
 import {
   composePointTable,
   GateComposeError,
   KERNEL_CAPABILITY_POINTS,
-} from "../src/kernel/points";
+} from "../src/core/points";
 import { fullPointTable, gateRow } from "./helpers/gate-rows";
 
 function rejectionCode(run: () => void): string {

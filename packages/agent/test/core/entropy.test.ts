@@ -1,7 +1,7 @@
 import { runAgentSync } from "../helpers/executor";
 import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
-import { Entropy } from "../../src/kernel/ports";
+import { Entropy } from "../../src/core/ports";
 
 describe("process entropy", () => {
   it("returns the supplied source untouched", () => {

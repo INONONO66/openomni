@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { SessionGeneration } from "../src/index";
+import { SessionGeneration } from "../src";
 
 test("existing Snapshot retains requested durable bundle identity", () => {
   const requested = {

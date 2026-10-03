@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { Kernel } from "@openomni/agent";
-const createTurnDispatcher = Kernel.createTurnDispatcher;
+import { Core } from "@openomni/agent";
+const createTurnDispatcher = Core.createTurnDispatcher;
 import { createCodemode } from "@openomni/machines";
 import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
 import { LedgerAction, type Machine } from "@openomni/protocol";

@@ -3,9 +3,9 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Kernel, Journal } from "@openomni/agent";
-const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
-const openCatalogStore = Journal.openCatalogStore;
+import { Core } from "@openomni/agent";
+const SEEDED_POLICY_ROWS = Core.SEEDED_POLICY_ROWS;
+const openCatalogStore = Core.openCatalogStore;
 import type { PolicyRow } from "@openomni/protocol";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";
@@ -20,7 +20,7 @@ const expectedIds = [
   ...MESSAGE_POLICY_ROWS.map(identity),
   ...PROVISION_POLICY_ROWS.map(identity),
   budgetId,
-  identity(Kernel.POINT_GENERATION_ROW),
+  identity(Core.POINT_GENERATION_ROW),
 ].sort();
 
 type CatalogStore = ReturnType<typeof openCatalogStore>;
@@ -114,7 +114,7 @@ test("a complete latest generation plus an unmappable row still rejects the boot
       seedKernelPolicyRows(policies);
       throw new Error("expected unknown_point");
     } catch (error) {
-      if (!Kernel.GateComposeError.isInstance(error)) throw error;
+      if (!Core.GateComposeError.isInstance(error)) throw error;
       expect(error.data).toEqual({ code: "unknown_point", point: "fold.checkpoint.pre" });
     }
     expect(policies.rows()).toEqual(before);
@@ -150,9 +150,9 @@ test("a base-era compaction deny converts at boot and keeps refusing summarizati
     });
 
     // The production compiler refuses summarization under the converted generation.
-    const compiler = Kernel.createPolicyCompiler({
+    const compiler = Core.createPolicyCompiler({
       source: policies,
-      registry: Kernel.KERNEL_POLICY_REGISTRY,
+      registry: Core.KERNEL_POLICY_REGISTRY,
     });
     const refused = compiler.pin(3).evaluate({ kind: "compaction", phase: "pre", op: "compact", value: {} });
     expect(refused.verdict).toBe("deny");
@@ -176,7 +176,7 @@ test("a latest generation with an unmappable row rejects the boot conversion and
       seedKernelPolicyRows(policies);
       throw new Error("expected unknown_point");
     } catch (error) {
-      if (!Kernel.GateComposeError.isInstance(error)) throw error;
+      if (!Core.GateComposeError.isInstance(error)) throw error;
       expect(error.data).toEqual({ code: "unknown_point", point: "fold.checkpoint.pre" });
     }
     expect(policies.rows()).toEqual(before);

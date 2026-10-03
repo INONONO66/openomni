@@ -36,21 +36,21 @@ export function clusterTempDir(prefix: string): {
 
 import { Database } from "bun:sqlite";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
-import { L0Write } from "../../src/store/session-file";
-import * as SessionHandleStore from "../../src/store/fence";
+import { L0Write } from "../../src/core/store/session-file";
+import * as SessionHandleStore from "../../src/core/store/fence";
 import type { Inbox } from "@openomni/protocol";
 import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
-import { openCatalogStore } from "../../src/store/catalog";
-import { openSessionStore } from "../../src/store/session-file";
-import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEntityEnv, } from "../../src/session/entity";
+import { openCatalogStore } from "../../src/core/store/catalog";
+import { openSessionStore } from "../../src/core/store/session-file";
+import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEntityEnv, } from "../../src/core/entity";
 
 /** Integration-helper composition root: cluster fixtures run on the real wall clock. */
 const wallClock = () => Date.now();
-import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "../../src/session/alarm";
-import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/session/run";
-import type { SessionError } from "../../src/kernel/failure";
-import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/session/commit";
+import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "../../src/core/alarm";
+import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/core/run";
+import type { SessionError } from "../../src/core/failure";
+import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/core/commit";
 import { runAgent } from "./executor";
 
 export interface TestClusterOptions {

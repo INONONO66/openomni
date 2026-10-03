@@ -7,15 +7,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { createRawSlots } from "../../src/kernel/gate/decide";
+import { createRawSlots } from "../../src/core/gate/decide";
 import {
   internalOrigin,
   pendingBacklog,
   receivedMessageAction,
   turnTerminalAction,
-} from "../../src/session/commit";
-import { createSessionAdmission } from "../../src/session/mailbox";
-import type { ResolvedSessionRuntime, SessionControllerState } from "../../src/session/run";
+} from "../../src/core/commit";
+import { createSessionAdmission } from "../../src/core/mailbox";
+import type { ResolvedSessionRuntime, SessionControllerState } from "../../src/core/run";
 import { openCrashStores } from "../helpers/crash-stores";
 import { runAgent } from "../helpers/isolated";
 import { fencedTurnFixture } from "../helpers/fenced-writer";

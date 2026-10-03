@@ -9,7 +9,7 @@ import {
   POINT_RECORDS,
   PointId,
   emittedRowKey,
-} from "../../src/index";
+} from "../../src";
 
 describe("point registry records (#1251)", () => {
   it("registers exactly fourteen points: eight core and six capability records", () => {

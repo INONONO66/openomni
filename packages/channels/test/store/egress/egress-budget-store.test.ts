@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEgressBudgetStore } from "../../../src/index.js";
-import { Journal } from "@openomni/agent";
-const openCatalogStore = Journal.openCatalogStore;
+import { Core } from "@openomni/agent";
+const openCatalogStore = Core.openCatalogStore;
 import { testNow, useMemoryStores } from "../../../../agent/test/store/helpers/storage";
 import type { Gateway } from "@openomni/protocol";
 

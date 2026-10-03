@@ -3,8 +3,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { SessionIndexInsert, SessionIndexRow } from "../../../src/store/catalog";
-import { CATALOG_SCHEMA, openCatalogStore } from "../../../src/store/catalog";
+import type { SessionIndexInsert, SessionIndexRow } from "../../../src/core/store/catalog";
+import { CATALOG_SCHEMA, openCatalogStore } from "../../../src/core/store/catalog";
 import { testNow } from "../helpers/storage";
 import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";
 
@@ -116,7 +116,7 @@ test("concurrent rotateFence from two processes yields distinct consecutive fenc
   try {
     store.indexSession({ id: "s1", parentId: null, role: "resident", createdAt: 1 });
     const childSource = `
-      import { openCatalogStore } from "./src/store/catalog.ts";
+      import { openCatalogStore } from "./src/core/store/catalog.ts";
       const store = openCatalogStore(String(process.env.CATALOG_PATH), { now: () => 1_700_000_000_000 });
       const fence = store.rotateFence("s1");
       store.close();

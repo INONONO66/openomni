@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { canonicalDigest, SessionTransition } from "../src/index";
+import { canonicalDigest, SessionTransition } from "../src";
 
 const original: SessionTransition.Request = {
   requestId: "intent",

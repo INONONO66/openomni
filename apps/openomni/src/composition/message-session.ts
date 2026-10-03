@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { Kernel, Session, Journal } from "@openomni/agent";
-const AgentFailure = Kernel.AgentFailure;
-type AgentFailure = Kernel.AgentFailure;
-const SessionEntity = Session.SessionEntity;
+import { Core } from "@openomni/agent";
+const AgentFailure = Core.AgentFailure;
+type AgentFailure = Core.AgentFailure;
+const SessionEntity = Core.SessionEntity;
 import { Inbox, Gateway, SessionGeneration, type LedgerSession } from "@openomni/protocol";
 import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
 import type { AppLedgerPlane } from "./cluster-runtime";
@@ -160,7 +160,7 @@ export function messageMaterialization(
   readonly at: number;
 }) => LedgerSession.Materialize {
   return (input) => {
-    const snapshot = Journal.SessionHandleStore.generationSnapshot({
+    const snapshot = Core.SessionHandleStore.generationSnapshot({
       generation: 1,
       revertTo: 0,
       tools: input.tools,
@@ -171,7 +171,7 @@ export function messageMaterialization(
       },
       policyGeneration: currentPolicyGeneration(),
     });
-    return Journal.SessionHandleStore.materializationSeed(
+    return Core.SessionHandleStore.materializationSeed(
       {
         id: input.id,
         parentId: input.parentId,

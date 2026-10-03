@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalDigest, FoldCheckpoint, PlainValueSchema } from "@openomni/protocol";
-import * as SessionHandleStore from "../src/store/fence";
+import * as SessionHandleStore from "../src/core/store/fence";
 import { isolatedRun } from "./helpers/isolated";
 import { openCrashStores } from "./helpers/crash-stores";
 import { sessionTree } from "./helpers/session-tree";

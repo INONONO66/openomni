@@ -1,5 +1,5 @@
 import { LlmCall, Operational, type BusEvent } from "@openomni/protocol";
-import type { Retry } from "./index";
+import type { Retry } from ".";
 
 /** Provider retry facts are emitted only after the executor decides to schedule another attempt. */
 export function observeRetry(

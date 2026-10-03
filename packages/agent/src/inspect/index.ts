@@ -1,5 +1,5 @@
-import * as SessionHandleStore from "../store/fence";
-import type { SessionKernel } from "../session/entity";
+import * as SessionHandleStore from "../core/store/fence";
+import type { SessionKernel } from "../core/entity";
 import { canonicalDigest, type LedgerAction, type PlainObject, type PlainValue, SessionHistory, SessionTransition, } from "@openomni/protocol";
 import { z } from "zod";
 

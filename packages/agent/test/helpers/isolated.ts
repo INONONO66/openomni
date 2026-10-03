@@ -1,6 +1,6 @@
-import { openCatalogStore } from "../../src/store/catalog";
-import { openSessionStore } from "../../src/store/session-file";
-import * as SessionHandleStore from "../../src/store/fence";
+import { openCatalogStore } from "../../src/core/store/catalog";
+import { openSessionStore } from "../../src/core/store/session-file";
+import * as SessionHandleStore from "../../src/core/store/fence";
 import type { LedgerSession, ObservationSink as ObservationSinkShape } from "@openomni/protocol";
 import { Cause, Context, Effect, Exit, FiberSet, Layer, Scope, Stream } from "effect";
 import {
@@ -8,12 +8,12 @@ import {
   type PublishedObservation,
   makeObservationBus,
   scopeObservation,
-} from "../../src/session/bus";
+} from "../../src/core/bus";
 import { LlmLive } from "../../src/model";
-import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/kernel/gate/compile";
-import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices, type RunnerServices } from "../../src/kernel/ports";
-import { NamedPolicyRegistry } from "../../src/kernel/bundle";
-import { makeSessionGenerations, type GenerationRawSlots } from "../../src/session/run";
+import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/core/gate/compile";
+import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices, type RunnerServices } from "../../src/core/ports";
+import { NamedPolicyRegistry } from "../../src/core/bundle";
+import { makeSessionGenerations, type GenerationRawSlots } from "../../src/core/run";
 import { entropySource } from "./time";
 
 type FailureReporter = (error: Error, eventName: string) => void;

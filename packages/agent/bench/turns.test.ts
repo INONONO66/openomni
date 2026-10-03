@@ -65,7 +65,7 @@ describe("turn benchmarks", () => {
   });
 
   test("benchmark entry point writes exactly four compaction and four turn metrics", async () => {
-    await import("./index.ts");
+    await import(".");
     const results = resultSchema.parse(await Bun.file("bench-results/agent.json").json());
     expect(results.map((result) => result.name)).toEqual([
       "compaction/20-messages",

@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { createSurfaceKeyStore } from "../../../src/store/surface-key";
-import { createSqliteSurfaceKeyAdapter } from "../../../src/store/storage/sqlite-surface-key-adapter";
+import { createSurfaceKeyStore } from "../../../src/core/store/surface-key";
+import { createSqliteSurfaceKeyAdapter } from "../../../src/core/store/storage/sqlite-surface-key-adapter";
 import { materializeSession } from "../helpers/session";
 import { useSqliteStores } from "../helpers/storage";
 

@@ -1,11 +1,11 @@
 import { Effect } from "effect";
-import { CompactionExecutionError, type ExecutionError } from "../../kernel/failure";
+import { CompactionExecutionError, type ExecutionError } from "../../core/failure";
 import type { CompactionResult } from "./contract";
 import { canonicalDigest, PlainValueSchema, type BusEvent } from "@openomni/protocol";
-import type { Executor } from "../../kernel/gate/decide";
-import { RunEvents } from "../../kernel/run-events";
+import type { Executor } from "../../core/gate/decide";
+import { RunEvents } from "../../core/run-events";
 import { Compaction } from "./compact";
-import type { Entropy } from "../../kernel/ports";
+import type { Entropy } from "../../core/ports";
 
 type CompactionArguments = Parameters<typeof Compaction.compact>;
 

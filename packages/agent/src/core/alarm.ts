@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import { interruptOn } from "../kernel/ports";
+import { interruptOn } from "./ports";
 import type { LedgerAction, } from "@openomni/protocol";
-import type { AlarmSkipReason, AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
+import type { AlarmSkipReason, AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
-export type { AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "../kernel/alarm";
+export type { AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
 /**
  * Timer plane over cluster DeliverAt (W5.2 review F2, plan D5/D8): a persisted

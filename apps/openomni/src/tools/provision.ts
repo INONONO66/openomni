@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { Kernel } from "@openomni/agent";
-const defineTool = Kernel.defineTool;
+import { Core } from "@openomni/agent";
+const defineTool = Core.defineTool;
 import type { PolicyRow } from "@openomni/protocol";
 import { ContactOperation, ContactResult } from "./core/contact-mutations";
 import {

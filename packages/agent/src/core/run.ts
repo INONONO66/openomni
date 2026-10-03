@@ -1,26 +1,26 @@
 import { Clock, Effect, Context, type Fiber, Exit, Layer, Scope, Semaphore, Cause } from "effect";
-import * as Failure from "../kernel/failure";
-import { type SessionError, type ExecutionError, RunnerOutputMissing, CommitFailed, AgentFailure, GenerationUnavailable, GenerationUnsettled, AgentInvariantViolation, InboundAuthorityViolation } from "../kernel/failure";
-import { type ExecutionLedger, type ExecutionApprovals, type ExecutionResult, type ExecutorOptions, createRawSlots, createExecutor, type Executor } from "../kernel/gate/decide";
+import * as Failure from "./failure";
+import { type SessionError, type ExecutionError, RunnerOutputMissing, CommitFailed, AgentFailure, GenerationUnavailable, GenerationUnsettled, AgentInvariantViolation, InboundAuthorityViolation } from "./failure";
+import { type ExecutionLedger, type ExecutionApprovals, type ExecutionResult, type ExecutorOptions, createRawSlots, createExecutor, type Executor } from "./gate/decide";
 import type { SessionPolicyRefusal } from "./messages";
 export { SessionPolicyRefusal } from "./messages";
-import { GenerationRawSlots } from "../kernel/gate/decide";
-export { GenerationRawSlots } from "../kernel/gate/decide";
+import { GenerationRawSlots } from "./gate/decide";
+export { GenerationRawSlots } from "./gate/decide";
 
-import * as SessionHandleStore from "../store/fence";
+import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./entity";
 import type { InspectRequest, InspectionPage } from "../inspect";
 import { Inbox, type LedgerAction, type LedgerSession, type ObservationSink, type SessionGeneration, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
-import type { ChatAgentConfig, AgentResult } from "../kernel/types";
+import type { ChatAgentConfig, AgentResult } from "./types";
 import type { decideSessionAdmission } from "./mailbox";
-import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "../kernel/ports";
+import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
 import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, receivedMessages, } from "./commit";
-import type { LedgerError } from "../store/errors";
+import type { LedgerError } from "./store/errors";
 import { z } from "zod";
 import { hydrateSessionHistory, refreshSessionHistory } from "../inspect/history";
 import { parentReply } from "../plugins/parent-reply";
 import { observeDrained, scopeObservation } from "./bus";
-import { runAgent } from "../kernel/turn";
+import { runAgent } from "./turn";
 import { pinnedModelSelection } from "../plugins/model-selection";
 
 // ─── from session-contract.ts (#1247) ───

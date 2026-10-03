@@ -1,12 +1,12 @@
 import { Effect } from "effect";
-import { CommitRefused, type LedgerError } from "../store/errors";
-import * as SessionHandleStore from "../store/fence";
-import type { CommitReceipt } from "../store/services";
-import { ObservationSink, type RunnerServices } from "../kernel/ports";
+import { CommitRefused, type LedgerError } from "./store/errors";
+import * as SessionHandleStore from "./store/fence";
+import type { CommitReceipt } from "./store/services";
+import { ObservationSink, type RunnerServices } from "./ports";
 import { canonicalDigest, PlainValueSchema, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
-import { createExecutor, type ExecutionResult } from "../kernel/gate/decide";
+import { createExecutor, type ExecutionResult } from "./gate/decide";
 import { recordedCompaction, requireCompactionIntent, restoreContextRequest, restoredContextProjection } from "../plugins/compaction/restore";
-import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "../kernel/failure";
+import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { ResolvedSessionRuntime, SessionRunnerResult, SessionActionCommitPort } from "./run";
 import type { SessionKernel } from "./entity";

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlainValue } from "@openomni/protocol";
-import { inboundAuthority } from "../src/session/run";
+import { inboundAuthority } from "../src/core/run";
 
 const external = { kind: "external", messageId: "m1", surface: "ws", externalId: "alice", actorId: "" };
 

@@ -2,16 +2,16 @@ import { sessionTree } from "./helpers/session-tree";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber } from "effect";
-import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
+import type { ResolvedExecutorOptions } from "../src/core/gate/decide";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { expect, it } from "bun:test";
 import { seedPolicy } from "./helpers/seed-policy";
 import { L0Observation, type SessionTransition } from "@openomni/protocol";
-import { closeSessions } from "../src/session/run";
+import { closeSessions } from "../src/core/run";
 import { session } from "../src/testing/registry";
-import { createTurnDispatcher, eraseTool, sessionTool } from "../src/kernel/tool";
+import { createTurnDispatcher, eraseTool, sessionTool } from "../src/core/tool";
 import { valueTool } from "./helpers/query-tool";
-import { createSessionRequests } from "../src/session/request";
+import { createSessionRequests } from "../src/core/request";
 import { suspendedRequest, } from "./helpers/effect-g2";
 
 // W5.2: the TTL-expiry test ("does not reacquire an expired lease under a still-live
@@ -54,7 +54,7 @@ function setup() {
         id: "controller",
         role: "resident",
         tools: [sessionTool(tool)],
-        runner: (input: import("../src/session/run").SessionRunnerInput) =>
+        runner: (input: import("../src/core/run").SessionRunnerInput) =>
           Effect.gen(function* () {
             const dispatcher = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([tool])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
             yield* dispatcher.execute(

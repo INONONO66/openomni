@@ -14,19 +14,19 @@ import { timingSafeEqual } from "node:crypto";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
-import { Kernel, Session, Bundle, Journal } from "@openomni/agent";
+import { Core, Bundle } from "@openomni/agent";
 const BundleDefinitions = Bundle.BundleDefinitions;
-const Entropy = Kernel.Entropy;
-const GenerationLayers = Kernel.GenerationLayers;
-const ObservationSink = Kernel.ObservationSink;
-const createSessionEntityRunTurn = Session.createSessionEntityRunTurn;
-const createSessionRequests = Session.createSessionRequests;
-const SessionEntity = Session.SessionEntity;
-type SessionHandle = Session.SessionHandle;
-type SessionRuntime = Session.SessionRuntime;
-const AgentFailure = Kernel.AgentFailure;
-const ExecutionApprovalError = Kernel.ExecutionApprovalError;
-const CommitRefused = Journal.CommitRefused;
+const Entropy = Core.Entropy;
+const GenerationLayers = Core.GenerationLayers;
+const ObservationSink = Core.ObservationSink;
+const createSessionEntityRunTurn = Core.createSessionEntityRunTurn;
+const createSessionRequests = Core.createSessionRequests;
+const SessionEntity = Core.SessionEntity;
+type SessionHandle = Core.SessionHandle;
+type SessionRuntime = Core.SessionRuntime;
+const AgentFailure = Core.AgentFailure;
+const ExecutionApprovalError = Core.ExecutionApprovalError;
+const CommitRefused = Core.CommitRefused;
 import { SessionGeneration, SessionTransition, type LedgerAction } from "@openomni/protocol";
 import {
   type ChannelDeliveryRoute,
@@ -813,7 +813,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
               });
               if (!accepted)
                 return yield* Effect.fail(new AgentFailure({ operation: "session.configure", cause: "denied" }));
-              const snapshot = Journal.SessionHandleStore.generationSnapshot({
+              const snapshot = Core.SessionHandleStore.generationSnapshot({
                 generation,
                 revertTo: before.generation,
                 tools: [...before.tools, ...additions.map((tool) => SessionGeneration.Tool.parse(tool))],
@@ -821,7 +821,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 policyGeneration: before.policyGeneration,
                 bundles: before.bundles,
               });
-              const configured = Journal.SessionHandleStore.configureAction({
+              const configured = Core.SessionHandleStore.configureAction({
                 id: services.entropy.id(), sessionId: id,
                 parentId: kernel.latestAction(id)?.id ?? null,
                 operation: "tools.add", snapshot, at: services.now(),
@@ -934,9 +934,9 @@ export interface AppSessionHandle {
     timeout(
       requestId: string,
       at: number,
-    ): Effect.Effect<void, Kernel.ExecutionError>;
+    ): Effect.Effect<void, Core.ExecutionError>;
   };
-  interrupt(): Effect.Effect<void, Kernel.SessionError>;
+  interrupt(): Effect.Effect<void, Core.SessionError>;
   readonly tools: {
     add: SessionHandle["tools"]["add"];
   };

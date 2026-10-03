@@ -69,9 +69,9 @@ test.each([
 });
 
 test.each([
-  ["packages/agent/src/kernel/gate/match.ts", "allowlist.includes(actor);"],
+  ["packages/agent/src/core/gate/match.ts", "allowlist.includes(actor);"],
   ["apps/openomni/src/other.test.ts", 'const reasonCodes = ["stalled"];'],
-  ["packages/agent/src/kernel/reason-codes.ts", 'const reasonCodes = ["stalled"];'],
+  ["packages/agent/src/core/reason-codes.ts", 'const reasonCodes = ["stalled"];'],
   ["packages/channels/src/telegram/other.ts", "evaluateTriggers(event);"],
   ["packages/channels/src/authn/decision.ts", "evaluatePermission(actor);"],
 ])("permits the explicitly scoped guard exception in %s", (path, source) => {
@@ -93,7 +93,7 @@ test("guard lint rejects a missing pinned file before scanning", async () => {
 test("guard lint reports planted source violations in-process", async () => {
   const root = mkdtempSync(join(tmpdir(), "guard-lint-"));
   for (const file of [
-    "packages/agent/src/kernel/gate/match.ts",
+    "packages/agent/src/core/gate/match.ts",
     "packages/channels/src/authn/decision.ts",
   ]) {
     const target = join(root, file);

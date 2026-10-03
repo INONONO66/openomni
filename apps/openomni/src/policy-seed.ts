@@ -1,6 +1,6 @@
-import { Kernel } from "@openomni/agent";
-const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
-const { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } = Kernel;
+import { Core } from "@openomni/agent";
+const SEEDED_POLICY_ROWS = Core.SEEDED_POLICY_ROWS;
+const { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } = Core;
 import type { PolicyRow, Storage as ProtocolStorage } from "@openomni/protocol";
 import { composedPointTable } from "./composition/point-table";
 import { MESSAGE_POLICY_ROWS } from "./message-policy";
@@ -38,7 +38,7 @@ export function seedKernelPolicyRows(
   policies: ProtocolStorage.PolicyRowSubAdapter,
   bundleRows: readonly Omit<PolicyRow.Row, "generation">[] = [],
   /** The composition's merged point table (#1251); the default is the full built-in composition this app ships. */
-  table: Kernel.GatePointTable = composedPointTable(),
+  table: Core.GatePointTable = composedPointTable(),
 ): number {
   return policies.appendGeneration((current) => {
     // Convert the latest generation's semantics onto the fourteen-point

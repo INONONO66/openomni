@@ -1,10 +1,10 @@
-import { Kernel, Model } from "@openomni/agent";
-const ObservationSink = Kernel.ObservationSink;
-type ObservationSink = Kernel.ObservationSink;
-const executorContext = Kernel.executorContext;
-const AgentFailure = Kernel.AgentFailure;
-const Interrupted = Kernel.Interrupted;
-type ExecutionError = Kernel.ExecutionError;
+import { Core, Model } from "@openomni/agent";
+const ObservationSink = Core.ObservationSink;
+type ObservationSink = Core.ObservationSink;
+const executorContext = Core.executorContext;
+const AgentFailure = Core.AgentFailure;
+const Interrupted = Core.Interrupted;
+type ExecutionError = Core.ExecutionError;
 const Llm = Model.Llm;
 type Llm = Model.Llm;
 type RunInput = Model.RunInput;

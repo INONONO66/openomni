@@ -3,7 +3,7 @@ import { catalogLayer } from "./helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { describe, expect, it } from "bun:test";
-import { createDispatcher, defineTool, eraseTool, sessionTool, ToolRefused, toolInputSchema, toolSpec } from "../src/kernel/tool";
+import { createDispatcher, defineTool, eraseTool, sessionTool, ToolRefused, toolInputSchema, toolSpec } from "../src/core/tool";
 import { recordingExecutor } from "./helpers/effect-g2";
 import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";

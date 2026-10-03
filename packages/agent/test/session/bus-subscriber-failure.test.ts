@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { BusEvent } from "@openomni/protocol";
 import { Effect, Logger } from "effect";
 import { z } from "zod";
-import { ObservationSubscriberFailure, makeObservationBus } from "../../src/session/bus";
+import { ObservationSubscriberFailure, makeObservationBus } from "../../src/core/bus";
 import { bounded } from "../helpers/bounded";
 import { runTestPromise } from "../helpers/isolated";
 

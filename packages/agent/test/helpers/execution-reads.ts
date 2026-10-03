@@ -1,7 +1,7 @@
 import { PlainObjectSchema, SessionTransition, type LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { SessionKernel } from "../../src/session/entity";
-import type { ExecutionLedger } from "../../src/kernel/gate/decide";
+import type { SessionKernel } from "../../src/core/entity";
+import type { ExecutionLedger } from "../../src/core/gate/decide";
 
 type Reads = Omit<ExecutionLedger, "commit" | "transition" | "validateRequest">;
 

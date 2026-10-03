@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { Kernel } from "@openomni/agent";
-const createPolicyCompiler = Kernel.createPolicyCompiler;
-const KERNEL_POLICY_REGISTRY = Kernel.KERNEL_POLICY_REGISTRY;
-const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
+import { Core } from "@openomni/agent";
+const createPolicyCompiler = Core.createPolicyCompiler;
+const KERNEL_POLICY_REGISTRY = Core.KERNEL_POLICY_REGISTRY;
+const SEEDED_POLICY_ROWS = Core.SEEDED_POLICY_ROWS;
 import type { PolicyRow } from "@openomni/protocol";
 import { seedKernelPolicyRows } from "../src/policy-seed";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";

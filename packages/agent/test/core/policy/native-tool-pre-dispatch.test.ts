@@ -3,14 +3,14 @@ import { sessionTree } from "../../helpers/session-tree";
 import { testExecutor, runAgentSync } from "../../helpers/executor";
 import { executorLayer, catalogLayer } from "../../helpers/service-layers";
 import { expect, test } from "bun:test";
-import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../../src/kernel/gate/compile";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
 import { PlainObjectSchema } from "@openomni/protocol";
 import { Cause, Effect, Fiber } from "effect";
-import { createNamedPolicyRegistry } from "../../../src/kernel/gate/compile";
+import { createNamedPolicyRegistry } from "../../../src/core/gate/compile";
 import { requestLedger, crashAfterRequestOpen, failure } from "../../helpers/effect-g1";
 import { z } from "zod";
-import { createExecutor } from "../../../src/kernel/gate/decide";
-import { createDispatcher, defineTool } from "../../../src/kernel/tool";
+import { createExecutor } from "../../../src/core/gate/decide";
+import { createDispatcher, defineTool } from "../../../src/core/tool";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
 
 test("approval recovery executes recorded admitted bytes without transforming again", () => isolated(Effect.scoped(Effect.gen(function* () {

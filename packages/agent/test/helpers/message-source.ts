@@ -1,4 +1,4 @@
-import type { MessageSource } from "../../src/kernel/message-factory";
+import type { MessageSource } from "../../src/core/message-factory";
 
 /** Deterministic message source for fixtures: fixed time, counter ids. */
 export function testMessageSource(prefix = "msg"): MessageSource {

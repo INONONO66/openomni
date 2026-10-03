@@ -3,10 +3,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { Bench } from "tinybench";
 import type { Message, ObservationSink } from "@openomni/protocol";
 import { Effect } from "effect";
-import { Compaction } from "../src/plugins/compaction/compact.ts";
-import { Entropy } from "../src/kernel/ports";
+import { Compaction } from "../src/plugins/compaction/compact";
+import { Entropy } from "../src/core/ports";
 import { entropySource } from "../test/helpers/time";
-import { addTurnBenchmarks, runBenchEffect } from "./turns.ts";
+import { addTurnBenchmarks, runBenchEffect } from "./turns";
 
 /** The bench stands in for one run. It measures compaction, not reporting. */
 const BENCH_TRACE = { traceId: "trace-agent-bench", sessionId: "session-agent-bench" };

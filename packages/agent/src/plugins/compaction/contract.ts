@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import type { ExecutionError } from "../../kernel/failure";
+import type { ExecutionError } from "../../core/failure";
 import type { Message } from "@openomni/protocol";
 import type { CompactionYield } from "./geometry";
 import type { ToolOutputElision } from "./reduce";

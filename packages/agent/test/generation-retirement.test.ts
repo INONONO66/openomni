@@ -2,12 +2,12 @@ import { testBus } from "./helpers/bus";
 import { isolated } from "./helpers/isolated";
 import { runAgentSync } from "./helpers/executor";
 import { expect, test } from "bun:test";
-import * as SessionHandleStore from "../src/store/fence";
-import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../src/kernel/gate/compile";
+import * as SessionHandleStore from "../src/core/store/fence";
+import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../src/core/gate/compile";
 import { Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
-import { makeSessionGenerations, GenerationRawSlots } from "../src/session/run";
-import { SessionLayer, ToolCatalog, ObservationSink } from "../src/kernel/ports";
-import { NamedPolicyRegistry } from "../src/kernel/bundle";
+import { makeSessionGenerations, GenerationRawSlots } from "../src/core/run";
+import { SessionLayer, ToolCatalog, ObservationSink } from "../src/core/ports";
+import { NamedPolicyRegistry } from "../src/core/bundle";
 
 function generation(number: number, close: () => void) {
   const snapshot = SessionHandleStore.generationSnapshot({ generation: number, revertTo: number - 1,

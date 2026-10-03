@@ -1,5 +1,5 @@
-import type { Session } from "@openomni/agent";
-type SessionEntityTimerContext = Session.SessionEntityTimerContext;
+import type { Core } from "@openomni/agent";
+type SessionEntityTimerContext = Core.SessionEntityTimerContext;
 import {
   Alarm,
   EncodedPayload,

@@ -4,7 +4,7 @@ import { bounded } from "../helpers/bounded";
 import { providerFailure } from "../helpers/mock-llm";
 import { createTestAgent } from "../helpers/g0-effect";
 import { describe, expect, it } from "bun:test";
-import { RunEvents } from "../../src/kernel/turn";
+import { RunEvents } from "../../src/core/turn";
 import { stepSnapshot } from "../helpers/messages";
 import { Bus } from "../helpers/bus";
 import { completeModel, mockLlm, createStopOutcome } from "../helpers/mock-llm";

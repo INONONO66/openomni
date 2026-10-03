@@ -40,7 +40,7 @@ export interface ChatAgentConfig {
     readonly alarmIds: readonly string[];
   }, ExecutionError>;
   /** The session owns inbox claims; this loop invokes its three model-step boundaries. */
-  boundary?: import("../session/run").SessionRunnerInput["boundary"];
+  boundary?: import("./run").SessionRunnerInput["boundary"];
   toolWave?: (calls: readonly Tool.Call[], signal?: AbortSignal) => Effect.Effect<readonly Tool.Result[], ExecutionError>;
   /** Durable L2 authority for session-owned prompt, turn, model, and tool work. */
   executor?: Executor;

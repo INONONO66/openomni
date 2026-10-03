@@ -1,23 +1,23 @@
 import { AppInvariantError } from "../invariant";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
-import { type Kernel, Session, Journal } from "@openomni/agent";
-const deadlineDelivery = Session.deadlineDelivery;
-const decideRequestTransition = Session.decideRequestTransition;
-type SessionHandle = Session.SessionHandle;
-type SessionRunner = Session.SessionRunner;
-const retryDelivery = Session.retryDelivery;
-const SessionEntityContext = Session.SessionEntityContext;
-const SessionEntityLive = Session.SessionEntityLive;
-const watchFiredDelivery = Session.watchFiredDelivery;
-const watchTimeoutDelivery = Session.watchTimeoutDelivery;
-type SessionEntityPorts = Session.SessionEntityPorts;
-type SessionEntityTimerContext = Session.SessionEntityTimerContext;
-type AlarmChainReads = Kernel.AlarmChainReads;
-const openCatalogStore = Journal.openCatalogStore;
-const openSessionStore = Journal.openSessionStore;
-type LedgerHandles = Journal.LedgerHandles;
-type ObservationFailurePort = Journal.ObservationFailurePort;
-type ObservationPublishFailure = Journal.ObservationPublishFailure;
+import { Core } from "@openomni/agent";
+const deadlineDelivery = Core.deadlineDelivery;
+const decideRequestTransition = Core.decideRequestTransition;
+type SessionHandle = Core.SessionHandle;
+type SessionRunner = Core.SessionRunner;
+const retryDelivery = Core.retryDelivery;
+const SessionEntityContext = Core.SessionEntityContext;
+const SessionEntityLive = Core.SessionEntityLive;
+const watchFiredDelivery = Core.watchFiredDelivery;
+const watchTimeoutDelivery = Core.watchTimeoutDelivery;
+type SessionEntityPorts = Core.SessionEntityPorts;
+type SessionEntityTimerContext = Core.SessionEntityTimerContext;
+type AlarmChainReads = Core.AlarmChainReads;
+const openCatalogStore = Core.openCatalogStore;
+const openSessionStore = Core.openSessionStore;
+type LedgerHandles = Core.LedgerHandles;
+type ObservationFailurePort = Core.ObservationFailurePort;
+type ObservationPublishFailure = Core.ObservationPublishFailure;
 import { createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore } from "@openomni/channels";
 import type { LedgerSession, ObservationSink, SessionTransition } from "@openomni/protocol";
 import { Context, Duration, Effect, Layer } from "effect";
@@ -76,7 +76,7 @@ export function sessionFilePath(sessionsDir: string, sessionId: string): string 
 
 type CatalogHandle = LedgerHandles["catalog"];
 type SessionStoreHandle = ReturnType<LedgerHandles["openSession"]>;
-export type SessionKernel = ReturnType<typeof Journal.SessionHandleStore.createSessionKernel>;
+export type SessionKernel = ReturnType<typeof Core.SessionHandleStore.createSessionKernel>;
 
 export interface AppLedgerOptions {
   /** Injected wall clock (#1245): the ledger plane never reads ambient time. */
@@ -152,7 +152,7 @@ export function createAppLedger(options: AppLedgerOptions): AppLedgerPlane {
           ...(options.observationSink === undefined ? {} : { observationSink: options.observationSink }),
         },
       );
-      entry = { store, kernel: Journal.SessionHandleStore.createSessionKernel(store, catalog) };
+      entry = { store, kernel: Core.SessionHandleStore.createSessionKernel(store, catalog) };
       memo.set(sessionId, entry);
     }
     return entry;
@@ -469,4 +469,4 @@ export function createSessionLivePlane(): SessionLivePlane {
  * borrowing kernel view lives with the request authority in the agent package
  * so the decision seam and its regression tests share one implementation.
  */
-export const requestAuthorityKernel = Session.requestAuthorityKernel;
+export const requestAuthorityKernel = Core.requestAuthorityKernel;

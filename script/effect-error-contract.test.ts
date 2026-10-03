@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { Effect, Result } from "effect";
 import ts from "typescript";
 import { runSyncEffect } from "../apps/openomni/test/helpers/effect";
-import * as Agent from "../packages/agent/src/kernel/failure";
+import * as Agent from "../packages/agent/src/core/failure";
 import * as Model from "../packages/agent/src/model/errors";
-import * as Store from "../packages/agent/src/store/errors";
+import * as Store from "../packages/agent/src/core/store/errors";
 import { sdkError } from "../packages/agent/test/model/helpers/retry";
 import * as Channels from "../packages/channels/src/errors";
 import * as Code from "../packages/machines/src/codemode/errors";
@@ -128,8 +128,8 @@ const carrierOwners: Readonly<Record<string, object>> = {
 };
 
 const packages: readonly PackageEntry[] = [
-  { name: "agent", path: "agent/src/kernel/failure", module: Agent, union: "SessionError", carrier: "AgentFailure", carrierPath: "agent/src/kernel/failure", failures: agent, thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError] },
-  { name: "agent store", path: "agent/src/store/errors", module: Store, union: "LedgerError", carrier: "AgentFailure", carrierPath: "agent/src/store/errors", failures: store, thrown: [Store.LedgerInvariant, Store.ReplyGrantProjectionError] },
+  { name: "agent", path: "agent/src/core/failure", module: Agent, union: "SessionError", carrier: "AgentFailure", carrierPath: "agent/src/core/failure", failures: agent, thrown: [Agent.AgentInvariantViolation, Agent.SessionCommitError] },
+  { name: "agent store", path: "agent/src/core/store/errors", module: Store, union: "LedgerError", carrier: "AgentFailure", carrierPath: "agent/src/core/store/errors", failures: store, thrown: [Store.LedgerInvariant, Store.ReplyGrantProjectionError] },
   { name: "agent model", path: "agent/src/model/errors", module: Model, union: "LlmError", carrier: "AgentFailure", carrierPath: "agent/src/model/errors", failures: model, thrown: [] },
   { name: "channels", path: "channels/src/errors", module: Channels, union: "ChannelError", carrier: "ChannelsFailure", carrierPath: "channels/src/errors", failures: channels, thrown: [] },
   { name: "machines", path: "machines/src/errors", module: Machines, union: "MachineError", carrier: "MachinesFailure", carrierPath: "machines/src/errors", failures: machines, thrown: [] },

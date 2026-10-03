@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { captureOutput } from "./capture-output.test-helper";
 import { normalizeKnipIssues, runKnip } from "./check-dead-exports";
 import type { PlainValue } from "../packages/protocol/src/json";
-import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index";
+import type { AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool";
 import {
   checkEarned,
   checkNaming,

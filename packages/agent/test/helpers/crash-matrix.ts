@@ -9,22 +9,22 @@ import { runnerTestLayer } from "./isolated";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./session-services";
 import { activeIsolation, isolatedLedger, isolatedRun } from "./isolated";
 import { openCrashStores } from "./crash-stores";
-import type { ResolvedExecutorOptions } from "../../src/kernel/gate/decide";
+import type { ResolvedExecutorOptions } from "../../src/core/gate/decide";
 import { Effect } from "effect";
 import { appendFileSync, writeSync } from "node:fs";
-import * as SessionHandleStore from "../../src/store/fence";
-import type { LedgerError } from "../../src/store/errors";
+import * as SessionHandleStore from "../../src/core/store/fence";
+import type { LedgerError } from "../../src/core/store/errors";
 import { LedgerAction, Message, PlainObjectSchema, PlainValueSchema, type PlainValue, } from "@openomni/protocol";
 import { z } from "zod";
-import type { ExecutionLedger } from "../../src/kernel/gate/decide";
-import { createLedgerRetryAlarmPort } from "../../src/kernel/gate/decide";
+import type { ExecutionLedger } from "../../src/core/gate/decide";
+import { createLedgerRetryAlarmPort } from "../../src/core/gate/decide";
 import { executeCompaction } from "../../src/plugins/compaction/execute-cut";
 import { session } from "../../src/testing/registry";
 import { reactivateSession } from "./wake-session";
 import { commitReceivedMessage } from "./ingress";
 
 import { receiveOutbound } from "./receive-outbound";
-import { createTurnDispatcher } from "../../src/kernel/tool";
+import { createTurnDispatcher } from "../../src/core/tool";
 import { requestLedger } from "./request-ledger";
 import { compiledPolicy } from "./compiled-policy";
 import { runChatAttempts } from "./chat-attempts";
@@ -33,7 +33,7 @@ import { stringQueryTool } from "./query-tool";
 import { textMessage } from "./messages";
 import { seedPolicy } from "./seed-policy";
 import { uniqueEntropy } from "./time";
-import { CommitFailed, AgentFailure, type SessionError } from "../../src/kernel/failure";
+import { CommitFailed, AgentFailure, type SessionError } from "../../src/core/failure";
 
 export const crashPoint = z.enum([
   configureCrashPoint,

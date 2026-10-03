@@ -1,6 +1,6 @@
 import { canonicalDigest, type Message } from "@openomni/protocol";
 import { latestCompactionAnchorId } from "./candidate";
-import { AgentInvariantViolation } from "../../kernel/failure";
+import { AgentInvariantViolation } from "../../core/failure";
 
 export type CanonicalConversationEntry = Message.WithParts;
 

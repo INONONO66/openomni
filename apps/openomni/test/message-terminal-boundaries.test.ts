@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { ownerStart } from "./helpers/owner-start";
 import { Bus, newTraceId } from "./helpers/bus";
-import { Journal } from "@openomni/agent";
+import { Core } from "@openomni/agent";
 import { Gateway, SessionTransition } from "@openomni/protocol";
 import type { AppLedgerPlane } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
@@ -111,7 +111,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
     const child = plane.listSessions().find((row) => row.role === "worker");
     if (child === undefined || child.parentId === null) throw new Error("missing child");
     const terminals = sessionTree(child.id, plane.sessionStore(child.id).actions).flatMap((action) => {
-      const terminal = Journal.SessionHandleStore.turnTerminal(action);
+      const terminal = Core.SessionHandleStore.turnTerminal(action);
       return terminal === undefined ? [] : [terminal];
     });
     expect(terminals.map((terminal) => terminal.kind)).toEqual([kind]);

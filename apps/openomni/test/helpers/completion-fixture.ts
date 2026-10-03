@@ -1,5 +1,5 @@
-import { Kernel, Model } from "@openomni/agent";
-const ObservationSink = Kernel.ObservationSink;
+import { Core, Model } from "@openomni/agent";
+const ObservationSink = Core.ObservationSink;
 import { Bus } from "./bus";
 const Llm = Model.Llm;
 const run = Model.run;

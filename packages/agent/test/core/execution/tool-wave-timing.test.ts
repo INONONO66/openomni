@@ -5,11 +5,11 @@ import type { Message, Tool } from "@openomni/protocol";
 import { messageSource } from "../../helpers/message-source";
 import { isolated } from "../../helpers/isolated";
 import { runInput } from "../../helpers/run-input";
-import { createAssistantMessage } from "../../../src/kernel/message-factory";
-import { createRunState } from "../../../src/kernel/turn";
-import { buildTurn } from "../../../src/kernel/turn";
-import { settleModelTools } from "../../../src/kernel/tool";
-import type { ObservedChatAgentConfig } from "../../../src/kernel/types";
+import { createAssistantMessage } from "../../../src/core/message-factory";
+import { createRunState } from "../../../src/core/turn";
+import { buildTurn } from "../../../src/core/turn";
+import { settleModelTools } from "../../../src/core/tool";
+import type { ObservedChatAgentConfig } from "../../../src/core/types";
 
 const sessionId = "session-wave-timing";
 

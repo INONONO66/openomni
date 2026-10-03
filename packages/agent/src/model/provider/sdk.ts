@@ -4,7 +4,7 @@ import type { LanguageModel } from "ai";
 import type { Auth } from "../auth/storage";
 import { clientIdentity } from "./identity";
 import { ModelResolutionError } from "../errors";
-import type { Provider } from "./index";
+import type { Provider } from ".";
 
 type SdkOptions = {
   apiKey?: string;

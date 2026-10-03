@@ -1,8 +1,8 @@
 import { Llm, LlmLive } from "../../src/model";
 import { type Context, Effect, Layer } from "effect";
-import type { ChatAgentConfig, ObservedChatAgentConfig } from "../../src/kernel/types";
-import type { createSessionChatRunner } from "../../src/session/run";
-import { ObservationSink } from "../../src/kernel/ports";
+import type { ChatAgentConfig, ObservedChatAgentConfig } from "../../src/core/types";
+import type { createSessionChatRunner } from "../../src/core/run";
+import { ObservationSink } from "../../src/core/ports";
 import { observationService } from "./service-layers";
 
 export interface ChatFixture extends ObservedChatAgentConfig {

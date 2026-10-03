@@ -1,5 +1,5 @@
-import { Kernel } from "@openomni/agent";
-const eraseTool = Kernel.eraseTool;
+import { Core } from "@openomni/agent";
+const eraseTool = Core.eraseTool;
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import type { FilePorts } from "./filesystem";
 import { createBashTool } from "../bash";

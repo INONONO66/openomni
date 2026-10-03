@@ -1,7 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import { canonicalDigest, type LedgerAction, type PlainValue } from "@openomni/protocol";
-import { LedgerInvariant } from "../../../src/store/errors";
-import * as SessionHandleStore from "../../../src/store/fence";
+import { LedgerInvariant } from "../../../src/core/store/errors";
+import * as SessionHandleStore from "../../../src/core/store/fence";
 import { materializeSession } from "../helpers/session";
 import { requestFixture } from "../helpers/request";
 import { sessionTree } from "../helpers/session-tree";

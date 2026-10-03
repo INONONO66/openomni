@@ -1,5 +1,5 @@
-import type { Kernel } from "@openomni/agent";
-type ChatAgentConfig = Kernel.ChatAgentConfig;
+import type { Core } from "@openomni/agent";
+type ChatAgentConfig = Core.ChatAgentConfig;
 
 export interface ChatProviderOptions {
   readonly apiKey: string;

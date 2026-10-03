@@ -1,7 +1,7 @@
 import { BusEvent, type ObservationSink, Gateway, type Inbox, type SessionTurn } from "@openomni/protocol";
 import { Data, Effect, FiberSet, Layer, PubSub, type Scope, Stream } from "effect";
 import { z } from "zod";
-import { ObservationSink as ObservationSinkTag } from "../kernel/ports";
+import { ObservationSink as ObservationSinkTag } from "./ports";
 
 const DeliveryFailure = z.object({
   eventName: z.string(),

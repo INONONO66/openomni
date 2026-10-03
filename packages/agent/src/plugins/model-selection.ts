@@ -1,8 +1,8 @@
-import type { SessionKernel } from "../session/entity";
+import type { SessionKernel } from "../core/entity";
 import type { LedgerAction, Model, PlainObject, PlainValue } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { ExecutionError } from "../kernel/failure";
-import type { Executor } from "../kernel/gate/decide";
+import type { ExecutionError } from "../core/failure";
+import type { Executor } from "../core/gate/decide";
 
 function record(value: PlainValue | undefined): PlainObject {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};

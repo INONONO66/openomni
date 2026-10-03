@@ -1,6 +1,6 @@
 import { Effect, Result } from "effect";
 import { type LedgerSession, type SessionGeneration, SessionTurn } from "@openomni/protocol";
-import type * as SessionHandleStore from "../src/store/fence";
+import type * as SessionHandleStore from "../src/core/store/fence";
 import { runLedgerSync } from "../test/store/helpers/effect";
 import { materializeSession } from "../test/store/helpers/session";
 

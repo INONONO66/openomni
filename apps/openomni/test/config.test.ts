@@ -8,7 +8,7 @@ import {
   parseWsPort,
   resolveClusterStorage,
 } from "../src/config";
-import { startOpenOmni } from "../src/index";
+import { startOpenOmni } from "../src";
 import { runEffect } from "./helpers/effect";
 
 const ENV_KEYS = [

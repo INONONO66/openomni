@@ -1,5 +1,5 @@
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { CommitRefused } from "../../../src/store/errors";
+import { CommitRefused } from "../../../src/core/store/errors";
 import { isolated } from "../../helpers/isolated";
 import { failure } from "../../helpers/effect-g3";
 import { completeModel, providerFailure, windowedLlm } from "../../helpers/mock-llm";
@@ -9,7 +9,7 @@ import { runTestAgent } from "../../helpers/effect-g3";
 import { compiledPolicy } from "../../helpers/compiled-policy";
 import { recoveryRecording as recordingExecutor } from "../../helpers/effect-g3r";
 import { runInput } from "../../helpers/run-input";
-import { RunEvents } from "../../../src/kernel/turn";
+import { RunEvents } from "../../../src/core/turn";
 import { executeCompaction } from "../../../src/plugins/compaction/execute-cut";
 import { createCompactionPlan, restoreCompactionProjection } from "../../../src/plugins/compaction/durable";
 import { Compaction } from "../../../src/plugins/compaction/compact";

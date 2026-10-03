@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "bun:test";
-import { Kernel, Model } from "@openomni/agent";
+import { Core, Model } from "@openomni/agent";
 const Llm = Model.Llm;
-const ObservationSink = Kernel.ObservationSink;
+const ObservationSink = Core.ObservationSink;
 import { Bus } from "./helpers/bus";
 import type { FixtureLlm } from "./helpers/app-fixture";
 const LlmRunFailure = Model.LlmRunFailure;
@@ -11,7 +11,7 @@ import {
   createCompactionSummarizer as summarizer,
   SummarizerError,
 } from "../src/compaction/summarizer";
-const ExecutorContext = Kernel.ExecutorContext;
+const ExecutorContext = Core.ExecutorContext;
 import { executor } from "./helpers/executor";
 import { runEffect, runSyncEffect } from "./helpers/effect";
 import { testIds } from "./helpers/test-entropy";

@@ -1,5 +1,5 @@
-import type { SessionKernel } from "../../session/entity";
-import { receivedMessages } from "../../session/commit";
+import type { SessionKernel } from "../../core/entity";
+import { receivedMessages } from "../../core/commit";
 import {
   canonicalDigest,
   Inbox,
@@ -7,7 +7,7 @@ import {
   type LedgerAction,
   type LedgerSession,
 } from "@openomni/protocol";
-import type { SessionRunnerResult } from "../../session/run";
+import type { SessionRunnerResult } from "../../core/run";
 
 /** A child seals its own obligation; only the receiving executor changes the parent. */
 export function parentReply(

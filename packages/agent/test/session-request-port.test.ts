@@ -3,9 +3,9 @@ import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServic
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import * as SessionHandleStore from "../src/store/fence";
+import * as SessionHandleStore from "../src/core/store/fence";
 import { canonicalDigest, type LedgerAction } from "@openomni/protocol";
-import { createSessionRequests } from "../src/session/request";
+import { createSessionRequests } from "../src/core/request";
 
 const setup = Effect.gen(function* () {
   (yield* isolatedLedger().kernel.materialize({

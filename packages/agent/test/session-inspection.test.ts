@@ -1,21 +1,21 @@
 import { APICallError } from "ai";
 import { sessionTree } from "./helpers/session-tree";
-import type { ResolvedExecutorOptions } from "../src/kernel/gate/decide";
+import type { ResolvedExecutorOptions } from "../src/core/gate/decide";
 import { turnTestLayer, catalogLayer } from "./helpers/service-layers";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
 import { Effect, Fiber, Scope } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { describe, expect, spyOn, test } from "bun:test";
 import { runChatAttempts, answerThenCompact, nullRetryAlarm } from "./helpers/effect-g2";
-import { OutcomeUnknown, CommitFailed } from "../src/kernel/failure";
+import { OutcomeUnknown, CommitFailed } from "../src/core/failure";
 import { seedPolicy } from "./helpers/seed-policy";
 import { approveWriteRow } from "./helpers/compiled-policy";
-import * as SessionHandleStore from "../src/store/fence";
+import * as SessionHandleStore from "../src/core/store/fence";
 import { LlmRunFailure, type Run } from "../src/model";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
-import { closeSessions, type SessionRunner } from "../src/session/run";
-import { createTurnDispatcher } from "../src/kernel/tool";
-import { resolveSessionRuntime } from "../src/session/run";
+import { closeSessions, type SessionRunner } from "../src/core/run";
+import { createTurnDispatcher } from "../src/core/tool";
+import { resolveSessionRuntime } from "../src/core/run";
 import { createController } from "../src/testing/controller";
 import { commitReceivedMessage } from "./helpers/ingress";
 import { foldSessionHistory } from "../src/inspect/history";
@@ -68,7 +68,7 @@ const runtime: SessionRuntime = {
         parentActionId: null,
       }).pipe(
         Effect.mapError(
-          (error: import("../src/store/errors").LedgerError) => new CommitFailed({ error }),
+          (error: import("../src/core/store/errors").LedgerError) => new CommitFailed({ error }),
         ),
       );
       yield* wake(message.destinationSessionId, parentRunner, runtime).pipe(
@@ -131,7 +131,7 @@ function committed(sessionId: string, kind: string): Promise<L0Observation.Actio
  * One real turn: a retried model call, a refused tool, an approved tool carrying a
  * credential, an effect whose outcome is unknown, an answer, and a compaction.
  */
-const parentRunner: SessionRunner = (input: import("../src/session/run").SessionRunnerInput) =>
+const parentRunner: SessionRunner = (input: import("../src/core/run").SessionRunnerInput) =>
   Effect.scoped(
     Effect.gen(function* () {
       if (input.messages.at(-1)?.text !== "hello") return { kind: "result", text: "noted" };

@@ -157,7 +157,7 @@ test("desktop entries register IPC before window creation and render without awa
   process.env.OPENOMNI_WS_TOKEN = "entry-token";
   delete process.env.ELECTRON_RENDERER_URL;
   try {
-    await import("../src/main/index");
+    await import("../src/main");
     await ready.promise;
     expect(windows).toHaveLength(1);
     expect(windows[0]?.options.backgroundColor).toBe("#0A0A0C");
@@ -198,7 +198,7 @@ test("desktop entries register IPC before window creation and render without awa
     expect(windows).toHaveLength(1);
     expect(loaded.at(-1)?.endsWith("/renderer/index.html")).toBe(true);
     expect(windows[0]?.webContents.openDevTools).not.toHaveBeenCalled();
-    await import("../src/preload/index");
+    await import("../src/preload");
     if (!exposed) throw new Error("Preload did not expose the desktop bridge");
     expect(await exposed.gateway()).toEqual({
       url: "ws://127.0.0.1:43210/ws",

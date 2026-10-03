@@ -1,14 +1,14 @@
 import { Effect } from "effect";
 import { executorLayer } from "../../../../packages/agent/test/helpers/service-layers";
 import { runSyncEffect } from "./effect";
-import { Kernel } from "@openomni/agent";
-const createExecutor = Kernel.createExecutor;
+import { Core } from "@openomni/agent";
+const createExecutor = Core.createExecutor;
 import { LedgerAction } from "@openomni/protocol";
 import { fixtureHashes } from "../../../../packages/agent/test/helpers/compiled-policy";
 import { nullRetryAlarm } from "../../../../packages/agent/test/helpers/effect-g1";
-const compilePolicySnapshot = Kernel.compilePolicySnapshot;
-const KERNEL_POLICY_REGISTRY = Kernel.KERNEL_POLICY_REGISTRY;
-const SEEDED_POLICY_ROWS = Kernel.SEEDED_POLICY_ROWS;
+const compilePolicySnapshot = Core.compilePolicySnapshot;
+const KERNEL_POLICY_REGISTRY = Core.KERNEL_POLICY_REGISTRY;
+const SEEDED_POLICY_ROWS = Core.SEEDED_POLICY_ROWS;
 
 let ordinal = 0;
 

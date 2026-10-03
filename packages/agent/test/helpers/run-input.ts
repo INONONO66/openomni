@@ -1,6 +1,6 @@
 import { newTraceId } from "./bus";
-import type { RunTrace } from "../../src/kernel/turn";
-import type { ChatAgentInput } from "../../src/kernel/types";
+import type { RunTrace } from "../../src/core/turn";
+import type { ChatAgentInput } from "../../src/core/types";
 
 /**
  * A run input carrying a real identity.

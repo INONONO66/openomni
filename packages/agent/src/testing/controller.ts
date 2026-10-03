@@ -1,18 +1,18 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
-import { FenceRefused } from "../store/errors";
+import { FenceRefused } from "../core/store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
-import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "../kernel/failure";
-import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "../session/commit";
-import { createSessionTurn } from "../session/run";
-import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "../session/mailbox";
-import { adoptSessionAuthority, createSessionConfiguration } from "../session/run";
-import { dispatchSessionOutbound } from "../session/run";
+import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "../core/failure";
+import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "../core/commit";
+import { createSessionTurn } from "../core/run";
+import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "../core/mailbox";
+import { adoptSessionAuthority, createSessionConfiguration } from "../core/run";
+import { dispatchSessionOutbound } from "../core/run";
 import { inspectSession } from "../inspect";
-import { createRawSlots } from "../kernel/gate/decide";
-import { commitFoldBatch } from "../session/commit";
-import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, } from "../session/run";
-import type { SessionControllerState } from "../session/run";
-import type { SessionKernel } from "../session/entity";
+import { createRawSlots } from "../core/gate/decide";
+import { commitFoldBatch } from "../core/commit";
+import type { SessionController, SessionControllerLifecycle, ResolvedSessionRuntime, SessionRunner, SessionRunnerResult, SessionHandle, } from "../core/run";
+import type { SessionControllerState } from "../core/run";
+import type { SessionKernel } from "../core/entity";
 
 const SEAL_RESCAN_BUDGET = 8;
 /** Shutdown grace for settling raw slots; the lease TTL it once mirrored is gone. */

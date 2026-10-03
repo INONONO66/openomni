@@ -1,7 +1,7 @@
 import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { Effect } from "effect";
 import { requestLedger } from "./g0-request-ledger";
-import { requestBindingDigest } from "../../src/session/request";
+import { requestBindingDigest } from "../../src/core/request";
 
 type Overrides = Partial<Omit<SessionTransition.Request, "bindingDigest">> &
   Pick<SessionTransition.Request, "requestId" | "sessionId" | "turnId" | "callId">;
