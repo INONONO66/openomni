@@ -55,7 +55,9 @@ describe("journal kind census (#1252)", () => {
     }
   });
 
-  test("writes are fail-closed: a schema mismatch refuses the append shape", () => {
+  // The production append site enforces these schemas (kernel.commit refuses
+  // the whole batch): packages/agent/test/journal-fail-closed.test.ts.
+  test("declared schemas refuse mismatched row bodies (enforced at the append site)", () => {
     const cases: ReadonlyArray<[string, Record<string, unknown>]> = [
       ["prompt", { ...body, intent: { ...payload, value: { delivery: "later" } } }],
       ["action", { ...body, intent: { ...payload, value: { after: -1 } } }],

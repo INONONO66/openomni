@@ -3,14 +3,14 @@ import { CommitRefused, type LedgerError } from "./store/errors";
 import * as SessionHandleStore from "./store/fence";
 import type { CommitReceipt } from "./store/services";
 import { ObservationSink, type RunnerServices } from "./ports";
-import { canonicalDigest, PlainValueSchema, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
+import { canonicalDigest, Journal, PlainValueSchema, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./gate/decide";
 import { recordedCompaction, requireCompactionIntent, restoreContextRequest, restoredContextProjection } from "../plugins/compaction/restore";
 import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { ResolvedSessionRuntime, SessionRunnerResult, SessionActionCommitPort } from "./run";
 import type { SessionKernel } from "./entity";
-import { turnIntentAction, turnResumeAction, deliveryActions, policyRefusalResult, generationForOpen, pendingBacklog, } from "./commit";
+import { turnIntentAction, turnResumeAction, deliveryActions, inputRowKind, policyRefusalResult, generationForOpen, pendingBacklog, } from "./commit";
 import type { SessionControllerState } from "./run";
 import { observeDrained } from "./bus";
 import { commitSessionRequest } from "./request";
@@ -21,15 +21,24 @@ import { hydrateSessionHistory } from "../inspect/history";
 
 type AdmissionError = SessionError;
 
+/**
+ * The capability journal kinds the kernel composes built-in (#1252): `tool`
+ * and `compaction` ship with the core loop; `action` arrives with its plugin.
+ */
+export const BUILTIN_CAPABILITY_KINDS: readonly string[] = Object.freeze(["tool", "compaction"]);
+
 interface AdmissionSnapshot {
   readonly row: LedgerSession.Row;
   readonly pending: readonly Inbox.Row[];
   readonly open?: SessionHandleStore.OpenTurn;
   readonly terminal?: ReturnType<SessionKernel["latestTurnTerminal"]>;
+  /** Capability kinds the composed generation registers; defaults to the built-ins. */
+  readonly capabilityKinds?: readonly string[];
 }
 
 type AdmissionDecision =
-  | { readonly kind: "stop" | "refused" | "start" }
+  | { readonly kind: "stop" | "start" }
+  | { readonly kind: "refused"; readonly reason?: "unknown_kind" }
   | { readonly kind: "recover"; readonly open: SessionHandleStore.OpenTurn }
   | { readonly kind: "resume"; readonly item: Inbox.Row }
   | { readonly kind: "consume"; readonly items: readonly Inbox.Row[] };
@@ -37,6 +46,11 @@ type AdmissionDecision =
 /** Pure routing of the durable S/T/I views; dispatch remains behind the ledger CAS. */
 export function decideSessionAdmission(snapshot: AdmissionSnapshot): AdmissionDecision {
   const { row, pending, open, terminal } = snapshot;
+  // #1252 input admission: an input whose journal row kind belongs to a
+  // capability absent from the composed generation is rejected, not consumed.
+  const registered = snapshot.capabilityKinds ?? BUILTIN_CAPABILITY_KINDS;
+  if (pending.some((item) => Journal.admitInputKind(registered, inputRowKind(item.kind)) !== "ok"))
+    return { kind: "refused", reason: "unknown_kind" };
   if (pending.some((item) => item.sessionId !== row.id || item.status !== "pending")) return { kind: "refused" };
   if (open !== undefined && open.action.sessionId !== row.id) return { kind: "refused" };
   if (terminal !== undefined && terminal.action.sessionId !== row.id) return { kind: "refused" };

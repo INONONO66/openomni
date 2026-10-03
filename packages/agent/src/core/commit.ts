@@ -2,7 +2,7 @@ import type { CommitReceipt } from "./store/services";
 import type { LedgerError } from "./store/errors";
 import { Effect } from "effect";
 import type { SessionKernel } from "./entity";
-import { canonicalDigest, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest, JournalKind, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
 import { pinCompactionAction } from "../plugins/compaction/successor";
 import type * as SessionHandleStore from "./store/fence";
@@ -301,6 +301,16 @@ export function turnCheckpointAction(input: {
   };
 }
 
+/**
+ * The journal row kind one delivered input lands as (#1252): `prompt` and
+ * `action` inputs are rows of their own kind; interrupt/resume control is a
+ * `signal` row. The single mapping both the admission constructor and the
+ * delivery constructor share.
+ */
+export function inputRowKind(kind: Inbox.Kind): "prompt" | "signal" | "action" {
+  return kind === "prompt" || kind === "action" ? kind : "signal";
+}
+
 export function deliveryActions(
   items: readonly Inbox.Row[],
   target:
@@ -318,13 +328,13 @@ export function deliveryActions(
       // #1252: a delivered input is a journal row of its own kind — `prompt`
       // for turn inputs, `signal` for interrupt/resume control. The retired
       // `inbox.deliver` kind had one writer here; this constructor keeps it.
-      kind: item.kind === "prompt" ? "prompt" : "signal",
+      kind: inputRowKind(item.kind),
       intent: {
         encodingVersion: 1,
         value:
-          item.kind === "prompt"
-            ? { inboxId: item.id, delivery: "followUp" }
-            : { inboxId: item.id, control: item.kind },
+          item.kind === "interrupt" || item.kind === "resume"
+            ? { inboxId: item.id, control: item.kind }
+            : { inboxId: item.id, delivery: JournalKind.DEFAULT_DELIVERY },
       },
       effect: {
         encodingVersion: 1,
@@ -493,7 +503,7 @@ export function receivedMessageAction(input: {
     parentId: input.parentActionId,
     sessionId: input.sessionId,
     // #1252: control inputs (interrupt/resume) are signal rows; prompts are prompt rows.
-    kind: input.kind === "prompt" ? "prompt" : "signal",
+    kind: inputRowKind(input.kind),
     intent: input.origin,
     effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
     irreversible: true,
@@ -516,7 +526,7 @@ export function receivedMessages(
   for (;;) {
     const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
     for (const action of page.actions) {
-      if (action.kind === "prompt" || action.kind === "signal") {
+      if (action.kind === "prompt" || action.kind === "signal" || action.kind === "action") {
         const effect = ReceivedEffect.safeParse(action.effect.value);
         if (effect.success) received.push({ action, kind: effect.data.inboxKind, content: effect.data.content });
         const intent = DeliverIntent.safeParse(action.intent.value);

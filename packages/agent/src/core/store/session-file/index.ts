@@ -390,7 +390,7 @@ function createActionReads(db: Database): Reads {
       return decodeRows(
         db
           .query<ActionSqlRow, [string]>(`
-        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind IN ('prompt', 'signal')
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind IN ('prompt', 'signal', 'action')
           AND json_extract(a.effect, '$.inboxKind') IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM action d WHERE d.session_id = a.session_id
             AND d.kind IN ('prompt', 'signal', 'action')

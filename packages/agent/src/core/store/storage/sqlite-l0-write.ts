@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { Database } from "bun:sqlite";
-import { LedgerAction, type LedgerSession } from "@openomni/protocol";
+import { Journal, LedgerAction, type LedgerSession } from "@openomni/protocol";
 import { computeActionHash, GENESIS_PREV_HASH } from "../action-hash.js";
 import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
-import { CorruptRecord } from "../errors";
+import { CorruptRecord, SchemaRefused } from "../errors";
 import type { RefuseWrite } from "./write-effect";
 
 export const sessionSelect = `SELECT id, parent_id, role, lease_owner, lease_fence,
@@ -43,11 +43,33 @@ export function selectSession(db: Database, id: string): LedgerSession.Row | und
   return row === undefined ? undefined : decodeSession(row);
 }
 
+/**
+ * Fail-closed write (#1252): every journal row body must satisfy its kind's
+ * declared schema before anything touches the chain. `fold.checkpoint` is the
+ * store-internal accelerator outside the declaration table and is exempt.
+ */
+function refuseSchemaMismatch(action: LedgerAction.Append, refuse: RefuseWrite | undefined): void {
+  const declaration = Journal.declarationFor(action.kind);
+  if (declaration === undefined) return;
+  const body = declaration.schema.safeParse({ intent: action.intent, effect: action.effect });
+  if (body.success) return;
+  const error = new SchemaRefused({
+    sessionId: action.sessionId,
+    actionId: action.id,
+    kind: action.kind,
+    reason: body.error.issues[0]?.message ?? "schema mismatch",
+  });
+  if (refuse !== undefined) refuse(error);
+  throw error;
+}
+
 export function appendAction(
   db: Database,
   action: LedgerAction.Append,
   expectedRevision: number,
+  refuse?: RefuseWrite,
 ): LedgerAction.Receipt | undefined {
+  refuseSchemaMismatch(action, refuse);
   if (actionExists(db, action.id)) return undefined;
   if (!parentBelongsToSession(db, action.parentId, action.sessionId)) return undefined;
   const revision = expectedRevision + 1;
@@ -126,7 +148,7 @@ export function commitSession(
   const receipts: LedgerAction.Receipt[] = [];
   let revision = current.revision;
   for (const action of request.actions) {
-    const receipt = appendAction(db, action, revision);
+    const receipt = appendAction(db, action, revision, refuse);
     if (receipt === undefined) return refusedSessionCommit("revision", current);
     receipts.push(receipt);
     revision = receipt.revision;

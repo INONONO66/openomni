@@ -12,7 +12,7 @@ export { SessionTransition } from "./session-transition.js";
 const Identifier = z.string().min(1);
 
 /** The one definition of deliverable input kinds (#1252); `Inbox.Kind` aliases it. */
-const InputKind = z.enum(["prompt", "interrupt", "resume"]);
+const InputKind = z.enum(["prompt", "interrupt", "resume", "action"]);
 const NullableIdentifier = Identifier.nullable();
 
 export { EncodedPayload } from "../journal/declaration.js";

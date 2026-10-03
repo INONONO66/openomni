@@ -11,5 +11,5 @@ export type Control = z.infer<typeof Control>;
 
 export const signal = declare(
   "signal",
-  RowBody.superRefine(refineField("intent", "kind", Control)),
+  RowBody.superRefine(refineField("intent", "control", Control)),
 );

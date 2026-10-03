@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { Inbox, Journal } from "@openomni/protocol";
-import { deliveryActions, receivedMessageAction } from "../src/core/commit";
+import { Inbox, Journal, type LedgerSession } from "@openomni/protocol";
+import { deliveryActions, inputRowKind, receivedMessageAction } from "../src/core/commit";
+import { decideSessionAdmission } from "../src/core/mailbox";
 
 /**
  * #1252 input admission: delivered inputs are journal rows of the closed set —
@@ -71,4 +72,40 @@ test("admission rows split the same way: prompt stays prompt, control admits as 
       effect: base.effect,
     }).success,
   ).toBe(false);
+});
+
+test("an input of a capability kind whose capability is off is rejected with unknown_kind", () => {
+  const sessionRow: LedgerSession.Row = {
+    id: "s1",
+    parentId: null,
+    role: "resident",
+    fenceOwner: "kernel",
+    fence: 1,
+    revision: 1,
+    state: "idle",
+    toolsGeneration: 1,
+    systemHash: "system",
+    policyGeneration: 1,
+  };
+  const pending = [row("action", "in-action")];
+  // The composed generation registers only the built-ins: the action input is refused.
+  const refused = decideSessionAdmission({ row: sessionRow, pending });
+  expect(refused).toEqual({ kind: "refused", reason: "unknown_kind" });
+  // The same input with the action capability composed is admitted (it heads a turn like a prompt).
+  const admitted = decideSessionAdmission({
+    row: sessionRow,
+    pending,
+    capabilityKinds: ["tool", "compaction", "action"],
+  });
+  expect(admitted.kind).not.toBe("refused");
+  // The mapping is exact: action inputs land as action rows, control as signal.
+  expect(inputRowKind("action")).toBe("action");
+  expect(inputRowKind("prompt")).toBe("prompt");
+  expect(inputRowKind("interrupt")).toBe("signal");
+  expect(inputRowKind("resume")).toBe("signal");
+  const [delivery] = deliveryActions(pending, { kind: "inbox" }, "before_llm", null);
+  if (delivery === undefined) throw new Error("missing delivery action");
+  expect(delivery.kind).toBe("action");
+  expect(delivery.intent.value).toEqual({ inboxId: "in-action", delivery: "followUp" });
+  expect(Journal.declarationFor("action")?.schema.safeParse({ intent: delivery.intent, effect: delivery.effect }).success).toBe(true);
 });

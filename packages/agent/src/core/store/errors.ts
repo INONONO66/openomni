@@ -45,6 +45,21 @@ export class PolicyGenerationRefused extends Data.TaggedError("PolicyGenerationR
   }
 }
 
+/**
+ * Fail-closed journal write (#1252): a row body that does not satisfy its
+ * kind's declared schema refuses the whole commit; nothing partial lands.
+ */
+export class SchemaRefused extends Data.TaggedError("SchemaRefused")<{
+  readonly sessionId: string;
+  readonly actionId: string;
+  readonly kind: string;
+  readonly reason: string;
+}> {
+  override get message(): string {
+    return `journal append refused: ${this.kind} row ${this.actionId} violates its declared schema (${this.reason})`;
+  }
+}
+
 export class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
   readonly capability: "storage" | "sessions" | "actions" | "policies";
 }> {
@@ -86,6 +101,7 @@ export type LedgerError =
   | FenceRefused
   | CommitRefused
   | PolicyGenerationRefused
+  | SchemaRefused
   | StorageUnavailable
   | CorruptRecord
   | AgentFailure;
