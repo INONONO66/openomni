@@ -13,6 +13,7 @@ import { execute } from "./exec";
 import { type CommandRunner, systemCommandRunner } from "./commands";
 import { createComputerUse } from "./computer-use";
 import { createReconnector, type ReconnectOptions } from "./reconnect";
+import { createPtyAdapter } from "./pty";
 
 /** Injected native interpreter port; the acquiring app scope owns its execution. */
 export interface CodeRunner {
@@ -55,9 +56,13 @@ type MachineDaemonOptions = DaemonConnection & {
    * full-jitter backoff. Absent keeps close-on-disconnect behavior.
    */
   readonly reconnect?: ReconnectOptions;
+  /** Persistent terminals (#1273): tmux binary/socket overrides and test ports. */
+  readonly pty?: Omit<import("./pty").PtyAdapterOptions, "id" | "runner">;
 };
 type WireParse = <T>(schema: z.ZodType<T>) => T;
-type WireResult = Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekResult | Machine.CellResult | Machine.ScreenReadResult | Machine.InputWriteResult;
+type WireResult =
+  | Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekResult | Machine.CellResult | Machine.ScreenReadResult | Machine.InputWriteResult
+  | Machine.PtyOpenResult | Machine.PtyWriteResult | Machine.PtyReadResult | Machine.PtyResizeResult | Machine.PtyCloseResult | Machine.PtyListResult;
 export interface MachineDaemon {
   /** The CURRENT attachment: reattach and refusal outcomes replace it. */
   readonly attachment: Machine.AttachResult;
@@ -78,9 +83,12 @@ function escapesCanonicalRoot(absolute: string, root: string): boolean {
 export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effect<MachineDaemon, MachineError, Scope.Scope> {
   return Effect.gen(function* () {
     const configured = yield* Effect.try({ try: () => Machine.Offer.parse(options.offer), catch: decodeMachineFailure("daemon.offer") });
-    const computer = createComputerUse({ runner: options.commands ?? systemCommandRunner(), id: options.id });
-    // Attach-time probe: each computer-use capability is offered only with complete prerequisites (#1274).
-    const offer: Machine.Offer = { ...configured, offeredCapabilities: yield* computer.offeredCapabilities(configured.offeredCapabilities) };
+    const commands = options.commands ?? systemCommandRunner();
+    const computer = createComputerUse({ runner: commands, id: options.id });
+    const pty = createPtyAdapter({ runner: commands, id: options.id, ...options.pty });
+    // Attach-time probes: computer-use needs complete prerequisites (#1274),
+    // pty.session needs tmux resolving on PATH (#1273).
+    const offer: Machine.Offer = { ...configured, offeredCapabilities: yield* pty.offeredCapabilities(yield* computer.offeredCapabilities(configured.offeredCapabilities)) };
     const filesystem = yield* createFsDriver(options.fsExports ?? new Map());
     const dispatch = yield* makeDispatcher;
     const lifetime = new AbortController();
@@ -111,6 +119,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       lifetime.abort();
       for (const cell of cells.values()) cell.abort();
       return Effect.gen(function* () {
+        yield* pty.shutdown();
         yield* filesystem.close();
         yield* releaseClient;
         if (options.runner) yield* options.runner.close();
@@ -185,6 +194,21 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
         return tracked(computer.inputWrite(request));
       });
     }
+    /** Shared pty gate: enrollment ∩ offer still authoritative for pty.session. */
+    function ptyGuard<R extends WireResult>(body: () => Effect.Effect<R, MachineError>): Effect.Effect<R | { status: "refused"; reason: "pty_not_available" }, MachineError> {
+      return Effect.suspend((): Effect.Effect<R | { status: "refused"; reason: "pty_not_available" }, MachineError> => {
+        if (!has(Machine.WellKnownCapability.ptySession)) return Effect.succeed({ status: "refused", reason: "pty_not_available" } as const);
+        return tracked(body());
+      });
+    }
+    function ptyOpen(request: Machine.PtyOpenRequest): Effect.Effect<Machine.PtyOpenResult, MachineError> {
+      return ptyGuard(() => {
+        const cwd = openCwd(request.cwd);
+        // The SAME confinement rule as exec, refused before any tmux session exists.
+        if ("status" in cwd) return Effect.succeed({ status: "refused", reason: "path_escapes_export" } as const);
+        return pty.open({ name: request.name, cwd: cwd.cwd });
+      });
+    }
     function cancelCode(request: z.infer<typeof Machine.CancelCode>): Machine.CancelResult {
       const cell = cells.get(request.cellId);
       cell?.abort();
@@ -222,6 +246,12 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       [Machine.WireMethod.RunCode]: (parse) => runCode(parse(Machine.CellRequest)),
       [Machine.WireMethod.ScreenRead]: (parse) => screenRead(parse(Machine.ScreenReadRequest)),
       [Machine.WireMethod.InputWrite]: (parse) => inputWrite(parse(Machine.InputWriteRequest)),
+      [Machine.WireMethod.PtyOpen]: (parse) => ptyOpen(parse(Machine.PtyOpenRequest)),
+      [Machine.WireMethod.PtyWrite]: (parse) => ptyGuard(() => pty.write(parse(Machine.PtyWriteRequest))),
+      [Machine.WireMethod.PtyRead]: (parse) => ptyGuard(() => pty.read(parse(Machine.PtyReadRequest))),
+      [Machine.WireMethod.PtyResize]: (parse) => ptyGuard(() => pty.resize(parse(Machine.PtyResizeRequest))),
+      [Machine.WireMethod.PtyClose]: (parse) => ptyGuard(() => pty.close(parse(Machine.PtyCloseRequest))),
+      [Machine.WireMethod.PtyList]: (parse) => ptyGuard(() => pty.list(parse(Machine.PtyListRequest))),
     };
     const onRequest = (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) =>
       Deferred.await(attached).pipe(Effect.andThen(Effect.gen(function* () {
