@@ -41,8 +41,16 @@ import type { ActorRegistry } from "@openomni/channels";
 import {
   createMachineHost,
   MachinesFailure,
+  type MachineError,
   type MachineHost,
 } from "@openomni/machines";
+import type { BusEvent, Machine } from "@openomni/protocol";
+import {
+  attachSelfMachine,
+  selfAttachFailure,
+  selfEnrollment,
+  type SelfMachine,
+} from "./composition/self-machine";
 import { traceIdFromUuid, type Channel } from "@openomni/protocol";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
@@ -52,6 +60,7 @@ import {
   loadConfig,
   modelTransport,
   resolveClusterStorage,
+  validateMachinePlane,
   type OpenOmniConfig,
   type RegisteredActor,
 } from "./config";
@@ -136,6 +145,59 @@ function registerActors(registry: ActorRegistry, actors: readonly RegisteredActo
       externalId: actor.externalId,
     });
   }
+}
+
+/**
+ * The machine plane in the #1271 boot order: validate the Owner's plane,
+ * start the listener set, attach the in-process self daemon over the unix
+ * loopback, and complete `machine.attach` — each failure is the one typed
+ * startup refusal `self_attach_failed`, and nothing here ever falls back to
+ * local execution. Tool ports are published only after `self.ready` passes.
+ */
+async function composeMachinePlane(
+  runtime: AppRuntime,
+  machines: NonNullable<OpenOmniConfig["machines"]>,
+  deps: {
+    readonly events: BusEvent.Sink;
+    readonly id: () => string;
+    readonly now: () => number;
+    readonly callTool: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
+  },
+): Promise<{ readonly host: MachineHost; readonly self: SelfMachine }> {
+  const plane = Result.getOrThrowWith(
+    Result.try({
+      try: () => validateMachinePlane(machines),
+      catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
+    }),
+    (cause) => selfAttachFailure(`machine configuration invalid: ${cause}`),
+  );
+  const host = await acquireAppResource(
+    runtime,
+    createMachineHost({
+      listen: machines.listen,
+      ...(machines.tls === undefined ? {} : { tls: machines.tls }),
+      enrollment: (machineId) =>
+        machineId === plane.self.id
+          ? selfEnrollment(plane, deps.now())
+          : machines.enrolled.find((e) => e.machineId === machineId),
+      events: deps.events,
+      id: deps.id,
+      now: deps.now,
+      callTool: deps.callTool,
+    }).pipe(Effect.mapError((error) => selfAttachFailure(`host listener failed: ${String(error)}`))),
+  );
+  const self = await acquireAppResource(
+    runtime,
+    attachSelfMachine({
+      host,
+      plane,
+      socketPath: machines.listen.unix,
+      id: deps.id,
+      now: deps.now,
+      onClose: (error) => console.error("self machine detached", error),
+    }),
+  );
+  return { host, self };
 }
 
 /**
@@ -376,32 +438,27 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // exactly the tools its own dispatcher holds.
     let cells: ComposedCodemode | undefined;
     const machines = config.machines;
-    const host: MachineHost | undefined =
+    const machinery =
       machines === undefined
         ? undefined
-        : await acquireAppResource(
-            runtime,
-            createMachineHost({
-              listen: machines.listen,
-              ...(machines.tls === undefined ? {} : { tls: machines.tls }),
-              enrollment: (machineId) => machines.enrolled.find((e) => e.machineId === machineId),
-              events: services.observations,
-              id: services.entropy.id,
-              now: services.now,
-              callTool: (call) =>
-                cells === undefined
-                  ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
-                  : cells.callTool(call).pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new MachinesFailure({
-                            operation: "codemode.callTool",
-                            cause: String(error),
-                          }),
-                      ),
+        : await composeMachinePlane(runtime, machines, {
+            events: services.observations,
+            id: services.entropy.id,
+            now: services.now,
+            callTool: (call) =>
+              cells === undefined
+                ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
+                : cells.callTool(call).pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new MachinesFailure({
+                          operation: "codemode.callTool",
+                          cause: String(error),
+                        }),
                     ),
-            }),
-          );
+                  ),
+          });
+    const host: MachineHost | undefined = machinery?.host;
 
     // A cell's catalog shares the dispatcher's tool.pre policy boundary.
     const llmPort = createCompletionPort(
@@ -466,6 +523,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("watches.close"),
       }),
     );
+    // Boot order (#1271): the self machine must answer over its loopback
+    // attachment BEFORE any tool port exists; a dead attachment fails boot.
+    if (machinery !== undefined) await runAppEffect(runtime, machinery.self.ready);
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
