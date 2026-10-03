@@ -99,7 +99,43 @@ the same raw endpoint; the plain-tool locus door belongs to #949.
   wire values. Exec and code retain typed terminal/refusal values. Invalid
   schemas and transport loss throw typed schema/IPC errors.
 
-### 2.2 Code-mode ownership and lifecycle
+### 2.2 Computer use (`screen.read` / `input.write`, #1274)
+
+- Wire methods `machine.screen_read` and `machine.input_write`; both gate on
+  the effective capability set like every other machine operation. The macOS
+  adapter (`packages/machines/src/computer-use.ts`) shells out to
+  `screencapture`/`sips`/`osascript`/`cliclick` through an injectable
+  `CommandRunner` port (`packages/machines/src/commands.ts`, argv spawn, no
+  shell, 256KiB output cap), so tests never touch the real screen.
+- Attach-time probes decide the offer: `screen.read` requires a real tiny
+  capture to succeed; `input.write` requires `cliclick` on PATH plus the
+  Accessibility (System Events) grant. A capability whose probe fails is
+  simply not offered. A mid-session failure re-probes and the capability
+  stays withdrawn (typed refusals) while the probe keeps failing.
+- `screen.read` returns `{captureId, png (base64, <= 4 MiB after bounded
+  sips -Z downscaling — never truncation), accessibilityTree?}`. The tree is
+  bounded JSON (<= 256 KiB) from a JXA System Events walk and is omitted, not
+  failed, without the permission. Regions are display-relative points
+  validated against measured display bounds (`sips` pixel dims over dpi);
+  out-of-bounds refuses `invalid_region` before any command runs.
+- `input.write` requires the `captureId` of the LATEST successful capture;
+  anything else refuses `stale_capture` and executes nothing. Input execution
+  is main-display only in v1: cliclick takes global (main-display-origin)
+  coordinates, so a request anchored to a capture of any other display refuses
+  `unsupported_action` with a message naming the display instead of silently
+  mistargeting. Actions
+  (max 32: click/type/key/move/scroll) map to one `cliclick` invocation;
+  middle-click and scroll refuse `unsupported_action` on this adapter
+  (cliclick 5.1 has neither), and coordinates outside the captured display
+  refuse `invalid_region` — always before anything executes.
+- There is no model-visible tool. Code mode is the only consumer:
+  `m.screen(display=None, region=None)` and `m.input(actions,
+  capture_id=None)` in Python cells (input defaults to the cell's last
+  capture id; without one it raises `ToolError`), `screen/input` on SDK
+  handles. `codemode.screen` is query-class at the app composition boundary;
+  `codemode.input` is execution-class.
+
+### 2.3 Code-mode ownership and lifecycle
 
 `createCodemode({machines,completion,tools})` is a reusable facade over a
 structural machines port. It supplies

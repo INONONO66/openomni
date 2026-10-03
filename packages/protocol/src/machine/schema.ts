@@ -28,6 +28,10 @@ export const WellKnownCapability = {
   fsRead: "fs.read",
   fsWrite: "fs.write",
   shellExec: "shell.exec",
+  /** Bounded screen capture + accessibility tree (#1274); macOS adapter first. */
+  screenRead: "screen.read",
+  /** Guarded pointer/keyboard actions tied to the latest capture (#1274). */
+  inputWrite: "input.write",
 } as const satisfies Record<string, CapabilityId>;
 
 /**
@@ -63,6 +67,8 @@ export const WireMethod = {
   Exec: "machine.exec",
   CallTool: "machine.call_tool",
   FsOp: "machine.fs_op",
+  ScreenRead: "machine.screen_read",
+  InputWrite: "machine.input_write",
 } as const;
 
 /** Shared by Enrollment/Offer arrays and the machine.attached event payload. */
@@ -433,3 +439,148 @@ export const CancelResult = z.object({ cancelled: z.boolean() }).strict();
 /** Machine host → machine daemon: the output a live cell has produced so far. */
 export const PeekCode = z.object({ cellId: z.string().min(1) }).strict();
 export const PeekResult = z.object({ running: z.boolean(), output: CellOutput }).strict();
+
+/**
+ * Computer use (#1274): bounded screen captures and guarded input actions.
+ * Ceilings are protocol-owned so host, daemon, and handles quote the same
+ * numbers; the daemon enforces them (it is the side holding the bytes).
+ */
+export const SCREEN_PNG_MAX_BYTES = 4_194_304;
+/** Base64 length that decodes to at most SCREEN_PNG_MAX_BYTES bytes. */
+const SCREEN_PNG_MAX_BASE64 = Math.ceil(SCREEN_PNG_MAX_BYTES / 3) * 4;
+/** Serialized ceiling for the optional accessibility-tree JSON value. */
+export const SCREEN_AX_MAX_BYTES = 262_144;
+export const INPUT_MAX_ACTIONS = 32;
+export const INPUT_MAX_TEXT_CHARS = 10_000;
+
+/**
+ * Display-relative points (origin at the selected display's top-left). The
+ * daemon validates a region against the selected display's measured bounds
+ * before invoking any capture or input command.
+ */
+const ScreenCoordinate = z.number().int().nonnegative();
+export const ScreenRegion = z
+  .object({
+    x: ScreenCoordinate,
+    y: ScreenCoordinate,
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  })
+  .strict();
+export type ScreenRegion = z.infer<typeof ScreenRegion>;
+
+/** `display` is the 1-based display index (screencapture's -D numbering). */
+export const ScreenReadRequest = z
+  .object({ display: z.number().int().positive().optional(), region: ScreenRegion.optional() })
+  .strict();
+export type ScreenReadRequest = z.infer<typeof ScreenReadRequest>;
+
+/**
+ * The tree is plain JSON, present only when the Accessibility permission
+ * probe succeeds, and bounded so one capture can never flood the wire.
+ */
+const BoundedAccessibilityTree = PlainValueSchema.superRefine((value, ctx) => {
+  if (new TextEncoder().encode(JSON.stringify(value)).length > SCREEN_AX_MAX_BYTES) {
+    ctx.addIssue({
+      code: "custom",
+      message: `accessibility tree exceeds ${SCREEN_AX_MAX_BYTES} serialized bytes`,
+    });
+  }
+});
+
+/**
+ * `refused` is a typed outcome, not a transport error: `permission_denied`
+ * reports a revoked TCC grant, `screen_not_available` a missing prerequisite
+ * (binary or probe), `capture_failed` a command failure that is neither.
+ * An over-cap PNG is downscaled and re-encoded, never truncated.
+ */
+export const ScreenReadResult = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("ok"),
+      captureId: z.string().min(1),
+      png: Base64.min(1).max(SCREEN_PNG_MAX_BASE64),
+      accessibilityTree: BoundedAccessibilityTree.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("refused"),
+      reason: z.enum([
+        "machine_not_attached",
+        "screen_not_available",
+        "invalid_region",
+        "permission_denied",
+        "capture_failed",
+      ]),
+    })
+    .strict(),
+]);
+export type ScreenReadResult = z.infer<typeof ScreenReadResult>;
+
+/**
+ * One guarded action. Coordinates are display-relative points on the display
+ * of the capture the request names; `key.name` uses the adapter's key
+ * vocabulary (an unknown name refuses `unsupported_action` before anything
+ * executes).
+ */
+export const InputAction = z.union([
+  z
+    .object({
+      click: z
+        .object({
+          x: ScreenCoordinate,
+          y: ScreenCoordinate,
+          button: z.enum(["left", "right", "middle"]).optional(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z.object({ type: z.object({ text: z.string().min(1).max(INPUT_MAX_TEXT_CHARS) }).strict() }).strict(),
+  z.object({ key: z.object({ name: z.string().min(1).max(64) }).strict() }).strict(),
+  z.object({ move: z.object({ x: ScreenCoordinate, y: ScreenCoordinate }).strict() }).strict(),
+  z
+    .object({
+      scroll: z
+        .object({ deltaX: z.number().int().optional(), deltaY: z.number().int().optional() })
+        .strict(),
+    })
+    .strict(),
+]);
+export type InputAction = z.infer<typeof InputAction>;
+
+/**
+ * Actions are tied to the LATEST successful capture: any other id refuses
+ * `stale_capture` and executes nothing — a request never partially executes.
+ * Input execution is main-display only in v1: a request anchored to a capture
+ * of any other display refuses `unsupported_action` (the refusal `message`
+ * names the display) rather than executing at translated global coordinates.
+ */
+export const InputWriteRequest = z
+  .object({
+    captureId: z.string().min(1),
+    actions: z.array(InputAction).min(1).max(INPUT_MAX_ACTIONS),
+  })
+  .strict();
+export type InputWriteRequest = z.infer<typeof InputWriteRequest>;
+
+export const InputWriteResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok") }).strict(),
+  z
+    .object({
+      status: z.literal("refused"),
+      reason: z.enum([
+        "machine_not_attached",
+        "input_not_available",
+        "stale_capture",
+        "invalid_region",
+        "permission_denied",
+        "unsupported_action",
+        "input_failed",
+      ]),
+      /** Human-readable detail, e.g. which display a refused anchor captured. */
+      message: z.string().min(1).max(256).optional(),
+    })
+    .strict(),
+]);
+export type InputWriteResult = z.infer<typeof InputWriteResult>;

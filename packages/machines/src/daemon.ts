@@ -9,6 +9,8 @@ import { MachinesFailure, MachineRefusalError, TransportFailure, type MachineErr
 import { decodeMachineFailure } from "./failure";
 import { createFsDriver } from "./fs";
 import { execute } from "./exec";
+import { type CommandRunner, systemCommandRunner } from "./commands";
+import { createComputerUse } from "./computer-use";
 
 /** Injected native interpreter port; the acquiring app scope owns its execution. */
 export interface CodeRunner {
@@ -23,10 +25,12 @@ interface MachineDaemonOptions {
   readonly offer: Machine.Offer;
   readonly fsExports?: ReadonlyMap<string, string>;
   readonly runner?: CodeRunner;
+  /** Injected shell-out port for computer-use probes/commands; tests fake it. */
+  readonly commands?: CommandRunner;
   readonly attachTimeoutMs?: number;
 }
 type WireParse = <T>(schema: z.ZodType<T>) => T;
-type WireResult = Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekResult | Machine.CellResult;
+type WireResult = Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekResult | Machine.CellResult | Machine.ScreenReadResult | Machine.InputWriteResult;
 export interface MachineDaemon {
   readonly attachment: Machine.AttachResult;
   readonly closed: Effect.Effect<void, MachineError>;
@@ -45,7 +49,10 @@ function escapesCanonicalRoot(absolute: string, root: string): boolean {
 
 export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effect<MachineDaemon, MachineError, Scope.Scope> {
   return Effect.gen(function* () {
-    const offer = yield* Effect.try({ try: () => Machine.Offer.parse(options.offer), catch: decodeMachineFailure("daemon.offer") });
+    const configured = yield* Effect.try({ try: () => Machine.Offer.parse(options.offer), catch: decodeMachineFailure("daemon.offer") });
+    const computer = createComputerUse({ runner: options.commands ?? systemCommandRunner(), id: options.id });
+    // Attach-time probe: each computer-use capability is offered only with complete prerequisites (#1274).
+    const offer: Machine.Offer = { ...configured, offeredCapabilities: yield* computer.offeredCapabilities(configured.offeredCapabilities) };
     const filesystem = yield* createFsDriver(options.fsExports ?? new Map());
     const lifetime = new AbortController();
     const cells = new Map<string, AbortController>();
@@ -110,6 +117,18 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
         return "status" in cwd ? Effect.succeed(cwd) : tracked(execute({ ...request, cwd: cwd.cwd }, lifetime.signal));
       });
     }
+    function screenRead(request: Machine.ScreenReadRequest): Effect.Effect<Machine.ScreenReadResult, MachineError> {
+      return Effect.suspend(() => {
+        if (!has(Machine.WellKnownCapability.screenRead)) return Effect.succeed({ status: "refused", reason: "screen_not_available" } as const);
+        return tracked(computer.screenRead(request));
+      });
+    }
+    function inputWrite(request: Machine.InputWriteRequest): Effect.Effect<Machine.InputWriteResult, MachineError> {
+      return Effect.suspend(() => {
+        if (!has(Machine.WellKnownCapability.inputWrite)) return Effect.succeed({ status: "refused", reason: "input_not_available" } as const);
+        return tracked(computer.inputWrite(request));
+      });
+    }
     function cancelCode(request: z.infer<typeof Machine.CancelCode>): Machine.CancelResult {
       const cell = cells.get(request.cellId);
       cell?.abort();
@@ -145,6 +164,8 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       [Machine.WireMethod.CancelCode]: (parse) => Effect.sync(() => cancelCode(parse(Machine.CancelCode))),
       [Machine.WireMethod.PeekCode]: (parse) => Effect.sync(() => peekCode(parse(Machine.PeekCode))),
       [Machine.WireMethod.RunCode]: (parse) => runCode(parse(Machine.CellRequest)),
+      [Machine.WireMethod.ScreenRead]: (parse) => screenRead(parse(Machine.ScreenReadRequest)),
+      [Machine.WireMethod.InputWrite]: (parse) => inputWrite(parse(Machine.InputWriteRequest)),
     };
     return yield* Effect.gen(function* () {
       client = yield* connectIpcClient(options.socketPath, {

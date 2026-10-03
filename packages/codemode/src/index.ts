@@ -39,6 +39,8 @@ const PathInput = z.object({ machineId: Machine.MachineId, path: Machine.Absolut
 const WriteInput = PathInput.extend({ data: z.string() });
 const ShellInput = Machine.ExecRequest.extend({ machineId: Machine.MachineId });
 const RunInput = z.object({ machineId: Machine.MachineId, code: z.string() }).strict();
+const ScreenInput = Machine.ScreenReadRequest.extend({ machineId: Machine.MachineId });
+const InputInput = Machine.InputWriteRequest.extend({ machineId: Machine.MachineId });
 const FindInput = z.object({ tag: z.string().min(1) }).strict();
 
 /** One app-owned scope retains background cells and tenant interpreters. */
@@ -76,6 +78,8 @@ export function createCodemode(options: Options) {
         ls: (path: string) => Effect.suspend(() => target().fs.list(path)),
         bash: (command: string, cwd: string) => Effect.suspend(() => target().exec(command, cwd)),
         eval: (cell: Machine.CellRequest, signal?: AbortSignal) => Effect.suspend(() => target().runCode(cell, signal)),
+        screen: (request: Machine.ScreenReadRequest) => Effect.suspend(() => target().screen(request)),
+        input: (request: Machine.InputWriteRequest) => Effect.suspend(() => target().input(request)),
       };
     }
     function getMachine(id: string) {
@@ -120,14 +124,25 @@ export function createCodemode(options: Options) {
         return undefined;
       });
     }
-    function dispatch(call: Machine.ToolCall): Effect.Effect<Machine.ToolCallResult, Failure> {
+    /** Computer use (#1274): same handle + authorization path, no model tool. */
+    function dispatchComputerOp(call: Machine.ToolCall): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
       return Effect.gen(function* () {
-        const binding = live.get(call.cellId);
-        if (!binding) return yield* new CodemodeError({ reason: "unknown_cell_id", message: "cell has settled" });
-        const catalogOp = yield* dispatchCatalog(call);
-        if (catalogOp !== undefined) return catalogOp;
-        const machineOp = yield* dispatchMachineOp(call);
-        if (machineOp !== undefined) return machineOp;
+        if (call.name === "codemode.screen") {
+          const input = yield* Effect.try({ try: () => ScreenInput.parse(call.arguments), catch: decodeCodeFailure("screen.arguments") });
+          const { machineId, ...request } = input;
+          const value = yield* getMachine(machineId).screen(request);
+          return { status: "completed", value: value.status === "ok" ? { ...value, png: Buffer.from(value.png).toString("base64") } : value };
+        }
+        if (call.name === "codemode.input") {
+          const input = yield* Effect.try({ try: () => InputInput.parse(call.arguments), catch: decodeCodeFailure("input.arguments") });
+          const { machineId, ...request } = input;
+          return { status: "completed", value: yield* getMachine(machineId).input(request) };
+        }
+        return undefined;
+      });
+    }
+    function dispatchHostOp(call: Machine.ToolCall, binding: NonNullable<ReturnType<typeof live.get>>): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
+      return Effect.gen(function* () {
         if (call.name === "codemode.eval") {
           const input = yield* Effect.try({ try: () => RunInput.parse(call.arguments), catch: decodeCodeFailure("eval.arguments") });
           const started = yield* launch(input.machineId, input.code, `${binding.tenant}/nested`, binding.caller, { timeoutMs: binding.timeoutMs, signal: binding.signal, ownership: binding.ownership }, binding.boundary);
@@ -137,6 +152,21 @@ export function createCodemode(options: Options) {
           const input = yield* Effect.try({ try: () => Machine.CompletionRequest.parse(call.arguments), catch: decodeCodeFailure("completion.arguments") });
           return { status: "completed", value: yield* options.completion(input) };
         }
+        return undefined;
+      });
+    }
+    function dispatch(call: Machine.ToolCall): Effect.Effect<Machine.ToolCallResult, Failure> {
+      return Effect.gen(function* () {
+        const binding = live.get(call.cellId);
+        if (!binding) return yield* new CodemodeError({ reason: "unknown_cell_id", message: "cell has settled" });
+        const catalogOp = yield* dispatchCatalog(call);
+        if (catalogOp !== undefined) return catalogOp;
+        const machineOp = yield* dispatchMachineOp(call);
+        if (machineOp !== undefined) return machineOp;
+        const computerOp = yield* dispatchComputerOp(call);
+        if (computerOp !== undefined) return computerOp;
+        const hostOp = yield* dispatchHostOp(call, binding);
+        if (hostOp !== undefined) return hostOp;
         return yield* binding.caller(call);
       });
     }

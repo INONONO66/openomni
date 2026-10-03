@@ -176,8 +176,10 @@ test("SDK handles and Python globals share raw endpoints across two machines", a
     expect(Object.keys(mode.getMachine("B")).sort()).toEqual([
       "bash",
       "eval",
+      "input",
       "ls",
       "read",
+      "screen",
       "write",
     ]);
   });

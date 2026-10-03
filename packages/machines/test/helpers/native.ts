@@ -35,6 +35,8 @@ function machineHandle(native: Native.MachineHandle) {
       stat: (...args: Parameters<typeof native.fs.stat>) => run(native.fs.stat(...args)),
     },
     exec: (...args: Parameters<typeof native.exec>) => run(native.exec(...args)),
+    screen: (...args: Parameters<typeof native.screen>) => run(native.screen(...args)),
+    input: (...args: Parameters<typeof native.input>) => run(native.input(...args)),
     runCode: (...args: Parameters<typeof native.runCode>) => run(native.runCode(...args)),
     peekCode: (...args: Parameters<typeof native.peekCode>) => run(native.peekCode(...args)),
   };

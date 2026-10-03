@@ -27,7 +27,8 @@ function bindings(frame: InvocationFrame, id: () => string): NonNullable<RunOpti
                 call.name === "codemode.read" ||
                 call.name === "codemode.ls" ||
                 call.name === "codemode.listMachines" ||
-                call.name === "codemode.findMachine"
+                call.name === "codemode.findMachine" ||
+                call.name === "codemode.screen"
                   ? "query"
                   : "execution",
             },
