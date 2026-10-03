@@ -113,7 +113,7 @@ test(
   async () => {
     // Occupying 9222 forces the documented probe-and-advance behavior; if some
     // other process already holds it the launch must advance just the same.
-    let occupied: ReturnType<typeof Bun.listen> | undefined;
+    let occupied: { stop(closeActiveConnections?: boolean): void } | undefined;
     try {
       occupied = Bun.listen({ hostname: "127.0.0.1", port: 9222, socket: { data() {} } });
     } catch {

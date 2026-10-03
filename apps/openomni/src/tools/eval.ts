@@ -71,7 +71,7 @@ export function createEvalTool(cell: Cell | undefined) {
     name: "eval",
     category: "execution",
     description:
-      "Run Python in this session's persistent cell: state survives between calls; machine handles, parallel, completion, and tool.<name>() proxies are in scope. operation.op=run starts code and waits up to timeout seconds; peek reads a running cell's output so far; stop interrupts it. stop and the 10 minute ceiling discard the interpreter's state.",
+      "Run Python in this session's persistent cell: state survives between calls; machine handles, parallel, completion, browser(machineId) for Chromium automation over CDP, and tool.<name>() proxies are in scope. operation.op=run starts code and waits up to timeout seconds; peek reads a running cell's output so far; stop interrupts it. stop and the 10 minute ceiling discard the interpreter's state.",
     input: Input,
     output: Machine.CellState,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
