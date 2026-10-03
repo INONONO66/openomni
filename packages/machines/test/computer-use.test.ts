@@ -330,14 +330,17 @@ describe("input.write", () => {
     });
   });
 
-  test("an accessibility complaint on stderr refuses permission_denied", async () => {
+  test("an accessibility complaint maps permission_denied only on a failed run", async () => {
     await fixture({}, async ({ handle, fake }) => {
       const shot = await latestCapture(handle);
+      // A zero-exit run executed: noisy stderr must NOT turn it into a refusal.
       fake.behavior.cliclickStderr = "cliclick requires Accessibility access";
+      expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
+        .toEqual({ status: "ok" });
+      fake.behavior.cliclickExitCode = 2;
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
         .toEqual({ status: "refused", reason: "permission_denied" });
       fake.behavior.cliclickStderr = "";
-      fake.behavior.cliclickExitCode = 2;
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
         .toEqual({ status: "refused", reason: "input_failed" });
     });

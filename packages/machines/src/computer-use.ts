@@ -392,11 +392,15 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
         yield* reprobeInput;
         return refusedInput("input_not_available");
       }
-      if (/accessibility|assistive access/i.test(result.stderr)) {
-        yield* reprobeInput;
-        return refusedInput("permission_denied");
+      if (result.exitCode !== 0) {
+        // Only a FAILED run maps stderr: a zero-exit run already executed, and
+        // reporting it permission_denied would be a refusal that lies.
+        if (/accessibility|assistive access/i.test(result.stderr)) {
+          yield* reprobeInput;
+          return refusedInput("permission_denied");
+        }
+        return refusedInput("input_failed");
       }
-      if (result.exitCode !== 0) return refusedInput("input_failed");
       return { status: "ok" } as const;
     });
 
