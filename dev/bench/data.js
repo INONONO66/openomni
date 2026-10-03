@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790947660027,
+  "lastUpdate": 1790996711033,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -76687,6 +76687,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 152300,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "66d56edb1c437a7c6796d50cba21b628c1f251db",
+          "message": "#1251: fourteen hook points and policy rows validated in a registry (#1269)\n\n* chore: open #1251 lane (epic #1260) on d34218c6\n\n* #1251: protocol point registry — fourteen point records, single gate row contract, compose rejection codes\n\n* #1251: merged point table, gate-row compiler with compose rejections, executor/monitor registry lookup, boot point-generation conversion\n\n* #1251: compaction consults compaction.* points, seeded row moves, six registry/fold/replay/migration test suites, conformance repins\n\n* #1251: split gate fold/validation helpers for the complexity lint; unexport internals flagged by the dead-export ratchet\n\n* #1251: docs stamps; flip #1248 to merged as d34218c6 (PR #1267)\n\n* #1251 r1 findings 4/5/8: replay carries the recorded rewrite output; observe rows execute audit-only\n\n- GateDecision gains annotations and the final rewritten output; replay\n  restores the recorded output without invoking handlers (chained rewrites\n  and untouched fields covered).\n- Observe rows resolve and invoke the registered handler under the\n  requirement guard; the recorded payload lands as an audit annotation and\n  nothing an observer returns or throws can change verdict or value.\n- No internal GateDecision.parse; compiled rows carry a narrowed emit kind;\n  typed plain-object field access in applyRewrite.\n- compose.ts also gains translateLegacyPolicyRow/legacyGateRow used by the\n  production cutover commit that follows.\n\n* #1251 r1 findings 1/6: the point registry is the production policy path; duplicate core registrations reject\n\n- compilePolicySnapshot admits every generation through compileGateRows\n  against the composition's merged point table (compose_rejected compile\n  error carries the #1255 code); snapshots expose pointTable.\n- Executor and monitor consult the snapshot's composed table; the\n  extensions.has(kind) bypass is gone — an extension kind without a point\n  record fails closed (blocked_pre, unknown_point).\n- session.open allows gate: historical session.configure rows are evaluated\n  there by the configure authority.\n- composePointTable rejects repeated core ids with duplicate.\n- Tests: rejected rows through production compile/generation/execution\n  (prompt post, message post, channel.send), duplicate core id, behavioral\n  emit-set and decision-shape checks replacing constant pins.\n\n* #1251 r1 findings 2/3: boot validates before the identity return and converts compaction semantics\n\n- Latest-generation validation runs before the identity-set early return: a\n  complete generation carrying an unmappable row rejects the boot.\n- translateLegacyPolicyRow converts base-era turn/post {op: compaction}\n  rows onto compaction/pre at boot (new generation, historical bytes\n  untouched) and at compile for pinned historical generations; a base-era\n  compaction deny keeps refusing summarization.\n- Identity check compares stored rows so a conversion always lands.\n\n* #1251 r1 finding 7: requirement guard exercised through a stable registry\n\nThe row's declared service resolves through a stable resolver and the\nhandler re-enters itself through the guard; no handler swapping between\ncalls.\n\n* #1251 r2 finding 1: compileGateRows is the single evaluator; legacy fold deleted\n\ncompile.ts now projects legacy rows once into gate rows (real when\nconditions, per-row message matchers, transform fields declared or\nrejected bad_field) and formats PolicyEvaluation from gate.decide.\nThe app composition supplies its POINT_TABLE at generation\nconstruction; a generation carrying an off-table row fails closed\nat capture. tool.pre/tool.post are rewriteOpen until the #1255\nenvelope; rows must still declare nonempty fields.\n\n* #1251 r2 findings 2/3: every historical compaction operation keeps its policy\n\nrestore_context_projection converts to compaction/pre with its real\noperation; wildcard turn/post rows fan out to the compaction point at\nprojection. session-context-restore exercises the untouched base-era\nturn/post fixture through the real restore operation.\n\n* #1251 r2 finding 5: observers receive an isolated snapshot\n\nHostile in-place mutation by an observer or consult handler never\nreaches the decision value; an ordinary observer throw records\nobserver_failed and the decision stands.\n\n* #1251 r2 findings 4/7: requires is a real dependency collection; constant pins dropped\n\nA row's how.requires resolves a separately declared handler at call\ntime; references outside it still escape. Protocol tests stop\nrestating the emit set and rejection-code enum.\n\n* #1251 r3 finding 3: matcher context is part of replay identity\n\nA recorded decision replays only when every context-dependent row still\nmatches exactly as recorded; a changed message context re-evaluates\ninstead of restoring the stale verdict.\n\n* #1251 r3 finding 1: the gate's recorded responses cross the production boundary\n\nPolicyEvaluation carries the replayable gate decision; the executor\ncommits it in the policy.decision intent (consulted payload/digest,\nrewrite output, facts) and re-admission replays that record through\nthe pinned snapshot instead of trusting intent bytes — a handler that\ncan no longer run never re-runs, and anything but a verbatim replay is\na stale approval. The recorded decision is replay input, never part of\nthe evaluation's input identity.\n\n* #1251 r3 finding 5: the fold moves to its own module; membership typed correctly\n\ncompose.ts keeps admission, matching and replay (115 noncomment lines);\nfold.ts owns handler invocation under the requirement guard and the\nper-row fold. No behavior change. The context-field membership check\nloses its never-assertion by typing the collection as readonly string[].\n\n* #1251 r3 findings 2+4: the composition selects its point table\n\nThe all-capability POINT_TABLE constant is gone. AppRuntimeOptions takes\nthe capability registrations the composition selects (default: every\nbuilt-in this app ships); AppPointTable carries the composed table to\nthe seed and to every generation compile. A composition without the\ntool capability refuses the kernel seed's tool rows at boot and fails\nany foreign generation closed at capture with unknown_point, while the\nfull composition admits and enforces the same rows (finding 4's\nparseRow-valid probe).\n\n# Conflicts:\n#\tapps/openomni/src/runtime.ts\n\n# Please enter the commit message for your changes. Lines starting\n# with '#' will be kept; you may remove them yourself if you want to.\n# An empty message aborts the commit.\n#\n# interactive rebase in progress; onto 4978236b\n# Last commands done (18 commands done):\n#    pick c0332f84 # #1251 r3 finding 5: the fold moves to its own module; membership typed correctly\n#    pick f796f0f4 # #1251 r3 findings 2+4: the composition selects its point table\n# Next commands to do (7 remaining commands):\n#    pick 2233f765 # #1251 r3 finding 6: retire the last policyPoint comment references\n#    pick 58f36cc0 # #1251 r3: hoist decision intent and recovery admission to named functions\n# You are currently rebasing branch 'epic1260/1251-point-registry' on '4978236b'.\n#\n# Changes to be committed:\n#\tmodified:   apps/openomni/src/composition/generation-layers.ts\n#\tnew file:   apps/openomni/src/composition/point-table.ts\n#\tmodified:   apps/openomni/src/index.ts\n#\tmodified:   apps/openomni/src/policy-seed.ts\n#\tmodified:   apps/openomni/src/process-entry.ts\n#\tmodified:   apps/openomni/src/runtime.ts\n#\tmodified:   apps/openomni/test/generation-layers.test.ts\n#\tmodified:   apps/openomni/test/helpers/generation-services.ts\n#\tmodified:   packages/agent/src/kernel/index.ts\n#\n\n* #1251 r3 finding 6: retire the last policyPoint comment references\n\n* #1251 r3: hoist decision intent and recovery admission to named functions\n\nPure extraction for the complexity ceiling after the gate-evidence\nadditions; typed row fixtures in the composition test.\n\n* #1251 r4 finding 2: replay binds a decision to its policy generation\n\nA recorded decision replays only under the generation that produced it;\na gen-1 allow presented to a gen-2 snapshot containing a new deny\nre-evaluates fresh and denies. Regressions at the gate level and\nthrough the production snapshot API. Also drops the stray blank line\nat EOF (finding 5).\n\n* #1251 r4 finding 1: present malformed gate evidence refuses, never byte-admits\n\nByte admission exists only for truly absent pre-contract evidence. A\npresent gate record that fails GateDecision parsing (e.g. its required\noutput stripped) is a corrupt decision: recovery refuses with\nstale_approval before the body runs. Adjacent absent/valid/malformed\nrecovery cases with body-count assertions.\n\n* #1251 r4 finding 3: compile.ts splits by concept\n\nPure moves, zero behavior change: registry.ts (named services and the\nkernel registry), legacy-rows.ts (historical decoding and the compile\nerror contract), project.ts (projection onto the fourteen-point gate),\nevaluate.ts (compatibility formatting and the fail-closed snapshot).\ncompile.ts keeps snapshot compilation, the pinning compiler and seeds\n(191 noncomment lines; largest sibling 232), re-exporting the public\nsurface so import sites are unchanged.\n\n* #1251 r4 finding 4: registry tests assert invariants, not the table\n\nThe owner list and per-point allowed-action transcriptions go; what a\npoint admits is covered by the gate compiler's behavioral tests. Kept\nand generalized the genuine consistency invariants: capability records\nare named after their owner, end points withhold emit, the point ids\nmatch the PointId schema.\n\n* #1251 r4 finding 3 follow-up: internal-only split exports stay internal\n\nDead-export ratchet: CompiledObligation, CompiledVerdict, rowKey,\nCORE_ACTION_KINDS and publicBucket are consumed only inside their new\nmodules and are no longer exported.\n\n* #1251 r4 cleanup: drop unused canonicalDigest import left by the compile split\n\n* #1251 r5 finding 1: one execution mode per row; a conflicting constant refuses at admission\n\nA gate row carrying both a declared guard ref and a constant verdict admitted\nbut executed the constant, silently bypassing the guard. Admission now models\nthe three gate modes explicitly (constant | consulted | obligation: the\nhistorical projection's metric/limit under its fixed allow) and rejects every\nmixed how with bad_action; rewrite and emit rows equally refuse foreign modes.\n\n* #1251 r5 patch coverage: observe fallback branches and non-string projection entries proven by behavior\n\nThe lead gate flagged fold.ts observe handler_unavailable/unrecorded_response\nand the projection's non-string transform-field skip as changed executable\nlines no test reached; each now has a behavioral assertion on the decision\nfacts/annotations or the dispatched rewrite.\n\n* #1251 r5: admission validators split per row kind for the complexity ceiling",
+          "timestamp": "2026-10-03T12:02:12+09:00",
+          "tree_id": "4df2da565d7338c871d40cb59202d8e3622a1fb8",
+          "url": "https://github.com/INONONO66/openomni/commit/66d56edb1c437a7c6796d50cba21b628c1f251db"
+        },
+        "date": 1790996710103,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1058,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1437,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1573092,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 419528,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6835315,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 129,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1144,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 719,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 194439,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 822781,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 479295,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3308,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 12624748,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1476521,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 175649,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 894752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 283785,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15556190,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 96,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 201790,
             "unit": "ns/op"
           }
         ]
