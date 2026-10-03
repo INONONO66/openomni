@@ -199,6 +199,32 @@ describe("screen.read", () => {
   });
 });
 
+describe("screen.read mid-session failures", () => {
+  test("a vanished screencapture binary refuses screen_not_available", async () => {
+    await fixture({}, async ({ handle, fake }) => {
+      expect((await handle.screen({})).status).toBe("ok");
+      fake.behavior.captureMissing = true;
+      expect(await handle.screen({})).toEqual({ status: "refused", reason: "screen_not_available" });
+      fake.behavior.captureMissing = false;
+      expect((await handle.screen({})).status).toBe("ok");
+    });
+  });
+
+  test("a failing tree fetch omits the tree and stops asking until re-probed", async () => {
+    await fixture({}, async ({ handle, fake }) => {
+      fake.behavior.treeExitCode = 1;
+      const first = await handle.screen({});
+      if (first.status !== "ok") throw new Error(`refused: ${first.reason}`);
+      expect("accessibilityTree" in first).toBe(false);
+      const asked = fake.invocations("osascript").filter((argv) => argv[1] === "-l").length;
+      const second = await handle.screen({});
+      expect(second.status).toBe("ok");
+      // Withdrawn after the failure: the second capture never runs the JXA walk.
+      expect(fake.invocations("osascript").filter((argv) => argv[1] === "-l")).toHaveLength(asked);
+    });
+  });
+});
+
 describe("input.write", () => {
   test("maps the action list onto one cliclick invocation", async () => {
     await fixture({}, async ({ handle, fake }) => {

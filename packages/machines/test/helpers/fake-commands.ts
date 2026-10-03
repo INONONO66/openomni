@@ -11,13 +11,15 @@ export function png(size: number): Buffer {
 }
 
 /** `sips -g` stdout for a display measured at the given pixel size and dpi. */
-export function sipsBounds(pixelWidth: number, pixelHeight: number, dpiWidth: number): string {
+function sipsBounds(pixelWidth: number, pixelHeight: number, dpiWidth: number): string {
   return `/tmp/x.png\n  pixelWidth: ${pixelWidth}\n  pixelHeight: ${pixelHeight}\n  dpiWidth: ${dpiWidth.toFixed(3)}\n`;
 }
 
 export interface FakeMacBehavior {
   captureExitCode: number;
   captureStderr: string;
+  /** When true the screencapture binary itself spawn-fails (vanished). */
+  captureMissing: boolean;
   capturePng: Buffer;
   /** `which cliclick` answer; undefined reports "not installed". */
   cliclickPath: string | undefined;
@@ -52,6 +54,7 @@ export function fakeMac(overrides: Partial<FakeMacBehavior> = {}): FakeMac {
   const behavior: FakeMacBehavior = {
     captureExitCode: 0,
     captureStderr: "",
+    captureMissing: false,
     capturePng: png(4096),
     cliclickPath: "/opt/homebrew/bin/cliclick",
     cliclickMissing: false,
@@ -72,6 +75,9 @@ export function fakeMac(overrides: Partial<FakeMacBehavior> = {}): FakeMac {
   const calls: string[][] = [];
   let lastDisplay = 1;
   function serveCapture(argv: readonly string[]): Effect.Effect<CommandResult, SpawnFailure> {
+    if (behavior.captureMissing) {
+      return Effect.fail(new SpawnFailure({ operation: "command.spawn", message: "ENOENT", cause: "ENOENT" }));
+    }
     const flag = argv.indexOf("-D");
     lastDisplay = flag === -1 ? 1 : Number(argv[flag + 1]);
     const path = argv[argv.length - 1];
