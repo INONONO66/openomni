@@ -18,7 +18,7 @@ import { alarmCapability, watchPurposes, WatchRefused, type WatchInstallDeps } f
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
-import { clusterTempDir, runCluster, sendAlarm, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
+import { clusterMessages, clusterTempDir, runCluster, sendAlarm, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-alarm-budget-");
@@ -584,4 +584,146 @@ test("r2 H3: three exhausted CAS attempts on the arm commit surface the typed Ar
   expect(refused).toMatchObject({ _tag: "ArmRefused", code: "revision" });
   // Exactly the bounded three attempts hit the contended commit.
   expect(contend.bumps).toBe(3);
+});
+
+test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retires both chains and the later timeout delivery lapses stale", async () => {
+  const sessionId = "h5-sequence-session";
+  const liveVerbs = new Map<string, ArmVerb>();
+  const closed: string[] = [];
+  const installs: string[] = [];
+  // A short REAL timeout: its DeliverAt envelope fires after the watch settled.
+  const TIMEOUT_MS = 1_500;
+  const spec: Alarm.WatchSpec = {
+    watch: { command: "true", description: "timed", timeout_ms: TIMEOUT_MS },
+    policyGeneration: 1,
+    notificationLimit: 1,
+  };
+  const capability = await runAgent(
+    alarmCapability({
+      bundles: [
+        {
+          bundle: "monitor",
+          purposes: watchPurposes({
+            close: (id) => {
+              closed.push(id);
+            },
+          }),
+        },
+      ],
+      compose: composeAlarmPurposes,
+      arm: (id) => (input) =>
+        Effect.suspend(() => {
+          const verb = liveVerbs.get(id);
+          return verb === undefined
+            ? Effect.die(new Error(`no live activation for ${id}`))
+            : verb(input);
+        }),
+      watch: {
+        install: ({ watchId }) =>
+          Effect.sync(() => {
+            installs.push(watchId);
+          }),
+      },
+    }),
+  );
+  const readArmed = Effect.sync(() => {
+    const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+    const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
+    try {
+      return SessionHandleStore.createSessionKernel(store, catalog).armedAlarms();
+    } finally {
+      store.close();
+      catalog.close();
+    }
+  });
+  const outcome = await runCluster(
+    {
+      sessionsDir,
+      catalogFile,
+      alarmCapability: capability,
+      onLive: (id, verbs) => {
+        liveVerbs.set(id, verbs.arm);
+        return () => {
+          liveVerbs.delete(id);
+        };
+      },
+    },
+    Effect.gen(function* () {
+      yield* sendPrompt(sessionId, `${sessionId}:m-1`, "hello");
+      // The REAL watch verb arms the main chain and its timeout companion;
+      // the entity forwards the timeout through the durable DeliverAt door.
+      const armNow = Date.now();
+      const main = yield* capability.verbs.watch({
+        sessionId,
+        turnId: "turn-1",
+        watchId: "h5",
+        spec,
+        now: armNow,
+      });
+      const timeoutRow = (yield* readArmed).find((row) => row.alarmId === "h5:timeout");
+      if (timeoutRow === undefined) return yield* Effect.die(new Error("missing timeout row"));
+      // The exhausting native hit (budget 1) lands BEFORE the timeout fires:
+      // one prompt, then the handler retires the main chain AND the companion.
+      const hit = yield* sendAlarm(sessionId, {
+        occurrenceId: main.occurrenceId,
+        purpose: "monitor.hit",
+        alarmId: "h5",
+        armSeq: main.armSeq,
+        sourceKey: "monitor",
+        payload: JSON.stringify({
+          spec,
+          notifications: 0,
+          hit: { content: "DONE", terminal: false, detail: "line:1" },
+        }),
+        fireAt: armNow,
+      });
+      // Bounded wait on the exact event: the parked timeout envelope delivers
+      // at its DeliverAt deadline and the entity acknowledges (processed).
+      yield* Effect.promise(async () => {
+        const deadline = Date.now() + 20_000;
+        for (;;) {
+          const processed = clusterMessages(catalogFile, "Session").some(
+            (row) =>
+              row.tag === "Alarm" && row.deliver_at === timeoutRow.fireAt && row.processed === 1,
+          );
+          if (processed) return;
+          if (Date.now() > deadline) throw new Error("timeout envelope never processed");
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      });
+      return { main, timeoutRow, hit };
+    }),
+  );
+  expect(outcome.hit).toMatchObject({ outcome: "delivered" });
+  expect(outcome.timeoutRow.fireAt).toBeGreaterThan(Date.now() - 60_000);
+  expect(installs).toEqual(["h5"]);
+  // The exhausted hit's handler closed the native source exactly once.
+  expect(closed).toEqual(["h5"]);
+  // Durable facts: zero armed rows survive; exactly ONE prompt committed; the
+  // late timeout delivery folded to fired{stale} with zero handler effects.
+  const after = await runAgent(
+    Effect.sync(() => {
+      const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+      const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
+      try {
+        const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+        return {
+          armed: kernel.armedAlarms(),
+          hitPrompt: kernel.actionById(`${outcome.main.occurrenceId}:prompt`),
+          timeoutPrompt: kernel.actionById(`${outcome.timeoutRow.occurrenceId}:prompt`),
+          timeoutStale: kernel.actionById(`${outcome.timeoutRow.occurrenceId}:stale`),
+        };
+      } finally {
+        store.close();
+        catalog.close();
+      }
+    }),
+  );
+  // Zero watch-plane rows survive (the entity's own passivation `resume`
+  // chain is loop-reserved bookkeeping, not a monitor arm).
+  expect(after.armed.filter((row) => row.sourceKey === "monitor")).toEqual([]);
+  expect(after.hitPrompt?.kind).toBe("prompt");
+  expect(after.hitPrompt?.effect.value).toMatchObject({ content: "DONE" });
+  expect(after.timeoutPrompt).toBeUndefined();
+  expect(after.timeoutStale?.kind).toBe("alarm");
 });

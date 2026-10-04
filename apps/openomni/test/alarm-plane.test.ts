@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type Bundle, Core } from "@openomni/agent";
+import { Core } from "@openomni/agent";
 import { Effect } from "effect";
 import {
   alarmChainReads,
@@ -9,11 +9,11 @@ import {
 } from "../src/composition/alarm-plane";
 import { runEffect } from "./helpers/effect";
 import {
-  alarmPortsFixture,
-  fixtureEntityArmVerb,
+  awaitScheduled,
+  commitArm,
+  FIXTURE_BASE,
   watchFixture,
-  type FixtureArmNotice,
-  type FixtureScheduledOccurrence,
+  withEntityAlarmPorts,
 } from "./helpers/watch-fixture";
 
 const OWNER = "alarm-plane-owner";
@@ -23,92 +23,6 @@ const watchSpec = (notificationLimit: number) => ({
   watch: { command: "true", description: "coverage", persistent: true as const },
   policyGeneration: 1,
   notificationLimit,
-});
-
-interface Plane {
-  readonly state: Awaited<ReturnType<typeof watchFixture>>;
-  readonly scheduled: FixtureScheduledOccurrence[];
-  readonly notices: FixtureArmNotice[];
-  readonly arm: (sessionId: string) => Bundle.ArmVerb;
-}
-
-async function armFixture(): Promise<Plane> {
-  const state = await watchFixture(SESSION, OWNER);
-  const scheduled: FixtureScheduledOccurrence[] = [];
-  const notices: FixtureArmNotice[] = [];
-  const arm = fixtureEntityArmVerb({
-    openKernel: state.plane.openKernel,
-    clock: () => 1000,
-    entropy: () => "minted",
-    schedule: (_sessionId, occurrence) => void scheduled.push(occurrence),
-    onArm: (notice) => notices.push(notice),
-  });
-  return { state, scheduled, notices, arm };
-}
-
-test("the fixture entity verb commits one chain row, schedules non-monitor purposes, and notifies onArm", async () => {
-  const { state, scheduled, notices, arm } = await armFixture();
-  try {
-    const hit = await runEffect(
-      arm(SESSION)({
-        purpose: "monitor.hit",
-        at: 1000,
-        alarmId: "watch-1",
-        sourceKey: "monitor",
-        payload: { spec: watchSpec(2), notifications: 0 },
-      }),
-    );
-    expect(hit.alarmId).toBe("watch-1");
-    // A monitor.hit arm is never scheduled: its native source resends it.
-    expect(scheduled).toEqual([]);
-    expect(notices).toMatchObject([
-      { purpose: "monitor.hit", alarmId: "watch-1", at: 1000, occurrenceId: hit.occurrenceId },
-    ]);
-    const timed = await runEffect(
-      arm(SESSION)({
-        purpose: "monitor.timeout",
-        at: 2000,
-        alarmId: "watch-1:timeout",
-        sourceKey: "monitor",
-        payload: { watchId: "watch-1" },
-      }),
-    );
-    expect(scheduled).toMatchObject([
-      {
-        occurrenceId: timed.occurrenceId,
-        purpose: "monitor.timeout",
-        alarmId: "watch-1:timeout",
-        fireAt: 2000,
-        payload: JSON.stringify({ watchId: "watch-1" }),
-      },
-    ]);
-    // A retiring arm (at: null) is recorded, never scheduled.
-    await runEffect(
-      arm(SESSION)({
-        purpose: "monitor.hit",
-        at: null,
-        alarmId: "watch-1",
-        supersedes: hit.occurrenceId,
-        sourceKey: "monitor",
-        payload: { reason: "cancel" },
-      }),
-    );
-    expect(scheduled).toHaveLength(1);
-    const chains = foldAlarmChains(state.kernel, SESSION);
-    expect(chains.get("watch-1")?.latest).toMatchObject({
-      at: null,
-      supersedes: hit.occurrenceId,
-      payload: { reason: "cancel" },
-    });
-    expect(chains.get("watch-1")?.armCount).toBe(2);
-    // An omitted alarmId mints one from entropy.
-    const minted = await runEffect(
-      arm(SESSION)({ purpose: "cron.tick", at: 5000, sourceKey: "cron", payload: {} }),
-    );
-    expect(minted.alarmId).toBe("minted");
-  } finally {
-    state.plane.close();
-  }
 });
 
 test("the live arm registry binds continuations to the authorizing activation's turn (H3)", async () => {
@@ -157,17 +71,15 @@ test("the live arm registry binds continuations to the authorizing activation's 
 });
 
 test("the chain fold pages full history and feeds the chain-guard reads", async () => {
-  const { state, arm } = await armFixture();
+  const state = await watchFixture(SESSION, OWNER);
   try {
-    const first = await runEffect(
-      arm(SESSION)({
-        purpose: "monitor.hit",
-        at: 1000,
-        alarmId: "paged",
-        sourceKey: "monitor",
-        payload: { spec: watchSpec(400), notifications: 0 },
-      }),
-    );
+    const first = await commitArm(state, SESSION, {
+      purpose: "monitor.hit",
+      at: 1000,
+      alarmId: "paged",
+      sourceKey: "monitor",
+      payload: { spec: watchSpec(400), notifications: 0 },
+    });
     // One 300-row fired batch pushes the second arm past the first history page.
     const row = state.kernel.row(SESSION);
     await runEffect(
@@ -191,16 +103,15 @@ test("the chain fold pages full history and feeds the chain-guard reads", async 
         state: row.state,
       }),
     );
-    const second = await runEffect(
-      arm(SESSION)({
-        purpose: "monitor.hit",
-        at: 4000,
-        alarmId: "paged",
-        supersedes: first.occurrenceId,
-        sourceKey: "monitor",
-        payload: { spec: watchSpec(400), notifications: 300 },
-      }),
-    );
+    const second = await commitArm(state, SESSION, {
+      purpose: "monitor.hit",
+      at: 4000,
+      alarmId: "paged",
+      supersedes: first.occurrenceId,
+      sourceKey: "monitor",
+      payload: { spec: watchSpec(400), notifications: 300 },
+      ts: 4000,
+    });
     const chain = foldAlarmChains(state.kernel, SESSION).get("paged");
     expect(chain?.latest.occurrenceId).toBe(second.occurrenceId);
     expect(chain?.armCount).toBe(2);
@@ -215,17 +126,15 @@ test("the chain fold pages full history and feeds the chain-guard reads", async 
 });
 
 test("watchStateOf projects armed and retired chains from the latest arm payload", async () => {
-  const { state, arm } = await armFixture();
+  const state = await watchFixture(SESSION, OWNER);
   try {
-    const armed = await runEffect(
-      arm(SESSION)({
-        purpose: "monitor.hit",
-        at: 1500,
-        alarmId: "proj",
-        sourceKey: "monitor",
-        payload: { spec: watchSpec(4), notifications: 2 },
-      }),
-    );
+    const armed = await commitArm(state, SESSION, {
+      purpose: "monitor.hit",
+      at: 1500,
+      alarmId: "proj",
+      sourceKey: "monitor",
+      payload: { spec: watchSpec(4), notifications: 2 },
+    });
     const chains = () => foldAlarmChains(state.kernel, SESSION);
     const live = chains().get("proj");
     if (live === undefined) throw new Error("missing chain");
@@ -239,33 +148,31 @@ test("watchStateOf projects armed and retired chains from the latest arm payload
     });
     for (const [reason, status] of [
       ["cancel", "cancelled"],
+      // #1254 r2 H2: the watch verb's create compensation retires with this reason.
+      ["create", "cancelled"],
       ["exhausted", "exhausted"],
       ["fired", "fired"],
       ["timeout", "fired"],
     ] as const) {
-      await runEffect(
-        arm(SESSION)({
-          purpose: "monitor.hit",
-          at: null,
-          alarmId: "proj",
-          supersedes: armed.occurrenceId,
-          sourceKey: "monitor",
-          payload: { reason },
-        }),
-      );
+      await commitArm(state, SESSION, {
+        purpose: "monitor.hit",
+        at: null,
+        alarmId: "proj",
+        supersedes: armed.occurrenceId,
+        sourceKey: "monitor",
+        payload: { reason },
+      });
       const retired = chains().get("proj");
       if (retired === undefined) throw new Error("missing chain");
       expect(watchStateOf(retired, SESSION)).toMatchObject({ status, fireAt: null });
     }
-    const cron = await runEffect(
-      arm(SESSION)({
-        purpose: "cron.tick",
-        at: 9000,
-        alarmId: "tick",
-        sourceKey: "cron",
-        payload: { expr: "*/5 * * * *", tz: "UTC", description: "grid" },
-      }),
-    );
+    const cron = await commitArm(state, SESSION, {
+      purpose: "cron.tick",
+      at: 9000,
+      alarmId: "tick",
+      sourceKey: "cron",
+      payload: { expr: "*/5 * * * *", tz: "UTC", description: "grid" },
+    });
     const cronChain = chains().get("tick");
     if (cronChain === undefined) throw new Error("missing cron chain");
     expect(watchStateOf(cronChain, SESSION)).toMatchObject({
@@ -278,14 +185,13 @@ test("watchStateOf projects armed and retired chains from the latest arm payload
   }
 });
 
-test("monitor ports drive the watch lifecycle as chain facts plus native handles", async () => {
-  const { state, scheduled, ports } = await alarmPortsFixture({ sessionId: SESSION, owner: OWNER });
-  const signal = new AbortController().signal;
-  try {
-    const created = await ports.create(
+test("monitor ports drive the watch lifecycle through the real entity's committing verb", async () => {
+  await withEntityAlarmPorts("entity-lifecycle-session", async (fx) => {
+    const signal = new AbortController().signal;
+    const created = await fx.ports.create(
       {
-        sessionId: SESSION,
-        turnId: "turn",
+        sessionId: fx.sessionId,
+        turnId: fx.turnId,
         id: "lifecycle",
         kind: "watch",
         spec: {
@@ -300,57 +206,87 @@ test("monitor ports drive the watch lifecycle as chain facts plus native handles
       id: "lifecycle",
       kind: "watch",
       status: "armed",
-      fireAt: 1000,
+      fireAt: FIXTURE_BASE,
       notifications: 0,
     });
-    expect(state.installed.map((spec) => spec.id)).toEqual(["lifecycle"]);
-    // The timed watch armed its timeout chain as a scheduled occurrence.
-    expect(scheduled).toMatchObject([
-      { purpose: "monitor.timeout", alarmId: "lifecycle:timeout", fireAt: 1500 },
-    ]);
+    expect(fx.installed.map((spec) => spec.id)).toEqual(["lifecycle"]);
+    // The timed watch armed its timeout chain; the ENTITY forwarded the
+    // non-hit occurrence through the durable DeliverAt door.
+    const timeoutChain = foldAlarmChains(fx.kernel, fx.sessionId).get("lifecycle:timeout");
+    expect(timeoutChain?.latest.at).toBe(FIXTURE_BASE + 500);
+    await awaitScheduled(fx.catalogFile, FIXTURE_BASE + 500);
+    // A continuation under a turn the live activation does not own is
+    // refused by the production registry — the entity appends nothing.
+    const stale = await runEffect(
+      Effect.flip(
+        fx.registryArm(fx.sessionId, "some-other-turn")({
+          purpose: "monitor.hit",
+          at: FIXTURE_BASE + 9_000,
+          alarmId: "stale-arm",
+          sourceKey: "monitor",
+          payload: {},
+        }),
+      ),
+    );
+    expect(stale.code).toBe("stale_turn");
+    expect(foldAlarmChains(fx.kernel, fx.sessionId).get("stale-arm")).toBeUndefined();
     // Rearm of a live watch is a no-op: the armed chain stands.
-    expect(await ports.rearm("lifecycle", SESSION, "turn", 1000, signal)).toMatchObject({
-      status: "armed",
-    });
+    expect(
+      await fx.ports.rearm("lifecycle", fx.sessionId, fx.turnId, FIXTURE_BASE, signal),
+    ).toMatchObject({ status: "armed", occurrenceId: created.occurrenceId });
     // A chain the session never armed is refused, not cancelled.
-    await expect(ports.cancel("ghost", SESSION, "turn", 1000, signal)).rejects.toMatchObject({
-      _tag: "MonitorRefused",
-    });
-    const cancelled = await ports.cancel("lifecycle", SESSION, "turn", 1000, signal);
+    await expect(
+      fx.ports.cancel("ghost", fx.sessionId, fx.turnId, FIXTURE_BASE, signal),
+    ).rejects.toMatchObject({ _tag: "MonitorRefused" });
+    const cancelled = await fx.ports.cancel("lifecycle", fx.sessionId, fx.turnId, FIXTURE_BASE, signal);
     expect(cancelled).toMatchObject({ status: "cancelled", fireAt: null });
-    expect(state.closed).toEqual(["lifecycle"]);
+    expect(fx.closed).toEqual(["lifecycle"]);
     // The timeout chain retired with its watch.
-    const timeout = foldAlarmChains(state.kernel, SESSION).get("lifecycle:timeout");
+    const timeout = foldAlarmChains(fx.kernel, fx.sessionId).get("lifecycle:timeout");
     expect(timeout?.latest).toMatchObject({ at: null, payload: { reason: "cancel" } });
     // Rearm revives the retired chain from its last sealed spec and reinstalls.
-    const revived = await ports.rearm("lifecycle", SESSION, "turn", 1000, signal);
+    const revived = await fx.ports.rearm("lifecycle", fx.sessionId, fx.turnId, FIXTURE_BASE, signal);
     expect(revived).toMatchObject({ status: "armed", notifications: 0 });
-    expect(state.installed.map((spec) => spec.id)).toEqual(["lifecycle", "lifecycle"]);
-  } finally {
-    state.plane.close();
-  }
+    expect(revived.occurrenceId).not.toBe(created.occurrenceId);
+    expect(fx.installed.map((spec) => spec.id)).toEqual(["lifecycle", "lifecycle"]);
+  });
 });
 
-test("monitor ports arm and revive a cron chain on its grid", async () => {
-  const { state, scheduled, ports } = await alarmPortsFixture({ sessionId: SESSION, owner: OWNER });
-  const signal = new AbortController().signal;
-  try {
-    const created = await ports.create(
-      { sessionId: SESSION, turnId: "turn", id: "grid", kind: "cron", expr: "*/5 * * * *", tz: "UTC", description: "five" },
+test("monitor ports arm and revive a cron chain on its grid through the real entity", async () => {
+  await withEntityAlarmPorts("entity-cron-session", async (fx) => {
+    const signal = new AbortController().signal;
+    const created = await fx.ports.create(
+      {
+        sessionId: fx.sessionId,
+        turnId: fx.turnId,
+        id: "grid",
+        kind: "cron",
+        expr: "*/5 * * * *",
+        tz: "UTC",
+        description: "five",
+      },
       signal,
     );
-    expect(created).toMatchObject({ id: "grid", kind: "cron", status: "armed", fireAt: 300_000 });
-    expect(scheduled).toMatchObject([
-      { purpose: "cron.tick", alarmId: "grid", fireAt: 300_000 },
-    ]);
+    // FIXTURE_BASE sits on a five-minute boundary; the next tick is +5min.
+    expect(created).toMatchObject({
+      id: "grid",
+      kind: "cron",
+      status: "armed",
+      fireAt: FIXTURE_BASE + 300_000,
+    });
+    await awaitScheduled(fx.catalogFile, FIXTURE_BASE + 300_000);
     // Native sources never track cron chains.
-    expect(state.installed).toEqual([]);
-    const cancelled = await ports.cancel("grid", SESSION, "turn", 1000, signal);
+    expect(fx.installed).toEqual([]);
+    const cancelled = await fx.ports.cancel("grid", fx.sessionId, fx.turnId, FIXTURE_BASE, signal);
     expect(cancelled).toMatchObject({ status: "cancelled", fireAt: null });
-    const revived = await ports.rearm("grid", SESSION, "turn", 400_000, signal);
-    expect(revived).toMatchObject({ status: "armed", fireAt: 600_000 });
-    expect(scheduled).toHaveLength(2);
-  } finally {
-    state.plane.close();
-  }
+    const revived = await fx.ports.rearm(
+      "grid",
+      fx.sessionId,
+      fx.turnId,
+      FIXTURE_BASE + 400_000,
+      signal,
+    );
+    expect(revived).toMatchObject({ status: "armed", fireAt: FIXTURE_BASE + 600_000 });
+    await awaitScheduled(fx.catalogFile, FIXTURE_BASE + 600_000);
+  });
 });

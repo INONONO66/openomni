@@ -8,9 +8,8 @@ import { Effect, Exit, Cause } from "effect";
 import { createMonitorTool } from "../src/tools/monitor";
 import { alarmChainReads, foldAlarmChains } from "../src/composition/alarm-plane";
 import { runEffect } from "./helpers/effect";
-import { alarmPortsFixture } from "./helpers/watch-fixture";
+import { FIXTURE_BASE, awaitScheduled, scheduledAt, withEntityAlarmPorts } from "./helpers/watch-fixture";
 import { activeInvocation } from "../../../packages/agent/src/core/gate/decide";
-import { CRON_TICK } from "../src/composition/bundles/cron";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
   const monitorTool = createMonitorTool();
@@ -91,7 +90,6 @@ test("monitor schema and dispatcher keep one strict create/rearm/cancel surface"
   ).rejects.toBeInstanceOf(ToolRefused);
 });
 
-const OWNER = "watch-test-owner";
 const SESSION = "monitor-session";
 
 const watchSpec = (notificationLimit: number) => ({
@@ -100,16 +98,18 @@ const watchSpec = (notificationLimit: number) => ({
   notificationLimit,
 });
 
-test("monitor controls fold create/rearm/cancel as chain facts scoped to the arming session", async () => {
-  const fixture = await alarmPortsFixture({ sessionId: SESSION, owner: OWNER });
-  const { state, ports } = fixture;
-  try {
+test("monitor controls fold create/rearm/cancel as chain facts through the real entity", async () => {
+  await withEntityAlarmPorts(SESSION, async (fx) => {
     // Enough committed history that the fold and the rearm's spec recovery
     // must page (`historyPage` default limit 100) instead of reading one page.
+    // Seeded as ledger facts under the LIVE activation's fence.
+    const row = fx.kernel.row(fx.sessionId);
+    const owner = row.fenceOwner;
+    if (owner === null) throw new Error("live activation without a fence");
     const filler = Array.from({ length: 110 }, (_, index) => ({
       id: `filler-${index + 1}`,
       parentId: index === 0 ? null : `filler-${index}`,
-      sessionId: SESSION,
+      sessionId: fx.sessionId,
       kind: "llm" as const,
       intent: { encodingVersion: 1 as const, value: { phase: "intent" } },
       effect: { encodingVersion: 1 as const, value: { phase: "pending" } },
@@ -117,26 +117,37 @@ test("monitor controls fold create/rearm/cancel as chain facts scoped to the arm
       ts: 2,
     }));
     await runEffect(
-      state.kernel.commit({
-        sessionId: SESSION,
-        owner: OWNER,
-        fence: state.fence,
+      fx.kernel.commit({
+        sessionId: fx.sessionId,
+        owner,
+        fence: row.fence,
         now: 2,
-        expectedRevision: state.kernel.row(SESSION).revision,
+        expectedRevision: row.revision,
         actions: filler,
-        state: "idle",
+        state: row.state,
       }),
     );
-    const monitorTool = createMonitorTool(ports);
-    const armed = await ports.create(
-      { id: "control", sessionId: SESSION, turnId: "turn", kind: "watch", spec: watchSpec(8) },
+    const monitorTool = createMonitorTool(fx.ports);
+    const armed = await fx.ports.create(
+      {
+        id: "control",
+        sessionId: fx.sessionId,
+        turnId: fx.turnId,
+        kind: "watch",
+        spec: watchSpec(8),
+      },
       new AbortController().signal,
     );
-    expect(armed).toMatchObject({ id: "control", kind: "watch", status: "armed", fireAt: 1000 });
-    expect(state.installed.map((spec) => spec.id)).toEqual(["control"]);
+    expect(armed).toMatchObject({
+      id: "control",
+      kind: "watch",
+      status: "armed",
+      fireAt: FIXTURE_BASE,
+    });
+    expect(fx.installed.map((spec) => spec.id)).toEqual(["control"]);
     const context = {
-      sessionId: SESSION,
-      turnId: "turn",
+      sessionId: fx.sessionId,
+      turnId: fx.turnId,
       callId: "call",
       signal: new AbortController().signal,
     };
@@ -151,83 +162,83 @@ test("monitor controls fold create/rearm/cancel as chain facts scoped to the arm
     expect(
       await monitorTool.execute({ operation: { op: "cancel", id: "control" } }, context),
     ).toMatchObject({ status: "cancelled", fireAt: null });
-    expect(state.closed).toEqual(["control"]);
+    expect(fx.closed).toEqual(["control"]);
     // Rearm revives the cancelled chain under a fresh occurrence.
-    const revived = await monitorTool.execute({ operation: { op: "rearm", id: "control" } }, context);
+    const revived = await monitorTool.execute(
+      { operation: { op: "rearm", id: "control" } },
+      context,
+    );
     expect(revived).toMatchObject({ id: "control", status: "armed", notifications: 0 });
     expect(revived.occurrenceId).not.toBe(armed.occurrenceId);
-    expect(state.installed.map((spec) => spec.id)).toEqual(["control", "control"]);
-  } finally {
-    state.plane.close();
-  }
+    expect(fx.installed.map((spec) => spec.id)).toEqual(["control", "control"]);
+  });
 });
 
 test("capability wakes spend the chain budget: prompt, re-arm, then exhaustion retire", async () => {
   // The prompt append is the entity's (`AlarmWakeContext.prompt`); here it is
   // recorded so the chain budget, re-arm and retire are what the test proves.
+  // Every arm the handler commits goes through the REAL entity verb.
   const prompts: { content: string; payload?: unknown }[] = [];
   const prompt: Bundle.AlarmPromptVerb = (input) => {
     prompts.push(input);
     return Effect.succeed({ seq: prompts.length });
   };
-  const fixture = await alarmPortsFixture({ sessionId: SESSION, owner: OWNER });
-  const { state, capability, arm } = fixture;
-  const kernel = state.plane.openKernel(SESSION);
-  const wake = (content: string) => {
-    const chain = foldAlarmChains(kernel, SESSION).get("budget");
-    if (chain === undefined || chain.latest.at === null) throw new Error("no armed chain");
-    const notice = [...fixture.notices]
-      .reverse()
-      .find((candidate) => candidate.occurrenceId === chain.latest.occurrenceId);
-    if (notice === undefined) throw new Error("unobserved arm");
-    return runEffect(
-      capability.wake(
-        {
-          occurrenceId: chain.latest.occurrenceId,
-          purpose: Bundle.MONITOR_HIT,
-          alarmId: "budget",
-          armSeq: notice.armSeq,
-          sourceKey: Bundle.MONITOR_SOURCE,
-          payload: JSON.stringify({
-            spec: chain.latest.payload.spec,
-            notifications: chain.latest.payload.notifications,
-            hit: { content, terminal: false, detail: "line:1" },
-          }),
-          fireAt: 1000,
-        },
-        {
-          sessionId: SESSION,
-          reads: alarmChainReads(kernel, SESSION),
-          arm: arm(SESSION),
-          now: 1010,
-          prompt,
-        },
-      ),
-    );
-  };
-  try {
-    await fixture.ports.create(
-      { id: "budget", sessionId: SESSION, turnId: "turn", kind: "watch", spec: watchSpec(2) },
+  await withEntityAlarmPorts(SESSION, async (fx) => {
+    const wake = (content: string) => {
+      const live = fx.kernel.armedAlarms().find((candidate) => candidate.alarmId === "budget");
+      if (live === undefined) throw new Error("no armed chain");
+      const chain = foldAlarmChains(fx.kernel, fx.sessionId).get("budget");
+      if (chain === undefined || chain.latest.at === null) throw new Error("no armed chain");
+      return runEffect(
+        fx.capability.wake(
+          {
+            occurrenceId: live.occurrenceId,
+            purpose: Bundle.MONITOR_HIT,
+            alarmId: "budget",
+            armSeq: live.armSeq,
+            sourceKey: Bundle.MONITOR_SOURCE,
+            payload: JSON.stringify({
+              spec: chain.latest.payload.spec,
+              notifications: chain.latest.payload.notifications,
+              hit: { content, terminal: false, detail: "line:1" },
+            }),
+            fireAt: FIXTURE_BASE,
+          },
+          {
+            sessionId: fx.sessionId,
+            reads: alarmChainReads(fx.kernel, fx.sessionId),
+            arm: fx.entityArm,
+            now: FIXTURE_BASE + 10,
+            prompt,
+          },
+        ),
+      );
+    };
+    await fx.ports.create(
+      { id: "budget", sessionId: fx.sessionId, turnId: fx.turnId, kind: "watch", spec: watchSpec(2) },
       new AbortController().signal,
     );
     expect(await wake("WAKE first")).toBe("delivered");
-    const afterFirst = foldAlarmChains(kernel, SESSION).get("budget");
-    expect(afterFirst?.latest).toMatchObject({ at: 1010, payload: { notifications: 1 } });
-    expect(state.closed).toEqual([]);
+    const afterFirst = foldAlarmChains(fx.kernel, fx.sessionId).get("budget");
+    expect(afterFirst?.latest).toMatchObject({
+      at: FIXTURE_BASE + 10,
+      payload: { notifications: 1 },
+    });
+    expect(fx.closed).toEqual([]);
     // The second wake spends the whole budget: prompt + exhaustion retire.
     expect(await wake("WAKE second")).toBe("exhausted");
-    const afterSecond = foldAlarmChains(kernel, SESSION).get("budget");
+    const afterSecond = foldAlarmChains(fx.kernel, fx.sessionId).get("budget");
     expect(afterSecond?.latest).toMatchObject({ at: null, payload: { reason: "exhausted" } });
-    // The handler closes the native source AND the retiring arm's hook does:
-    // close is idempotent fire-and-forget, so the overlap is harmless.
-    expect(state.closed).toEqual(["budget", "budget"]);
+    expect(fx.kernel.armedAlarms().filter((live) => live.alarmId === "budget")).toEqual([]);
+    // The handler closes the native source AND the entity's post-commit arm
+    // notice does: close is idempotent fire-and-forget, so the overlap is
+    // harmless (and exactly what production composes).
+    expect(fx.closed).toEqual(["budget", "budget"]);
     expect(prompts).toEqual([
       { content: "WAKE first", payload: { watchId: "budget", detail: "line:1" } },
       { content: "WAKE second", payload: { watchId: "budget", detail: "line:1" } },
     ]);
-  } finally {
-    state.plane.close();
-  }
+  });
 });
 
 /** A compiled tool/pre snapshot the invocation frame carries into `evaluateGate`. */
@@ -244,13 +255,11 @@ function monitorPolicy(extraRows: readonly Record<string, unknown>[] = []) {
 }
 
 test("cron create validates the grid and consults the gate before arming the chain", async () => {
-  const fixture = await alarmPortsFixture({ sessionId: SESSION, owner: OWNER });
-  const { state, ports, scheduled } = fixture;
-  try {
-    const monitorTool = createMonitorTool(ports);
+  await withEntityAlarmPorts(SESSION, async (fx) => {
+    const monitorTool = createMonitorTool(fx.ports);
     const context = {
-      sessionId: SESSION,
-      turnId: "turn",
+      sessionId: fx.sessionId,
+      turnId: fx.turnId,
       callId: "call",
       signal: new AbortController().signal,
     };
@@ -259,10 +268,7 @@ test("cron create validates the grid and consults the gate before arming the cha
       description: "five minute grid",
       source: { kind: "cron" as const, expr, tz: "UTC" },
     });
-    const run = (
-      policy: ReturnType<typeof monitorPolicy>,
-      operation: ReturnType<typeof cron>,
-    ) =>
+    const run = (policy: ReturnType<typeof monitorPolicy>, operation: ReturnType<typeof cron>) =>
       activeInvocation.run(
         {
           executor: {} as never,
@@ -289,17 +295,14 @@ test("cron create validates the grid and consults the gate before arming the cha
       name: "ToolRefused",
       message: "monitor refused: cron arm denied",
     });
-    expect(foldAlarmChains(state.plane.openKernel(SESSION), SESSION).size).toBe(0);
-    expect(scheduled).toEqual([]);
-    // An allowed grid arms one cron chain at the next boundary and schedules it.
+    expect(foldAlarmChains(fx.kernel, fx.sessionId).size).toBe(0);
+    expect(scheduledAt(fx.catalogFile, FIXTURE_BASE + 300_000)).toBe(false);
+    // An allowed grid arms one cron chain at the next boundary; the REAL
+    // entity schedules it through the durable DeliverAt door.
     const armed = await run(monitorPolicy(), cron("*/5 * * * *"));
     expect(armed).toMatchObject({ id: "minted", kind: "cron", status: "armed", notifications: 0 });
-    // fixture clock 1000 -> the next */5 UTC boundary is 1970-01-01T00:05:00Z.
-    expect(armed.fireAt).toBe(300_000);
-    expect(scheduled).toMatchObject([
-      { alarmId: "minted", purpose: CRON_TICK, fireAt: 300_000 },
-    ]);
-  } finally {
-    state.plane.close();
-  }
+    // FIXTURE_BASE sits on a five-minute boundary: the next tick is +5min.
+    expect(armed.fireAt).toBe(FIXTURE_BASE + 300_000);
+    await awaitScheduled(fx.catalogFile, FIXTURE_BASE + 300_000);
+  });
 });
