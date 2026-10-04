@@ -32,7 +32,7 @@ export const WatchState = z
 export type WatchState = z.infer<typeof WatchState>;
 
 /** Create input: identity plus the sealed source; lifecycle fields are plane-owned. */
-export type WatchCreate =
+type WatchCreate =
   | {
       readonly sessionId: string;
       readonly id: string;

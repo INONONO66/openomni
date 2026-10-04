@@ -1,12 +1,11 @@
 import { Bundle } from "@openomni/agent";
 import { Cron } from "@openomni/protocol";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { z } from "zod";
-import type { ALARM_CAPABILITY_KEY, AlarmCapabilityService } from "./alarm";
 
 /**
- * The `cron` bundle (#1254): one `cron.tick` purpose over the alarm
- * capability. A tick wakes with its grid time; the handler prompts once
+ * The `cron` bundle's purpose (#1254): one `cron.tick` purpose over the alarm
+ * capability (the bundle's `requires: alarm` edge is #1255's compose mechanics). A tick wakes with its grid time; the handler prompts once
  * (carrying the count of grid times missed while the host was down — there
  * is no catch-up storm), then re-arms the chain at the next grid time with
  * `supersedes`. State is the chain; nothing rides process memory.
@@ -78,19 +77,4 @@ function cronTick(deps: CronWakeDeps): Bundle.AlarmPurposeHandler {
 /** The cron bundle's purpose declaration for the capability composition. */
 export function cronPurposes(deps: CronWakeDeps): Bundle.AlarmBundlePurposes {
   return { bundle: "cron", purposes: [{ name: CRON_TICK, handler: cronTick(deps) }] };
-}
-
-/** The bundle itself: a pure dependency edge on the alarm capability. */
-export function cronBundle(capability: typeof AlarmCapabilityService): Bundle.BundleDefinition {
-  // Explicit type arguments: see `alarmBundle`.
-  return Bundle.bundle<[], [typeof AlarmCapabilityService], never, never, typeof ALARM_CAPABILITY_KEY>({
-    name: "cron",
-    provides: [],
-    requires: [capability],
-    layer: Layer.effectDiscard(
-      Effect.gen(function* () {
-        yield* capability;
-      }),
-    ),
-  });
 }

@@ -213,14 +213,14 @@ export function pathSource(
 }
 
 /** The armed occurrence a native hit resends (the cluster dedupes on it). */
-export interface WatchOccurrenceRef {
+interface WatchOccurrenceRef {
   readonly occurrenceId: string;
   readonly alarmId: string;
   readonly armSeq: number;
 }
 
 /** One native hit, merged onto the armed occurrence payload the source resends. */
-export interface WatchHit {
+interface WatchHit {
   readonly content: string;
   readonly terminal: boolean;
   /** Transport detail (PTY line slot, path stat identity, exit) — never an id. */

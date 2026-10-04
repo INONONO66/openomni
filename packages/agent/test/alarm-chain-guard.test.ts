@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, test } from "bun:test";
+import { runTestSync } from "./helpers/isolated";
 import { Effect } from "effect";
 import { Alarm } from "@openomni/protocol";
 import {
@@ -141,7 +142,7 @@ describe("alarm row builders", () => {
 describe("composeAlarmPurposes registry", () => {
   test("rejects a capability declaring a reserved purpose with a typed compose error", () => {
     for (const purpose of [...RESERVED_PURPOSES, "rescan"]) {
-      const error = Effect.runSync(
+      const error = runTestSync(
         Effect.flip(
           composeAlarmPurposes({ capabilities: [{ bundle: "monitor", purposes: [purpose] }] }),
         ),
@@ -154,7 +155,7 @@ describe("composeAlarmPurposes registry", () => {
   });
 
   test("rejects a duplicate purpose across capabilities with a typed compose error", () => {
-    const error = Effect.runSync(
+    const error = runTestSync(
       Effect.flip(
         composeAlarmPurposes({
           capabilities: [
@@ -170,7 +171,7 @@ describe("composeAlarmPurposes registry", () => {
   });
 
   test("accepts a capability declaring cron.tick and keeps the reserved purposes present", () => {
-    const registry = Effect.runSync(
+    const registry = runTestSync(
       composeAlarmPurposes({ capabilities: [{ bundle: "cron", purposes: ["cron.tick"] }] }),
     );
     expect(registry.get("cron.tick")).toBe("cron");

@@ -1,13 +1,8 @@
 import { expect, test } from "bun:test";
 import { Bundle, Core } from "@openomni/agent";
 import { Effect } from "effect";
-import {
-  AlarmCapabilityService,
-  selectAlarmBundles,
-} from "../src/composition/bundles/alarm";
 import { CRON_TICK, cronPurposes } from "../src/composition/bundles/cron";
-import { monitorBundle, monitorPurposes } from "../src/composition/bundles/monitor";
-import { cronBundle } from "../src/composition/bundles/cron";
+import { monitorPurposes } from "../src/composition/bundles/monitor";
 import { runEffect } from "./helpers/effect";
 
 // #1254 S4: ctx.prompt — recorded for assertion, typed as Lane 4's verb.
@@ -32,37 +27,13 @@ async function composedCapability(): Promise<Bundle.AlarmCapabilityDefinition> {
   );
 }
 
-test("selectAlarmBundles cascades capability-off into recorded disabled facts", async () => {
-  const off = selectAlarmBundles({ alarm: undefined, dependents: [monitorBundle, cronBundle] });
-  expect(off.definitions).toEqual([]);
-  expect(off.disabled).toEqual([
-    {
-      bundle: "monitor",
-      reason: "requires @openomni/bundle/alarm/Capability: alarm capability not composed",
-    },
-    {
-      bundle: "cron",
-      reason: "requires @openomni/bundle/alarm/Capability: alarm capability not composed",
-    },
-  ]);
+test("alarmCapability composes the monitor and cron purposes under their owning bundles", async () => {
   const capability = await composedCapability();
-  const on = selectAlarmBundles({ alarm: capability, dependents: [monitorBundle, cronBundle] });
-  expect(on.disabled).toEqual([]);
-  expect(on.definitions.map((definition) => definition.name)).toEqual(["alarm", "monitor", "cron"]);
-  // The composed registry binds each purpose to its owning bundle.
+  // The composed registry binds each product purpose to its declaring bundle.
   expect([...capability.registry.entries()].filter(([, owner]) => owner !== "core")).toEqual([
     ["monitor.hit", "monitor"],
     ["monitor.timeout", "monitor"],
     ["cron.tick", "cron"],
-  ]);
-  // The bundle tag law: alarm provides the capability key, dependents require it.
-  expect(on.definitions.map((definition) => [
-    definition.provides.map((tag) => tag.key),
-    definition.requires.map((tag) => tag.key),
-  ])).toEqual([
-    [[AlarmCapabilityService.key], []],
-    [[], [AlarmCapabilityService.key]],
-    [[], [AlarmCapabilityService.key]],
   ]);
 });
 

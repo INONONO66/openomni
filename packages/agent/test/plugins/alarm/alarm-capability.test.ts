@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { runTestSync } from "../../helpers/isolated";
 import { Effect } from "effect";
 import type { Alarm } from "@openomni/protocol";
 import { AlarmComposeError, composeAlarmPurposes } from "../../../src/core/alarm";
@@ -92,7 +93,7 @@ function capability(input: {
   readonly extra?: readonly { readonly bundle: string; readonly purposes: readonly string[] }[];
 }): AlarmCapabilityDefinition {
   const deps = wakeDeps(input.prompts ?? [], input.closed ?? []);
-  return Effect.runSync(
+  return runTestSync(
     alarmCapability({
       bundles: [
         { bundle: "monitor", purposes: watchPurposes(deps) },
@@ -129,7 +130,7 @@ describe("purpose registry through composeAlarmPurposes", () => {
       arm: () => stubArm([]),
       watch: { install: () => Effect.void },
     });
-    const error = Effect.runSync(Effect.flip(build));
+    const error = runTestSync(Effect.flip(build));
     expect(error).toBeInstanceOf(AlarmComposeError);
     expect(error.code).toBe("reserved_purpose");
     expect(error.bundle).toBe("rogue");
@@ -151,7 +152,7 @@ describe("purpose registry through composeAlarmPurposes", () => {
       arm: () => stubArm([]),
       watch: { install: () => Effect.void },
     });
-    const error = Effect.runSync(Effect.flip(build));
+    const error = runTestSync(Effect.flip(build));
     expect(error.code).toBe("duplicate_purpose");
     expect(error.bundle).toBe("copycat");
   });
@@ -172,7 +173,7 @@ describe("wake dispatch", () => {
     const prompts: PromptCall[] = [];
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm(calls), prompts });
-    const outcome = Effect.runSync(
+    const outcome = runTestSync(
       definition.wake(
         fired({
           payload: JSON.stringify({
@@ -191,7 +192,7 @@ describe("wake dispatch", () => {
   test("an unregistered purpose is a typed wake failure with zero handler calls", () => {
     const prompts: PromptCall[] = [];
     const definition = capability({ arm: stubArm([]), prompts });
-    const error = Effect.runSync(
+    const error = runTestSync(
       Effect.flip(
         definition.wake(
           fired({ purpose: "reminder.due", payload: "{}" }),
@@ -210,7 +211,7 @@ describe("monitor.hit over the supersedes lifecycle", () => {
     const prompts: PromptCall[] = [];
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm([]), prompts });
-    const outcome = Effect.runSync(
+    const outcome = runTestSync(
       definition.wake(
         fired({
           payload: JSON.stringify({
@@ -239,7 +240,7 @@ describe("monitor.hit over the supersedes lifecycle", () => {
     const closed: string[] = [];
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm([]), prompts, closed });
-    const outcome = Effect.runSync(
+    const outcome = runTestSync(
       definition.wake(
         fired({
           payload: JSON.stringify({
@@ -270,7 +271,7 @@ describe("monitor.hit over the supersedes lifecycle", () => {
     const closed: string[] = [];
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm([]), closed });
-    const outcome = Effect.runSync(
+    const outcome = runTestSync(
       definition.wake(
         fired({
           payload: JSON.stringify({
@@ -289,7 +290,7 @@ describe("monitor.hit over the supersedes lifecycle", () => {
 
   test("a hit without native detail is a typed wake failure", () => {
     const definition = capability({ arm: stubArm([]) });
-    const error = Effect.runSync(
+    const error = runTestSync(
       Effect.flip(
         definition.wake(
           fired({ payload: JSON.stringify({ spec, notifications: 0 }) }),
@@ -302,7 +303,7 @@ describe("monitor.hit over the supersedes lifecycle", () => {
 
   test("an arm refusal during re-arm surfaces as a typed wake failure", () => {
     const definition = capability({ arm: stubArm([]) });
-    const error = Effect.runSync(
+    const error = runTestSync(
       Effect.flip(
         definition.wake(
           fired({
@@ -327,7 +328,7 @@ describe("monitor.timeout", () => {
     const closed: string[] = [];
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm([]), prompts, closed });
-    const outcome = Effect.runSync(
+    const outcome = runTestSync(
       definition.wake(
         fired({
           purpose: MONITOR_TIMEOUT,
@@ -361,7 +362,7 @@ describe("monitor.timeout", () => {
   test("an already retired chain lapses without a superseding arm", () => {
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm([]) });
-    const outcome = Effect.runSync(
+    const outcome = runTestSync(
       definition.wake(
         fired({
           purpose: MONITOR_TIMEOUT,
@@ -385,7 +386,7 @@ describe("verbs", () => {
       ...spec,
       watch: { command: "make build", description: "build watch", timeout_ms: 60_000 },
     };
-    const result = Effect.runSync(
+    const result = runTestSync(
       definition.verbs.watch({ sessionId: "session-1", watchId: "watch-9", spec: timed, now: 1_000 }),
     );
     expect(result).toEqual({ alarmId: "watch-9", occurrenceId: "occ-1" });
@@ -413,7 +414,7 @@ describe("verbs", () => {
       ...spec,
       watch: { command: "", description: "broken", persistent: true },
     } as Alarm.WatchSpec;
-    const error = Effect.runSync(
+    const error = runTestSync(
       Effect.flip(
         definition.verbs.watch({ sessionId: "session-1", watchId: "w", spec: broken, now: 0 }),
       ),
@@ -426,7 +427,7 @@ describe("verbs", () => {
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm(calls) });
     const refused = (purpose: string) =>
-      Effect.runSync(
+      runTestSync(
         Effect.flip(
           definition.verbs.arm("session-1")({ purpose, at: 1, payload: {}, sourceKey: "monitor" }),
         ),
@@ -435,7 +436,7 @@ describe("verbs", () => {
     expect(refused("rescan").code).toBe("reserved_purpose");
     expect(refused("reminder.due").code).toBe("unknown_purpose");
     expect(calls).toEqual([]);
-    const accepted = Effect.runSync(
+    const accepted = runTestSync(
       definition.verbs.arm("session-1")({
         purpose: MONITOR_HIT,
         at: 2,

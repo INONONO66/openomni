@@ -1,5 +1,5 @@
 import { Bundle, Core } from "@openomni/agent";
-import { Alarm, Cron, type LedgerAction, type PlainObject } from "@openomni/protocol";
+import { Alarm, Cron, type LedgerAction, type PlainObject, PlainObjectSchema } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
 import { MonitorRefused, type MonitorPorts, type WatchState } from "../tools/core/watch";
@@ -25,7 +25,7 @@ const ArmIntent = z.object({
   supersedes: z.string().nullable(),
   alarmId: z.string(),
   sourceKey: z.string(),
-  payload: z.record(z.string(), z.unknown()),
+  payload: PlainObjectSchema,
 });
 
 const FiredIntent = z.object({
@@ -36,13 +36,13 @@ const FiredIntent = z.object({
 });
 
 /** One folded arm row: the chain's current (or final) occurrence for its alarm. */
-export interface AlarmArmRow {
+interface AlarmArmRow {
   readonly occurrenceId: string;
   readonly purpose: string;
   readonly at: number | null;
   readonly supersedes: string | null;
   readonly sourceKey: string;
-  readonly payload: Readonly<Record<string, unknown>>;
+  readonly payload: PlainObject;
   readonly ts: number;
   readonly actionId: string;
 }
@@ -404,7 +404,7 @@ function requireChain(deps: AlarmMonitorDeps, sessionId: string, id: string): Al
 /** The last committed arm payload that still carries the chain's spec (watch) or cron fields. */
 function chainSpec(deps: AlarmMonitorDeps, sessionId: string, id: string) {
   const kernel = deps.openKernel(sessionId);
-  let found: Readonly<Record<string, unknown>> | undefined;
+  let found: PlainObject | undefined;
   let after = 0;
   for (;;) {
     const page = kernel.historyPage(sessionId, { afterRevision: after });
