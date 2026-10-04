@@ -45,6 +45,10 @@ and ordinary Effect callbacks are allowed implementations, not an arbitrary
 authority-registration API. No concrete hooks/MCP/LSP bundle or W3 membership
 mount/unmount API is delivered by this floor. `Snapshot.bundles` records
 selection; it does not make volatile scopes durable or establish full G1.
+(#1256 delivers the first concrete hooks bundle through that data road:
+`apps/openomni/src/bundles/hooks-json` compiles the Owner's hooks file into
+gate rows over the removable `plugins/hook` capability's `hook/process`
+handler — still declarations plus named handlers, no registration API.)
 
 ## Receipt location and scope
 
