@@ -22,7 +22,7 @@ import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
 import { CommitRefused } from "../../src/core/store/errors";
 import { writerLoop, type ActivationHandle, type SessionKernel } from "../../src/core/entity";
-import { AdmissionFailure, AlarmOccurrence, AlarmRpc, DeliverRpc, ReadRpc, ResolveRpc } from "../../src/core/messages";
+import { AdmissionFailure, AlarmOccurrence, type AlarmRpc, type DeliverRpc, type ReadRpc, type ResolveRpc } from "../../src/core/messages";
 import type { SessionEntityPorts } from "../../src/core/run";
 import { clusterTempDir, makeTurnPort, resolvedRunner, sessionFileFor } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";

@@ -10,7 +10,7 @@ import { AgentFailure } from "../../../src/core/failure";
 import { LlmRunFailure } from "../../../src/model";
 import { runChatAttempts } from "../../helpers/effect-g1";
 import { compiledPolicy } from "../../helpers/compiled-policy";
-import { Alarm, LedgerAction, type PlainObject, type PlainValue, type SessionTransition } from "@openomni/protocol";
+import { LedgerAction, type PlainObject, type PlainValue, type SessionTransition } from "@openomni/protocol";
 
 
 const usage = {
