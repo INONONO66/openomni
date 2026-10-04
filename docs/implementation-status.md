@@ -71,6 +71,10 @@ folded to a recorded `fired{stale}` fact), and exempts `monitor.hit`
 occurrences from the entity's `sendAlarm` time delivery (the installed native
 source resends them with the hit; `monitor-app.test.ts` pins the second turn,
 the alarm prompt, the `<occurrenceId>:delivered` row and the re-armed chain).
+The armed budget bounds the index, so only an arm that adds a chain (non-null
+`at`, no armed row for its id) consults `maxArmed`; a retire or a re-arm of an
+armed chain commits at a full budget and a retire frees its slot
+(`alarm-budget.test.ts`).
 `Protocol.Cron.next(expr, fromMs, tz)` / `Cron.occurrences(expr, afterMs,
 untilMs, tz, limit)` is a dependency-free Vixie grid over `Intl.DateTimeFormat`
 zone math (DST gap skipped, overlap fires once, 366-day `unreachable` bound,
