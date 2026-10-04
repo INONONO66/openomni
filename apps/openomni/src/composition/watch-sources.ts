@@ -260,8 +260,8 @@ function terminalSource(
   };
 }
 
-/** The fs.watch slice a path watch consumes; injected so a test controls when the native stream goes live (G015). */
-export interface PathWatcher {
+/** The fs.watch slice a path watch consumes; injected so a test models a native event that never arrives (G015). */
+interface PathWatcher {
   on(event: "error", listener: (error: Error) => void): void;
   close(): void;
 }
@@ -273,11 +273,31 @@ export type PathWatchInstaller = (
 const nativePathWatch: PathWatchInstaller = (directory, listener) =>
   watch(directory, { recursive: true }, listener);
 
+/**
+ * Bun's macOS fs.watch rebuilds one shared FSEvents stream whenever any watcher
+ * in the process opens or closes, and an event landing during the rebuild is
+ * dropped for good, not delayed (oven-sh/bun#44385; measured on Bun 1.4.1 at
+ * load 10-12: the create test loses ~10% of native events, and a single
+ * post-install stat does not recover them because the rebuild outlives the
+ * fs.watch() return). A path watch therefore reconciles its stat identity on
+ * this cadence beside the native callback; the identity key makes both paths
+ * idempotent, so a hit is never doubled.
+ */
+const PATH_RECONCILE_MS = 1_000;
+/** Runs `tick` on the reconcile cadence until the returned cancel is called; injected so a test drives the ticks. */
+export type ReconcileScheduler = (tick: () => void) => () => void;
+const nativeReconcile: ReconcileScheduler = (tick) => {
+  const timer = setInterval(tick, PATH_RECONCILE_MS);
+  timer.unref();
+  return () => clearInterval(timer);
+};
+
 export function pathSource(
   spec: Extract<Alarm.Watch, { path: string }>,
   event: (content: string, identity: string) => void,
   failure: (error: Error) => void,
   installWatch: PathWatchInstaller = nativePathWatch,
+  schedule: ReconcileScheduler = nativeReconcile,
 ): AlarmSource {
   // The stat identity is the transport occurrence key; `previous` is only the
   // physical snapshot that classifies create/modify. Durable dedupe is the ledger's.
@@ -304,15 +324,15 @@ export function pathSource(
     if (name === null || name === basename(spec.path)) observe();
   });
   source.on("error", failure);
-  // Bun 1.4 can return from fs.watch() before the native stream is live, so a
-  // create/modify landing in that window is otherwise lost (G015). Reconcile
-  // once by the stat identity; a native callback that ALSO fires for the same
-  // state sees an unchanged identity and does not double-fire.
+  const cancel = schedule(observe);
+  // The first reconcile runs at once so a create that landed while fs.watch()
+  // was still installing is observed before the first cadence tick.
   observe();
   return {
     observe,
     close() {
       closed = true;
+      cancel();
       source.close();
       return Promise.resolve();
     },
@@ -392,8 +412,10 @@ export function createWatchSources(
     readonly failure: (watchId: string, error: Error) => void;
     /** Absent means this brain has no body: terminal watches are refused at create. */
     readonly machines?: TerminalWatchMachines;
-    /** Test seam for the fs.watch startup window (G015); production uses the native installer. */
+    /** Test seam for a lost native event (G015); production uses the native installer. */
     readonly pathWatch?: PathWatchInstaller;
+    /** Test seam for the reconcile cadence (G015); production uses a 1 s unref'd interval. */
+    readonly reconcile?: ReconcileScheduler;
   },
 ): WatchSources {
   // The watch plane owns the boot-time runtime requirement: composing it on a
@@ -497,6 +519,7 @@ export function createWatchSources(
         enqueue(holder, { content, terminal: false, detail: `path:${identity}` }),
       (error) => sourceFailure(spec, holder, error),
       options.pathWatch ?? nativePathWatch,
+      options.reconcile ?? nativeReconcile,
     );
   }
 
