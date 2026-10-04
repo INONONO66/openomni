@@ -134,9 +134,9 @@ test("dispatch table stays captured across configure even when the next generati
     yield* generations.configure(b, options.ledger.commit(selectAction(b.snapshot)).pipe(
       Effect.mapError((error: LedgerError) => new CommitFailed({ error })),
     ));
-    expect(yield* executeCaptured).toMatchObject({ toolCallId: "call-2", output: "B" });
+    expect(yield* executeCaptured).toMatchObject({ toolCallId: "call-2", content: "B" });
     release.resolve("A");
-    expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "call-1", output: "A" });
+    expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "call-1", content: "A" });
     yield* Deferred.await(retired).pipe(Effect.timeout("5 seconds"));
     const results = sessionTree(fiberSessionId).filter((action: LedgerAction.Node) =>
       action.kind === "tool" && effectValue(action).phase === "result");

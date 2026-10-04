@@ -121,7 +121,7 @@ export function handleToolResult(
   context.sink.onToolResult({
     id: context.id(),
     toolCallId,
-    output: outputPayload.output,
+    content: outputPayload.output,
     ...(isError && { isError: true }),
   });
 }

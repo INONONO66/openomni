@@ -65,7 +65,7 @@ describe("createTurnDispatcher", () => {
           return "captured";
         }),
       ])));
-      expect(yield* dispatcher.execute(call("invocation"), context)).toMatchObject({ output: "captured" });
+      expect(yield* dispatcher.execute(call("invocation"), context)).toMatchObject({ content: "captured" });
       expect(bodies).toBe(1);
       expect(currentInvocation).toThrow(ExecutorContextError);
     })),
@@ -87,7 +87,7 @@ describe("createTurnDispatcher", () => {
     const result = await isolated(Effect.flatMap(dispatcher, (value) => value.execute(call("echo"), context)));
 
     expect(result.isError).toBeUndefined();
-    expect(result.output).toBe("ok");
+    expect(result.content).toBe("ok");
     expect(recording.committed.filter((action) => action.kind === "tool").map(opPhaseOf)).toEqual([
       "echo:intent",
       "echo:result",
@@ -182,7 +182,7 @@ describe("tool body outcomes", () => {
     const result = await isolated(dispatcher.execute(call("fast"), context));
 
     expect(result.isError).toBeUndefined();
-    expect(result.output).toBe("done");
+    expect(result.content).toBe("done");
   });
 
   it("fails closed when the body violates the output schema", async () => {

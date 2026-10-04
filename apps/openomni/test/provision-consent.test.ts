@@ -105,7 +105,7 @@ it("executes exactly the original promotion after authenticated consent", async 
     expect(request.parsedInput).toEqual({ operation: PROMOTE });
     const registered = await f.answer();
     expect(registered.isError).toBeUndefined();
-    expect(registered.output).toMatch(/^contact contact:mallory registered \(tier \w+\)$/);
+    expect(registered.content).toMatch(/^contact contact:mallory registered \(tier \w+\)$/);
     expect(malloryStanding()).toBe("registered");
     expect(f.kernel.requestById(request.requestId)?.state).toBe("resolved");
     expect(f.ledger.actionById?.(`${request.requestId}:application`)).toBeDefined();
@@ -138,7 +138,7 @@ it("merges only the approved endpoint into the exact target", async () => {
   try {
     const merged = await f.answer();
     expect(merged.isError).toBeUndefined();
-    expect(merged.output).toBe("endpoint ep:mallory merged into actor:alice");
+    expect(merged.content).toBe("endpoint ep:mallory merged into actor:alice");
     expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("actor:alice");
   } finally {
     await f.close();
@@ -159,7 +159,7 @@ for (const [name, operation] of [
     try {
       const result = await f.answer();
       expect(result.isError).toBe(true);
-      expect(result.output).toContain("endpoint or target is missing, or already bound");
+      expect(result.content).toContain("endpoint or target is missing, or already bound");
       expect(actors().getEndpoint("ep:mallory")?.actorId).toBe("contact:mallory");
     } finally {
       await f.close();

@@ -104,7 +104,7 @@ export function messageFixture(
           { id: crypto.randomUUID(), tool: "send_message", input: payload },
           { sessionId, turnId: input.turnId },
         );
-        return { kind: "result" as const, text: result.output ?? "" };
+        return { kind: "result" as const, text: result.content ?? "" };
       }),
     },
     runtime,

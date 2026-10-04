@@ -73,13 +73,13 @@ export function requestToolStep(
     for (const part of message.parts) {
       if (part.type !== "tool" || part.callID !== call.id) continue;
       if (part.state.status === "completed")
-        return { id: call.id, toolCallId: call.id, toolName: call.tool, output: part.state.output };
+        return { id: call.id, toolCallId: call.id, toolName: call.tool, content: part.state.output };
       if (part.state.status === "error")
         return {
           id: call.id,
           toolCallId: call.id,
           toolName: call.tool,
-          output: part.state.error,
+          content: part.state.error,
           isError: true,
         };
     }

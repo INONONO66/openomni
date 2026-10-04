@@ -81,7 +81,7 @@ test("captured bundle data resolves custom transforms and obligations alongside 
     policyRow("demo/redact-row", { type: "transform", ref: "kernel/redact", config: { paths: ["secret"] } }, 200),
     policyRow("demo/cap-row", { type: "obligation", ref: "demo/cap", metric: "fanout", limit: 2 }),
   ], bodies);
-  expect(result).toMatchObject({ toolCallId: "call", output: "bundle" });
+  expect(result).toMatchObject({ toolCallId: "call", content: "bundle" });
   expect(bodies).toEqual([{ value: "bundle" }]);
   expect(policy.evaluate({ kind: "tool", phase: "pre", op: "demo__echo", value: {} }).obligations)
     .toEqual([{ ref: "demo/cap", metric: "fanout", limit: 2 }]);
@@ -94,7 +94,7 @@ test("a transform's non-string declared field entry is skipped at projection; th
   const { result } = yield* dispatch([
     policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { fields: ["value", 7], value: "bundle" } }, 300),
   ], bodies);
-  expect(result).toMatchObject({ toolCallId: "call", output: "bundle" });
+  expect(result).toMatchObject({ toolCallId: "call", content: "bundle" });
   expect(bodies).toEqual([{ value: "bundle", secret: "secret" }]);
 }))));
 

@@ -47,7 +47,7 @@ test.each([
   registerTarget(fixture.plane);
   const result = await fixture.send(actorMessage("target"));
   expect(result.isError).not.toBe(true);
-  const handle = Gateway.SendMessageHandle.parse(JSON.parse(result.output));
+  const handle = Gateway.SendMessageHandle.parse(JSON.parse(String(result.content)));
   expect(keys).toEqual([handle.messageId]);
   const receipts = sessionTree(fixture.sessionId, fixture.plane.sessionStore(fixture.sessionId).actions).flatMap((action) => {
     const effect = action.effect.value;
@@ -70,7 +70,7 @@ test("ungranted app actor send is a compiled pre-denial, never an executed deliv
   registerTarget(fixture.plane);
   const result = await fixture.send(actorMessage("target"));
   expect(result.isError).toBe(true);
-  expect(result.output).toContain("message.resident.actor_grant");
+  expect(result.content).toContain("message.resident.actor_grant");
   expect(calls()).toBe(0);
   const senderTree = () =>
     sessionTree(fixture.sessionId, fixture.plane.sessionStore(fixture.sessionId).actions);

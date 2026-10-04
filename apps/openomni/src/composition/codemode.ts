@@ -6,7 +6,7 @@ const AgentFailure = Core.AgentFailure;
 type InvocationFrame = Core.InvocationFrame;
 import { Effect, Exit, type Scope } from "effect";
 import type { MachineHost } from "@openomni/machines";
-import { Machine } from "@openomni/protocol";
+import { Machine, toolResultText } from "@openomni/protocol";
 
 /** Bind product dispatch; interpreter state and cell provenance live in codemode. */
 export type ComposedCodemode = Effect.Success<ReturnType<typeof createCodemode>>;
@@ -51,10 +51,12 @@ function bindings(frame: InvocationFrame, id: () => string): NonNullable<RunOpti
             },
             { sessionId: tenant, turnId: call.cellId },
         );
+        // D5 (assumed: tool result split — content / details / structuredContent):
+        // the cell consumes typed data, never the model text.
         return Machine.ToolCallResult.parse(
           result.isError
-            ? { status: "failed", error: String(result.output) }
-            : { status: "completed", value: result.output },
+            ? { status: "failed", error: toolResultText(result) }
+            : { status: "completed", value: result.structuredContent },
         );
       }).pipe(Effect.mapError((error) => new MachinesFailure({ operation: call.name, cause: String(error) })));
     },

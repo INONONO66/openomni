@@ -66,7 +66,7 @@ test("a resident tool call is executed and observed through the durable executor
           input: { operation: { op: "run", code: "1", timeout: 1 } },
         });
         if (result === undefined) return { type: "stop" };
-        sink.onMessage(assistantMessage(input, { text: String(result?.output ?? "missing") }));
+        sink.onMessage(assistantMessage(input, { text: String(result?.content ?? "missing") }));
         return { type: "stop" as const };
       }),
     },

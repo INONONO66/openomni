@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Message } from "@openomni/protocol";
+import { toolResultText, type Message } from "@openomni/protocol";
 import { stringifyToolOutput, toModelMessages } from "../../../src/model/message";
 import type { Provider } from "../../../src/model/provider";
 
@@ -352,5 +352,77 @@ describe("toModelMessages reasoning signature resend gate (#532 candidate 10)", 
 
     const block = reasoningBlockOf(result);
     expect(block?.providerOptions).toBeUndefined();
+  });
+});
+
+describe("D5 tool result split at the model boundary", () => {
+  function assistantWithToolText(output: string): Message.WithParts {
+    return {
+      info: {
+        id: "msg-a",
+        sessionID: "session-1",
+        role: "assistant",
+        time: { created: 1100, completed: 1200 },
+        parentID: "msg-u",
+        modelID: "claude-3-5-sonnet",
+        providerID: "anthropic",
+        agent: "default",
+        path: { cwd: "/", root: "/" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "stop",
+      } as Message.AssistantMessage,
+      parts: [
+        {
+          id: "part-tool",
+          sessionID: "session-1",
+          messageID: "msg-a",
+          type: "tool",
+          callID: "call-1",
+          tool: "echo",
+          state: {
+            status: "completed",
+            input: { value: "x" },
+            output,
+            time: { start: 1100, end: 1150 },
+            title: "echo",
+            metadata: {},
+          },
+        } as Message.ToolPart,
+      ],
+    };
+  }
+
+  function toolResultValue(
+    messages: ReturnType<typeof toModelMessages>,
+  ): { type: string; value: string } | undefined {
+    const toolMsg = messages.find((m) => m.role === "tool");
+    if (!toolMsg || !Array.isArray(toolMsg.content)) throw new Error("expected tool-result block");
+    const block = toolMsg.content.find((b) => b.type === "tool-result");
+    if (!block) throw new Error("expected tool-result block");
+    return (block as { output?: { type: string; value: string } }).output;
+  }
+
+  test("the model message carries the result's content text and never details/structuredContent", () => {
+    const result = {
+      id: "call-1",
+      toolCallId: "call-1",
+      toolName: "echo",
+      content: "answer=42",
+      details: { errorKind: "none" },
+      structuredContent: { answer: 42 },
+    };
+    const messages = toModelMessages([assistantWithToolText(toolResultText(result))], anthropicModel);
+    expect(toolResultValue(messages)).toEqual({ type: "text", value: "answer=42" });
+    const wire = JSON.stringify(messages);
+    expect(wire).not.toContain("structuredContent");
+    expect(wire).not.toContain("details");
+  });
+
+  test("a historical output-only result still renders its text to the model", () => {
+    const historical = { id: "call-1", toolCallId: "call-1", output: "legacy text" };
+    expect(toolResultText(historical)).toBe("legacy text");
+    const messages = toModelMessages([assistantWithToolText(toolResultText(historical))], anthropicModel);
+    expect(toolResultValue(messages)).toEqual({ type: "text", value: "legacy text" });
   });
 });

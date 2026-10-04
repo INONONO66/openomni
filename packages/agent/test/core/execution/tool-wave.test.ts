@@ -341,7 +341,7 @@ it("refuses incomplete arguments without losing valid or invalid input positions
   ], context);
   expect(results).toMatchObject([
     { toolCallId: "incomplete", isError: true, errorKind: "invalid_input" },
-    { toolCallId: "complete", output: "complete" },
+    { toolCallId: "complete", content: "complete" },
     { toolCallId: "unnamed", isError: true, errorKind: "unregistered_tool" },
   ]);
   expect(bodies).toEqual(["complete"]);
