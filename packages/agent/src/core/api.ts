@@ -4,8 +4,14 @@
 export type { ExecutionRequest, Executor } from "./gate/decide";
 export {
   AgentFailure, AgentInvariantViolation, CompactionExecutionError, ContextRestoreError,
-  type ExecutionError,
+  type ExecutionError, pretty,
 } from "./failure";
 export type { SessionKernel } from "./entity";
 export { Entropy } from "./ports";
 export { RunEvents } from "./run-events";
+// #1254 alarm seam: exactly what an alarm capability needs; frozen at S1 —
+// later steps add, never rename.
+export {
+  ArmRefused, AlarmWakeError, RESERVED_PURPOSES,
+  type AlarmCapability, type AlarmWakeContext, type ArmVerb, type AlarmFired, type AlarmWakeOutcome,
+} from "./alarm";

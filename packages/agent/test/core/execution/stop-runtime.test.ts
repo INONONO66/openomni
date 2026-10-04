@@ -15,24 +15,31 @@ import { assistantStep } from "../../helpers/dispatching-runner";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
 import { collector } from "../../helpers/observation-collector";
 import { commitReceivedMessage } from "../../helpers/ingress";
+import { armAction } from "../../../src/core/alarm";
 
-/** The alarm table is gone: an armed alarm is an armed `alarm` chain action with no settling child. */
-function armAlarm(id: string): void {
+/**
+ * The alarm table is gone: an armed alarm is an `alarm{arm}` chain row
+ * (#1254: alarmId + armSeq, capability purpose) with no settling `fired` row.
+ * Returns the committed action id the live-wait verdict names.
+ */
+function armAlarm(alarmId: string): string {
   const ledger = isolatedLedger();
-  const appended = ledger.session.actions.append(
-    {
-      id,
-      parentId: null,
-      sessionId: "stop",
-      kind: "alarm",
-      intent: { encodingVersion: 1, value: { phase: "intent", op: "arm" } },
-      effect: { encodingVersion: 1, value: { phase: "result" } },
-      ts: Date.now(),
-      irreversible: true,
-    },
-    ledger.kernel.row("stop").revision,
-  );
+  const now = Date.now();
+  const armed = armAction({
+    parentId: null,
+    sessionId: "stop",
+    purpose: "test.tick",
+    at: now + 60_000,
+    supersedes: null,
+    alarmId,
+    sourceKey: "test",
+    payload: {},
+    armSeq: 1,
+    ts: now,
+  });
+  const appended = ledger.session.actions.append(armed.action, ledger.kernel.row("stop").revision);
   if (appended === undefined) throw new Error("alarm arm append refused");
+  return armed.action.id;
 }
 
 function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "prior-alarm") {
@@ -199,7 +206,7 @@ test("only a still-armed action created by this turn permits a waiting terminal"
   expect(current.result).toMatchObject({
     kind: "waiting",
     reason: "live_wait",
-    alarmIds: ["current-alarm"],
+    alarmIds: ["current-alarm:arm:1"],
   });
   expect(current.calls).toBe(1);
   expect(current.snapshot.turns[0]?.terminal?.kind).toBe("waiting");

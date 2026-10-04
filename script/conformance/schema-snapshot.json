@@ -981,7 +981,6 @@
   "SessionGeneration.SystemBlock": ["content", "id", "source"],
   "SessionGeneration.Tool": ["category", "inputSchema", "name", "sequential"],
   "SessionHistory.Cause#action": ["actionId", "kind"],
-  "SessionHistory.Cause#alarm": ["alarmId", "epoch", "kind"],
   "SessionHistory.Cause#inbox": ["inboxIds", "kind"],
   "SessionHistory.Cause#root": ["kind"],
   "SessionHistory.Compaction": [

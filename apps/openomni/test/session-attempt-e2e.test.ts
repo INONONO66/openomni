@@ -103,18 +103,15 @@ for (const visible of ["none", "text", "tool"] as const) {
         Array.from({ length: attempts.length }, () => ({ parent_id: parent?.id ?? null })),
       );
       expect(requests).toBe(visible === "none" ? 3 : 1);
-      // Durable retry schedule (timer plane): each backoff committed an
-      // `alarm.arm` chain action carrying retry.scheduled. The chain fact is
-      // never cancelled — the live waiter carries the wait and a redelivered
-      // timer no-ops via the chain guard (supersede at delivery, not cancel).
+      // Durable retry schedule (#1254 chain): each backoff committed a live
+      // `alarm{arm, purpose: retry}` row carrying the attempt; the settle that
+      // follows a wait is the next armSeq with `at: null`, never a delete.
       const retryAlarms = db
         .query(
-          "SELECT json_extract(effect,'$.status') AS status FROM action WHERE session_id=? AND kind='alarm' AND json_extract(intent,'$.op')='arm' AND json_extract(effect,'$.spec.kind')='retry.scheduled' ORDER BY ordinal",
+          "SELECT json_extract(intent,'$.payload.attempt') AS attempt FROM action WHERE session_id=? AND kind='alarm' AND json_extract(intent,'$.op')='arm' AND json_extract(intent,'$.purpose')='retry' AND json_extract(intent,'$.at') IS NOT NULL ORDER BY ordinal",
         )
         .all(sessionId);
-      expect(retryAlarms).toEqual(
-        visible === "none" ? [{ status: "armed" }, { status: "armed" }] : [],
-      );
+      expect(retryAlarms).toEqual(visible === "none" ? [{ attempt: 1 }, { attempt: 2 }] : []);
       expect(
         db
           .query(

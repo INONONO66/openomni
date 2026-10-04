@@ -4,8 +4,8 @@ import * as Failure from "../failure";
 import { type ExecutionError, GenerationUnavailable, InvocationClosed, CommitFailed, ExecutionApprovalError, PolicyDenied, AgentFailure, Interrupted, OutcomeUnknown } from "../failure";
 import { type BusEvent, GateDecision, LedgerAction, type LedgerSession, type ObservationSink as ObservationPort, type PlainValue, type SessionTransition, Tool, type PlainObject, L0Observation, canonicalDigest, PlainValueSchema, RowVerdictType, SessionHistory, listenForAbort } from "@openomni/protocol";
 import type { CompiledPolicySnapshot, PolicyEvaluationInput, PolicyEvaluation } from "./compile";
-import type { RetryAlarmPort, AlarmSenders } from "../alarm-ports";
-import { alarmAction, createRetryAlarmPort } from "../alarm";
+import type { RetryAlarmPort, RetryAlarmDeps } from "../alarm-ports";
+import { createRetryAlarmPort } from "../alarm";
 import { turnStopAction } from "../commit";
 import type { WaveControl, Dispatcher } from "../tool";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -770,39 +770,25 @@ function usageProvenance(evidence: PlainValue, failure: ExecutionError | undefin
 }
 
 /**
- * Default durable retry port over the timer plane (W5.2 plan D8): `arm`
- * commits the `retry.scheduled` fact as an armed `alarm` chain action through
- * the session ledger. Without a cluster client there is no DeliverAt sender:
- * the chain action is the durable evidence activation resume consumes, and
- * the live residual sleep carries the in-process wait. Composition injects
- * the full port (with the entity-client sender) via `ExecutorOptions.retryAlarm`.
+ * Default durable retry port over the alarm chain (#1254 S4): `arm` commits
+ * the `alarm{arm}` chain row (purpose `retry`) through the session ledger and
+ * forwards the minted occurrence through `send`; `settle` retires the chain
+ * with an `at: null` arm. Without a cluster client there is no DeliverAt
+ * sender: the chain row is the durable evidence the activation resend
+ * consumes, and the live residual sleep carries the in-process wait.
+ * Composition injects the sender via `ExecutorOptions.retryAlarm`.
  */
 export function createLedgerRetryAlarmPort(
   ledger: Pick<ExecutionLedger, "commit">,
   sessionId: string,
   clock: () => number,
-  send: AlarmSenders["retryScheduled"] = () => Effect.void,
+  send: RetryAlarmDeps["send"] = () => Effect.void,
 ): RetryAlarmPort {
   return createRetryAlarmPort({
-    commitScheduled: (input) =>
+    sessionId,
+    commitArm: (action) =>
       ledger
-        .commit(LedgerAction.Append.parse(alarmAction({
-          id: input.id,
-          parentId: null,
-          sessionId,
-          intent: { op: "arm", kind: "at", fireAt: input.notBefore },
-          effect: {
-            status: "armed",
-            spec: {
-              kind: "retry.scheduled",
-              attempt: input.attempt,
-              reason: input.reason,
-              notBefore: input.notBefore,
-            },
-          },
-          revert: { op: "cancel", id: input.id },
-          ts: input.notBefore,
-        })))
+        .commit(LedgerAction.Append.parse(action))
         .pipe(
           Effect.mapError((error) => new CommitFailed({ error })),
           Effect.asVoid,
@@ -882,11 +868,11 @@ function createAttemptRunner(
       const delayMs = retryDelay(recover, decision);
       const reason = recover ? "context_overflow" : Retry.attemptReason(failure);
       attempts.onRetry?.({ attempt, maxAttempts: Retry.MAX_ATTEMPTS, delayMs, decision, error: failure, reason });
-      const id = `${intent.action.id}:retry:${attempt}`;
+      const id = intent.action.id;
       const fireAt = options.clock() + delayMs;
       yield* retryAlarm.arm({ id, attempt, reason, fireAt });
       yield* retryAlarm.wait(fireAt, options.signal);
-      yield* retryAlarm.settle(id);
+      yield* retryAlarm.settle({ id, attempt });
       return reason;
     });
   }

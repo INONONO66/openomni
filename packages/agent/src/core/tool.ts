@@ -1,5 +1,5 @@
 import { Clock, Effect, Cause, Exit, Option } from "effect";
-import { AgentInvariantViolation, type ExecutionError, ToolBodyFailed, AgentFailure } from "./failure";
+import { AgentInvariantViolation, type ExecutionError, ToolBodyFailed, AgentFailure, pretty } from "./failure";
 import type { ChatAgentConfig } from "./types";
 import type { RunState, TurnArtifacts } from "./turn";
 import { recordToolCall } from "./budget";
@@ -142,7 +142,7 @@ export function settleModelTools(
               if (Exit.isSuccess(exit)) return Effect.succeed(exit.value);
               if (Cause.hasInterrupts(exit.cause)) return Effect.failCause(exit.cause);
               const output = Option.match(Cause.findErrorOption(exit.cause), {
-                onNone: () => Cause.pretty(exit.cause),
+                onNone: () => pretty(exit.cause),
                 onSome: (error) => error.message,
               });
               return Effect.succeed({ id: call.id, toolCallId: call.id, toolName: call.tool, output, isError: true });

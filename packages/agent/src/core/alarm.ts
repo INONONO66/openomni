@@ -1,33 +1,60 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { interruptOn } from "./ports";
-import type { LedgerAction, PlainObject } from "@openomni/protocol";
-import type { AlarmSkipReason, AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
+import { Alarm, canonicalJson, isReservedAlarmPurpose, RESERVED_ALARM_PURPOSES, type LedgerAction, type PlainObject } from "@openomni/protocol";
+import type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
-export type { AlarmDisposition, AlarmChainReads, WatchTimeoutArm, RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
-
-/**
- * Timer plane over cluster DeliverAt (W5.2 review F2, plan D5/D8): a persisted
- * timer message is never cancelled in storage. Supersede = commit the winning
- * chain action first; a later delivery consults the chain and no-ops. The
- * dispositions below are those chain guards; the entity handler acks a "skip"
- * without committing anything.
- */
-
-
-const RUN: AlarmDisposition = { op: "run" };
-const skip = (reason: AlarmSkipReason): AlarmDisposition => ({ op: "skip", reason });
-
-
-
-
-
+export type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
 /**
- * The one `alarm` append constructor (#1252): this module is the kind's
- * declared single writer; retry arms (gate) and watch lifecycle facts
- * (composition monitor ports) both build their rows here.
+ * Timer plane over cluster DeliverAt (#1254): a persisted timer message is
+ * never cancelled in storage. Supersede = commit the winning `arm` row first;
+ * a later delivery consults the chain through `alarmDisposition` and folds to
+ * a recorded `fired{stale}` fact with zero execution.
  */
-export function alarmAction(input: {
+
+/** The four loop-reserved purposes, re-exported for the capability seam. */
+export const RESERVED_PURPOSES = RESERVED_ALARM_PURPOSES;
+
+/** Why a delivered occurrence is skipped instead of run. */
+export type AlarmSkipReason = "superseded" | "settled" | "unknown";
+
+export type AlarmDisposition =
+  | { readonly op: "run" }
+  | { readonly op: "skip"; readonly reason: AlarmSkipReason };
+
+/** The latest committed `arm` row view for one alarm chain. */
+export interface AlarmArmView {
+  readonly occurrenceId: string;
+  /** Epoch ms, or null when the arm retired the chain. */
+  readonly at: number | null;
+}
+
+/** Chain reads one alarm delivery decides over; the entity supplies its kernel's read ports. */
+export interface AlarmChainReads {
+  /** Latest `alarm{arm}` row for `alarmId`, or undefined when the chain has none. */
+  latestArm(alarmId: string): AlarmArmView | undefined;
+  /** True when a `fired{delivered|exhausted}` row exists for the occurrence. */
+  settled(occurrenceId: string): boolean;
+}
+
+/**
+ * The one chain guard (#1254): an occurrence is fresh iff the latest `arm`
+ * row for its alarm still names its `occurrenceId`, the arm is not retired
+ * (`at !== null`), and no accepted (`delivered|exhausted`) firing settled it.
+ */
+export function alarmDisposition(
+  reads: AlarmChainReads,
+  occurrence: { readonly alarmId: string; readonly occurrenceId: string },
+): AlarmDisposition {
+  const arm = reads.latestArm(occurrence.alarmId);
+  if (arm === undefined) return { op: "skip", reason: "unknown" };
+  if (arm.occurrenceId !== occurrence.occurrenceId || arm.at === null)
+    return { op: "skip", reason: "superseded" };
+  if (reads.settled(occurrence.occurrenceId)) return { op: "skip", reason: "settled" };
+  return { op: "run" };
+}
+
+function appendAlarm(input: {
   readonly id: string;
   readonly parentId: string | null;
   readonly sessionId: string;
@@ -50,95 +77,330 @@ export function alarmAction(input: {
   };
 }
 
-const RETRY_SEPARATOR = ":retry:";
-const PAGE_LIMIT = 256;
-
-function hasNewerAttempt(reads: AlarmChainReads, attempt: LedgerAction.Node): boolean {
-  if (attempt.parentId === null) return false;
-  let cursor = 0;
-  for (;;) {
-    const page = reads.operationChildrenPage(attempt.parentId, cursor);
-    if (page.some((child) => child.kind === "llm" && child.ordinal > attempt.ordinal))
-      return true;
-    if (page.length < PAGE_LIMIT) return false;
-    cursor = page.at(-1)?.ordinal ?? cursor;
-  }
-}
-
 /**
- * A redelivered `RetryScheduled` re-runs the open model attempt only while the
- * armed attempt is still the live, unsettled one: a settled terminal or a newer
- * attempt intent means the in-process residual wait already won (plan D8).
+ * One `alarm{arm}` row (#1254): mints the occurrence id from the arm's own
+ * journal sequence (`armSeq`) inside the committing transaction. An
+ * `at: null` arm retires the chain; `supersedes` names the previous
+ * occurrence this arm replaces.
  */
-export function retryDelivery(reads: AlarmChainReads, alarmId: string): AlarmDisposition {
-  const separator = alarmId.lastIndexOf(RETRY_SEPARATOR);
-  if (separator <= 0) return skip("malformed_alarm_id");
-  const attemptId = alarmId.slice(0, separator);
-  const attempt = reads.actionById(attemptId);
-  if (attempt === undefined) return skip("unknown_attempt");
-  if (reads.resultFor(attemptId) !== undefined) return skip("attempt_settled");
-  if (hasNewerAttempt(reads, attempt)) return skip("superseded");
-  return RUN;
-}
-
-/**
- * A `Deadline` delivery expires only a still-open request; any terminal state
- * (resolved/refused/expired/cancelled) acks silently so the resolution tokens
- * `duplicate`/`late_unknown` of the request plane stay intact (check4 F7).
- */
-export function deadlineDelivery(reads: AlarmChainReads, requestId: string): AlarmDisposition {
-  const request = reads.requestById(requestId);
-  if (request === undefined) return skip("unknown_request");
-  if (request.state !== "open") return skip("request_terminal");
-  return RUN;
-}
-
-/** A `WatchFired` delivery commits at most once per committed occurrence id. */
-export function watchFiredDelivery(reads: AlarmChainReads, occurrenceId: string): AlarmDisposition {
-  if (reads.actionById(occurrenceId) !== undefined) return skip("duplicate_occurrence");
-  return RUN;
-}
-
-/** The chain key one watch-timeout delivery commits under. */
-export function watchTimeoutKey(message: Pick<WatchTimeoutArm, "watchId" | "epoch">): string {
-  return `${message.watchId}:timeout:${message.epoch}`;
-}
-
-/** A `WatchTimeout` delivery is idempotent per (watchId, epoch). */
-export function watchTimeoutDelivery(
-  reads: AlarmChainReads,
-  message: Pick<WatchTimeoutArm, "watchId" | "epoch">,
-): AlarmDisposition {
-  if (reads.actionById(watchTimeoutKey(message)) !== undefined) return skip("duplicate_timeout");
-  return RUN;
-}
-
-
-
-export function createRetryAlarmPort(deps: RetryAlarmDeps): RetryAlarmPort {
+export function armAction(input: {
+  readonly parentId: string | null;
+  readonly sessionId: string;
+  readonly purpose: string;
+  readonly at: number | null;
+  readonly supersedes: string | null;
+  readonly alarmId: string;
+  readonly sourceKey: string;
+  readonly payload: PlainObject;
+  readonly armSeq: number;
+  readonly ts: number;
+}): { readonly action: LedgerAction.Append; readonly occurrenceId: string } {
+  const occurrenceId = Alarm.occurrenceId(input.sessionId, input.alarmId, input.armSeq, input.sourceKey);
   return {
-    // Chain evidence strictly before the persisted rearm: a crash between the
-    // two resumes from the chain on activation; a crash inside the wait is
-    // woken by the redelivered message, which no-ops when the live path won.
-    arm: (input) =>
-      deps
-        .commitScheduled({
-          id: input.id,
-          attempt: input.attempt,
-          reason: input.reason,
-          notBefore: input.fireAt,
-        })
-        .pipe(
-          Effect.flatMap(() =>
-            deps.send({ alarmId: input.id, attempt: input.attempt, notBefore: input.fireAt }),
-          ),
+    occurrenceId,
+    action: appendAlarm({
+      id: `${input.alarmId}:arm:${input.armSeq}`,
+      parentId: input.parentId,
+      sessionId: input.sessionId,
+      intent: {
+        op: "arm",
+        purpose: input.purpose,
+        at: input.at,
+        supersedes: input.supersedes,
+        alarmId: input.alarmId,
+        sourceKey: input.sourceKey,
+        payload: input.payload,
+      },
+      effect: { occurrenceId },
+      ts: input.ts,
+    }),
+  };
+}
+
+/** One `alarm{fired}` row (#1254); idempotent per `<occurrenceId>:<outcome>` chain key. */
+export function firedAction(input: {
+  readonly parentId: string | null;
+  readonly sessionId: string;
+  readonly purpose: string;
+  readonly alarmId: string;
+  readonly occurrenceId: string;
+  readonly outcome: "delivered" | "stale" | "exhausted";
+  readonly ts: number;
+}): LedgerAction.Append {
+  return appendAlarm({
+    id: `${input.occurrenceId}:${input.outcome}`,
+    parentId: input.parentId,
+    sessionId: input.sessionId,
+    intent: {
+      op: "fired",
+      occurrenceId: input.occurrenceId,
+      outcome: input.outcome,
+      purpose: input.purpose,
+      alarmId: input.alarmId,
+    },
+    effect: { op: "fired", occurrenceId: input.occurrenceId, outcome: input.outcome },
+    ts: input.ts,
+  });
+}
+
+/**
+ * Boot alarm sweep config (#1254 S3; nested inside `AlarmDrainConfig` at S4).
+ * `full: true` rescans every session at boot; `full: false` rescans
+ * `has_armed` sessions plus sessions idle for at least `idleDays` days.
+ * Values come from the composition root's config, never from core constants.
+ */
+export interface AlarmSweepConfig {
+  readonly full: boolean;
+  readonly idleDays: number;
+}
+
+/**
+ * Loop consumption defaults (#1254 S4, D3): typed in core, VALUES supplied by
+ * the composition root (`assumed: loop consumption defaults — steer/followUp
+ * batch width all|one, alarms before prompt 4, armed-alarm cap 64,
+ * passivation idle 60 s`). The writer admits at most `alarmsBeforePrompt`
+ * alarm wakes before a queued prompt delivery; the `arm` verb refuses
+ * `alarm_budget` at `armedCount() >= maxArmed`; the entity's `maxIdleTime`
+ * is `idleMs`.
+ */
+export interface AlarmDrainConfig {
+  readonly alarmsBeforePrompt: number;
+  readonly maxArmed: number;
+  readonly idleMs: number;
+  readonly sweep: AlarmSweepConfig;
+}
+
+// ─── #1254 capability seam (frozen at S1: later steps add, never rename) ───
+
+/** The fired occurrence view a capability's `wake` receives. */
+export interface AlarmFired {
+  readonly occurrenceId: string;
+  readonly purpose: string;
+  readonly alarmId: string;
+  readonly armSeq: number;
+  readonly sourceKey: string;
+  /** Canonical JSON of the arm's payload. */
+  readonly payload: string;
+  readonly fireAt: number;
+}
+
+/**
+ * Typed `arm` refusal (#1254): the body's `deny{reason: alarm_budget}` is
+ * `code: "alarm_budget"`. r2 H3 adds the app-path authority codes:
+ * `not_live` (no registered activation), `stale_turn` (the live activation
+ * does not own the caller's turn token), `stale_activation` (the committing
+ * activation lost the fence to a successor — it is no longer the writer) and
+ * `revision` (the bounded three-attempt revision CAS exhausted).
+ */
+export class ArmRefused extends Schema.TaggedError<ArmRefused>(
+  "@openomni/agent/core/ArmRefused",
+)("ArmRefused", {
+  code: Schema.Literals([
+    "alarm_budget",
+    "unknown_purpose",
+    "reserved_purpose",
+    "not_live",
+    "stale_turn",
+    "stale_activation",
+    "revision",
+  ]),
+}) {}
+
+/** The arm verb a capability schedules through; never a direct journal append. */
+export type ArmVerb = (input: {
+  readonly purpose: string;
+  readonly at: number | null;
+  readonly payload: PlainObject;
+  readonly alarmId?: string;
+  readonly supersedes?: string;
+  readonly sourceKey: string;
+}) => Effect.Effect<
+  { readonly alarmId: string; readonly occurrenceId: string; readonly armSeq: number },
+  ArmRefused
+>;
+
+/**
+ * Typed send refusal (#1254 H2): the composed send door reports a PERMANENT
+ * inability to honor an armed occurrence (an uninstallable watch spec, an
+ * unparseable payload). The entity retires the chain with
+ * `reason: "send_refused"`. Transient failures must stay defects: the armed
+ * row stands and the next activation's resend (or the boot sweep) retries.
+ */
+export class AlarmSendRefused extends Schema.TaggedError<AlarmSendRefused>(
+  "@openomni/agent/core/AlarmSendRefused",
+)("AlarmSendRefused", {
+  reason: Schema.String,
+}) {}
+
+/**
+ * Everything one committed `alarm{arm}` row carries, reported post-commit by
+ * the entity's arm verb (#1254 H1). The composition root keeps native source
+ * handles aligned with the chain: a re-arm moves the holder onto the new
+ * occurrence at the commit, a retiring arm (`at: null`) closes it.
+ */
+export interface AlarmArmNotice {
+  readonly sessionId: string;
+  readonly purpose: string;
+  readonly alarmId: string;
+  readonly occurrenceId: string;
+  readonly armSeq: number;
+  readonly at: number | null;
+  readonly supersedes: string | null;
+  readonly sourceKey: string;
+  readonly payload: PlainObject;
+}
+
+/**
+ * The accepted outcome a capability's wake returns (#1254): the core records
+ * `fired{outcome: <returned>}` through `firedAction` — a capability never
+ * builds an `alarm` append literal itself.
+ */
+export type AlarmWakeOutcome = "delivered" | "exhausted";
+
+/** Typed wake failure a capability's purpose handler reports. */
+export class AlarmWakeError extends Schema.TaggedError<AlarmWakeError>(
+  "@openomni/agent/core/AlarmWakeError",
+)("AlarmWakeError", {
+  purpose: Schema.String,
+  reason: Schema.String,
+}) {}
+
+/** What one wake dispatch hands a registered purpose handler. */
+export interface AlarmWakeContext {
+  readonly sessionId: string;
+  /** Kernel chain reads (chain page by alarmId). */
+  readonly reads: AlarmChainReads;
+  readonly arm: ArmVerb;
+  readonly now: number;
+  /**
+   * #1254 S4: appends one `prompt{origin: "alarm"}` input row through the
+   * entity's writer path; `seq` is the committed revision. The origin is
+   * fixed by the core — a capability never owns a prompt write path.
+   */
+  readonly prompt: (input: {
+    readonly content: string;
+    readonly payload?: PlainObject;
+  }) => Effect.Effect<{ readonly seq: number }, AlarmWakeError>;
+}
+
+/** One alarm capability: declared purposes plus their wake dispatch. */
+export interface AlarmCapability {
+  readonly purposes: readonly string[];
+  readonly wake: (fired: AlarmFired, ctx: AlarmWakeContext) => Effect.Effect<AlarmWakeOutcome, AlarmWakeError>;
+}
+
+/** Typed purpose-registry compose failure (#1254): no partial activation. */
+export class AlarmComposeError extends Schema.TaggedError<AlarmComposeError>(
+  "@openomni/agent/core/AlarmComposeError",
+)("AlarmComposeError", {
+  code: Schema.Literals(["reserved_purpose", "duplicate_purpose"]),
+  purpose: Schema.String,
+  bundle: Schema.String,
+}) {}
+
+/** purpose → owning bundle; the core's four reserved purposes are always present. */
+export type AlarmPurposeRegistry = ReadonlyMap<string, string>;
+
+/**
+ * Composes the alarm purpose registry (#1254): reserved names and the
+ * entity-internal `rescan` are rejected, duplicates are rejected, and the
+ * core's four loop-reserved purposes are always present.
+ */
+export function composeAlarmPurposes(input: {
+  readonly capabilities: readonly { readonly bundle: string; readonly purposes: readonly string[] }[];
+}): Effect.Effect<AlarmPurposeRegistry, AlarmComposeError> {
+  return Effect.suspend(() => {
+    const registry = new Map<string, string>(
+      RESERVED_PURPOSES.map((purpose) => [purpose, "core"] as const),
+    );
+    for (const capability of input.capabilities) {
+      for (const purpose of capability.purposes) {
+        if (isReservedAlarmPurpose(purpose) || purpose === "rescan")
+          return Effect.fail(
+            new AlarmComposeError({ code: "reserved_purpose", purpose, bundle: capability.bundle }),
+          );
+        if (registry.has(purpose))
+          return Effect.fail(
+            new AlarmComposeError({ code: "duplicate_purpose", purpose, bundle: capability.bundle }),
+          );
+        registry.set(purpose, capability.bundle);
+      }
+    }
+    return Effect.succeed(registry);
+  });
+}
+
+/**
+ * Durable retry schedule over the alarm chain (#1254 S4): `arm` commits one
+ * `alarm{arm}` row (purpose `retry`, alarmId `<attemptActionId>:retry`,
+ * armSeq `2*attempt - 1`, superseding the previous attempt's occurrence) and
+ * forwards the occurrence to the composed DeliverAt sender; `settle` retires
+ * the chain with an `at: null` arm (armSeq `2*attempt`) so a completed
+ * attempt leaves no open alarm. `wait` keeps the live in-process residual
+ * sleep; a crash inside it is woken by the redelivered occurrence, which the
+ * chain guard folds exactly once.
+ */
+export function createRetryAlarmPort(deps: RetryAlarmDeps): RetryAlarmPort {
+  const alarmIdOf = (actionId: string) => `${actionId}:retry`;
+  return {
+    arm: (input) => {
+      const alarmId = alarmIdOf(input.id);
+      const armSeq = 2 * input.attempt - 1;
+      const supersedes =
+        input.attempt > 1
+          ? Alarm.occurrenceId(deps.sessionId, alarmId, 2 * (input.attempt - 1) - 1, "retry")
+          : null;
+      const payload = { attempt: input.attempt, reason: input.reason };
+      const { action, occurrenceId } = armAction({
+        parentId: null,
+        sessionId: deps.sessionId,
+        purpose: "retry",
+        at: input.fireAt,
+        supersedes,
+        alarmId,
+        sourceKey: "retry",
+        payload,
+        armSeq,
+        ts: input.fireAt,
+      });
+      // Chain evidence strictly before the persisted rearm: a crash between
+      // the two resumes from the chain on activation; a crash inside the wait
+      // is woken by the redelivered occurrence, folded by the chain guard.
+      return deps.commitArm(action).pipe(
+        Effect.flatMap(() =>
+          deps.send({
+            occurrenceId,
+            purpose: "retry",
+            alarmId,
+            armSeq,
+            sourceKey: "retry",
+            payload: canonicalJson(payload),
+            fireAt: input.fireAt,
+          }),
         ),
+      );
+    },
     wait: (fireAt, signal) =>
       Effect.suspend(() => {
         const sleep = Effect.sleep(Math.max(0, fireAt - deps.clock()));
         if (signal === undefined) return sleep;
         return sleep.pipe(Effect.raceFirst(interruptOn(signal)));
       }),
-    settle: () => Effect.void,
+    settle: (input) => {
+      const alarmId = alarmIdOf(input.id);
+      const { action } = armAction({
+        parentId: null,
+        sessionId: deps.sessionId,
+        purpose: "retry",
+        at: null,
+        supersedes: Alarm.occurrenceId(deps.sessionId, alarmId, 2 * input.attempt - 1, "retry"),
+        alarmId,
+        sourceKey: "retry",
+        payload: { attempt: input.attempt },
+        armSeq: 2 * input.attempt,
+        ts: deps.clock(),
+      });
+      return deps.commitArm(action);
+    },
   };
 }

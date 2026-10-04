@@ -11,6 +11,7 @@ import {
   lifecycleFailure,
 } from "./runtime";
 import { timingSafeEqual } from "node:crypto";
+import { statSync } from "node:fs";
 import { configuredCompaction } from "./compaction/strategy";
 import { seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
@@ -22,7 +23,6 @@ const ObservationSink = Core.ObservationSink;
 const createSessionEntityRunTurn = Core.createSessionEntityRunTurn;
 const createSessionRequests = Core.createSessionRequests;
 const SessionEntity = Core.SessionEntity;
-type AlarmPurpose = Core.AlarmPurpose;
 type SessionHandle = Core.SessionHandle;
 type SessionRuntime = Core.SessionRuntime;
 const AgentFailure = Core.AgentFailure;
@@ -44,7 +44,7 @@ import {
   type MachineError,
   type MachineHost,
 } from "@openomni/machines";
-import { traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
+import { Alarm, parseJson, traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
 import {
   attachSelfMachine,
   selfAttachFailure,
@@ -59,6 +59,7 @@ import {
   ConfigurationError,
   loadConfig,
   modelTransport,
+  resolveAlarmSweep,
   resolveClusterStorage,
   validateMachinePlane,
   type OpenOmniConfig,
@@ -74,16 +75,15 @@ import {
   AppLedger,
   createSessionLivePlane,
   requestAuthorityKernel,
-  sessionTimerPort,
+  rescanOccurrences,
+  sessionFilePath,
 } from "./composition/cluster-runtime";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
-import {
-  watchFiredHook,
-  watchOccurrenceKey,
-  watchTimeoutHook,
-} from "./composition/monitor-ports";
+import { createLiveArmRegistry } from "./composition/alarm-plane";
+import { monitorPurposes } from "./composition/bundles/monitor";
+import { cronPurposes } from "./composition/bundles/cron";
 import {
   acquireAppResource,
   channelRequests,
@@ -486,49 +486,34 @@ export async function startOpenOmni(options: StartOptions = {}) {
       cells, completion: llmPort, messages,
       now: services.now, id: services.entropy.id,
     });
-    // Watch plane (#1253): native sources deliver occurrences through the
-    // entity's one `alarm` door; the occurrence id is the durable dedupe and
-    // the chain-guard identity (plan F2). A superseded occurrence folds to a
-    // recorded stale fact on the chain, never a rejection.
+    // Watch plane (#1253/#1254): native sources resend the chain's ARMED
+    // occurrence through the entity's one `alarm` door; the occurrence id is
+    // the durable dedupe and the chain-guard identity (plan F2). A superseded
+    // occurrence folds to a recorded stale fact on the chain, never a
+    // rejection.
     const sendAlarm = (
       sessionId: string,
       occurrence: {
         readonly occurrenceId: string;
-        readonly purpose: AlarmPurpose;
-        readonly body: string;
+        readonly purpose: string;
+        readonly alarmId: string;
+        readonly armSeq: number;
+        readonly sourceKey: string;
+        readonly payload: string;
         readonly fireAt: number;
       },
     ) => entityClient(sessionId).Alarm(occurrence).pipe(Effect.asVoid);
+    // Scheduled occurrences persist without awaiting the reply: a DeliverAt
+    // send only answers at `fireAt`, and the arming turn must not block on it.
+    const scheduleAlarm = (
+      sessionId: string,
+      occurrence: Parameters<typeof sendAlarm>[1],
+    ) => entityClient(sessionId).Alarm(occurrence, { discard: true });
     // Terminal watches drain the same machines surface the bash door uses.
     const watchSources = createWatchSources(
       {
-        watchFired: (fire) => {
-          const sourceKey = watchOccurrenceKey(fire.watchId, fire.epoch, fire.sourceKey);
-          return runAppEffect(
-            runtime,
-            sendAlarm(fire.sessionId, {
-              occurrenceId: sourceKey,
-              purpose: "watch.fired",
-              body: JSON.stringify({
-                watchId: fire.watchId,
-                epoch: fire.epoch,
-                sourceKey,
-                batch: JSON.stringify({ content: fire.content, terminal: fire.terminal }),
-              }),
-              fireAt: services.now(),
-            }),
-          );
-        },
-        watchTimeout: (arm) =>
-          runAppEffect(
-            runtime,
-            sendAlarm(arm.sessionId, {
-              occurrenceId: `${arm.watchId}:timeout:${arm.epoch}`,
-              purpose: "watch.timeout",
-              body: JSON.stringify({ watchId: arm.watchId, epoch: arm.epoch }),
-              fireAt: arm.fireAt,
-            }),
-          ),
+        deliver: ({ sessionId, ...occurrence }) =>
+          runAppEffect(runtime, sendAlarm(sessionId, occurrence)),
       },
       {
         clock: services.now,
@@ -542,6 +527,72 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("watches.close"),
       }),
     );
+    const closeWatch = (watchId: string) => void watchSources.close(watchId);
+    // #1254 H2: a `monitor.hit` send (activation resend or fresh-arm forward)
+    // is the native-source plane's (re)install, never a time delivery: a live
+    // holder just adopts the occurrence; a missing one is installed from the
+    // committed arm payload. An uninstallable or unparseable spec is the
+    // typed PERMANENT refusal the entity answers by retiring the chain.
+    const installFromOccurrence = (
+      sessionId: string,
+      occurrence: Parameters<typeof sendAlarm>[1],
+    ): Effect.Effect<void, Core.AlarmSendRefused> =>
+      Effect.suspend(() => {
+        const payload = parseJson(Bundle.WatchHitPayload, occurrence.payload);
+        if (payload === undefined)
+          return Effect.fail(
+            new Core.AlarmSendRefused({ reason: "monitor.hit arm payload carries no watch spec" }),
+          );
+        const armed = {
+          sessionId,
+          id: occurrence.alarmId,
+          occurrence: {
+            occurrenceId: occurrence.occurrenceId,
+            alarmId: occurrence.alarmId,
+            armSeq: occurrence.armSeq,
+          },
+          base: { spec: payload.spec, notifications: payload.notifications },
+        };
+        if (watchSources.refresh(armed)) return Effect.void;
+        return Effect.tryPromise({
+          try: () => watchSources.install(armed),
+          catch: (error) =>
+            new Core.AlarmSendRefused({
+              reason: error instanceof Error ? error.message : String(error),
+            }),
+        });
+      });
+    // #1254 H3: ONE committing arm path. Every app-side arm (monitor tool,
+    // watch verb, cron create) delegates to the live activation's budgeted
+    // entity verb through this registry; no app code commits an arm row.
+    const liveArms = createLiveArmRegistry();
+    const alarmPlane = await runAppBoot(
+      runtime,
+      Bundle.alarmCapability({
+        bundles: [
+          monitorPurposes({ close: closeWatch }),
+          cronPurposes(),
+        ],
+        compose: Core.composeAlarmPurposes,
+        watch: {
+          install: ({ sessionId, watchId, spec, occurrence }) =>
+            Effect.tryPromise({
+              try: () =>
+                watchSources.install({
+                  sessionId,
+                  id: watchId,
+                  occurrence,
+                  base: { spec, notifications: 0 },
+                }),
+              catch: (error) =>
+                new Bundle.WatchRefused({
+                  reason: error instanceof Error ? error.message : String(error),
+                }),
+            }),
+        },
+        arm: liveArms.arm,
+      }),
+    );
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
@@ -549,7 +600,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       bundles: services.bundles.names,
       tools: {
         ...tools,
-        alarms: await createMonitorPorts(runtime, watchSources),
+        alarms: await createMonitorPorts(runtime, alarmPlane),
         provisioning: provisioningPort,
       },
       sessionRuntime,
@@ -669,9 +720,21 @@ export async function startOpenOmni(options: StartOptions = {}) {
             request.deadline === undefined
               ? Effect.void
               : sendAlarm(request.sessionId, {
-                  occurrenceId: `${request.requestId}:deadline`,
+                  // #1254 S4: the request authority commits the deadline arm
+                  // (alarmId `<requestId>:deadline`, armSeq 1) in the open
+                  // decision batch; this send forwards that SAME minted
+                  // occurrence, so the chain guard recognizes it as fresh.
+                  occurrenceId: Alarm.occurrenceId(
+                    request.sessionId,
+                    `${request.requestId}:deadline`,
+                    1,
+                    "deadline",
+                  ),
                   purpose: "deadline",
-                  body: JSON.stringify({ requestId: request.requestId }),
+                  alarmId: `${request.requestId}:deadline`,
+                  armSeq: 1,
+                  sourceKey: "deadline",
+                  payload: JSON.stringify({ requestId: request.requestId }),
                   fireAt: request.deadline,
                 }).pipe(
                     Effect.catch((error) =>
@@ -767,17 +830,96 @@ export async function startOpenOmni(options: StartOptions = {}) {
               resolvedRuntime,
               services.scope,
             )(input),
-      timers: sessionTimerPort({
-        requestDomainRevisions: domainRevisions,
-        watchFired: watchFiredHook({
-          closeSource: (watchId) => void watchSources.close(watchId),
-        }),
-        watchTimeout: watchTimeoutHook({
-          closeSource: (watchId) => void watchSources.close(watchId),
-        }),
-      }),
       requestDomainRevisions: domainRevisions,
+      // An entity-path Resolve (the answer found no live turn) may land after
+      // the activation it triggered recovered the open turn, which then parked
+      // on the still-open request: the entity rings the live approval gate
+      // after its commit, the same doorbell the direct answer path rings.
+      onRequestReady: notifyLiveApprovals,
+      // #1254 S4: the composed monitor/cron capability the entity dispatches a
+      // delivered non-reserved occurrence to; unbound it would fold every
+      // watch hit and cron tick to a recorded stale fact with zero execution.
+      alarmCapability: alarmPlane,
+      // #1254 H3: each activation registers its budgeted arm verb here — the
+      // app-side capability path above delegates to it (one committing door).
+      onLive: liveArms.onLive,
+      // #1254 H1: native handles follow committed arm rows — a re-arm after a
+      // hit moves the live source onto the new occurrence at the commit (so
+      // the next hit resends the LIVE occurrence, not the settled one), and a
+      // retiring arm closes the handle. The first install stays the watch
+      // verb's awaited install seam.
+      onArmed: (notice) => {
+        if (notice.purpose !== Bundle.MONITOR_HIT) return;
+        if (notice.at === null) {
+          closeWatch(notice.alarmId);
+          return;
+        }
+        const payload = Bundle.WatchHitPayload.safeParse(notice.payload);
+        if (!payload.success) return;
+        watchSources.refresh({
+          sessionId: notice.sessionId,
+          id: notice.alarmId,
+          occurrence: {
+            occurrenceId: notice.occurrenceId,
+            alarmId: notice.alarmId,
+            armSeq: notice.armSeq,
+          },
+          base: { spec: payload.data.spec, notifications: payload.data.notifications },
+        });
+      },
+      // #1254 S3: an activation resends its armed occurrences through the
+      // entity's own persisted Alarm door (occurrence id = cluster dedupe).
+      // Persist-and-return (M3): a DeliverAt envelope only replies at
+      // `fireAt`, so the resend walk must complete at the durable insert —
+      // a reply-awaiting send would park the walk on the first future row.
+      // Native-source chains (`monitor.hit`) are never time-delivered: their
+      // send is the source (re)install (#1254 H2), whose permanent failures
+      // are the typed refusal the entity retires on. Everything else is a
+      // defect — the entity logs it and the armed row stands for the next
+      // activation (recovery of last resort).
+      sendAlarm: (sessionId, occurrence) =>
+        occurrence.purpose === Bundle.MONITOR_HIT
+          ? installFromOccurrence(sessionId, occurrence)
+          : scheduleAlarm(sessionId, occurrence).pipe(Effect.orDie),
     });
+
+    // Boot alarm rescan (#1254 S3): wake every session that may hold armed
+    // alarms with an entity-internal `rescan` occurrence. Idleness is the
+    // session file's mtime; an in-memory plane has no idle sessions.
+    {
+      const sweep = resolveAlarmSweep(config);
+      const bootNow = services.now();
+      const lastActivityAt = (id: string): number => {
+        if (config.sessionsDir === undefined) return bootNow;
+        // Idleness is the session file's mtime; a missing file counts as
+        // activity-now. Any other fs failure still fails the boot closed.
+        return statSync(sessionFilePath(config.sessionsDir, id), { throwIfNoEntry: false })?.mtimeMs ?? bootNow;
+      };
+      const rescans = rescanOccurrences({
+        armedSessionIds: plane.catalog.armedSessionIds(),
+        sessions: plane.listSessions().map((row) => ({
+          id: row.id,
+          lastActivityAt: lastActivityAt(row.id),
+        })),
+        sweep,
+        bootId: services.entropy.id(),
+        now: bootNow,
+      });
+      for (const rescan of rescans) {
+        await runAppBoot(
+          runtime,
+          sendAlarm(rescan.sessionId, rescan.occurrence).pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => {
+                console.error(`boot alarm rescan failed: ${rescan.sessionId}`, cause);
+              }),
+            ),
+            Effect.forkIn(appScope),
+            Effect.asVoid,
+          ),
+        );
+      }
+    }
 
     await acquire(Effect.succeed(supervisor), (resource) =>
       Effect.tryPromise({

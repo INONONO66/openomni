@@ -192,7 +192,7 @@ function transitionOf(action: LedgerAction.Node, turnId: string | null): Session
     callId: firstText(effect.callId, intent.callId, request.data?.callId),
     requestId: firstText(request.data?.requestId, outbound.data?.message.requestId),
     peerSessionId: peerOf(intent, outbound.data),
-    cause: causeOf(action, intent, effect),
+    cause: causeOf(action, effect),
     outcome: outcomeOf(action, effect, request.data, outbound.data),
     reason: reasonOf(intent, effect),
     digest: canonicalDigest({ intent: action.intent, effect: action.effect }),
@@ -243,16 +243,6 @@ function phaseOf(
   return KIND_PHASES[action.kind] ?? effectPhase(effect.phase) ?? intentPhase(intent.phase);
 }
 
-function alarmCause(
-  action: LedgerAction.Node,
-  intent: PlainObject,
-): SessionHistory.Cause | undefined {
-  const alarmId = text(intent.alarmId);
-  if (alarmId !== undefined && typeof intent.epoch === "number" && !(action.kind === "alarm" && intent.op === "arm"))
-    return { kind: "alarm", alarmId, epoch: intent.epoch };
-  return undefined;
-}
-
 function deliveryCause(
   action: LedgerAction.Node,
   effect: PlainObject,
@@ -271,10 +261,12 @@ function lineageCause(action: LedgerAction.Node): SessionHistory.Cause {
 
 function causeOf(
   action: LedgerAction.Node,
-  intent: PlainObject,
   effect: PlainObject,
 ): SessionHistory.Cause {
-  return alarmCause(action, intent) ?? deliveryCause(action, effect) ?? lineageCause(action);
+  // #1254 S5: the dedicated alarm-cause variant is gone; occurrence-chain
+  // alarm rows surface through the `alarms` read model, so history causes
+  // fall through to delivery/lineage.
+  return deliveryCause(action, effect) ?? lineageCause(action);
 }
 
 function outboundOutcome(outbound: SessionTransition.Outbound): SessionHistory.Outcome {

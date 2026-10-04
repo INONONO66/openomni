@@ -8,6 +8,8 @@ import {
   LedgerAction,
   LedgerSession,
   PolicyRow,
+  RESERVED_ALARM_PURPOSES,
+  isReservedAlarmPurpose,
   type Tool,
   type PlainObject,
 } from "../src/index.js";
@@ -161,13 +163,16 @@ describe("L0 ledger protocol", () => {
     }
   });
 
-  test("alarm occurrences retain domain-separated delivery identity", () => {
-    const id = Alarm.occurrenceId("alarm-1", 1, "source-1");
-    expect(id).toBe(canonicalDigest(["alarm.occurrence", "alarm-1", 1, "source-1"]));
-    expect(Alarm.occurrenceId("alarm-1", 1, "source-1")).toBe(id);
-    expect(Alarm.occurrenceId("alarm-2", 1, "source-1")).not.toBe(id);
-    expect(Alarm.occurrenceId("alarm-1", 2, "source-1")).not.toBe(id);
-    expect(Alarm.occurrenceId("alarm-1", 1, "source-2")).not.toBe(id);
+  test("alarm occurrence minter is a pinned domain-separated digest", () => {
+    const id = Alarm.occurrenceId("session-1", "alarm-1", 7, "retry");
+    expect(id).toBe(canonicalDigest(["alarm.occurrence", "session-1", "alarm-1", 7, "retry"]));
+    // Same inputs, same digest.
+    expect(Alarm.occurrenceId("session-1", "alarm-1", 7, "retry")).toBe(id);
+    // A fork never accepts its parent's key: sessionId changes the digest.
+    expect(Alarm.occurrenceId("session-2", "alarm-1", 7, "retry")).not.toBe(id);
+    expect(Alarm.occurrenceId("session-1", "alarm-2", 7, "retry")).not.toBe(id);
+    expect(Alarm.occurrenceId("session-1", "alarm-1", 8, "retry")).not.toBe(id);
+    expect(Alarm.occurrenceId("session-1", "alarm-1", 7, "deadline")).not.toBe(id);
   });
 
   test("parses session, inbox, fence-adoption, and global policy rows", () => {
@@ -218,4 +223,13 @@ describe("L0 ledger protocol", () => {
       }),
     ).toMatchObject({ name: "tool-guard", generation: 1 });
   });
+});
+
+test("the loop-reserved alarm purpose set is closed and classifies exactly its members", () => {
+  expect([...RESERVED_ALARM_PURPOSES]).toEqual(["step_watchdog", "retry", "deadline", "resume"]);
+  for (const purpose of RESERVED_ALARM_PURPOSES) {
+    expect(isReservedAlarmPurpose(purpose)).toBe(true);
+  }
+  expect(isReservedAlarmPurpose("monitor.hit")).toBe(false);
+  expect(isReservedAlarmPurpose("cron.tick")).toBe(false);
 });

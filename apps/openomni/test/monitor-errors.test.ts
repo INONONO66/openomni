@@ -13,10 +13,10 @@ const SPAWNED_PTY_MS = 15_000;
 
 test("alarm JSON boundary validates values instead of assigning a payload type", () => {
   expect(() =>
-    alarmSummary('{"alarmId":"id","epoch":1,"reason":"exit","exitCode":"zero"}'),
+    alarmSummary('{"watchId":"id","reason":"exit","exitCode":"zero"}'),
   ).toThrow();
   expect(() =>
-    alarmSummary('{"alarmId":"id","epoch":1,"reason":"invented","exitCode":0}'),
+    alarmSummary('{"watchId":"id","reason":"invented","exitCode":0}'),
   ).toThrow();
   expect(() => alarmPathEvent('{"path":"/tmp/ready","event":"delete"}')).toThrow();
   expect(() => alarmPathEvent('{"path":42,"event":"create"}')).toThrow();

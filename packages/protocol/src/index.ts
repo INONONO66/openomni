@@ -1,5 +1,6 @@
 export * from "./error/index.js";
-export { canonicalDigest, canonicalKey, parseJson, PlainValueSchema } from "./json.js";
+export { Cron, CronParseError } from "./cron.js";
+export { canonicalDigest, canonicalJson, canonicalKey, parseJson, PlainValueSchema } from "./json.js";
 export { PlainObjectSchema } from "./json.js";
 export type { JsonShapedValue, PlainObject, PlainValue } from "./json.js";
 export { listenForAbort } from "./platform.js";

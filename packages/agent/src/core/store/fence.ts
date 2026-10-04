@@ -19,7 +19,8 @@ import { z } from "zod";
 import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
 import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "./services";
 import type { CatalogStore } from "./catalog.js";
-import type { SessionStore } from "./session-file/index.js";
+import type { ArmedAlarmRow, SessionStore } from "./session-file/index.js";
+import { armedAlarmDelta } from "./storage/sqlite-l0-write.js";
 import { writeEffect } from "./storage/write-effect";
 
 /**
@@ -45,7 +46,6 @@ export function claimWithinCountedWindow<State>(operations: {
   });
 }
 
-
 export const RESUME_BUDGET = 10;
 
 /** The storage capabilities one kernel handle reads and writes. */
@@ -54,6 +54,11 @@ export interface SessionKernelStores {
   readonly sessions?: SessionWriteAdapter;
   readonly actions?: ProtocolStorage.ActionSubAdapter;
   readonly policies?: ProtocolStorage.PolicyRowSubAdapter;
+  /** #1254 S3: reads over the session file's durable `armed_alarms` index. */
+  readonly armed?: {
+    armedAlarms(): readonly ArmedAlarmRow[];
+    armedCount(): number;
+  };
 }
 
 /**
@@ -66,6 +71,8 @@ export interface SessionKernelContext {
   stores(): SessionKernelStores;
   writable(): boolean;
   readonly childSessionsPage: CatalogStore["childSessionsPage"];
+  /** #1254 S3: the catalog `has_armed` flag write (ordering law in `commitIn`). */
+  readonly markArmed?: (sessionId: string, armed: boolean) => void;
 }
 
 export interface MaterializeInput {
@@ -151,7 +158,28 @@ function commitIn(
   context: SessionKernelContext,
   input: LedgerSession.Commit,
 ): Effect.Effect<CommitReceipt, LedgerError> {
-  return sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.commit(input)));
+  // #1254 S3 catalog intent ordering: flag the session as possibly-armed
+  // BEFORE the session transaction that commits an arm (an extra true costs a
+  // boot rescan); clear only after a committed batch touched the alarm plane
+  // AND the index confirms empty (a premature false would lose recovery).
+  const deltas = input.actions.flatMap((action) => {
+    const delta = armedAlarmDelta(action);
+    return delta === undefined ? [] : [delta];
+  });
+  return Effect.suspend(() => {
+    if (deltas.some((delta) => delta.op === "upsert")) context.markArmed?.(input.sessionId, true);
+    return sessionWritesIn(context).pipe(
+      Effect.flatMap((sessions) => sessions.commit(input)),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          if (deltas.length === 0) return;
+          const armed = context.stores().armed;
+          if (armed !== undefined && armed.armedCount() === 0)
+            context.markArmed?.(input.sessionId, false);
+        }),
+      ),
+    );
+  });
 }
 
 /** The seed and its high-water mark belong to the same SQLite read snapshot. */
@@ -328,7 +356,11 @@ function outboundRowsIn(
 }
 
 /** The chain effect one received message committed; the pending fold reads it back. */
-const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
+const ReceivedEffect = z.object({
+  inboxKind: Inbox.Kind,
+  content: z.string(),
+  delivery: z.enum(["steer", "followUp"]).optional(),
+});
 
 /**
  * Pending-message projection (W5.2): `prompt` actions carrying an inbox
@@ -575,7 +607,10 @@ function getSnapshotIn(
   turns = 1,
 ): SessionTurn.Snapshot {
   if (!Number.isInteger(turns) || turns < 0)
-    throw new LedgerInvariant({ operation: "session.snapshot", message: "turn count must be non-negative" });
+    throw new LedgerInvariant({
+      operation: "session.snapshot",
+      message: "turn count must be non-negative",
+    });
   return context.stores().transaction(() => snapshotFor(context, rowIn(context, sessionId), turns));
 }
 
@@ -651,7 +686,10 @@ function watchSnapshotIn(
       snapshot,
       subscribe(handler: (observation: SessionTurn.Observation) => void) {
         if (closed)
-          throw new LedgerInvariant({ operation: "session.watch", message: "session watch is unsubscribed" });
+          throw new LedgerInvariant({
+            operation: "session.watch",
+            message: "session watch is unsubscribed",
+          });
         handlers.add(handler);
         return () => handlers.delete(handler);
       },
@@ -808,6 +846,12 @@ function requiredActionsIn(context: SessionKernelContext) {
   return adapter;
 }
 
+function requiredArmedIn(context: SessionKernelContext) {
+  const adapter = context.stores().armed;
+  if (adapter === undefined) throw new StorageUnavailable({ capability: "armed_alarms" });
+  return adapter;
+}
+
 function makeSessionKernel(context: SessionKernelContext) {
   return {
     materialize: (input: MaterializeInput) => materializeIn(context, input),
@@ -888,11 +932,17 @@ function makeSessionKernel(context: SessionKernelContext) {
     },
     row: (sessionId: string): LedgerSession.Row => rowIn(context, sessionId),
     listRows: (): LedgerSession.Row[] => requiredSessionsIn(context).list(),
-    childSessionsPage: (sessionId: string, afterId: string, limit: number): { readonly id: string }[] =>
-      context.childSessionsPage(sessionId, afterId, limit),
+    childSessionsPage: (
+      sessionId: string,
+      afterId: string,
+      limit: number,
+    ): { readonly id: string }[] => context.childSessionsPage(sessionId, afterId, limit),
     policyRows: (generation?: number): PolicyRow.Row[] => policyRowsIn(context, generation),
     currentPolicyGeneration: (): number =>
       policyRowsIn(context).reduce((latest, policy) => Math.max(latest, policy.generation), 0),
+    /** #1254 S3: armed occurrences restored from the session file's durable index. */
+    armedAlarms: (): readonly ArmedAlarmRow[] => requiredArmedIn(context).armedAlarms(),
+    armedCount: (): number => requiredArmedIn(context).armedCount(),
     getSnapshot: (sessionId: string, turns = 1): SessionTurn.Snapshot =>
       getSnapshotIn(context, sessionId, turns),
     watchSnapshot: (
@@ -919,8 +969,11 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
       sessions: session.sessions,
       actions: session.actions,
       policies: catalog.policies,
+      armed: { armedAlarms: session.armedAlarms, armedCount: session.armedCount },
     }),
     writable: () => true,
-    childSessionsPage: (parentId, afterId, limit) => catalog.childSessionsPage(parentId, afterId, limit),
+    childSessionsPage: (parentId, afterId, limit) =>
+      catalog.childSessionsPage(parentId, afterId, limit),
+    markArmed: (sessionId, armed) => catalog.markArmed(sessionId, armed),
   });
 }

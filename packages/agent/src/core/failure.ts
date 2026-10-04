@@ -169,7 +169,33 @@ export type SessionError = ExecutionError | SessionMissing | LeaseLost | Generat
 // ─── from failure.ts (#1247) ───
 /** The typed error a Cause carries, else `synthesize` applied to the pretty-printed Cause (defects and interrupts). */
 export function fromCause<E, F>(cause: Cause.Cause<E>, synthesize: (pretty: string) => F): E | F {
-  return Option.getOrElse(Cause.findErrorOption(cause), () => synthesize(Cause.pretty(cause)));
+  return Option.getOrElse(Cause.findErrorOption(cause), () => synthesize(pretty(cause)));
+}
+
+/**
+ * `Cause.pretty` byte-for-byte, except that an Error whose `stack` is not a string renders as
+ * `name: message`. Bun 1.4.1 materializes `new Error().stack` lazily and intermittently yields
+ * `undefined` with `Error.stackTraceLimit` intact (always when the limit is 0), which made
+ * effect's renderer return `""` or throw from `cause.stack.split`. This is the one Cause renderer
+ * for this package and `apps/openomni`; `Cause.pretty` is not read there.
+ */
+export function pretty<E>(cause: Cause.Cause<E>): string {
+  return Cause.prettyErrors(cause).map(renderPrettyError).join("\n");
+}
+
+function stackOf(error: Error): string {
+  return typeof error.stack === "string" ? error.stack : `${error.name}: ${error.message}`;
+}
+
+function renderPrettyError(error: Error): string {
+  const head = stackOf(error);
+  return "cause" in error && error.cause instanceof Error ? `${head} {\n${renderErrorCause(error.cause, "  ")}\n}` : head;
+}
+
+function renderErrorCause(cause: Error, prefix: string): string {
+  const [first, ...rest] = stackOf(cause).split("\n");
+  const lines = [`${prefix}[cause]: ${first}`, ...rest.map((line) => `${prefix}${line}`)].join("\n");
+  return "cause" in cause && cause.cause instanceof Error ? `${lines} {\n${renderErrorCause(cause.cause, `${prefix}  `)}\n${prefix}}` : lines;
 }
 
 /** Agent profile: a Cause without a typed error becomes this package's AgentFailure for `operation`. */

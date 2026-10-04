@@ -285,7 +285,7 @@
   },
   {
     "name": "monitor",
-    "description": "Watch command output in a PTY, a machine terminal session, or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
+    "description": "Watch command output in a PTY, a machine terminal session, an absolute path, or a cron schedule outside the session. Create a persistent or timed watch or a recurring cron chain, rearm a retired one, or cancel it.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -388,6 +388,25 @@
                         }
                       },
                       "required": ["kind", "path", "event"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "cron"
+                        },
+                        "expr": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "tz": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["kind", "expr", "tz"],
                       "additionalProperties": false
                     }
                   ]

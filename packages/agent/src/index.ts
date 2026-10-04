@@ -1,6 +1,6 @@
 // Agent package public API (#1276): exactly five namespaces.
 export * as Core from "./core";
-export * as Bundle from "./core/bundle";
+export * as Bundle from "./bundle";
 export * as Model from "./model";
 export * as Inspect from "./inspect";
 export * as Testing from "./testing";
