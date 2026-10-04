@@ -205,6 +205,19 @@ export type ArmVerb = (input: {
 >;
 
 /**
+ * Typed send refusal (#1254 H2): the composed send door reports a PERMANENT
+ * inability to honor an armed occurrence (an uninstallable watch spec, an
+ * unparseable payload). The entity retires the chain with
+ * `reason: "send_refused"`. Transient failures must stay defects: the armed
+ * row stands and the next activation's resend (or the boot sweep) retries.
+ */
+export class AlarmSendRefused extends Schema.TaggedError<AlarmSendRefused>(
+  "@openomni/agent/core/AlarmSendRefused",
+)("AlarmSendRefused", {
+  reason: Schema.String,
+}) {}
+
+/**
  * Everything one committed `alarm{arm}` row carries, reported post-commit by
  * the entity's arm verb (#1254 H1). The composition root keeps native source
  * handles aligned with the chain: a re-arm moves the holder onto the new

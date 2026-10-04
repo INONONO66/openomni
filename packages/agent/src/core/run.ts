@@ -334,13 +334,16 @@ export interface SessionEntityPorts {
    * DeliverAt door (the occurrence id is the dedupe key, so a live duplicate
    * folds in the cluster). Persist-and-return (M3): the effect completes when
    * the envelope is durable — it never awaits the delivery reply, which for a
-   * future occurrence only arrives at `fireAt`. Absent means no resend plane
-   * is composed.
+   * future occurrence only arrives at `fireAt`. For a native-source purpose
+   * (`monitor.hit`) the send is the source (re)install instead (#1254 H2).
+   * A typed `AlarmSendRefused` is a PERMANENT refusal — the entity retires
+   * the chain; transient failures must stay defects so the armed row stands.
+   * Absent means no resend plane is composed.
    */
   readonly sendAlarm?: (
     sessionId: string,
     occurrence: import("./alarm").AlarmFired,
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, import("./alarm").AlarmSendRefused>;
   /**
    * #1254 H3: live-activation hook. Called once per activation (after fence
    * adoption, before the armed resend) with the entity's budgeted `arm` verb

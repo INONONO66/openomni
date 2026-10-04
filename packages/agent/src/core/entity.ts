@@ -12,7 +12,7 @@ import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit
 import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
 import { AdmissionFailure, type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, type ReadPage, ReadRpc, ResolveRefused, ResolveRpc } from "./messages";
-import { alarmDisposition, armAction, ArmRefused, firedAction, type AlarmChainReads, type AlarmDrainConfig, type AlarmFired, type AlarmWakeContext, AlarmWakeError, type ArmVerb } from "./alarm";
+import { alarmDisposition, armAction, ArmRefused, firedAction, type AlarmChainReads, type AlarmDrainConfig, type AlarmFired, type AlarmSendRefused, type AlarmWakeContext, AlarmWakeError, type ArmVerb } from "./alarm";
 import { isReservedAlarmPurpose } from "@openomni/protocol";
 import { renderReadModel } from "./read";
 
@@ -193,6 +193,42 @@ function commitIn(
   );
 }
 
+/**
+ * One armed-occurrence send with the H2 refusal contract (#1254). A typed
+ * `AlarmSendRefused` is permanent: on the activation RESEND walk nobody else
+ * can answer it, so the chain retires with `reason: "send_refused"` (the
+ * post-commit notice closes any native handle). On the fresh-arm FORWARD the
+ * committing wave's verb awaits the install itself and owns the refusal (the
+ * watch verb retires its chains on a failed create) — retiring here too
+ * would double-retire the chain, so the forward drops it. Any other failure
+ * is logged and the armed row stands: the durable index plus the boot sweep
+ * is the recovery of last resort. A refused RETIRE is a wiring defect and dies.
+ */
+function sendArmedOccurrence(
+  handle: ActivationHandle,
+  send: NonNullable<SessionEntityPorts["sendAlarm"]>,
+  occurrence: AlarmFired,
+  onRefused: "retire" | "ignore",
+): Effect.Effect<void> {
+  const sessionId = handle.authority.sessionId;
+  return send(sessionId, occurrence).pipe(
+    Effect.catchCause((cause) => {
+      const refused: Option.Option<AlarmSendRefused> = Cause.findErrorOption(cause);
+      if (Option.isNone(refused))
+        return Effect.logError(`armed alarm send failed: ${sessionId}`, cause);
+      if (onRefused === "ignore") return Effect.void;
+      return entityArmVerb(handle)({
+        purpose: occurrence.purpose,
+        at: null,
+        alarmId: occurrence.alarmId,
+        supersedes: occurrence.occurrenceId,
+        sourceKey: occurrence.sourceKey,
+        payload: { reason: "send_refused", detail: refused.value.reason },
+      }).pipe(Effect.orDie, Effect.asVoid);
+    }),
+  );
+}
+
 /** Reconstructs the minted occurrence from a committed arm append and forwards it. */
 function forwardArmedOccurrences(
   handle: ActivationHandle,
@@ -208,7 +244,7 @@ function forwardArmedOccurrences(
   // Scoped to the activation: the envelope persists before the reply wait,
   // so a passivation interrupting the waiting fiber never loses the send.
   return Effect.forkIn(
-    Effect.forEach(occurrences, (fired) => send(handle.authority.sessionId, fired), { discard: true }),
+    Effect.forEach(occurrences, (fired) => sendArmedOccurrence(handle, send, fired, "ignore"), { discard: true }),
     handle.scope,
   ).pipe(Effect.asVoid);
 }
@@ -700,11 +736,11 @@ function armedChainReads(handle: ActivationHandle): AlarmChainReads {
 function resendArmedAlarms(handle: ActivationHandle): Effect.Effect<void> {
   const send = handle.env.ports.sendAlarm;
   if (send === undefined || handle.closing.current) return Effect.void;
-  const { kernel, authority, scope } = handle;
+  const { kernel, scope } = handle;
   const rows = kernel.armedAlarms();
   if (rows.length === 0) return Effect.void;
   return Effect.forkIn(
-    Effect.forEach(rows, (row) => send(authority.sessionId, row), { discard: true }),
+    Effect.forEach(rows, (row) => sendArmedOccurrence(handle, send, row, "retire"), { discard: true }),
     scope,
   ).pipe(Effect.asVoid);
 }

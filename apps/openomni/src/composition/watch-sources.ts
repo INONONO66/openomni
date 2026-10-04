@@ -486,8 +486,10 @@ export function createWatchSources(
     await holder.tail;
   }
 
-  return {
-    async install(spec) {
+  /** In-flight installs by watch id: a concurrent duplicate adopts the winner. */
+  const pending = new Map<string, Promise<void>>();
+
+  async function startHolder(spec: ArmedWatch): Promise<void> {
       // Reinstall replaces any previous handle before a new occurrence leaves.
       await close(spec.id);
       const holder: Holder = {
@@ -511,6 +513,29 @@ export function createWatchSources(
         throw error;
       }
       holders.set(spec.id, holder);
+  }
+
+  return {
+    async install(spec) {
+      // #1254 H2: an arm's forward and the watch verb's awaited install may
+      // race for the same fresh chain. The loser adopts the winner's handle
+      // (occurrence swap) instead of starting a second native source.
+      const inflight = pending.get(spec.id);
+      if (inflight !== undefined) {
+        await inflight.catch(() => undefined);
+        const holder = holders.get(spec.id);
+        if (holder !== undefined) {
+          holder.current = spec;
+          return;
+        }
+      }
+      const task = startHolder(spec);
+      pending.set(spec.id, task);
+      try {
+        await task;
+      } finally {
+        pending.delete(spec.id);
+      }
     },
     refresh(spec) {
       const holder = holders.get(spec.id);

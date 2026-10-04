@@ -156,7 +156,7 @@ test("app monitor source escapes the creating tool wave and wakes the session on
     unsubscribe2();
     guard2.removeEventListener("abort", abort2);
   });
-  const writer2 = Bun.spawn(["/bin/sh", "-c", `printf 'WAKE\n' > '${fifo}'`]);
+  const writer2 = Bun.spawn(["/bin/sh", "-c", `printf 'WAKE\\n' > '${fifo}'`]);
   suite.defer(async () => {
     if (writer2.exitCode === null) writer2.kill();
     await writer2.exited;

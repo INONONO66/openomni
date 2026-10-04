@@ -609,6 +609,155 @@ const stopLlm = {
   run: () => Effect.succeed({ type: "stop" as const }),
 };
 
+/** Seeds one armed MONITOR_HIT chain (given spec) plus its scheduled timeout companion. */
+async function seedNativeSession(
+  plane: Awaited<ReturnType<typeof planeOf>>,
+  sessionId: string,
+  watch: Record<string, unknown>,
+) {
+  const kernel = plane.openKernel(sessionId);
+  await runEffect(
+    kernel.materialize({
+      id: sessionId,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: kernel.currentPolicyGeneration(),
+      actionId: `${sessionId}:materialize`,
+      at: 1,
+    }),
+  );
+  plane.catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: 1 });
+  const fence = await runEffect(adoptTestFence(kernel, sessionId, "native-seeder"));
+  const hit = Core.armAction({
+    parentId: `${sessionId}:materialize`,
+    sessionId,
+    purpose: Bundle.MONITOR_HIT,
+    at: 2_000,
+    supersedes: null,
+    alarmId: `${sessionId}-watch`,
+    sourceKey: Bundle.MONITOR_SOURCE,
+    payload: { spec: { watch, policyGeneration: 1, notificationLimit: 8 }, notifications: 0 },
+    armSeq: 1,
+    ts: 2,
+  });
+  const timeout = Core.armAction({
+    parentId: hit.action.id,
+    sessionId,
+    purpose: Bundle.MONITOR_TIMEOUT,
+    at: 4_102_444_800_000,
+    supersedes: null,
+    alarmId: `${sessionId}-watch:timeout`,
+    sourceKey: Bundle.MONITOR_SOURCE,
+    payload: { watchId: `${sessionId}-watch` },
+    armSeq: 2,
+    ts: 3,
+  });
+  await runEffect(
+    kernel.commit({
+      sessionId,
+      owner: "native-seeder",
+      fence,
+      now: 3,
+      expectedRevision: kernel.row(sessionId).revision,
+      actions: [hit.action, timeout.action],
+      state: "idle",
+    }),
+  );
+  return { hit, timeout };
+}
+
+test("an activation's armed monitor.hit resend reinstalls the native source across a reboot (#1254 H2)", async () => {
+  const fifo = join(suite.tempDir("index-native-resend-"), "source");
+  expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
+  const config = suite.config("index-native-resend-db-", { wsToken: "index-native-token" });
+  const app1 = await suite.boot({ config, llm: stopLlm });
+  const plane1 = await planeOf(app1.runtime);
+  const sessionId = "native-resend";
+  const { hit, timeout } = await seedNativeSession(plane1, sessionId, {
+    command: `cat '${fifo}'; read value`,
+    filter: "^WAKE$",
+    description: "native resend",
+    persistent: true,
+  });
+  await app1.stop();
+
+  // The wake's prompt commit is the barrier: it exists only if the reboot's
+  // armed resend actually reinstalled the native source and its hit resent
+  // the LIVE occurrence through the entity door.
+  const woke = Promise.withResolvers<void>();
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.sessionId === sessionId && event.kind === "prompt") woke.resolve();
+  });
+  suite.defer(unsubscribe);
+  const app2 = await suite.boot({ config: { ...config, machines: testMachinesPlane() }, llm: stopLlm });
+  const plane2 = await planeOf(app2.runtime);
+  // The writer's open blocks until the reinstalled source's `cat` attaches to
+  // the fifo — the rendezvous IS the install proof, no readiness polling.
+  const writer = Bun.spawn(["/bin/sh", "-c", `printf 'WAKE\\n' > '${fifo}'`]);
+  suite.defer(async () => {
+    if (writer.exitCode === null) writer.kill();
+    await writer.exited;
+  });
+  await bounded(woke.promise);
+  const kernel2 = plane2.openKernel(sessionId);
+  // The hit delivered under the seeded occurrence and prompted its content.
+  expect(kernel2.actionById(`${hit.occurrenceId}:delivered`)?.kind).toBe("alarm");
+  const prompt = kernel2.actionById(`${hit.occurrenceId}:prompt`);
+  if (prompt?.kind !== "prompt") throw new Error("missing wake prompt");
+  // The companion timeout chain was scheduled, not retired: still armed on
+  // the original occurrence, untouched by the hit path.
+  const chains = foldAlarmChains(kernel2, sessionId);
+  const timeoutChain = chains.get(`${sessionId}-watch:timeout`);
+  if (timeoutChain === undefined) throw new Error("timeout chain lost");
+  expect(timeoutChain.latest.occurrenceId).toBe(timeout.occurrenceId);
+  expect(timeoutChain.latest.at).toBe(4_102_444_800_000);
+});
+
+test("an uninstallable armed monitor.hit retires its chain with send_refused at reboot (#1254 H2)", async () => {
+  const config = suite.config("index-native-refused-db-", { wsToken: "index-refusal-token" });
+  const app1 = await suite.boot({ config, llm: stopLlm });
+  const plane1 = await planeOf(app1.runtime);
+  const sessionId = "native-refused";
+  // A terminal watch whose machine does not exist: install can never succeed.
+  const { hit, timeout } = await seedNativeSession(plane1, sessionId, {
+    machine: "m-ghost",
+    session: "qa",
+    description: "ghost terminal",
+    persistent: true,
+  });
+  await app1.stop();
+
+  // The ONLY alarm commit this reboot can produce for the session is the
+  // entity's retire of the refused chain — subscribe before boot.
+  const retired = Promise.withResolvers<void>();
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.sessionId === sessionId && event.kind === "alarm") retired.resolve();
+  });
+  suite.defer(unsubscribe);
+  const app2 = await suite.boot({ config: { ...config, machines: testMachinesPlane() }, llm: stopLlm });
+  const plane2 = await planeOf(app2.runtime);
+  await bounded(retired.promise);
+  const kernel2 = plane2.openKernel(sessionId);
+  const chains = foldAlarmChains(kernel2, sessionId);
+  const watchChain = chains.get(`${sessionId}-watch`);
+  if (watchChain === undefined) throw new Error("watch chain lost");
+  // Retired: a fresh arm superseding the refused occurrence, at: null, typed reason.
+  expect(watchChain.latest.at).toBeNull();
+  expect(watchChain.armCount).toBe(2);
+  expect(watchChain.latest.supersedes).toBe(hit.occurrenceId);
+  expect(watchChain.latest.payload).toMatchObject({ reason: "send_refused" });
+  // No fired fact was invented for the refused occurrence.
+  expect(kernel2.actionById(`${hit.occurrenceId}:delivered`)).toBeUndefined();
+  expect(kernel2.actionById(`${hit.occurrenceId}:stale`)).toBeUndefined();
+  // The scheduled timeout companion is untouched and still armed.
+  const timeoutChain = chains.get(`${sessionId}-watch:timeout`);
+  if (timeoutChain === undefined) throw new Error("timeout chain lost");
+  expect(timeoutChain.latest.occurrenceId).toBe(timeout.occurrenceId);
+  expect(timeoutChain.latest.at).toBe(4_102_444_800_000);
+});
+
 test("refused alarm sends (sqlite trigger fault) fail one session's rescan and another's activation resend without touching their armed rows", async () => {
   const config = suite.config("index-resend-fault-db-", { wsToken: "index-fault-token" });
   if (config.catalogPath === undefined) throw new Error("missing test catalog");
@@ -637,9 +786,17 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
   const errors = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const line = args.map(String).join(" ");
     if (line.includes("fault-rescan")) rescanLogged.resolve();
-    if (line.includes("fault-resend")) resendLogged.resolve();
   });
   suite.defer(() => errors.mockRestore());
+  // #1254 H2: a transient resend failure is a defect the ENTITY logs (the
+  // armed row stands); Effect's default logger writes through console.log.
+  const original = console.log.bind(console);
+  const logs = spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    const line = args.map(String).join(" ");
+    if (line.includes("armed alarm send failed: fault-resend")) resendLogged.resolve();
+    else original(...args);
+  });
+  suite.defer(() => logs.mockRestore());
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     if (event.sessionId === "fault-ok" && event.kind === "alarm") okStale.resolve();
   });
@@ -663,9 +820,12 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
   expect(resendKernel.actionById(`${resendDue.occurrenceId}:stale`)).toBeUndefined();
   expect(resendKernel.actionById(`${resendDue.occurrenceId}:delivered`)).toBeUndefined();
   // Secondary: each injected fault surfaced exactly one failure report.
-  const lines = errors.mock.calls.map((call) => call.map(String).join(" "));
-  expect(lines.filter((line) => line.includes("fault-rescan"))).toHaveLength(1);
-  expect(lines.filter((line) => line.includes("fault-resend"))).toHaveLength(1);
+  const errorLines = errors.mock.calls.map((call) => call.map(String).join(" "));
+  expect(errorLines.filter((line) => line.includes("fault-rescan"))).toHaveLength(1);
+  const logLines = logs.mock.calls.map((call) => call.map(String).join(" "));
+  expect(
+    logLines.filter((line) => line.includes("armed alarm send failed: fault-resend")),
+  ).toHaveLength(1);
 });
 
 test("activation resend persists every armed envelope at the insert, never awaiting a future occurrence's reply (M3)", async () => {

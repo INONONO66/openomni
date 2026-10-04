@@ -528,6 +528,46 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
     );
     const closeWatch = (watchId: string) => void watchSources.close(watchId);
+    // #1254 H2: a `monitor.hit` send (activation resend or fresh-arm forward)
+    // is the native-source plane's (re)install, never a time delivery: a live
+    // holder just adopts the occurrence; a missing one is installed from the
+    // committed arm payload. An uninstallable or unparseable spec is the
+    // typed PERMANENT refusal the entity answers by retiring the chain.
+    const installFromOccurrence = (
+      sessionId: string,
+      occurrence: Parameters<typeof sendAlarm>[1],
+    ): Effect.Effect<void, Core.AlarmSendRefused> =>
+      Effect.suspend(() => {
+        const parsed = (() => {
+          try {
+            return Bundle.WatchHitPayload.safeParse(JSON.parse(occurrence.payload));
+          } catch {
+            return undefined;
+          }
+        })();
+        if (parsed === undefined || !parsed.success)
+          return Effect.fail(
+            new Core.AlarmSendRefused({ reason: "monitor.hit arm payload carries no watch spec" }),
+          );
+        const armed = {
+          sessionId,
+          id: occurrence.alarmId,
+          occurrence: {
+            occurrenceId: occurrence.occurrenceId,
+            alarmId: occurrence.alarmId,
+            armSeq: occurrence.armSeq,
+          },
+          base: { spec: parsed.data.spec, notifications: parsed.data.notifications },
+        };
+        if (watchSources.refresh(armed)) return Effect.void;
+        return Effect.tryPromise({
+          try: () => watchSources.install(armed),
+          catch: (error) =>
+            new Core.AlarmSendRefused({
+              reason: error instanceof Error ? error.message : String(error),
+            }),
+        });
+      });
     // #1254 H3: ONE committing arm path. Every app-side arm (monitor tool,
     // watch verb, cron create) delegates to the live activation's budgeted
     // entity verb through this registry; no app code commits an arm row.
@@ -838,20 +878,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // Persist-and-return (M3): a DeliverAt envelope only replies at
       // `fireAt`, so the resend walk must complete at the durable insert —
       // a reply-awaiting send would park the walk on the first future row.
-      // Native-source chains (`monitor.hit`) are never time-delivered — their
-      // installed source resends the armed occurrence with the hit — so the
-      // entity's arm forward and activation resend skip them here, the same
-      // rule the app's arm verb applies to its own schedule.
+      // Native-source chains (`monitor.hit`) are never time-delivered: their
+      // send is the source (re)install (#1254 H2), whose permanent failures
+      // are the typed refusal the entity retires on. Everything else is a
+      // defect — the entity logs it and the armed row stands for the next
+      // activation (recovery of last resort).
       sendAlarm: (sessionId, occurrence) =>
         occurrence.purpose === Bundle.MONITOR_HIT
-          ? Effect.void
-          : scheduleAlarm(sessionId, occurrence).pipe(
-          Effect.catchCause((cause) =>
-            Effect.sync(() => {
-              console.error(`armed alarm resend failed: ${sessionId}`, cause);
-            }),
-          ),
-        ),
+          ? installFromOccurrence(sessionId, occurrence)
+          : scheduleAlarm(sessionId, occurrence).pipe(Effect.orDie),
     });
 
     // Boot alarm rescan (#1254 S3): wake every session that may hold armed
