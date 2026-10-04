@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791130925432,
+  "lastUpdate": 1791154448468,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -78161,6 +78161,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 191811,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5362b3bd4b030dc07278af6ede710c2d9a9eb727",
+          "message": "Load declarative capabilities and bundles and migrate monitor and cron (#1255) (#1289)\n\n* docs(status): open #1255 declarative bundles; #1254 merged 77e1375b (#1255 opener)\n\n* feat(protocol): D5 owner fields on the tool result contract (#1255 D5)\n\ncontent (model text) is the new required-by-refinement text slot with\noutput kept readable for historical rows; details and structuredContent\nare bounded plain-JSON fields refused typed over 262144 bytes;\ntoolResultText is the one content-or-output reader.\n\nassumed: tool result split — content / details / structuredContent (D5)\n\n* feat(agent): Capability/Bundle/Manifest define contracts in core (#1255 S1)\n\nCapability.define / Bundle.define (defineBundle) / Manifest.define as plain\nfrozen declaration data in core/capability.ts, exported through core/api.ts\nand the Bundle barrel. Model tools on a capability refuse typed at define\ntime; the former BundleError namespace refusal is define-time validation\n(DefineRefused). plugins/alarm adopts Capability.define (seam AlarmSeam,\npoints [alarm.fired], purposes registry, verbs {arm, watch}); behavior\nunchanged, existing alarm tests green.\n\n* fix(agent): default declaration generics so uninferred params stay object (#1255 S1)\n\n* wip(agent): S2 compose.ts (bundle.ts renamed), six-code ComposeRefused, off cascade, session.configure disabled; tests compose-reject/compose-off-cascade (#1255 S2, lead-banked after lane death; 2 TS errors in compose-off-cascade.test.ts:96,99)\n\n* wip(agent): D5 producer mapping — core/tool.ts result assembly, processor tool-events/stream-events, inspect/history read content; tests updated (#1255 D5, lead-banked after lane death; types+350 tests green)\n\n* fix(agent): compose-off-cascade test types; session.configure disabled schema readonly (#1255 S2)\n\nDisabled journal array is .readonly() so the one writer accepts the composed readonly cascade without copies at the type seam; test uses the real 'create' operation, revertTo 0, and zod-parses the intent value instead of a PlainValue cast (written-unknown stays 0).\n\n* refactor(openomni): move monitor and cron into src/bundles (#1255 P2)\n\n* feat(openomni): app manifest and bundles-off config tuple (#1255 P1)\n\n* feat(protocol): manifestHash on generation snapshot, idempotent on session tool, compose operation (#1255 S3)\n\nAdditive to the twelve kinds: session.configure's existing writer carries the composed Generation.hash in the snapshot, SessionGeneration.Tool preserves the bundle's idempotent declaration (the run loop alone decides replay), and the configure intent gains the 'compose' operation for manifest adoption at turn start. Covered by generation-rotation.test.ts later in this lane.\n\n* feat(agent): derive the three tool projections once; delete sessionTool()/toolSpec() (#1255 S3)\n\nprojectTools(definitions) -> {session, specs, dispatch} is the single derivation of SessionGeneration.Tool (idempotent preserved), Tool.Spec and the dispatch Map; buildDispatcher and the captured-catalog check consume it. rg 'sessionTool(|toolSpec(' packages/agent/src exits 1. apps/openomni/src/resident.ts still references Core.sessionTool - Lane 2 switches it to Core.projectTools(definitions).session (noted in progress file).\n\n* feat(agent): D5 consumer switch — cell door carries structuredContent only, composition reads it (#1255 D5)\n\nassumed: tool result split — content / details / structuredContent (D5)\n\nThe cell-door dispatch result and failed() drop the pre-D5 output alias;\napps/openomni composition/codemode.ts maps structuredContent to the cell's\nToolCallResult value and errors through toolResultText (the one fallback\nreader). Tests across agent and apps updated from .output to .content\n(model door) / .structuredContent (cell door).\n\nDECISION: the dead lane's inline comments deferred this switch to Lane 2;\nLane 2's brief explicitly excludes tool-result consumers (Lane 3 owns the\nD5 switch), so this lane does it.\n\n* feat(agent): generation rotation - composed manifest adoption at turn start (#1255 S3)\n\nSessionRuntime gains an optional composed{current} port; mailbox.startTurn appends one session.configure{operation: compose, disabled} through the single fence.ts writer when the composed Generation.hash differs from the session's adopted manifestHash, BEFORE capturing - the in-flight turn finishes on its captured generation (rotation strictly between turns). composedManifest(generation) projects the adoption face once via projectTools. DECISION: adoption bypasses authorizeConfigure - the manifest change itself (boot or provision op) is the authorized act; the per-session append is mechanical. Covered by generation-rotation.test.ts (2 tests: empty-state recompute/rollback determinism, in-flight pin + next-turn adoption + no-op on unchanged hash).\n\n* feat(agent): off-kind rows - composed admission kinds port, opaque journal history (#1255 S3)\n\nSessionEntityPorts gains capabilityKinds (the composed generation's registered kinds, mirroring inputRegistrations); entity admissionSnapshot threads it into decideSessionAdmission. off-kind-rows.test.ts drives the REAL entity cluster: rows written while the capability was on stay byte-for-byte with action_hash/prev_hash recomputable after the off recompose, deliver of the kind refuses unknown_kind with zero new facts, the off generation registers no reducer (opaque fold), and admission refuses pending rows of the kind.\n\n* test(agent): D5 split coverage — producer doors, model boundary, historical fallback, eval structuredContent (#1255 D5)\n\nassumed: tool result split — content / details / structuredContent (D5)\n\ntool-dispatcher: model door content+structuredContent, cell door typed-only,\noversize JSON dropped from structuredContent with truncated content kept,\nfailed call carries details.errorKind. to-model-messages: the wire carries\ncontent text only (never details/structuredContent); an output-only\nhistorical row still renders via toolResultText. code-mode-e2e: eval answers\nthe model with rendered content and code consumers with the CellState in\nstructuredContent.\n\n* refactor(openomni): switch apps and lint-tools to Core.projectTools after sessionTool()/toolSpec() deletion (#1255 Lane 2 step 2)\n\nLead-banked WIP of Lane 2 (lane died mid-step, tree coherent: apps check-types 0 errors, lint:tools OK, touched tests pass). lint-tools widens visibility for the snapshot projection alone because projectTools(...).specs drops model-invisible doors.\n\n* wip(openomni): P3 half-step — legacy compose plane removed from core, watch-plane.ts extracted; index.ts/runtime.ts not yet switched (#1255 Lane 2b, lead-banked)\n\nINCOHERENT WIP: apps check-types 14 errors (BundleDefinitions gone; runtime typed on the legacy layer). Lane 2b died on context overflow at 9.8M tokens. Lane 2c continues from here.\n\n* fix(app): refuseEvidenceOnly writes D5 content+details; last .output readers in agent tests (#1255 D5)\n\nassumed: tool result split — content / details / structuredContent (D5)\n\nresident.ts evidence-only refusal was the one producer still writing the\npre-split output field; it now writes content and details.errorKind.\nnative-tool-pre-dispatch cell-door assertion reads structuredContent;\nbench/turns and resident-authority read content.\n\n* #1255 P3: boot composes the manifest; generation layers read the composed generation\n\nconfig -> appManifest -> Bundle.compose -> runtime. A ComposeRefused is the\ntyped boot failure before any listener exists.\n\n- new ComposedGeneration service (composition/composed.ts); injected runtimes\n  default to the empty composition, boot/tests inject their holder.\n- generation-layers: policy registry = kernel + generation handlers; tool pool\n  appends generation.tools after the catalog (catalog wins name collisions);\n  ON bundles' contract Layers acquire per generation Scope in composition\n  order (the deleted runtime bundle plane's resource semantics).\n- policy-seed: gateRowPolicySeeds projects composed #1251 gate rows onto the\n  legacy live-plane rows; boot seeds generation.rows (monitorSeedRows gone).\n- index.ts: watch-plane seam owns every native-source/purpose concern; no\n  bundle name remains in boot; entity ports read inputRegistrations and\n  capabilityKinds from the composed generation per call.\n- resident: composedFaces per role (off bundle's face disappears), adoption()\n  face for core rotation (S3), materialize stamps manifestHash.\n- manifest: thin tool capability owns tool.pre/tool.post so bundle rows on\n  tool points compose.\n- core: configure paths carry manifestHash forward; MaterializeInput accepts\n  it (else every app configure forces a spurious compose adoption next turn).\n- tests migrated to composed holders; app-fixture composes the REAL product\n  manifest for injected runtimes.\n\napps check-types: 0 errors (one PRE-EXISTING upstream error in\npackages/machines/src/daemon.ts, byte-identical to origin/main).\napps bun test: 658 pass / 0 fail.\n\n* #1255 P4: provision bundle_enable/bundle_disable recompose the manifest off-list\n\n- provisioning/bundles.ts: BundlePort (names/off/set) + executors. disable =\n  off + name (sorted, deduped), enable = off - name; an undeclared name\n  refuses before composing; a ComposeRefused propagates as the tool refusal\n  and the previous composition stays current (atomic swap = rollback, no\n  restart).\n- index.ts: the port's set() composes appManifest with the new off-list,\n  swaps the ComposedGeneration holder and seeds the recomposed gate rows as\n  a fresh policy generation. In-flight turns keep their captured generation;\n  sessions adopt the new hash at next turn start (core rotation, S3).\n- composed.ts: ComposedHolder {current, swap} + composedHolderOf; all holder\n  providers (boot, fixtures) updated.\n- provision tool: bundle ops in the operation/output unions, consent rows\n  like contact_promote/contact_merge, renderer line.\n- tests: provision-bundles.test.ts (off-list semantics, undeclared refusal,\n  compose-refusal rollback); tool-schema snapshot regenerated (provision\n  schema grew; ultracite fix applied).\n\napps check-types 0 errors (modulo pre-existing daemon.ts); targeted tests\n39+4 pass; lint:tools OK.\n\n* #1255 P5: token-search ratchet tests in check-deps.test.ts\n\nThe checker already blocks every directory/band violation class with exit 1\nand tight #1276 pins (no slack: a pin above actual fails closed), so P5 adds\nthe issue body's token searches as live-repo tests via import.meta.dir:\n\n- T1 monitor tool/ports files deleted; T2 sessionTool(/toolSpec( at 0;\n  T3 'monitor' absent from boot; T4 BundlesLive at 0 (last comment mention\n  in core/compose.ts reworded); T5 @openomni/llm in agent src stays 0;\n  Bun.cron( stays 0.\n\nscript/check-deps.test.ts: 80 pass / 0 fail; script/check-deps.ts OK.\n\n* #1255 P4 follow-up: provision-consent pins the four consent rows (contact + bundle ops)\n\n* test(openomni): monitor bundle end-to-end — restart fire, mid-turn disable, off-at-boot (#1255 P6)\n\napps/openomni/test/monitor-bundle.test.ts: (1) a cron armed through the real monitor tool survives an app restart and a past-due boot fires it exactly once — one firing in the alarms read model, one prompt{origin: alarm} in history, and the adopted generation number stays stable because the recomposed manifest hashes identically (no spurious rotation); (2) provision{bundle_disable} mid-turn behind its Owner consent row: the running turn finishes on its captured generation (monitor still offered to the model's next wave), the NEXT turn adopts the recompose — generation+1, monitor out of bundles and tools, the off cascade on the session.configure{compose} disabled list; (3) OPENOMNI_BUNDLES_OFF at boot composes the bundle out through the real index.ts wiring — no tool face, adopted bundles exclude it, and an unregistered input kind refuses unknown_kind at Deliver with zero new facts.\n\nAppRuntimeOptions.clusterClock: 'injected' (opt-in) provides the injected wall clock to the cluster host layer so persisted DeliverAt holds follow the test clock — the restart-fire test is exact-state with zero sleeps. Default keeps the host on the platform clock: existing fixtures that pin a small epoch rely on past-due envelopes delivering immediately.\n\n* test(agent): re-prove deleted bundle.test.ts behaviors on the compose path (#1255 P3)\n\nThe legacy plane's bundle.test.ts was deleted with its plane; the behaviors it proved now live on Manifest.define/compose: self-requiring capability and self-providing bundle reject requires_cycle; a tool name colliding across bundles rejects duplicate; purposes and handlers collide across declarations (capability vs capability and bundle vs capability) with the owning name and detail; composition preserves manifest install order for bundles, tool faces and gate rows (not lexical order).\n\n* refactor(agent): split compose merge/cascade helpers under the lint complexity cap (#1255)\n\ncascadeOff's fixpoint sweeps and composeManifest's table merges move into named helpers (sweepOffCapabilities/sweepOffBundles, mergeCapabilityTables/mergeBundleTables, mergeInto) — behavior-identical, bun run lint green (noExcessiveCognitiveComplexity was red on both functions). Drops the unused SeamTag import in capability-define.test.ts.\n\n* refactor(agent): rename the compose-time handler table (#1255)\n\nThe issue's verification grep requires NamedPolicyRegistry to read zero.\nLane 1 kept the name for the immutable handler table built once at\ncompose and for its Context tag. Two names now: the Context tag is\nGenerationHandlers (the live handlers of one composed generation); the\nvalue table is HandlerTable with createHandlerTable/HandlerTableError.\nNo behavior change — no registration API existed.\n\n* test(openomni): catalog op pin gains provision bundle_enable/bundle_disable (#1255 P4)\n\n* docs(#1255): landed receipt, AGENTS stamp, close SLOP B6\n\nimplementation-status carries the measured shipped state of the three\nlanes with the recorded deviations and the merged-head sweeps; the\nAGENTS.md stamp flips from in flight to PR #1289; SLOP B6 closes on the\ncensus (bundle.ts barrel, fail-open 0, approvalBindings 0, callback\nroads 0, compose resolving handler names against declarations).\n\n* fix(#1255): close the static gates — seam keys, composeSync, typed bundle layers\n\n- Seams are keys, not Context.Service tags: Bundle.seam(key) is the one\n  constructor (key law @openomni/<owner>/<Name>, namespace refusal);\n  AlarmSeam and the app's ToolCapabilitySeam use it (R9: no unread tag).\n- Bundle.composeSync(manifest) is the Effect-free compose for boot and\n  fixtures; recompose at provision runs through runAppEffect.\n- Bundle.alarmContract builds the purpose-free manifest contract without a\n  runner; createWatchPlane is synchronous.\n- Bundle layers are typed Layer<never, SessionError, BundleLayerServices>;\n  the unknown-cast guard in bundleLayerStack is gone.\n- Dead exports unexported (composedPolicyRegistry, BUNDLE_INPUT,\n  productComposedHolder, AlarmOccurrence, api.ts re-exports trimmed to the\n  plugin-consumed names).\n- Test runner sites go through each package's runner owner.\n\n* test(#1255): retarget the bundle type contract; a compose defect stays a defect\n\nscript/bundle-type-contract.test.ts pinned the deleted core/bundle.ts\ncompiler (bundle/compose(seed, [...]) over Context.Service seams), so the\nscripts-tooling lanes failed on the PR head. It now pins the #1255 contract:\na bundle Layer is Layer<never, SessionError, BundleLayerServices> (a Layer\nreading a service outside the seed or failing outside the typed session\nerrors refuses TS2322), kinds/points are capability-owned (TS2322) and a\nseam is a key (forged object refuses TS2353); the positive fixture carries\nno any/unknown.\n\ncompose-reject gains the exit shape for a non-ComposeRefused throw inside\ncompose: a die, never a typed failure.\n\n* test(#1255): cover the seed projection, the alarm view swap and the bundle dispatch; pick the cron chain by kind\n\ngateRowPolicySeeds had no direct test: the table now pins obligation,\nconstant verdict, transform (with and without params) and the three\ninvariant refusals. alarmCapabilityView proves every face reads the\nholder's CURRENT instance after a recompose swap. executeProvision\ndispatches bundle_enable/bundle_disable through the bundle port and\nrefuses typed when provisioning is not composed.\n\nmonitor-bundle's cron test picked 'the second chain' by id inequality,\nwhich under a different Map order returned the consent request's\ndeadline chain (kind watch, status fired) instead of the re-armed cron\nchain; it now selects by kind.\n\n* test(#1255): one retired-surface conformance assertion; boot comment drops the bundle name\n\nReview r1 M1: check-deps.test.ts carried five absence-only token tests\n(deleted monitor files, sessionTool(/toolSpec(, 'monitor' in boot,\nBundlesLive, @openomni/llm) plus the Bun.cron( search. They fold into one\ntable-driven assertion over the live repository that names the surface\nAND the file on regrowth — which is exactly what it did: the H1 comment in\nindex.ts had reintroduced the word 'monitor' into boot, the issue's T3\ntoken. The comment now says 'watch ports'.\n\nmonitor-bundle test 4 narrows its step type to requestToolStep's own\nparameter types instead of a conditional type over suite.boot.",
+          "timestamp": "2026-10-05T07:51:28+09:00",
+          "tree_id": "53408cb0cbf648be2fd3d3e88a412bbef21a1f40",
+          "url": "https://github.com/INONONO66/openomni/commit/5362b3bd4b030dc07278af6ede710c2d9a9eb727"
+        },
+        "date": 1791154448100,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 877,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1564,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1210,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1184257,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 320324,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5857074,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 129,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 877,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 579,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 138297,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 713223,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 387610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 10693912,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1115959,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15547,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 144655,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 711126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 194621,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14221811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 75,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 152992,
             "unit": "ns/op"
           }
         ]
