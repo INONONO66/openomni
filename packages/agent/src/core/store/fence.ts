@@ -435,6 +435,8 @@ export function generationSnapshot(input: {
     readonly blocks: readonly SessionGeneration.SystemBlock[];
   };
   readonly policyGeneration: number;
+  /** The composed manifest's `Generation.hash` this snapshot adopts (#1255). */
+  readonly manifestHash?: string;
 }): SessionGeneration.Snapshot {
   assertUniqueTools(input.tools);
   assertUniqueBlocks(input.system.blocks);
@@ -453,6 +455,7 @@ export function generationSnapshot(input: {
       .join("\n\n"),
     systemHash: canonicalDigest(blocks),
     policyGeneration: input.policyGeneration,
+    ...(input.manifestHash === undefined ? {} : { manifestHash: input.manifestHash }),
   });
 }
 
