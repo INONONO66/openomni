@@ -205,6 +205,24 @@ export type ArmVerb = (input: {
 >;
 
 /**
+ * Everything one committed `alarm{arm}` row carries, reported post-commit by
+ * the entity's arm verb (#1254 H1). The composition root keeps native source
+ * handles aligned with the chain: a re-arm moves the holder onto the new
+ * occurrence at the commit, a retiring arm (`at: null`) closes it.
+ */
+export interface AlarmArmNotice {
+  readonly sessionId: string;
+  readonly purpose: string;
+  readonly alarmId: string;
+  readonly occurrenceId: string;
+  readonly armSeq: number;
+  readonly at: number | null;
+  readonly supersedes: string | null;
+  readonly sourceKey: string;
+  readonly payload: PlainObject;
+}
+
+/**
  * The accepted outcome a capability's wake returns (#1254): the core records
  * `fired{outcome: <returned>}` through `firedAction` — a capability never
  * builds an `alarm` append literal itself.

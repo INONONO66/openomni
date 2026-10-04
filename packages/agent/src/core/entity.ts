@@ -632,12 +632,13 @@ function entityArmVerb(handle: ActivationHandle): ArmVerb {
         return yield* new ArmRefused({ code: "alarm_budget" });
       const row = kernel.row(authority.sessionId);
       const armSeq = row.revision + 1;
+      const supersedes = input.supersedes ?? latest?.occurrenceId ?? null;
       const { action, occurrenceId } = armAction({
         parentId: kernel.latestAction(authority.sessionId)?.id ?? null,
         sessionId: authority.sessionId,
         purpose: input.purpose,
         at: input.at,
-        supersedes: input.supersedes ?? latest?.occurrenceId ?? null,
+        supersedes,
         alarmId,
         sourceKey: input.sourceKey,
         payload: input.payload,
@@ -652,6 +653,20 @@ function entityArmVerb(handle: ActivationHandle): ArmVerb {
         expectedRevision: row.revision,
         actions: [action],
         state: row.state,
+      });
+      // #1254 H1: post-commit notice — the composition root moves its native
+      // source handle onto this arm BEFORE any next hit can resend the old,
+      // now-superseded occurrence (which would fold stale in the dedupe).
+      env.ports.onArmed?.({
+        sessionId: authority.sessionId,
+        purpose: input.purpose,
+        alarmId,
+        occurrenceId,
+        armSeq,
+        at: input.at,
+        supersedes,
+        sourceKey: input.sourceKey,
+        payload: input.payload,
       });
       return { alarmId, occurrenceId, armSeq };
     })).pipe(Effect.catchIf(

@@ -252,6 +252,8 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
       // #1254 H3: live-arm registration delegates late like the other ports.
       // An activation awaits `ready` before any port call, so boot has bound.
       onLive: (sessionId, verbs) => resolve().onLive?.(sessionId, verbs) ?? (() => undefined),
+      // #1254 H1: post-commit arm notices follow the same late binding.
+      onArmed: (notice) => resolve().onArmed?.(notice),
       // #1254 S4: capability + keep-alive observation delegate late like the
       // turn port — purposes resolve against whatever boot bound (none = []).
       alarmCapability: {

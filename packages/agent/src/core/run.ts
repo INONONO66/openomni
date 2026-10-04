@@ -352,6 +352,12 @@ export interface SessionEntityPorts {
     sessionId: string,
     verbs: { readonly arm: import("./alarm").ArmVerb },
   ) => () => void;
+  /**
+   * #1254 H1: fired synchronously after every arm the entity's arm verb
+   * commits. The composition root follows the chain with its native source
+   * handles (refresh on re-arm, close on retire). Absent means nobody follows.
+   */
+  readonly onArmed?: (notice: import("./alarm").AlarmArmNotice) => void;
 }
 
 // ─── from controller-state (#1247) ───

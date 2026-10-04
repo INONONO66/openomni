@@ -809,6 +809,30 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // #1254 H3: each activation registers its budgeted arm verb here — the
       // app-side capability path above delegates to it (one committing door).
       onLive: liveArms.onLive,
+      // #1254 H1: native handles follow committed arm rows — a re-arm after a
+      // hit moves the live source onto the new occurrence at the commit (so
+      // the next hit resends the LIVE occurrence, not the settled one), and a
+      // retiring arm closes the handle. The first install stays the watch
+      // verb's awaited install seam.
+      onArmed: (notice) => {
+        if (notice.purpose !== Bundle.MONITOR_HIT) return;
+        if (notice.at === null) {
+          closeWatch(notice.alarmId);
+          return;
+        }
+        const payload = Bundle.WatchHitPayload.safeParse(notice.payload);
+        if (!payload.success) return;
+        watchSources.refresh({
+          sessionId: notice.sessionId,
+          id: notice.alarmId,
+          occurrence: {
+            occurrenceId: notice.occurrenceId,
+            alarmId: notice.alarmId,
+            armSeq: notice.armSeq,
+          },
+          base: { spec: payload.data.spec, notifications: payload.data.notifications },
+        });
+      },
       // #1254 S3: an activation resends its armed occurrences through the
       // entity's own persisted Alarm door (occurrence id = cluster dedupe).
       // Persist-and-return (M3): a DeliverAt envelope only replies at
