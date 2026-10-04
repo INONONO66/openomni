@@ -801,12 +801,16 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
     if (line.includes("fault-rescan")) rescanLogged.resolve();
   });
   suite.defer(() => errors.mockRestore());
-  // #1254 H2: a transient resend failure is a defect the ENTITY logs (the
-  // armed row stands); Effect's default logger writes through console.log.
+  // #1254 H2 / r2 M4: a transient resend failure is a defect the ENTITY logs
+  // (the armed row stands); Effect's default logger writes through
+  // console.log. The log is identified by the injected error's own sentinel
+  // (the trigger's RAISE message riding the rendered cause), never by the
+  // production log sentence — rewording the log must not break this test.
+  const INJECTED_RESEND = "injected resend refusal";
   const original = console.log.bind(console);
   const logs = spyOn(console, "log").mockImplementation((...args: unknown[]) => {
     const line = args.map(String).join(" ");
-    if (line.includes("armed alarm send failed: fault-resend")) resendLogged.resolve();
+    if (line.includes(INJECTED_RESEND)) resendLogged.resolve();
     else original(...args);
   });
   suite.defer(() => logs.mockRestore());
@@ -836,9 +840,7 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
   const errorLines = errors.mock.calls.map((call) => call.map(String).join(" "));
   expect(errorLines.filter((line) => line.includes("fault-rescan"))).toHaveLength(1);
   const logLines = logs.mock.calls.map((call) => call.map(String).join(" "));
-  expect(
-    logLines.filter((line) => line.includes("armed alarm send failed: fault-resend")),
-  ).toHaveLength(1);
+  expect(logLines.filter((line) => line.includes(INJECTED_RESEND))).toHaveLength(1);
 });
 
 test("activation resend persists every armed envelope at the insert, never awaiting a future occurrence's reply (M3)", async () => {
