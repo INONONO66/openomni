@@ -35,8 +35,10 @@ test("a missing requestId is unknown_request with zero new facts", async () => {
   const sessionId = "stale-unknown";
   await seedSessionWithOpenRequest({ sessionsDir, catalogFile, sessionId, requestId: "req-live" });
   const before = readChain(sessionFileFor(sessionsDir, sessionId), sessionId).length;
+  // A refusal commits nothing, so the request doorbell stays silent.
+  const rung: string[] = [];
   const refusal = await runCluster(
-    options,
+    { ...options, onRequestReady: (ringing) => rung.push(ringing) },
     sendResolve(sessionId, {
       requestId: "req-gone",
       outcome: "cancelled",
@@ -45,6 +47,7 @@ test("a missing requestId is unknown_request with zero new facts", async () => {
     }).pipe(Effect.flip),
   );
   expect((refusal as ResolveRefused).code).toBe("unknown_request");
+  expect(rung).toEqual([]);
   expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId).length).toBe(before);
 });
 

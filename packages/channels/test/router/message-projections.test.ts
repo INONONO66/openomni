@@ -57,7 +57,7 @@ test.each([
   expect(commits).toEqual([]);
 });
 
-test("session deadline is part of the inbox commit, never a second alarm write", async () => {
+test("session deadline is one deadline arm inside the request commit, never a second write", async () => {
   const router = makeRouter({
     now: () => 10,
   });
@@ -73,11 +73,20 @@ test("session deadline is part of the inbox commit, never a second alarm write",
   ));
   expect(result.status).toBe("executed");
   if (result.status !== "executed") throw new Error("not executed");
-  expect(sessionTree("sender", ledger().sessions.actions).filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm")).toEqual(
-    [],
-  );
-  expect(ledger().kernel.requestRows("sender")).toMatchObject([
-    { deadline: 100, expectedResponders: ["child"] },
+  // #1254 S4: the deadline is the reserved `deadline` alarm chain, armed in
+  // the same decision batch as `request.open` (no second commit below).
+  const requests = ledger().kernel.requestRows("sender");
+  expect(requests).toMatchObject([{ deadline: 100, expectedResponders: ["child"] }]);
+  const requestId = requests[0]?.requestId;
+  expect(
+    sessionTree("sender", ledger().sessions.actions)
+      .filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "alarm")
+      .map((action) => ({ id: action.id, intent: action.intent.value })),
+  ).toMatchObject([
+    {
+      id: `${requestId}:deadline:arm:1`,
+      intent: { op: "arm", purpose: "deadline", at: 100, payload: { requestId } },
+    },
   ]);
   expect(commits).toHaveLength(1);
   expect(z.object({ sourceActionId: z.string() }).safeParse(commits[0]?.origin.value).success).toBe(

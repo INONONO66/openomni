@@ -10,7 +10,7 @@ import { createFindTool } from "../find";
 import { createGrepTool } from "../grep";
 import { createLsTool } from "../ls";
 import { createMonitorTool } from "../monitor";
-import type { MonitorPorts } from "./monitor-ports";
+import type { MonitorPorts } from "./watch";
 import { createProvisionTool } from "../provision";
 import type { ProvisionPort } from "../../provisioning/channels";
 import { createReadTool } from "../read";

@@ -1,5 +1,5 @@
-import { Cause, Clock, Effect } from "effect";
-import { type ExecutionError, RunEvents, type Entropy } from "../../core/api";
+import { Clock, Effect } from "effect";
+import { type ExecutionError, RunEvents, type Entropy, pretty } from "../../core/api";
 import type { Message, BusEvent } from "@openomni/protocol";
 import type { CompactionYield } from "./geometry";
 import type { CompactionCandidate } from "./speculate";
@@ -124,7 +124,7 @@ export namespace Compaction {
         dispatch.candidate,
         finish,
       ).pipe(Effect.onError((cause) => Effect.sync(() => {
-      const message = Cause.pretty(cause);
+      const message = pretty(cause);
       // The one exit finish() cannot serve: the summarizer threw. The
       // bracket still closes — `failed` is this operation's terminal — and
       // the throw propagates unchanged into the seam's fail-closed contract.

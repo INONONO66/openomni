@@ -120,10 +120,10 @@ test("intent payload literals without an append shape never count as writers", (
   const root = fixture({
     "packages/protocol/src/journal/core/alarm.ts": ALARM_DECLARATION,
     "packages/agent/src/core/alarm.ts": OWNER_WRITER,
-    // monitor-ports' shape: a nested payload value carries `kind: "alarm"` but
-    // no `irreversible`/`parentId` sibling — not an append row.
+    // An alarm prompt origin's shape: a nested payload value carries
+    // `kind: "alarm"` but no `irreversible`/`parentId` sibling — not an append row.
     "apps/openomni/src/monitor.ts":
-      'export const intent = { value: { kind: "alarm", watchId: "w", epoch: 1 } };\n',
+      'export const intent = { value: { kind: "alarm", alarmId: "w", occurrenceId: "w:1" } };\n',
   });
 
   expect(run(root)).toEqual({

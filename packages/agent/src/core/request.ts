@@ -1,4 +1,5 @@
-import { canonicalDigest, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, type SessionGeneration, type PlainObject } from "@openomni/protocol";
+import { Alarm, canonicalDigest, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, type SessionGeneration, type PlainObject } from "@openomni/protocol";
+import { armAction } from "./alarm";
 import { Clock, Effect } from "effect";
 import { AgentFailure, CommitFailed, type ExecutionError } from "./failure";
 import { receivedMessageAction } from "./commit";
@@ -211,6 +212,49 @@ function resolutionRecord(
   };
 }
 
+/**
+ * Deadline chain arms (#1254 S4): a `request.open` with a deadline arms the
+ * reserved `deadline` purpose (alarmId `<requestId>:deadline`, armSeq 1) in
+ * the SAME decision batch; every terminal transition retires the chain with
+ * an `at: null` arm (armSeq 2) so a settled request leaves no open alarm. A
+ * deadline occurrence that still outraces the retire folds through the chain
+ * guard, and the wake expires the request only if it is still open.
+ */
+function deadlineArms(
+  command: SessionTransition.Command,
+  request: SessionTransition.Request,
+  terminal: boolean,
+): LedgerAction.Append[] {
+  if (typeof request.deadline !== "number") return [];
+  const alarmId = `${request.requestId}:deadline`;
+  if (command.payload.kind === "request.open")
+    return [armAction({
+      parentId: null,
+      sessionId: command.sessionId,
+      purpose: "deadline",
+      at: request.deadline,
+      supersedes: null,
+      alarmId,
+      sourceKey: "deadline",
+      payload: { requestId: request.requestId },
+      armSeq: 1,
+      ts: command.at,
+    }).action];
+  if (!terminal) return [];
+  return [armAction({
+    parentId: null,
+    sessionId: command.sessionId,
+    purpose: "deadline",
+    at: null,
+    supersedes: Alarm.occurrenceId(command.sessionId, alarmId, 1, "deadline"),
+    alarmId,
+    sourceKey: "deadline",
+    payload: { requestId: request.requestId },
+    armSeq: 2,
+    ts: command.at,
+  }).action];
+}
+
 function recordRequest(
   command: SessionTransition.Command,
   request: SessionTransition.Request,
@@ -220,6 +264,7 @@ function recordRequest(
 ): RequestDecision {
   const writes: LedgerAction.Append[] = [inputRecord(command, request, inputDigest, resolution)];
   if (terminal) writes.push(resolutionRecord(command, request, resolution));
+  writes.push(...deadlineArms(command, request, terminal));
   const receive = receivingIntake(command, request, resolution);
   return { resolution, request, actions: writes, ...(receive === undefined ? {} : { receive }) };
 }

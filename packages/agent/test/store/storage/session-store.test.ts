@@ -56,13 +56,14 @@ function turnIntentAction(input: {
   };
 }
 
-test("openSessionStore bootstraps a fresh session file: exactly the three session tables, WAL", () => {
+test("openSessionStore bootstraps a fresh session file: exactly the four session tables, WAL", () => {
   const directory = mkdtempSync(join(tmpdir(), "session-store-"));
   const path = join(directory, "s1.sqlite");
   const store = openSessionStore(path, { now: testNow });
   try {
     expect(tableCensus(path)).toEqual([
       { name: "action" },
+      { name: "armed_alarms" },
       { name: "decision_fact" },
       { name: "session" },
     ]);

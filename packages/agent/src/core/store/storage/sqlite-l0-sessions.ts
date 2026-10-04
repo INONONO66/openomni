@@ -16,10 +16,7 @@ import {
   appendAction,
   commitSession,
 } from "./sqlite-l0-write.js";
-import {
-  reportCommitted,
-  type ObservationFailurePort,
-} from "./sqlite-l0-observation.js";
+import { reportCommitted, type ObservationFailurePort } from "./sqlite-l0-observation.js";
 import { writeEffect, type RefuseWrite } from "./write-effect";
 
 function materializeSession(
@@ -60,9 +57,13 @@ function staleLeaseRefusal(current: LedgerSession.Row): FenceRefused {
 }
 
 /**
- * Fence adoption (W5.2 F5): writes the catalog-rotated fence into the session
- * file's single row. Idempotent for the current owner+fence pair; a file
- * fence at or beyond the target means a later activation already won.
+ * Fence adoption (W5.2 F5): the authority transfer. Writes the
+ * catalog-allocated fence into the session file's single row, under the same
+ * file lock every fenced commit serializes behind — so an old-fence commit
+ * either lands strictly before this CAS (accepted, durable, visible to the
+ * successor) or after it (refused "stale" by `commitSession`). Idempotent for
+ * the current owner+fence pair; a file fence at or beyond the target means a
+ * later activation already won.
  */
 function adoptFence(db: Database, request: LedgerSession.AdoptFence, refuse: RefuseWrite) {
   const current = selectSession(db, request.sessionId);
@@ -97,7 +98,8 @@ export function createSessions(
         const result = transaction(() =>
           materializeSession(db, LedgerSession.Materialize.parse(input), refuse),
         );
-        if (result.created) reportCommitted(db, observationSink, onObservationFailure, result.receipt);
+        if (result.created)
+          reportCommitted(db, observationSink, onObservationFailure, result.receipt);
         return result;
       }),
     get(id) {

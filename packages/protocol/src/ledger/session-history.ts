@@ -69,14 +69,14 @@ export namespace SessionHistory {
 
   /**
    * The committed record that caused a transition. `action` is the parent
-   * action, `inbox` the admitted rows a turn or delivery consumed, `alarm` the
-   * coordination row whose firing woke the session, and `root` a record with
-   * no parent in the tree: the session declaration or an armed alarm row.
+   * action (an alarm-woken row descends from its `alarm{fired}` row, so a
+   * firing is lineage, not a cause of its own — #1254), `inbox` the admitted
+   * rows a turn or delivery consumed, and `root` a record with no parent in
+   * the tree: the session declaration or an armed alarm row.
    */
   export const Cause = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("action"), actionId: Id }).strict(),
     z.object({ kind: z.literal("inbox"), inboxIds: z.array(Id).min(1) }).strict(),
-    z.object({ kind: z.literal("alarm"), alarmId: Id, epoch: z.number().int() }).strict(),
     z.object({ kind: z.literal("root") }).strict(),
   ]);
   export type Cause = z.infer<typeof Cause>;

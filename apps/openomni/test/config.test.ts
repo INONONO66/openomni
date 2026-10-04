@@ -9,6 +9,7 @@ import {
   ConfigurationError,
   loadConfig,
   parseWsPort,
+  resolveAlarmSweep,
   resolveClusterStorage,
   validateMachinePlane,
 } from "../src/config";
@@ -23,6 +24,8 @@ const ENV_KEYS = [
   "OPENOMNI_CATALOG_PATH",
   "OPENOMNI_SESSIONS_DIR",
   "OPENOMNI_ENTITY_IDLE_MS",
+  "OPENOMNI_ALARM_SWEEP_FULL",
+  "OPENOMNI_ALARM_SWEEP_IDLE_DAYS",
   "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
   "OPENOMNI_WS_TOKEN",
@@ -242,6 +245,37 @@ describe("cluster storage config", () => {
       );
     },
   );
+
+  // #1254 S3: the boot alarm sweep is config, not a core constant.
+  it("reads the boot alarm sweep from the environment and defaults it off", () => {
+    expect(loadConfig(home).alarmSweep).toBeUndefined();
+    expect(resolveAlarmSweep(loadConfig(home))).toEqual({ full: false, idleDays: 7 });
+
+    process.env.OPENOMNI_ALARM_SWEEP_FULL = "on";
+    process.env.OPENOMNI_ALARM_SWEEP_IDLE_DAYS = "3";
+    const config = loadConfig(home);
+    expect(config.alarmSweep).toEqual({ full: true, idleDays: 3 });
+    expect(resolveAlarmSweep(config)).toEqual({ full: true, idleDays: 3 });
+
+    process.env.OPENOMNI_ALARM_SWEEP_FULL = "off";
+    delete process.env.OPENOMNI_ALARM_SWEEP_IDLE_DAYS;
+    expect(loadConfig(home).alarmSweep).toEqual({ full: false, idleDays: 7 });
+  });
+
+  it.each([
+    ["OPENOMNI_ALARM_SWEEP_FULL", "yes"],
+    ["OPENOMNI_ALARM_SWEEP_IDLE_DAYS", "0"],
+    ["OPENOMNI_ALARM_SWEEP_IDLE_DAYS", "1.5"],
+    ["OPENOMNI_ALARM_SWEEP_IDLE_DAYS", "soon"],
+  ])("refuses %s=%p with a typed configuration code", (key, raw) => {
+    process.env[key] = raw;
+    expect(() => loadConfig(home)).toThrow(
+      expect.objectContaining({
+        name: "OpenOmniConfigurationError",
+        data: containing({ code: "invalid_alarm_sweep" }),
+      }),
+    );
+  });
 });
 
 describe("cluster crypto layer", () => {

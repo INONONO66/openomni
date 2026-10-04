@@ -173,7 +173,9 @@ test("activation rotates and adopts the fence; every superseded writer is refuse
     expect(kernel.actionById("a-stale")).toBeUndefined();
     expect(kernel.row("s1").revision).toBe(revisionBefore);
 
-    // The adapter surfaces the same refusal as a typed CommitRefused.
+    // The adapter's typed refusal is the session file's own verdict (#1254 r2
+    // H1: the file is the one fence authority; the catalog never enters the
+    // commit path): CommitRefused{reason:"fence"} carrying the file's fence.
     const refused = runLedgerSync(
       Effect.flip(
         kernel.commit(
@@ -182,6 +184,7 @@ test("activation rotates and adopts the fence; every superseded writer is refuse
       ),
     );
     expect(refused).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: 2 });
+    expect(kernel.actionById("a-stale-2")).toBeUndefined();
 
     // Restart rotates again and the previous holder is refused in turn.
     expect(activate(catalog, kernel, "s1", "runner:c")).toBe(3);
@@ -284,7 +287,9 @@ test("concurrent activations from two processes: one winner, stale loser refused
     if (loser === undefined || winner === undefined) throw new Error("expected two child reports");
 
     // The higher fence always adopts and commits; the lower either committed
-    // before the takeover or was refused - never anything else.
+    // before the takeover or was refused - never anything else. `fence` is the
+    // session file's own CAS (the one fence authority, #1254 r2 H1);
+    // `activation_stale` is an adoption that lost the file CAS outright.
     expect(winner.committed).toBe(true);
     if (!loser.committed) expect(loser.reason).toMatch(/^(fence|activation_stale)$/);
 
