@@ -242,6 +242,60 @@ test("path watch native callback observes a created target", async () => {
   }
 });
 
+test("a create landing in the fs.watch startup window is observed exactly once", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "watch-sources-race-"));
+  const path = join(directory, "target");
+  const sends: WatchHitSend[] = [];
+  const reconciled = eventSignal<WatchHitSend>("startup-window create", SPAWNED_PTY_MS);
+  // The injected installer models the measured Bun 1.4.1 race (gate 1243): the
+  // create lands after fs.watch() returned but before the native stream is
+  // live, so no callback ever fires for it — the event is lost natively.
+  let live: ((eventType: string, fileName: string | null) => void) | undefined;
+  const sources = createWatchSources(
+    {
+      deliver: (send) => {
+        sends.push(send);
+        reconciled.resolve(send);
+        return Promise.resolve();
+      },
+    },
+    {
+      clock: () => 0,
+      failure: (_id, error) => reconciled.reject(error),
+      pathWatch: (_directory, listener) => {
+        writeFileSync(path, "created inside the startup window");
+        live = listener;
+        return { on: () => undefined, close: () => undefined };
+      },
+    },
+  );
+  try {
+    await sources.install(
+      armed({
+        id: "watch-race",
+        watch: { path, event: "create", description: "startup-window create", persistent: true },
+      }),
+    );
+    // Only the post-install stat reconcile can observe the lost create.
+    const send = await reconciled.promise;
+    expect(send.alarmId).toBe("watch-race");
+    // The stream going live late and replaying the create must not double-fire:
+    // the stat identity already advanced past it.
+    live?.("rename", "target");
+    await sources.close("watch-race");
+    expect(sends).toHaveLength(1);
+    const entry = parseHit(sends[0] as WatchHitSend);
+    expect(entry.hit).toMatchObject({
+      terminal: false,
+      content: JSON.stringify({ path, event: "create" }),
+    });
+    expect(entry.hit.detail.startsWith("path:create:")).toBe(true);
+  } finally {
+    await sources.closeAll();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 /** The stderr each process tool fails with (exit 1); `/bin/kill` still kills the group so the held shell exits. */
 interface ProcessToolFailures {
   readonly kill: string;

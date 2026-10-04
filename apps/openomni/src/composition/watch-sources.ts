@@ -260,10 +260,24 @@ function terminalSource(
   };
 }
 
+/** The fs.watch slice a path watch consumes; injected so a test controls when the native stream goes live (G015). */
+export interface PathWatcher {
+  on(event: "error", listener: (error: Error) => void): void;
+  close(): void;
+}
+export type PathWatchInstaller = (
+  directory: string,
+  listener: (eventType: string, fileName: string | null) => void,
+) => PathWatcher;
+
+const nativePathWatch: PathWatchInstaller = (directory, listener) =>
+  watch(directory, { recursive: true }, listener);
+
 export function pathSource(
   spec: Extract<Alarm.Watch, { path: string }>,
   event: (content: string, identity: string) => void,
   failure: (error: Error) => void,
+  installWatch: PathWatchInstaller = nativePathWatch,
 ): AlarmSource {
   // The stat identity is the transport occurrence key; `previous` is only the
   // physical snapshot that classifies create/modify. Durable dedupe is the ledger's.
@@ -286,10 +300,15 @@ export function pathSource(
       failure(new AlarmSourceError(undefined, "path.observe"));
     }
   }
-  const source = watch(dirname(spec.path), { recursive: true }, (_kind, name) => {
+  const source = installWatch(dirname(spec.path), (_kind, name) => {
     if (name === null || name === basename(spec.path)) observe();
   });
   source.on("error", failure);
+  // Bun 1.4 can return from fs.watch() before the native stream is live, so a
+  // create/modify landing in that window is otherwise lost (G015). Reconcile
+  // once by the stat identity; a native callback that ALSO fires for the same
+  // state sees an unchanged identity and does not double-fire.
+  observe();
   return {
     observe,
     close() {
@@ -373,6 +392,8 @@ export function createWatchSources(
     readonly failure: (watchId: string, error: Error) => void;
     /** Absent means this brain has no body: terminal watches are refused at create. */
     readonly machines?: TerminalWatchMachines;
+    /** Test seam for the fs.watch startup window (G015); production uses the native installer. */
+    readonly pathWatch?: PathWatchInstaller;
   },
 ): WatchSources {
   // The watch plane owns the boot-time runtime requirement: composing it on a
@@ -475,6 +496,7 @@ export function createWatchSources(
       (content, identity) =>
         enqueue(holder, { content, terminal: false, detail: `path:${identity}` }),
       (error) => sourceFailure(spec, holder, error),
+      options.pathWatch ?? nativePathWatch,
     );
   }
 
