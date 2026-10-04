@@ -6,7 +6,7 @@ import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import type { AnyToolDefinition, LedgerAction, PlainValue, ToolExecutionContext } from "@openomni/protocol";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { z } from "zod";
-import { NamedPolicyRegistry } from "../src/core/bundle";
+import { NamedPolicyRegistry } from "../src/core/compose";
 import { CommitFailed, InvocationClosed, ToolBodyFailed, type ExecutionError } from "../src/core/failure";
 import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocation, type InvocationFrame } from "../src/core/gate/decide";
 import type { ExecutionResult } from "../src/core/gate/decide";

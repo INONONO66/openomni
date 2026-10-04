@@ -5,7 +5,7 @@ import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } f
 import type { LedgerAction, PlainValue } from "@openomni/protocol";
 import { Clock, Effect, Layer } from "effect";
 import { z } from "zod";
-import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/core/bundle";
+import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/core/compose";
 import { makeSessionGenerations } from "../src/core/run";
 import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
 import { createTurnDispatcher, defineTool, sessionTool } from "../src/core/tool";

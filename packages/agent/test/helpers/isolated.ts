@@ -12,7 +12,7 @@ import {
 import { LlmLive } from "../../src/model";
 import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/core/gate/compile";
 import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices, type RunnerServices } from "../../src/core/ports";
-import { NamedPolicyRegistry } from "../../src/core/bundle";
+import { NamedPolicyRegistry } from "../../src/core/compose";
 import { makeSessionGenerations, type GenerationRawSlots } from "../../src/core/run";
 import { entropySource } from "./time";
 

@@ -1,5 +1,6 @@
 import {
   canonicalDigest,
+  type ConfigureDisabled,
   type ConsumptionSettings,
   Inbox,
   PlainObjectSchema,
@@ -463,6 +464,8 @@ export function configureAction(input: {
   readonly snapshot: SessionGeneration.Snapshot;
   /** `all|one` consumption widths (#1253); present only when the configure pins them. */
   readonly settings?: ConsumptionSettings;
+  /** The composed off cascade (#1255); present only when a manifest composed. */
+  readonly disabled?: ConfigureDisabled;
   readonly at: number;
 }): LedgerAction.Append {
   return {
@@ -475,6 +478,7 @@ export function configureAction(input: {
       value: {
         operation: input.operation,
         ...(input.settings === undefined ? {} : { settings: input.settings }),
+        ...(input.disabled === undefined ? {} : { disabled: input.disabled.map((entry) => ({ ...entry })) }),
       },
     },
     effect: {
