@@ -696,3 +696,51 @@ test("#1247 S8 pin: validateAgentIndexPerimeter reads the pinned file and tolera
   const violations = await validateAgentIndexPerimeter(planted);
   expect(violations.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 });
+
+// ─── #1255: retired-surface conformance ─────────────────────────────────────
+// ONE conformance assertion over the issue body's "tokens that must return no
+// output" (the deleted monitor tool/ports files, the imperative session-tool
+// constructors, bundle names in boot, the legacy compose plane, kernel-row
+// @openomni/llm references, the ambient cron grid). It reads the LIVE
+// repository via import.meta.dir — never a fixture — so a regrowth of any
+// retired surface names the file that grew it.
+
+const repoRoot = join(import.meta.dir, "..");
+
+const RETIRED_SURFACES: Readonly<Record<string, { pattern: RegExp; globs: readonly string[] }>> = {
+  "monitor tool/ports files": {
+    pattern: /./,
+    globs: ["apps/openomni/src/tools/monitor.ts", "apps/openomni/src/composition/monitor-ports.ts"],
+  },
+  "sessionTool(/toolSpec( in the agent": {
+    pattern: /sessionTool\(|toolSpec\(/,
+    globs: ["packages/agent/src/**/*.ts"],
+  },
+  "bundle name 'monitor' in boot": { pattern: /monitor/, globs: ["apps/openomni/src/index.ts"] },
+  "legacy compose plane BundlesLive": {
+    pattern: /BundlesLive/,
+    globs: ["apps/*/src/**/*.ts", "packages/agent/src/**/*.ts"],
+  },
+  "@openomni/llm in kernel rows": { pattern: /@openomni\/llm/, globs: ["packages/agent/src/**/*.ts"] },
+  "ambient Bun.cron( grid": { pattern: /Bun\.cron\(/, globs: ["apps/**/*.ts", "packages/**/*.ts"] },
+};
+
+async function tokenMatches(pattern: RegExp, globs: readonly string[]): Promise<string[]> {
+  const hits: string[] = [];
+  for (const glob of globs) {
+    for await (const file of new Bun.Glob(glob).scan({ cwd: repoRoot })) {
+      const source = await Bun.file(join(repoRoot, file)).text();
+      if (pattern.test(source)) hits.push(file);
+    }
+  }
+  return hits.sort();
+}
+
+test("#1255: every retired surface greps to zero in the live repository", async () => {
+  const hits: Record<string, string[]> = {};
+  for (const [surface, { pattern, globs }] of Object.entries(RETIRED_SURFACES)) {
+    hits[surface] = await tokenMatches(pattern, globs);
+  }
+  const expected = Object.fromEntries(Object.keys(RETIRED_SURFACES).map((surface) => [surface, []]));
+  expect(hits).toEqual(expected);
+});

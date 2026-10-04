@@ -1,6 +1,5 @@
 import type { Readable } from "node:stream";
-import { Core, Bundle } from "@openomni/agent";
-const BundleDefinitions = Bundle.BundleDefinitions;
+import { Core } from "@openomni/agent";
 const Entropy = Core.Entropy;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -31,6 +30,7 @@ import { AppScope, type AppRuntime } from "./runtime";
 import { type Inbox, Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
+import { ComposedGeneration } from "./composition/composed";
 import { createCompletionPort } from "./composition/completion";
 import { configureAuthority } from "./composition/generation-layers";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
@@ -38,7 +38,7 @@ import { captureNow } from "./composition/platform";
 import { createResident } from "./resident";
 import { materializeInboxTarget, pendingInboxRow, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
-import { seedKernelPolicyRows } from "./policy-seed";
+import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
 import { parentReply } from "./composition/parent-reply";
@@ -122,7 +122,7 @@ export function serveProcessSession(
   appRuntime: AppRuntime,
 ) {
   return Effect.gen(function* () {
-  const bundles = yield* BundleDefinitions;
+  const composed = yield* ComposedGeneration;
   const generations = yield* GenerationLayers;
   const plane = yield* AppLedger;
   const scope = yield* AppScope;
@@ -130,7 +130,7 @@ export function serveProcessSession(
   const entropy = yield* Entropy;
   const observations = yield* ObservationSink;
   const owner = `process:${process.pid}`;
-  seedKernelPolicyRows(plane.catalog.policies, bundles.select(bundles.names).rows, yield* AppPointTable);
+  seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds(composed.current().generation.rows), yield* AppPointTable);
   const runtime: SessionRuntime = {
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,
@@ -159,7 +159,7 @@ export function serveProcessSession(
     { now, id: entropy.id },
   );
   const resident = createResident({
-    bundles: bundles.names,
+    composed: { current: composed.current },
     model: request.model,
     apiKey: request.apiKey,
     ...(request.transport === undefined ? {} : { transport: request.transport }),

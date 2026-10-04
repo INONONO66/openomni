@@ -12,7 +12,7 @@ export {
   currentInvocation, forkInvocation,
   type InvocationFrame, type ExecutionApprovalRequest, type Executor,
 } from "./gate/decide";
-export { compilePolicySnapshot, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, type PolicyEvaluationInput } from "./gate/compile";
+export { compilePolicySnapshot, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, type HandlerTable, type NamedTransformer, type PolicyEvaluationInput } from "./gate/compile";
 export { decisionFromEvaluation, evaluatePermission } from "./gate/match";
 export {
   composePointTable, executionPoint, GateComposeError, KERNEL_CAPABILITY_POINTS,
@@ -20,8 +20,8 @@ export {
 } from "./points";
 export { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } from "./gate/migrate";
 export {
-  createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, sessionTool,
-  ToolRefused, toolInputSchema, toolSpec,
+  createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, projectTools,
+  ToolRefused, toolInputSchema, type ToolProjections, type ProjectableTool,
 } from "./tool";
 
 export {
@@ -30,6 +30,7 @@ export {
   type SessionCreateOptions, type SessionRunnerInput, type SessionRunnerResult,
   type SessionEntityPorts, type SessionEntityTurnInput,
   type SessionSystem, type ResolvedSessionRuntime,
+  composedManifest, type ComposedManifest,
 } from "./run";
 export { decideSessionAdmission, requestAuthorityKernel, commitSessionRequest } from "./mailbox";
 export { createSessionRequests, decideRequestTransition, requestBindingDigest } from "./request";

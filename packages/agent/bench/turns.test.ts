@@ -22,7 +22,7 @@ describe("turn benchmarks", () => {
   test("echo dispatch commits a real tool intent and successful result", async () => {
     const dispatch = toolDispatch();
     const result = await bounded(dispatch.run(), "echo result");
-    expect(result).toMatchObject({ output: "hello", toolCallId: "call-1" });
+    expect(result).toMatchObject({ content: "hello", toolCallId: "call-1" });
     expect(result.isError).not.toBe(true);
     const actions = dispatch.committed.filter((action) => action.kind === "tool");
     expect(actions).toHaveLength(2);

@@ -328,7 +328,7 @@ function handleStepFinish(
       context.sink.onToolResult({
         id: context.id(),
         toolCallId: callID,
-        output: "truncated output: tool call incomplete",
+        content: "truncated output: tool call incomplete",
         isError: true,
       });
     }
@@ -393,7 +393,7 @@ export function settleAttempt(
     context.sink.onToolResult({
       id: context.id(),
       toolCallId: callID,
-      output: "Processing was interrupted",
+      content: "Processing was interrupted",
       isError: true,
     });
   }

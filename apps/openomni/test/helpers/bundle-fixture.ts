@@ -1,21 +1,41 @@
 import { closeSync, openSync, writeSync } from "node:fs";
 import { Core, Bundle } from "@openomni/agent";
-const bundle = Bundle.bundle;
 const ObservationSink = Core.ObservationSink;
-type BundleDefinition = Bundle.BundleDefinition;
 import { Tool } from "@openomni/protocol";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
+import { composedHolderOf, type ComposedHolder } from "../../src/composition/composed";
+import { toolCapability } from "../../src/manifest";
 import { contentBlocks, messageEnd, messageStart, sseResponse } from "./anthropic-sse";
+
+/**
+ * A composed holder for injected-runtime tests (#1255 P3): the manifest is
+ * composed once here, the way boot does, and handed to `gatewayRuntime` via
+ * the `composed` option. The thin product tool capability is always declared
+ * so rows targeting `tool.pre`/`tool.post` compose.
+ */
+export function composedHolder(options: {
+  readonly bundles?: readonly Bundle.BundleContract[];
+  readonly capabilities?: readonly Bundle.CapabilityDefinition[];
+  readonly off?: readonly string[];
+} = {}): ComposedHolder {
+  const manifest = Bundle.Manifest.define({
+    capabilities: [toolCapability, ...(options.capabilities ?? [])],
+    bundles: options.bundles ?? [],
+    off: options.off ?? [],
+  });
+  const generation = Bundle.composeSync(manifest);
+  return composedHolderOf({ manifest, generation });
+}
 
 export const ProviderRequest = z.object({
   tools: z.array(z.object({ name: z.string() })).optional(),
   messages: z.array(z.object({ role: z.string(), content: z.union([z.string(), z.array(z.object({ type: z.string() }).passthrough())]) })),
 });
 
-/** Real file and subscriptions, acquired only inside a selected generation. */
+/** Real file and subscriptions, acquired only inside a composed generation's Scope. */
 export function auditBundle(path: string): {
-  readonly definition: BundleDefinition & { readonly provides: readonly []; readonly requires: readonly [typeof ObservationSink] };
+  readonly contract: Bundle.BundleContract<"audit-log">;
   readonly acquired: number[];
   readonly closed: number[];
   readonly whenClosed: (acquisition: number) => Promise<void>;
@@ -41,7 +61,7 @@ export function auditBundle(path: string): {
       witnesses.get(id)?.resolve();
     }));
   }));
-  return { definition: bundle({ name: "audit-log", provides: [], requires: [ObservationSink], layer: live }), acquired, closed,
+  return { contract: Bundle.define({ name: "audit-log", requires: [], layer: live }), acquired, closed,
     whenClosed: (id) => {
       const witness = witnesses.get(id);
       if (witness === undefined) throw new Error(`acquisition ${id} has not started`);

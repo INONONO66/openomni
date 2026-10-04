@@ -3,7 +3,7 @@ import { catalogLayer } from "./helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { describe, expect, it } from "bun:test";
-import { createDispatcher, defineTool, eraseTool, sessionTool, ToolRefused, toolInputSchema, toolSpec } from "../src/core/tool";
+import { createDispatcher, defineTool, eraseTool, projectTools, ToolRefused, toolInputSchema } from "../src/core/tool";
 import { recordingExecutor } from "./helpers/effect-g2";
 import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";
@@ -57,7 +57,7 @@ describe("tool dispatcher public contract", () => {
           expect(recording.committed[0]?.kind).toBe("policy.decision");
           expect(bodies).toBe(0);
           released.resolve();
-          expect(yield* Fiber.join(running)).toMatchObject({ output: "result" });
+          expect(yield* Fiber.join(running)).toMatchObject({ content: "result" });
           expect(bodies).toBe(1);
         }),
       ),
@@ -95,10 +95,10 @@ describe("tool dispatcher public contract", () => {
     const execution = definition({ name: "run", category: "execution" });
 
     expect(toolInputSchema(eraseTool(query))).toMatchObject({ type: "object" });
-    expect(toolSpec(eraseTool(query))).toMatchObject({ name: "echo", safe: true });
-    expect(toolSpec(eraseTool(query))).not.toHaveProperty("placement");
-    expect(toolSpec(eraseTool(execution))).toMatchObject({ name: "run", safe: false });
-    expect(sessionTool(eraseTool(execution))).toMatchObject({ name: "run", category: "execution" });
+    expect(projectTools([eraseTool(query)]).specs[0]).toMatchObject({ name: "echo", safe: true });
+    expect(projectTools([eraseTool(query)]).specs[0]).not.toHaveProperty("placement");
+    expect(projectTools([eraseTool(execution)]).specs[0]).toMatchObject({ name: "run", safe: false });
+    expect(projectTools([eraseTool(execution)]).session[0]).toMatchObject({ name: "run", category: "execution" });
   });
 
   it("classifies missing tools and invalid inputs without invoking a tool", () =>
@@ -161,7 +161,7 @@ describe("tool dispatcher public contract", () => {
             expect(result).toMatchObject({
               isError: true,
               errorKind: "execution_failed",
-              output: String(failure),
+              content: String(failure),
             });
           }
           const terminals = recording.committed.flatMap((action) => {
@@ -198,11 +198,11 @@ describe("tool dispatcher public contract", () => {
           const cell = yield* dispatch.executeCell(call, context);
           const model = yield* dispatch.execute(call, context);
 
-          expect(cell.output).toBe(output);
-          expect(typeof model.output).toBe("string");
-          expect(model.output).toHaveLength(32_000);
+          expect(cell.structuredContent).toBe(output);
+          expect(typeof model.content).toBe("string");
+          expect(model.content).toHaveLength(32_000);
           const marker = "\n[truncated: 8054 bytes dropped; 40000 bytes original]";
-          expect(model.output).toBe(`${output.slice(0, 32_000 - marker.length)}${marker}`);
+          expect(model.content).toBe(`${output.slice(0, 32_000 - marker.length)}${marker}`);
         }),
       ),
     ));
@@ -219,16 +219,16 @@ describe("tool dispatcher public contract", () => {
           const dispatch = dispatcher([definition({ execute: async () => output })]);
           const cell = yield* dispatch.executeCell(call, context);
           const model = yield* dispatch.execute(call, context);
-          expect(cell.output).toBe(output);
+          expect(cell.structuredContent).toBe(output);
           expect(model.isError).toBeUndefined();
-          expect(model.output.length).toBeLessThanOrEqual(32_000);
-          expect(Buffer.from(model.output, "utf8").toString("utf8")).toBe(model.output);
+          expect(model.content.length).toBeLessThanOrEqual(32_000);
+          expect(Buffer.from(model.content, "utf8").toString("utf8")).toBe(model.content);
           const receipt = /\n\[truncated: (\d+) bytes dropped; (\d+) bytes original\]$/.exec(
-            model.output,
+            model.content,
           );
           expect(receipt).not.toBeNull();
           if (receipt === null) throw new Error("missing byte receipt");
-          const prefix = model.output.slice(0, receipt.index);
+          const prefix = model.content.slice(0, receipt.index);
           expect(output.startsWith(prefix)).toBe(true);
           const dropped = output.slice(prefix.length);
           expect(Number(receipt[1])).toBe(Buffer.byteLength(dropped, "utf8"));
@@ -236,7 +236,7 @@ describe("tool dispatcher public contract", () => {
           expect(Buffer.byteLength(prefix) + Number(receipt[1])).toBe(Number(receipt[2]));
           const nextCodePoint = [...dropped][0];
           expect(nextCodePoint).toBeDefined();
-          expect(model.output.length + (nextCodePoint?.length ?? 0)).toBeGreaterThan(32_000);
+          expect(model.content.length + (nextCodePoint?.length ?? 0)).toBeGreaterThan(32_000);
         }),
       ),
     ));
@@ -248,10 +248,80 @@ describe("tool dispatcher public contract", () => {
           const output = `a${"\u{1F600}".repeat(25_000)}`;
           const dispatch = dispatcher([definition({ execute: async () => output })]);
           const model = yield* dispatch.execute(call, context);
-          expect(model.output).toBe(
+          expect(model.content).toBe(
             `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
           );
-          expect((yield* dispatch.executeCell(call, context)).output).toBe(output);
+          expect((yield* dispatch.executeCell(call, context)).structuredContent).toBe(output);
+        }),
+      ),
+    ));
+});
+
+describe("D5 tool result split producers", () => {
+  const structuredTool = eraseTool(defineTool({
+    name: "echo",
+    description: "Returns structured data",
+    category: "query",
+    input: z.object({ value: z.string() }).strict(),
+    output: z.object({ answer: z.number(), note: z.string() }).strict(),
+    visibility: { model: ["resident"], cell: ["resident"] },
+    execute: async () => ({ answer: 42, note: "n" }),
+    render: (_input, value) => `answer=${value.answer}`,
+  }));
+
+  it("model door carries rendered content plus structuredContent; the cell door carries typed data only", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const dispatch = dispatcher([structuredTool]);
+          const model = yield* dispatch.execute(call, context);
+          expect(model.content).toBe("answer=42");
+          expect(model.structuredContent).toEqual({ answer: 42, note: "n" });
+          expect(model.details).toBeUndefined();
+          const cell = yield* dispatch.executeCell({ ...call, id: "cell-structured" }, context);
+          expect(cell.structuredContent).toEqual({ answer: 42, note: "n" });
+          expect(cell.content).toBeUndefined();
+        }),
+      ),
+    ));
+
+  it("oversize structured data is dropped from structuredContent while content keeps the truncated render", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const blob = "x".repeat(300_000);
+          const dispatch = dispatcher([eraseTool(defineTool({
+            name: "echo",
+            description: "Returns oversize structured data",
+            category: "query",
+            input: z.object({ value: z.string() }).strict(),
+            output: z.object({ blob: z.string() }).strict(),
+            visibility: { model: ["resident"], cell: ["resident"] },
+            execute: async () => ({ blob }),
+            render: (_input, value) => value.blob,
+          }))]);
+          const model = yield* dispatch.execute(call, context);
+          expect(model.structuredContent).toBeUndefined();
+          expect(model.isError).toBeUndefined();
+          expect(model.content.length).toBeLessThanOrEqual(32_000);
+          expect(model.content).toContain("[truncated:");
+        }),
+      ),
+    ));
+
+  it("a failed call carries the error text as content and the errorKind as details", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const dispatch = dispatcher([definition({ execute: async () => { throw new ToolRefused("echo", "nope"); } })]);
+          const model = yield* dispatch.execute(call, context);
+          expect(model).toMatchObject({
+            isError: true,
+            errorKind: "precondition_failed",
+            content: "echo refused: nope",
+            details: { errorKind: "precondition_failed" },
+          });
+          expect(model.structuredContent).toBeUndefined();
         }),
       ),
     ));

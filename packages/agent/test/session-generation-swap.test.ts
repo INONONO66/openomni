@@ -12,11 +12,11 @@ import { createExecutor } from "../src/core/gate/decide";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { makeSessionGenerations, type GenerationBundle } from "../src/core/run";
 import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
-import { NamedPolicyRegistry } from "../src/core/bundle";
+import { GenerationHandlers } from "../src/core/compose";
 import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import { executeToolBody } from "../src/core/tool";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
-import { createTurnDispatcher, sessionTool } from "../src/core/tool";
+import { createTurnDispatcher, projectTools } from "../src/core/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 
 /** Chain oracle over the active isolation's kernel. */
@@ -31,12 +31,12 @@ function bundle(generation: number, name: string, finalized: () => void,
   };
   const snapshot = SessionHandleStore.generationSnapshot({
     generation, revertTo: generation - 1,
-    tools: [sessionTool(definition)],
+    tools: projectTools([definition]).session,
     system: { preset: name, blocks: [] }, policyGeneration: 1,
   });
   return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void, layer: Layer.mergeAll(
     Layer.succeed(ObservationSink, testBus()),
-    Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
+    Layer.succeed(GenerationHandlers, KERNEL_POLICY_REGISTRY),
     Layer.succeed(SessionLayer, { snapshot, policy }),
     Layer.succeed(ToolCatalog, { definitions: [definition] }),
     Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(finalized))),
@@ -134,9 +134,9 @@ test("dispatch table stays captured across configure even when the next generati
     yield* generations.configure(b, options.ledger.commit(selectAction(b.snapshot)).pipe(
       Effect.mapError((error: LedgerError) => new CommitFailed({ error })),
     ));
-    expect(yield* executeCaptured).toMatchObject({ toolCallId: "call-2", output: "B" });
+    expect(yield* executeCaptured).toMatchObject({ toolCallId: "call-2", content: "B" });
     release.resolve("A");
-    expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "call-1", output: "A" });
+    expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "call-1", content: "A" });
     yield* Deferred.await(retired).pipe(Effect.timeout("5 seconds"));
     const results = sessionTree(fiberSessionId).filter((action: LedgerAction.Node) =>
       action.kind === "tool" && effectValue(action).phase === "result");

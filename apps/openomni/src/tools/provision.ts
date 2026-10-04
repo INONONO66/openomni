@@ -9,6 +9,7 @@ import {
   PersonDeclareResult,
 } from "../provisioning/contacts";
 import { ChannelOperation, ChannelResult, type ProvisionPort } from "../provisioning/channels";
+import { BundleOperation, BundleResult } from "../provisioning/bundles";
 import { executeProvision, provisionApproval } from "../provisioning/execution";
 import { EMPTY_INPUT, ProvisionStatusOutput, renderProvision } from "../provisioning/status";
 
@@ -17,6 +18,7 @@ const ProvisionOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_remove"), args: PERSON_REMOVE_INPUT }).strict(),
   ...ContactOperation.options,
   ...ChannelOperation.options,
+  ...BundleOperation.options,
   z.object({ op: z.literal("status"), args: EMPTY_INPUT }).strict(),
 ]);
 export const ProvisionInput = z.object({ operation: ProvisionOperation }).strict();
@@ -25,6 +27,7 @@ export const ProvisionOutput = z.discriminatedUnion("op", [
   z.object({ op: z.literal("contact_remove"), id: z.string() }).strict(),
   ...ContactResult.options,
   ...ChannelResult.options,
+  ...BundleResult.options,
   ProvisionStatusOutput.extend({ op: z.literal("status") }),
 ]);
 
@@ -35,7 +38,7 @@ export function createProvisionTool(port: ProvisionPort | undefined, now: () => 
       name: "provision",
       category: "mutation",
       description:
-        "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|contact_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and contact_merge suspend for Owner consent.",
+        "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|contact_merge|channel_add|channel_enable|channel_disable|secret_rotate|bundle_enable|bundle_disable|status. contact_promote, contact_merge, bundle_enable and bundle_disable suspend for Owner consent.",
       input: ProvisionInput,
       output: ProvisionOutput,
       visibility: { model: ["resident"], cell: ["resident"] },
@@ -50,6 +53,8 @@ export function createProvisionTool(port: ProvisionPort | undefined, now: () => 
 export const PROVISION_POLICY_ROWS: readonly Omit<PolicyRow.Row, "generation">[] = [
   "contact_promote",
   "contact_merge",
+  "bundle_enable",
+  "bundle_disable",
 ].map((operation) => ({
   name: `provision-${operation.replace("_", "-")}-consent`,
   kind: "tool",

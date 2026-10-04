@@ -87,6 +87,7 @@ export function materializeInboxTarget(
           bundles: snapshot.bundles,
           system: { preset: snapshot.systemPreset, blocks: snapshot.systemBlocks },
           policyGeneration: snapshot.policyGeneration,
+          ...(snapshot.manifestHash === undefined ? {} : { manifestHash: snapshot.manifestHash }),
           actionId: create.initialAction.id,
           at: clock(),
         })
@@ -160,6 +161,8 @@ export function messageMaterialization(
   readonly role: LedgerSession.Role;
   readonly tools: readonly SessionGeneration.Tool[];
   readonly bundles?: readonly string[];
+  /** The composed generation's hash (#1255 P3): stamped so an unchanged manifest appends no adoption row. */
+  readonly manifestHash?: string;
   readonly preset: string;
   readonly runner: string;
   readonly at: number;
@@ -170,6 +173,7 @@ export function messageMaterialization(
       revertTo: 0,
       tools: input.tools,
       bundles: input.bundles ?? [],
+      ...(input.manifestHash === undefined ? {} : { manifestHash: input.manifestHash }),
       system: {
         preset: input.preset,
         blocks: [{ id: "runner", source: "app:runner", content: input.runner }],

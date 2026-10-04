@@ -47,5 +47,5 @@ export function modelToolOutput(
   now?: () => number,
 ) {
   const dispatch = dispatchModelTool(name, ports, origin, now);
-  return async (input: PlainObject): Promise<string> => String((await dispatch(input)).output);
+  return async (input: PlainObject): Promise<string> => String((await dispatch(input)).content);
 }

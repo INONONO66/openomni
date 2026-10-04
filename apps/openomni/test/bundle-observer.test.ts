@@ -4,12 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { Core, Bundle, Model } from "@openomni/agent";
-const bundle = Bundle.bundle;
-const bundlePolicyTag = Bundle.bundlePolicyTag;
-const BundlesLive = Bundle.BundlesLive;
 const defineTool = Core.defineTool;
 const eraseTool = Core.eraseTool;
-const sessionTool = Core.sessionTool;
 const Llm = Model.Llm;
 const run = Model.run;
 import { sessionFilePath } from "../src/composition/cluster-runtime";
@@ -18,7 +14,7 @@ import { Effect, Layer } from "effect";
 import { z } from "zod";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { residentSuite } from "./helpers/resident-suite";
-import { auditBundle, ProviderRequest, providerResponse } from "./helpers/bundle-fixture";
+import { auditBundle, composedHolder, ProviderRequest, providerResponse } from "./helpers/bundle-fixture";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { eventSignal } from "./helpers/event-signal";
 import { Bus, newTraceId } from "./helpers/bus";
@@ -42,7 +38,7 @@ for (const enabled of [false, true]) test(`one AppLive bundle argument controls 
   const config = suite.config("app-observer-db-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
   const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir,
-    bundles: enabled ? BundlesLive([audit.definition]) : BundlesLive([]),
+    composed: composedHolder({ bundles: enabled ? [audit.contract] : [] }),
     llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [echo("echo", async (text) => text)] });
@@ -79,12 +75,14 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   const seen: string[] = [];
   const base = echo("echo", async (text) => { seen.push(text); entered.resolve(); await release.promise; return text; });
   const demo = echo("demo__echo", async (text) => { seen.push(text); return text; });
-  const Policy = bundlePolicyTag("demo");
-  const policy = Layer.succeed(Policy, { transformers: [{ name: "demo/redact-home", apply: () => ({ text: "redacted" }) }], obligations: [] });
-  const definition = bundle({ name: "demo", requires: [], provides: [Policy], layer: policy, tools: [demo], rows: [{
-    name: "demo/redact", kind: "tool", phase: "pre", priority: 1000,
-    match: { encodingVersion: 1, value: { op: "echo" } }, verdict: { encodingVersion: 1, value: { type: "transform", ref: "demo/redact-home", config: { fields: ["text"] } } },
-  }] });
+  // #1255 P3: the demo bundle is a composed CONTRACT — its transformer is a
+  // registered handler and its rewrite row rides the frozen #1251 gate shape.
+  const definition = Bundle.define({ name: "demo", requires: [], tools: [demo],
+    handlers: { "demo/redact-home": { apply: () => ({ text: "redacted" }) } },
+    rows: [{
+      id: "demo/tool.pre#1", on: "tool.pre", order: 1000,
+      when: { op: "echo" }, do: "rewrite", how: { ref: "demo/redact-home", params: { fields: ["text"] } },
+    }] });
   const offered: string[][] = [];
   const provider = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async (request) => {
     const body = ProviderRequest.parse(await request.json());
@@ -95,7 +93,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   suite.defer(() => provider.stop(true));
   const config = suite.config("app-bundle-swap-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
-  const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, bundles: BundlesLive([audit.definition, definition]),
+  const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, composed: composedHolder({ bundles: [audit.contract, definition] }),
     llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
   const app = await suite.boot({ config, runtime, toolDefinitions: [base] });
@@ -111,7 +109,9 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     if (handle === undefined) throw new Error("missing live session");
     const retired = eventSignal<void>("g1 observer finalized");
     void audit.whenClosed(2).then(retired.resolve, retired.reject);
-    expect(await runAppEffect(runtime, handle.tools.add([sessionTool(demo)]))).toMatchObject({ generation: 2 });
+    // The composed demo face is already on from materialize (#1255); an
+    // empty add still selects the next generation — the pinning under test.
+    expect(await runAppEffect(runtime, handle.tools.add([]))).toMatchObject({ generation: 2 });
     expect(audit.closed).not.toContain(2);
     release.resolve();
     await first;
@@ -119,8 +119,9 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     const second = nextResidentTurn(plane);
     ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "next" }));
     await second;
-    expect(offered.slice(0, 2).every((names) => !names.includes(demo.name))).toBe(true);
-    expect(offered.slice(2).every((names) => names.includes(demo.name))).toBe(true);
+    // The composed bundle's face is on from materialize (#1255): every
+    // request offers it; the held turn still executes on its g1 catalog.
+    expect(offered.every((names) => names.includes(demo.name))).toBe(true);
     expect(seen).toEqual(["redacted", "/home/private"]);
     expect(audit.acquired).toEqual([1, 2, 3]);
     const observed = readFileSync(path, "utf8").trim().split("\n").map((line) => z.object({ acquisition: z.number(), data: z.object({ toolName: z.string() }) }).parse(JSON.parse(line)));
@@ -129,7 +130,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     const actions = sessionTree(row.id, plane.sessionStore(row.id).actions);
     expect(actions.map((action) => action.intent.value)).toEqual(expect.arrayContaining([
       expect.objectContaining({ op: "echo", originalArgs: { text: "/home/private" }, value: { text: "redacted" } }),
-      expect.objectContaining({ hook: "tool.pre", ref: "demo/redact-home", transforms: [{ ruleId: "demo/redact", ref: "demo/redact-home" }] }),
+      expect.objectContaining({ hook: "tool.pre", ref: "demo/redact-home", transforms: [{ ruleId: "demo/tool.pre#1", ref: "demo/redact-home" }] }),
     ]));
   } finally { release.resolve(); await first; }
 });

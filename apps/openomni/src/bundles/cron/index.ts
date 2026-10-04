@@ -4,8 +4,9 @@ import { Effect } from "effect";
 import { z } from "zod";
 
 /**
- * The `cron` bundle's purpose (#1254): one `cron.tick` purpose over the alarm
- * capability (the bundle's `requires: alarm` edge is #1255's compose mechanics). A tick wakes with its grid time; the handler prompts once
+ * The `cron` bundle (#1255, purposes from #1254): one `cron.tick` purpose
+ * over the alarm capability (the `requires: alarm` edge is compose's
+ * mechanics). A tick wakes with its grid time; the handler prompts once
  * (carrying the count of grid times missed while the host was down — there
  * is no catch-up storm), then re-arms the chain at the next grid time with
  * `supersedes`. State is the chain; nothing rides process memory.
@@ -79,4 +80,13 @@ function cronTick(): Bundle.AlarmPurposeHandler {
 /** The cron bundle's purpose declaration for the capability composition. */
 export function cronPurposes(): Bundle.AlarmBundlePurposes {
   return { bundle: "cron", purposes: [{ name: CRON_TICK, handler: cronTick() }] };
+}
+
+/** The `cron` bundle contract (#1255 `Bundle.define`): the one tick purpose, no tools, no rows. */
+export function cronBundle(): Bundle.BundleContract<"cron", object, Bundle.AlarmPurposeHandler> {
+  return Bundle.define({
+    name: "cron",
+    requires: [Bundle.AlarmSeam],
+    purposes: { [CRON_TICK]: cronTick() },
+  });
 }

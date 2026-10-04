@@ -25,13 +25,13 @@ interface NamedObligation {
   readonly name: string;
 }
 
-export interface NamedPolicyRegistry {
+export interface HandlerTable {
   readonly transformers: readonly NamedTransformer[];
   readonly obligations: readonly NamedObligation[];
 }
 
-export const NamedPolicyRegistryError = NamedError.create(
-  "NamedPolicyRegistryError",
+export const HandlerTableError = NamedError.create(
+  "HandlerTableError",
   z
     .object({
       code: z.enum(["invalid_ref", "duplicate_ref"]),
@@ -41,13 +41,13 @@ export const NamedPolicyRegistryError = NamedError.create(
 );
 
 /** Copies definitions, never freezes caller objects or exposes mutable Maps. */
-export function createNamedPolicyRegistry(input: NamedPolicyRegistry): NamedPolicyRegistry {
+export function createHandlerTable(input: HandlerTable): HandlerTable {
   const names = new Set<string>();
   for (const entry of [...input.transformers, ...input.obligations]) {
     if (!PolicyRef.safeParse(entry.name).success)
-      throw new NamedPolicyRegistryError({ code: "invalid_ref", ref: entry.name });
+      throw new HandlerTableError({ code: "invalid_ref", ref: entry.name });
     if (names.has(entry.name))
-      throw new NamedPolicyRegistryError({ code: "duplicate_ref", ref: entry.name });
+      throw new HandlerTableError({ code: "duplicate_ref", ref: entry.name });
     names.add(entry.name);
   }
   return Object.freeze({
@@ -101,7 +101,7 @@ function redact(args: PlainValue, config: PlainValue): PlainValue {
   return output;
 }
 
-export const KERNEL_POLICY_REGISTRY: NamedPolicyRegistry = createNamedPolicyRegistry({
+export const KERNEL_POLICY_REGISTRY: HandlerTable = createHandlerTable({
   transformers: [{ name: "kernel/redact", apply: redact }],
   obligations: [{ name: "kernel/budget-clamp" }],
 });

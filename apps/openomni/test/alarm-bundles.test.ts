@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { Bundle, Core } from "@openomni/agent";
 import { Effect } from "effect";
-import { CRON_TICK, cronPurposes } from "../src/composition/bundles/cron";
-import { monitorPurposes } from "../src/composition/bundles/monitor";
+import { CRON_TICK, cronBundle, cronPurposes } from "../src/bundles/cron";
+import { monitorBundle, monitorPurposes, monitorSeedRows } from "../src/bundles/monitor";
 import { runEffect } from "./helpers/effect";
 
 /** A recording `AlarmWakeContext.prompt` — the core's verb, stubbed for assertion. */
@@ -186,4 +186,48 @@ test("cron.tick reports payload and expression faults as typed wake failures", a
     Effect.flip(wake(cronFired({ ...payload, expr: "not a cron line" }, 300_000), 300_000)),
   );
   expect(expr.reason).toBe("cron_expr");
+});
+
+// ─── #1255 P2: the Bundle.define contracts the manifest composes ────────────
+
+test("monitorBundle declares the sealed tool face, the wake budget row and the watch purposes", () => {
+  const monitor = monitorBundle({ close: () => undefined });
+  expect(monitor.contract).toBe("bundle");
+  expect(monitor.name).toBe("monitor");
+  expect(monitor.requires.map((seam) => seam.key)).toEqual([Bundle.AlarmSeam.key]);
+  // The 12-tool catalog stays sealed: the bundle declares the same `monitor` face.
+  expect(monitor.tools.map((tool) => tool.name)).toEqual(["monitor"]);
+  expect(monitor.rows).toEqual([
+    {
+      id: "monitor/tool.pre#1",
+      on: "tool.pre",
+      when: { op: "monitor" },
+      do: "gate",
+      how: { ref: "kernel/budget-clamp", metric: "notifications", limit: 8 },
+      order: 900,
+    },
+  ]);
+  expect(Object.keys(monitor.purposes).sort()).toEqual([Bundle.MONITOR_HIT, Bundle.MONITOR_TIMEOUT].sort());
+  // The legacy-shaped seed row rides the bundle module too (boot passes it to the seed).
+  expect(monitorSeedRows.map((row) => row.name)).toEqual(["monitor-wake-budget"]);
+});
+
+test("cronBundle declares the one cron.tick purpose and nothing else", () => {
+  const cron = cronBundle();
+  expect(cron.contract).toBe("bundle");
+  expect(cron.name).toBe("cron");
+  expect(cron.requires.map((seam) => seam.key)).toEqual([Bundle.AlarmSeam.key]);
+  expect(cron.tools).toEqual([]);
+  expect(cron.rows).toEqual([]);
+  expect(Object.keys(cron.purposes)).toEqual([CRON_TICK]);
+});
+
+test("the port-less monitor tool face refuses execution with a typed refusal", async () => {
+  const face = monitorBundle({ close: () => undefined }).tools[0];
+  if (face === undefined) throw new Error("missing monitor tool face");
+  const attempt = face.execute(
+    { operation: { op: "cancel", id: "w-1" } },
+    { sessionId: "s", turnId: "t", callId: "c-1", signal: new AbortController().signal },
+  );
+  expect(attempt).rejects.toThrow("alarm port unavailable");
 });

@@ -112,7 +112,7 @@ for (const stop of [false, true]) {
     try {
       // The one-second wait is eval's public background-run boundary, not a polling delay;
       // the interpreter is warmed first so a cold start cannot stand in for that boundary.
-      expect((await execute({ op: "run", code: "0", timeout: 15 })).output).toBe("0");
+      expect((await execute({ op: "run", code: "0", timeout: 15 })).content).toBe("0");
       const running = execute({
         op: "run",
         code: "print('started')\nanswer = completion('hold')\nanswer",
@@ -122,14 +122,14 @@ for (const stop of [false, true]) {
       const started = await running;
       expect(started.isError).toBeUndefined();
       const cellId = /^cell (\S+) is still running; peek or stop it by cell_id\nstarted\n$/.exec(
-        started.output,
+        started.content,
       )?.[1];
-      if (cellId === undefined) throw new Error(`expected running cell: ${started.output}`);
+      if (cellId === undefined) throw new Error(`expected running cell: ${started.content}`);
       expect(toolActions("completion", "intent")).toHaveLength(1);
       expect(toolActions("completion", "result")).toHaveLength(0);
 
       if (stop) {
-        expect((await execute({ op: "stop", cell_id: cellId })).output).toBe(
+        expect((await execute({ op: "stop", cell_id: cellId })).content).toBe(
           "the cell was stopped\nstarted\n",
         );
         expect((await execute({ op: "peek", cell_id: cellId })).isError).toBe(true);
@@ -143,14 +143,14 @@ for (const stop of [false, true]) {
         expect(completion).toEqual({ result: { status: "completed", value: "late" } });
       }
       // Same-tenant execution is a barrier for the Python result/late-answer handling.
-      expect((await execute({ op: "run", code: "6 * 7", timeout: 15 })).output).toBe("42");
+      expect((await execute({ op: "run", code: "6 * 7", timeout: 15 })).content).toBe("42");
       if (stop) {
         expect(
-          (await execute({ op: "run", code: "'answer' in globals()", timeout: 15 })).output,
+          (await execute({ op: "run", code: "'answer' in globals()", timeout: 15 })).content,
         ).toBe("False");
         expect((await execute({ op: "peek", cell_id: cellId })).isError).toBe(true);
       } else {
-        expect((await execute({ op: "peek", cell_id: cellId })).output).toBe("'late'");
+        expect((await execute({ op: "peek", cell_id: cellId })).content).toBe("'late'");
         expect((await execute({ op: "peek", cell_id: cellId })).isError).toBe(true);
       }
       const intents = toolActions("completion", "intent");

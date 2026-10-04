@@ -3,7 +3,7 @@ import { AgentInvariantViolation, type ExecutionError, ToolBodyFailed, AgentFail
 import type { ChatAgentConfig } from "./types";
 import type { RunState, TurnArtifacts } from "./turn";
 import { recordToolCall } from "./budget";
-import { type Tool, type Message, type PlainValue, PlainValueSchema, type ToolDefinition, type ToolExecutionContext, listenForAbort, type AnyToolDefinition, type LedgerSession, type LedgerAction, canonicalDigest, SessionGeneration, type ToolCategory } from "@openomni/protocol";
+import { type Tool, type Message, type PlainValue, PlainValueSchema, type ToolDefinition, type ToolExecutionContext, listenForAbort, type AnyToolDefinition, type LedgerSession, type LedgerAction, canonicalDigest, SessionGeneration, type ToolCategory, toolResultText, toolResultJsonSchema } from "@openomni/protocol";
 import { BOUNDED_CONCURRENCY, GenerationOwnership, ToolCatalog, type ProcessServices, SessionLayer } from "./ports";
 import { z } from "zod";
 import { RawToolSlots, openInvocation, withExecutor, withInvocation, type InvocationFrame, type Executor, activeInvocation, requireExecutor, createExecutor, immutableInput, type DurableExecutor, type ExecutionLedger, type ExecutionBatchResult, type ExecutionRequest, type ExecutionApprovals, type ExecutorOptions } from "./gate/decide";
@@ -141,11 +141,11 @@ export function settleModelTools(
             Effect.flatMap((exit) => {
               if (Exit.isSuccess(exit)) return Effect.succeed(exit.value);
               if (Cause.hasInterrupts(exit.cause)) return Effect.failCause(exit.cause);
-              const output = Option.match(Cause.findErrorOption(exit.cause), {
+              const content = Option.match(Cause.findErrorOption(exit.cause), {
                 onNone: () => pretty(exit.cause),
                 onSome: (error) => error.message,
               });
-              return Effect.succeed({ id: call.id, toolCallId: call.id, toolName: call.tool, output, isError: true });
+              return Effect.succeed({ id: call.id, toolCallId: call.id, toolName: call.tool, content, isError: true });
             }),
           );
         }, { concurrency: BOUNDED_CONCURRENCY });
@@ -174,13 +174,13 @@ export function settleModelTools(
         ? {
             status: "error",
             input: part.state.input,
-            error: result.output,
+            error: toolResultText(result),
             time: { start: startedAt, end: settledAt },
           }
         : {
             status: "completed",
             input: part.state.input,
-            output: result.output,
+            output: toolResultText(result),
             title: part.tool,
             metadata: {},
             time: { start: startedAt, end: settledAt },
@@ -286,6 +286,8 @@ function isToolRefusal(value: CaughtValue): value is Error {
 const NEVER_ABORTED = new AbortController().signal;
 
 const MODEL_OUTPUT_MAX_CHARS = 32_000;
+/** D5 bound: typed data rides structuredContent only when it fits the protocol JSON bound. */
+const BoundedResultJson = toolResultJsonSchema();
 /** Executable catalog data copied into each captured generation's dispatch table. */
 export type ToolDispatchDefinition<In extends z.ZodType = z.ZodType, Out extends z.ZodType = z.ZodType> = ToolDefinition<In, Out> & {
   readonly approval?: (input: PlainValue) => NonNullable<ExecutionRequest["approval"]>;
@@ -312,9 +314,10 @@ type ToolErrorKind =
   | "execution_failed"
   | "invalid_output";
 
-type ToolDispatchResult = Tool.Result & { readonly errorKind?: ToolErrorKind };
-type CellToolDispatchResult = Omit<ToolDispatchResult, "output"> & {
-  readonly output: PlainValue;
+type ToolDispatchResult = Tool.Result & { readonly content: string; readonly errorKind?: ToolErrorKind };
+type CellToolDispatchResult = Omit<ToolDispatchResult, "output" | "content"> & {
+  /** Cell-door successes skip render, so they carry typed data without model text. */
+  readonly content?: string;
 };
 
 interface DispatcherOptions {
@@ -428,13 +431,25 @@ function finishResult(
   if (!output.success) {
     return failed(call, `${definition.name} produced invalid output`, "invalid_output");
   }
+  if (door === "cell") {
+    // The cell door stays render-free: typed data only.
+    return {
+      toolCallId: call.id,
+      id: call.id,
+      toolName: call.tool,
+      structuredContent: output.data,
+    } satisfies CellToolDispatchResult;
+  }
+  // Typed data rides structuredContent only when it fits the protocol bound;
+  // content stays the authoritative model text either way.
+  const structured = BoundedResultJson.safeParse(output.data);
   return {
     toolCallId: call.id,
     id: call.id,
     toolName: call.tool,
-    output:
-      door === "cell" ? output.data : truncate(definition.render(inputData, output.data)),
-  } satisfies ToolDispatchResult | CellToolDispatchResult;
+    content: truncate(definition.render(inputData, output.data)),
+    ...(structured.success ? { structuredContent: structured.data } : {}),
+  } satisfies ToolDispatchResult;
 }
 
 function approvalFromOriginal(
@@ -476,10 +491,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
    */
   const resolveExecutor = (): Executor | undefined =>
     options?.executor ?? activeInvocation.getStore()?.executor;
-  const toolsGeneration = new Map(definitions.map((definition) => [
-    definition.name,
-    Object.freeze({ definition, approval: definition.approval }),
-  ]));
+  const { specs, dispatch: dispatchTable } = projectTools(definitions);
   type Prepared =
     | { readonly kind: "refused"; readonly result: ToolDispatchResult }
     | {
@@ -499,7 +511,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
     originalAction?: LedgerAction.Node,
   ): Prepared {
     const context = executionContext(call, providedContext);
-    const entry = toolsGeneration.get(call.tool);
+    const entry = dispatchTable.get(call.tool);
     if (entry === undefined) {
       return {
         kind: "refused",
@@ -567,10 +579,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
         ...(door === "model"
           ? {
               toolResult: (execution: ExecutionBatchResult): Tool.Result => {
-                const result = finish(execution);
-                if (typeof result.output !== "string")
-                  throw new AgentInvariantViolation("model tool output must be rendered text");
-                modelResult = { ...result, output: result.output };
+                modelResult = renderedResult(finish(execution));
                 return modelResult;
               },
             }
@@ -632,7 +641,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
 
   return {
     ...(options?.executor === undefined ? {} : { executor: options.executor }),
-    specs: definitions.filter((definition) => definition.visibility.model.length > 0).map(toolSpec),
+    specs,
     executeWave,
     recover(actions, context) {
       return Effect.gen(function* () {
@@ -769,12 +778,10 @@ export function createTurnDispatcher(
   const { definitions } = yield* ToolCatalog;
   const generation = yield* GenerationOwnership;
   const { policy } = yield* SessionLayer;
+  const projected = new Map(projectTools(definitions).session.map((tool) => [tool.name, tool]));
   for (const captured of input.tools ?? []) {
-    const definition = definitions.find((candidate) => candidate.name === captured.name);
-    if (
-      definition === undefined ||
-      canonicalDigest(sessionTool(definition)) !== canonicalDigest(captured)
-    ) {
+    const current = projected.get(captured.name);
+    if (current === undefined || canonicalDigest(current) !== canonicalDigest(captured)) {
       return yield* new AgentFailure({ operation: "dispatcher.acquire", cause: `captured catalog mismatch: ${captured.name}` });
     }
   }
@@ -829,23 +836,51 @@ export function createTurnDispatcher(
   });
 }
 
-export function sessionTool(definition: AnyToolDefinition): SessionGeneration.Tool {
-  return SessionGeneration.Tool.parse({
-    name: definition.name,
-    inputSchema: toolInputSchema(definition),
-    category: definition.category,
-    ...(definition.sequential ? { sequential: true } : {}),
-  });
+/** A composable tool definition: dispatchable, with the bundle's replay declaration. */
+export type ProjectableTool = ToolDispatchDefinition & { readonly idempotent?: boolean };
+
+/**
+ * The three tool projections (#1255), derived ONCE from one definition list —
+ * the composed generation's tools or the catalog. `session` is the journaled
+ * `SessionGeneration.Tool` shape (`idempotent` preserved; the run loop alone
+ * decides replay), `specs` the model-visible `Tool.Spec` faces, `dispatch` the
+ * execution Map. No caller re-projects.
+ */
+export interface ToolProjections {
+  readonly session: readonly SessionGeneration.Tool[];
+  readonly specs: readonly Tool.Spec[];
+  readonly dispatch: ReadonlyMap<
+    string,
+    { readonly definition: ProjectableTool; readonly approval?: ToolDispatchDefinition["approval"] }
+  >;
 }
 
-export function toolSpec(definition: AnyToolDefinition): Tool.Spec {
-  return {
-    name: definition.name,
-    description: definition.description,
-    inputSchema: toolInputSchema(definition),
-    safe: toolIsSafe(definition.category),
-    ...(definition.sequential ? { sequential: true } : {}),
-  };
+export function projectTools(definitions: readonly ProjectableTool[]): ToolProjections {
+  const session = definitions.map((definition) =>
+    SessionGeneration.Tool.parse({
+      name: definition.name,
+      inputSchema: toolInputSchema(definition),
+      category: definition.category,
+      ...(definition.sequential ? { sequential: true } : {}),
+      ...(definition.idempotent === true ? { idempotent: true } : {}),
+    }),
+  );
+  const specs = definitions
+    .filter((definition) => definition.visibility.model.length > 0)
+    .map((definition): Tool.Spec => ({
+      name: definition.name,
+      description: definition.description,
+      inputSchema: toolInputSchema(definition),
+      safe: toolIsSafe(definition.category),
+      ...(definition.sequential ? { sequential: true } : {}),
+    }));
+  const dispatch = new Map(
+    definitions.map((definition) => [
+      definition.name,
+      Object.freeze({ definition, approval: definition.approval }),
+    ]),
+  );
+  return { session: Object.freeze(session), specs: Object.freeze(specs), dispatch };
 }
 
 function executionContext(call: Tool.Call, context: DispatchContext): ToolExecutionContext {
@@ -858,18 +893,20 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
 }
 
 function renderedResult(result: ToolDispatchResult | CellToolDispatchResult): ToolDispatchResult {
-  if (typeof result.output !== "string") throw new AgentInvariantViolation("model tool output must be rendered text");
-  return { ...result, output: result.output };
+  const { content, ...settled } = result;
+  if (content === undefined) throw new AgentInvariantViolation("model tool result must carry rendered content");
+  return { ...settled, content };
 }
 
-function failed(call: Tool.Call, output: string, errorKind: ToolErrorKind): ToolDispatchResult {
+function failed(call: Tool.Call, content: string, errorKind: ToolErrorKind): ToolDispatchResult {
   return {
     toolCallId: call.id,
     id: call.id,
     toolName: call.tool,
-    output,
+    content,
     isError: true,
     errorKind,
+    details: { errorKind },
   };
 }
 

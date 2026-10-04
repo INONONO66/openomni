@@ -29,7 +29,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { runScriptMain } from "./main-runner";
-import { toolSpec } from "../packages/agent/src/core/tool.js";
+import { projectTools } from "../packages/agent/src/core/tool.js";
 import { catalogDefinitions, type ToolPorts } from "../apps/openomni/src/tools/core/catalog.js";
 import type { Tool, AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
 import type { PlainObject, PlainValue } from "../packages/protocol/src/json.js";
@@ -43,6 +43,21 @@ const schemaPorts: ToolPorts = {
   llm: undefined, provisioning: undefined, clock: () => 0, id: () => "schema",
 };
 const definitions = catalogDefinitions(schemaPorts);
+
+/**
+ * The snapshot pins the FULL catalog surface, cell-only doors included:
+ * `projectTools(...).specs` drops model-invisible tools, so visibility is
+ * widened for the projection alone (`Tool.Spec` carries no visibility).
+ */
+function allToolSpecs(list: readonly AnyToolDefinition[]): readonly Tool.Spec[] {
+  return projectTools(
+    list.map((definition) =>
+      definition.visibility.model.length > 0
+        ? definition
+        : { ...definition, visibility: { ...definition.visibility, model: ["resident" as const] } },
+    ),
+  ).specs;
+}
 
 interface Violation {
   readonly check:
@@ -271,7 +286,7 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 function collectToolSurfaces(): ToolSurface[] {
-  return definitions.map(toolSpec).map((spec) => ({
+  return allToolSpecs(definitions).map((spec) => ({
     name: spec.name,
     description: spec.description,
     inputSchema: spec.inputSchema,
@@ -336,7 +351,8 @@ export async function checkNaming(baseline: Baseline): Promise<Violation[]> {
 // check 6 — earned check
 // ---------------------------------------------------------------------------
 
-const TOOL_SOURCE_GLOB = "apps/openomni/src/tools/**/*.ts";
+// #1255: bundle-owned tools live under `src/bundles/<bundle>/index.ts`.
+const TOOL_SOURCE_GLOBS = ["apps/openomni/src/tools/**/*.ts", "apps/openomni/src/bundles/**/*.ts"];
 const TOOL_CATEGORIES: readonly ToolCategory[] = ["query", "mutation", "authority", "execution"];
 
 function looksLikeToolDefinition(value: object): value is AnyToolDefinition {
@@ -358,8 +374,13 @@ async function locateExportedDefinitions(
   definitions: readonly AnyToolDefinition[],
 ): Promise<LocatedDefinition[]> {
   const located = new Map<AnyToolDefinition, string>();
-  const glob = new Bun.Glob(TOOL_SOURCE_GLOB);
-  for await (const filePath of glob.scan({ cwd: ROOT, onlyFiles: true })) {
+  const files = new Set<string>();
+  for (const pattern of TOOL_SOURCE_GLOBS) {
+    for await (const filePath of new Bun.Glob(pattern).scan({ cwd: ROOT, onlyFiles: true })) {
+      files.add(filePath);
+    }
+  }
+  for (const filePath of files) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
     const source = await Bun.file(join(ROOT, filePath)).text();
     const module = z.record(z.string(), z.union([
@@ -387,6 +408,14 @@ async function locateExportedDefinitions(
 /** KERNEL 3.5: `tools/<name>.ts`, with the repo's kebab-case file rule applied to snake_case names. */
 function toolFileName(toolName: string): string {
   return `${toolName.replaceAll("_", "-")}.ts`;
+}
+
+/** #1255: a bundle-owned tool lives in its bundle's `index.ts`, directory named after the tool. */
+function isToolSourcePath(toolName: string, filePath: string): boolean {
+  return (
+    filePath.endsWith(`/${toolFileName(toolName)}`) ||
+    filePath.endsWith(`src/bundles/${toolName.replaceAll("_", "-")}/index.ts`)
+  );
 }
 
 export function definitionInvariantViolations(
@@ -418,7 +447,7 @@ export function definitionInvariantViolations(
         subject: definition.name,
         message: "[tool-source-location] catalog definition has no verifiable source file",
       });
-    } else if (!filePath.endsWith(`/${toolFileName(definition.name)}`)) {
+    } else if (!isToolSourcePath(definition.name, filePath)) {
       violations.push({
         check: "tool-lint",
         subject: definition.name,
@@ -587,7 +616,7 @@ async function checkSchemaSnapshot(): Promise<Violation[]> {
 }
 
 export function buildToolSchemaSnapshot(): readonly Tool.Spec[] {
-  return definitions.map(toolSpec);
+  return allToolSpecs(definitions);
 }
 
 export function diffToolSchemaSnapshots<T extends { readonly name?: string }>(

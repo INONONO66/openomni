@@ -80,7 +80,7 @@ const toolProjectionCases: ToolProjectionCase[] = [
       { type: "finish" },
     ],
     expectedResults: 1,
-    expectedResult: { toolCallId: "call-weather", output: "network down", isError: true },
+    expectedResult: { toolCallId: "call-weather", content: "network down", isError: true },
     expectedPart: {
       callID: "call-weather",
       state: { status: "error", error: "network down" },
@@ -124,7 +124,7 @@ const toolProjectionCases: ToolProjectionCase[] = [
     expectedResults: 1,
     expectedResult: {
       toolCallId: "structured",
-      output: '{"content":[{"type":"text","text":"hit"}]}',
+      content: '{"content":[{"type":"text","text":"hit"}]}',
     },
     expectedPart: {
       callID: "structured",
@@ -138,7 +138,7 @@ const toolProjectionCases: ToolProjectionCase[] = [
       { type: "tool-error", toolCallId: "error-object", error: new Error("error fixture") },
     ],
     expectedResults: 1,
-    expectedResult: { toolCallId: "error-object", output: "error fixture", isError: true },
+    expectedResult: { toolCallId: "error-object", content: "error fixture", isError: true },
     expectedPart: { callID: "error-object", state: { status: "error", error: "error fixture" } },
   },
 ];
@@ -199,7 +199,7 @@ describe("Processor tool result projection", () => {
     expect(toolResults).toHaveLength(1);
     expect(toolResults[0]).toMatchObject({
       toolCallId: "call-weather",
-      output: "sunny",
+      content: "sunny",
     });
     const toolPart = messages.at(-1)?.parts.find((part) => part.type === "tool");
     expect(toolPart).toMatchObject({

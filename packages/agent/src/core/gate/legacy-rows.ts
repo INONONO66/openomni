@@ -8,7 +8,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { freezePlain } from "./match";
-import type { NamedPolicyRegistry, NamedTransformer } from "./registry";
+import type { HandlerTable, NamedTransformer } from "./registry";
 
 /**
  * Historical row decoding (#1251): the compile error contract and the parser
@@ -135,7 +135,7 @@ export function parseRow(
   row: PolicyRow.Row,
   generation: number,
   kinds: ReadonlySet<string>,
-  registry: NamedPolicyRegistry,
+  registry: HandlerTable,
 ): CompiledRow {
   if (row.generation !== generation) {
     throw new PolicyCompileError({
@@ -215,7 +215,7 @@ function resolveVerdict(
   verdict: RowVerdict,
   row: PolicyRow.Row,
   generation: number,
-  registry: NamedPolicyRegistry,
+  registry: HandlerTable,
 ): CompiledVerdict {
   switch (verdict.type) {
     case "transform": {

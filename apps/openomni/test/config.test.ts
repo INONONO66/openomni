@@ -46,6 +46,7 @@ const ENV_KEYS = [
   "OPENOMNI_MACHINES_TLS_CERT",
   "OPENOMNI_MACHINES_TLS_KEY",
   "OPENOMNI_CHANNEL_ALLOWED_SENDERS",
+  "OPENOMNI_BUNDLES_OFF",
 ] as const;
 
 let saved: Record<string, string | undefined>;
@@ -649,5 +650,24 @@ describe("machines self enrollment config (#1271)", () => {
     if (machines === undefined) throw new Error("machines plane expected");
     expect(machines.default).toBe("alpha");
     expect(validateMachinePlane(machines).defaultMachine).toBe("alpha");
+  });
+});
+
+describe("bundles off tuple (#1255)", () => {
+  it("unset means absent: every declared bundle stays on", () => {
+    expect(loadConfig().bundlesOff).toBeUndefined();
+  });
+
+  it("parses the Owner's off names", () => {
+    process.env.OPENOMNI_BUNDLES_OFF = '["monitor","cron"]';
+    expect(loadConfig().bundlesOff).toEqual(["monitor", "cron"]);
+  });
+
+  it("refuses the boot on malformed JSON or an empty name (fail-closed)", () => {
+    process.env.OPENOMNI_BUNDLES_OFF = "monitor";
+    expect(loadConfig).toThrow(ConfigurationError);
+    expect(loadConfig).toThrow("OPENOMNI_BUNDLES_OFF is invalid JSON");
+    process.env.OPENOMNI_BUNDLES_OFF = '[""]';
+    expect(loadConfig).toThrow("OPENOMNI_BUNDLES_OFF is invalid");
   });
 });
