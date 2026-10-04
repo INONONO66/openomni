@@ -202,6 +202,17 @@ export function canonicalKey(value: PlainValue): string {
 }
 
 /**
+ * ONE canonical JSON byte owner for persisted facts that travel as text
+ * (alarm payloads, message origins): sorted object keys, no whitespace,
+ * finite numbers, plain data only. Every byte string it emits parses back
+ * with `JSON.parse`; `canonicalKey` is the in-memory equality profile and
+ * does not.
+ */
+export function canonicalJson(value: PlainValue): string {
+  return renderCanonical(value);
+}
+
+/**
  * ONE digest owner for canonical JSON identity: sorted object keys, no
  * whitespace, finite numbers, plain data only — undefined and non-JSON
  * values fail loudly — hashed with sha256 under the `sha256:` prefix.

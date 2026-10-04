@@ -17,7 +17,7 @@ import type { KindDeclaration } from "./declaration.js";
 export * as JournalKind from "./declaration.js";
 export { Control as SignalControl } from "./core/signal.js";
 export { Phase as RequestPhase } from "./core/request.js";
-export { Op as AlarmOp, FiredOutcome as AlarmFiredOutcome } from "./core/alarm.js";
+export { Op as AlarmOp, FiredOutcome as AlarmFiredOutcome, RESERVED_PURPOSES as RESERVED_ALARM_PURPOSES, isReservedPurpose as isReservedAlarmPurpose, type ReservedPurpose as ReservedAlarmPurpose } from "./core/alarm.js";
 export { Settings as ConsumptionSettings, ConsumptionWidth } from "./core/session-configure.js";
 export { CompactionReason } from "./capability/compaction.js";
 

@@ -23,6 +23,8 @@ import {
 } from "./helpers/cluster-runtime";
 import { SessionNotFound } from "../src/core/store/errors";
 import { seedSessionWithOpenRequest } from "./helpers/seed-request";
+import { armAction } from "../src/core/alarm";
+import { Alarm } from "@openomni/protocol";
 import { approvalAnswer } from "./helpers/request-fixtures";
 import { runAgent } from "./helpers/executor";
 import type { DeliverRefused } from "../src/core/messages";
@@ -204,6 +206,20 @@ test("alarm(retry) replaces RetryScheduled: live attempt applies, unknown occurr
       irreversible: true as const,
     };
     const row = kernel.row(sessionId);
+    // #1254 S4: a live occurrence is one the chain armed — the retry port
+    // commits the arm row first, so the seed commits the same shape.
+    const armed = armAction({
+      parentId: "op:attempt:1",
+      sessionId,
+      purpose: "retry",
+      at: 100,
+      supersedes: null,
+      alarmId: "op:attempt:1:retry",
+      sourceKey: "retry",
+      payload: { attempt: 1, reason: "transient_error" },
+      armSeq: 1,
+      ts: 100,
+    });
     await runAgent(
       kernel.commit({
         sessionId,
@@ -214,6 +230,7 @@ test("alarm(retry) replaces RetryScheduled: live attempt applies, unknown occurr
         actions: [
           { ...base, id: "op", parentId: null, kind: "llm" },
           { ...base, id: "op:attempt:1", parentId: "op", kind: "llm" },
+          armed.action,
         ],
         state: row.state,
       }),
@@ -222,9 +239,12 @@ test("alarm(retry) replaces RetryScheduled: live attempt applies, unknown occurr
   const live = await runCluster(
     options,
     sendAlarm(sessionId, {
-      occurrenceId: "op:attempt:1:retry:1",
+      occurrenceId: Alarm.occurrenceId(sessionId, "op:attempt:1:retry", 1, "retry"),
       purpose: "retry",
-      body: JSON.stringify({ alarmId: "op:attempt:1:retry:1", attempt: 1 }),
+      alarmId: "op:attempt:1:retry",
+      armSeq: 1,
+      sourceKey: "retry",
+      payload: JSON.stringify({ attempt: 1, reason: "transient_error" }),
       fireAt: Date.now() - 1000,
     }),
   );
@@ -234,7 +254,10 @@ test("alarm(retry) replaces RetryScheduled: live attempt applies, unknown occurr
     sendAlarm(sessionId, {
       occurrenceId: "missing:retry:1",
       purpose: "retry",
-      body: JSON.stringify({ alarmId: "missing:retry:1", attempt: 1 }),
+      alarmId: "missing:retry:1",
+      armSeq: 1,
+      sourceKey: "retry",
+      payload: JSON.stringify({ attempt: 1 }),
       fireAt: Date.now() - 1000,
     }),
   );
@@ -258,16 +281,24 @@ test("alarm(deadline) replaces Deadline: open request applies, unknown request f
     options,
     Effect.gen(function* () {
       const open = yield* sendAlarm(sessionId, {
-        occurrenceId: "req-deadline:deadline",
+        // #1254 S4: the open decision armed the deadline chain; the live
+        // occurrence is the one that arm minted.
+        occurrenceId: Alarm.occurrenceId(sessionId, "req-deadline:deadline", 1, "deadline"),
         purpose: "deadline",
-        body: JSON.stringify({ requestId: "req-deadline" }),
+        alarmId: "req-deadline:deadline",
+        armSeq: 1,
+        sourceKey: "deadline",
+        payload: JSON.stringify({ requestId: "req-deadline" }),
         fireAt: Date.now() - 1000,
       });
       expect(open.outcome).toBe("delivered");
       const unknown = yield* sendAlarm(sessionId, {
         occurrenceId: "missing:deadline",
         purpose: "deadline",
-        body: JSON.stringify({ requestId: "missing" }),
+        alarmId: "missing:deadline",
+        armSeq: 1,
+        sourceKey: "deadline",
+        payload: JSON.stringify({ requestId: "missing" }),
         fireAt: Date.now() - 1000,
       });
       expect(unknown.outcome).toBe("stale");
@@ -277,7 +308,10 @@ test("alarm(deadline) replaces Deadline: open request applies, unknown request f
   expect(chain.find((row) => row.id === "missing:deadline:stale")?.kind).toBe("alarm");
 });
 
-test("alarm(watch.fired/watch.timeout) replace WatchFired/WatchTimeout with chain-guarded folds", async () => {
+test("alarm(watch.*) purposes are capability-dispatched: unbound occurrences fold stale, idempotently", async () => {
+  // #1254 S4: the interim watch timer folds are deleted — watch purposes are
+  // plugin capability purposes (the alarm-plane merge binds them). With no
+  // capability bound, a watch occurrence folds to a recorded stale fact.
   const sessionId = "surface-watch";
   await runCluster(
     options,
@@ -285,50 +319,63 @@ test("alarm(watch.fired/watch.timeout) replace WatchFired/WatchTimeout with chai
       const fired = yield* sendAlarm(sessionId, {
         occurrenceId: "watch-occ-1",
         purpose: "watch.fired",
-        body: JSON.stringify({ watchId: "w1", epoch: 1, sourceKey: "watch-occ-1", batch: "[]" }),
+        alarmId: "w1",
+        armSeq: 1,
+        sourceKey: "watch-occ-1",
+        payload: JSON.stringify({ watchId: "w1", sourceKey: "watch-occ-1", batch: "[]" }),
         fireAt: Date.now() - 1000,
       });
-      expect(fired.outcome).toBe("delivered");
-      // A sourceKey already committed on the chain is a superseded occurrence.
-      const supersededFired = yield* sendAlarm(sessionId, {
-        occurrenceId: "watch-occ-2",
-        purpose: "watch.fired",
-        body: JSON.stringify({
-          watchId: "w1",
-          epoch: 1,
-          sourceKey: `${sessionId}:materialize`,
-          batch: "[]",
-        }),
-        fireAt: Date.now() - 1000,
-      });
-      expect(supersededFired.outcome).toBe("stale");
+      expect(fired.outcome).toBe("stale");
       const timeout = yield* sendAlarm(sessionId, {
         occurrenceId: "w1:timeout:1",
         purpose: "watch.timeout",
-        body: JSON.stringify({ watchId: "w1", epoch: 1 }),
+        alarmId: "w1",
+        armSeq: 1,
+        sourceKey: "watch.timeout",
+        payload: JSON.stringify({ watchId: "w1" }),
         fireAt: Date.now() - 1000,
       });
-      expect(timeout.outcome).toBe("delivered");
+      expect(timeout.outcome).toBe("stale");
     }),
   );
   const chain = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
-  const fact = chain.find((row) => row.id === "watch-occ-2:stale");
-  expect(fact?.kind).toBe("alarm");
+  expect(chain.find((row) => row.id === "watch-occ-1:stale")?.kind).toBe("alarm");
+  expect(chain.find((row) => row.id === "w1:timeout:1:stale")?.kind).toBe("alarm");
   // Replay of the stale occurrence appends nothing: the fact id is idempotent.
   const before = chain.length;
   await runCluster(
     options,
     sendAlarm(sessionId, {
-      occurrenceId: "watch-occ-2",
+      occurrenceId: "watch-occ-1",
       purpose: "watch.fired",
-      body: JSON.stringify({
-        watchId: "w1",
-        epoch: 1,
-        sourceKey: `${sessionId}:materialize`,
-        batch: "[]",
-      }),
+      alarmId: "w1",
+      armSeq: 1,
+      sourceKey: "watch-occ-1",
+      payload: JSON.stringify({ watchId: "w1", sourceKey: "watch-occ-1", batch: "[]" }),
       fireAt: Date.now() - 1000,
     }),
   );
   expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId).length).toBe(before);
+});
+
+test("alarm with an unregistered purpose folds to a recorded stale fact, zero execution", async () => {
+  const sessionId = "surface-unregistered-purpose";
+  const receipt = await runCluster(
+    options,
+    sendAlarm(sessionId, {
+      occurrenceId: "occ-unregistered-1",
+      purpose: "cron.tick",
+      alarmId: "cron-1",
+      armSeq: 1,
+      sourceKey: "cron",
+      payload: JSON.stringify({ expr: "*/30 * * * *" }),
+      fireAt: Date.now() - 1000,
+    }),
+  );
+  expect(receipt.outcome).toBe("stale");
+  const chain = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
+  const fact = chain.find((row) => row.id === "occ-unregistered-1:stale");
+  expect(fact?.kind).toBe("alarm");
+  // The loop was not woken: no turn envelope exists anywhere in the chain.
+  expect(chain.some((row) => row.kind === "turn")).toBe(false);
 });

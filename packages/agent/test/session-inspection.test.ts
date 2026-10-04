@@ -7,6 +7,7 @@ import { Effect, Fiber, Scope } from "effect";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { describe, expect, spyOn, test } from "bun:test";
 import { runChatAttempts, answerThenCompact, nullRetryAlarm } from "./helpers/effect-g2";
+import { armAction, firedAction } from "../src/core/alarm";
 import { OutcomeUnknown, CommitFailed } from "../src/core/failure";
 import { seedPolicy } from "./helpers/seed-policy";
 import { approveWriteRow } from "./helpers/compiled-policy";
@@ -304,31 +305,28 @@ function lifecycle() {
         sourceActionId: commission.id,
       },
     });
-    // W5.2: the alarms table is deleted; a watch is `alarm.arm`/`alarm.fired`
-    // chain actions guarded by occurrence id (cluster timer plane), and the
-    // wake is the fired occurrence's received message plus a fresh activation.
+    // #1254: a watch is an `alarm{arm}` chain row plus the `alarm{fired}` row
+    // that settles its occurrence; the wake is the fired row's received
+    // message plus a fresh activation.
     const kernel = isolatedLedger().kernel;
     const monitorWriter = yield* kernel.adoptFence({
       sessionId: "parent", owner: "monitor-writer", fence: kernel.row("parent").fence + 1,
     });
-    yield* monitorCommit(kernel, monitorWriter.fence, {
-      id: "monitor", sessionId: "parent", parentId: null, kind: "alarm",
-      intent: { encodingVersion: 1, value: { alarmId: "monitor", kind: "at", fireAt: 1_000 } },
-      effect: { encodingVersion: 1, value: { phase: "pending" } },
-      ts: 1_000, irreversible: true,
+    const monitorArm = armAction({
+      parentId: null, sessionId: "parent", purpose: "monitor.hit", at: 1_000, supersedes: null,
+      alarmId: "monitor", sourceKey: "timer:1000", payload: {}, armSeq: 1, ts: 1_000,
     });
-    const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
+    yield* monitorCommit(kernel, monitorWriter.fence, monitorArm.action);
+    const monitorFire = firedAction({
+      parentId: monitorArm.action.id, sessionId: "parent", purpose: "monitor.hit", alarmId: "monitor",
+      occurrenceId: monitorArm.occurrenceId, outcome: "delivered", ts: 1_000,
+    });
     const woke = committed("parent", "turn");
-    yield* monitorCommit(kernel, monitorWriter.fence, {
-      id: monitorFire, sessionId: "parent", parentId: "monitor", kind: "alarm",
-      intent: { encodingVersion: 1, value: { alarmId: "monitor", epoch: 1, sourceKey: "timer:1000", terminal: true } },
-      effect: { encodingVersion: 1, value: { terminal: "executed" } },
-      ts: 1_000, irreversible: true,
-    });
+    yield* monitorCommit(kernel, monitorWriter.fence, monitorFire);
     yield* commitReceivedMessage(kernel, {
       id: "monitor-woke", sessionId: "parent", kind: "prompt", content: "monitor woke",
       origin: { encodingVersion: 1, value: { kind: "alarm", alarmId: "monitor" } },
-      createdAt: 1_000, parentActionId: monitorFire,
+      createdAt: 1_000, parentActionId: monitorFire.id,
     });
     yield* wake("parent", parentRunner, runtime);
     yield* Effect.promise(() => woke).pipe(Effect.timeout("5 seconds"));
@@ -418,9 +416,6 @@ describe("action-based history and diagnostic projections", () => {
               case "inbox":
                 for (const id of transition.cause.inboxIds) expect(inbox.has(id)).toBe(true);
                 break;
-              case "alarm":
-                expect(transition.cause).toEqual({ kind: "alarm", alarmId: "monitor", epoch: 1 });
-                break;
               case "root":
                 expect(transition.parentId).toBeNull();
                 expect(["session.configure", "alarm"]).toContain(transition.kind);
@@ -500,26 +495,16 @@ describe("action-based history and diagnostic projections", () => {
           expect(inspection.compactions).toHaveLength(1);
           expect(inspection.compactions[0]?.discarded.count).toBeGreaterThan(0);
           expect(inspection.compactions[0]?.restoredBy).toEqual([]);
-          const woke = inspection.transitions.filter(
+          // #1254: a fired alarm row's cause is its chain lineage (its arm
+          // action); the dedicated alarm cause variant is gone.
+          const monitorFire = `${Alarm.occurrenceId("parent", "monitor", 1, "timer:1000")}:delivered`;
+          const woke = inspection.transitions.find(
             (
               entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
-            ) => entry.cause.kind === "alarm",
+            ) => entry.actionId === monitorFire,
           );
-          expect(
-            woke.map(
-              (
-                entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
-              ) => entry.kind,
-            ),
-          ).toEqual(["alarm"]);
-          const monitorFire = Alarm.occurrenceId("monitor", 1, "timer:1000");
-          expect(
-            woke.map(
-              (
-                entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
-              ) => entry.actionId,
-            ),
-          ).toEqual([monitorFire]);
+          expect(woke?.kind).toBe("alarm");
+          expect(woke?.cause).toEqual({ kind: "action", actionId: "monitor:arm:1" });
           const wakePrompt = inspection.transitions.find(
             (
               entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],

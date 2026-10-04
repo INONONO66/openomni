@@ -1,33 +1,25 @@
 import { AppInvariantError } from "../invariant";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { Core } from "@openomni/agent";
-const deadlineDelivery = Core.deadlineDelivery;
-const decideRequestTransition = Core.decideRequestTransition;
 type SessionHandle = Core.SessionHandle;
 type SessionRunner = Core.SessionRunner;
-const retryDelivery = Core.retryDelivery;
 const SessionEntityContext = Core.SessionEntityContext;
-const SessionEntityLive = Core.SessionEntityLive;
-const watchFiredDelivery = Core.watchFiredDelivery;
-const watchTimeoutDelivery = Core.watchTimeoutDelivery;
+const createSessionEntityLayer = Core.createSessionEntityLayer;
 type SessionEntityPorts = Core.SessionEntityPorts;
-type SessionEntityTimerContext = Core.SessionEntityTimerContext;
-type AlarmChainReads = Core.AlarmChainReads;
+type AlarmDrainConfig = Core.AlarmDrainConfig;
 const openCatalogStore = Core.openCatalogStore;
 const openSessionStore = Core.openSessionStore;
 type LedgerHandles = Core.LedgerHandles;
 type ObservationFailurePort = Core.ObservationFailurePort;
 type ObservationPublishFailure = Core.ObservationPublishFailure;
 import { createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore } from "@openomni/channels";
-import type { LedgerSession, ObservationSink, SessionTransition } from "@openomni/protocol";
+import type { LedgerSession, ObservationSink } from "@openomni/protocol";
 import { Context, Duration, Effect, Layer } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { BunCrypto } from "./cluster-crypto";
 
-/** Timer ack vocabulary (agent `SessionTimerOutcome`, structurally identical). */
-type SessionTimerOutcome = "applied" | "noop";
 /** effect/cluster's entity reaper never scans more frequently than five seconds. */
 const ENTITY_REAPER_INTERVAL_MS = 5_000;
 
@@ -224,126 +216,6 @@ export function appLedgerLayer(options: AppLedgerOptions): Layer.Layer<AppLedger
   );
 }
 
-function chainReads(context: SessionEntityTimerContext): AlarmChainReads {
-  const { kernel, authority } = context;
-  return {
-    actionById: kernel.actionById,
-    requestById: kernel.requestById,
-    resultFor: (intentId) => kernel.resultFor(authority.sessionId, intentId),
-    operationChildrenPage: (parentId, cursor) =>
-      kernel.operationChildrenPage(authority.sessionId, parentId, cursor),
-  };
-}
-
-/**
- * `Deadline` fold body: an open request expires through the pure request
- * authority under the activation's own fence — never a second fence adoption,
- * which would stale the very activation delivering the wake.
- */
-function commitRequestDeadline(
-  context: SessionEntityTimerContext,
-  requestId: string,
-  domainRevisions?: (request: SessionTransition.Request) => Readonly<Record<string, number>>,
-): Effect.Effect<SessionTimerOutcome> {
-  const { kernel, authority } = context;
-  return Effect.gen(function* () {
-    const row = kernel.row(authority.sessionId);
-    const request = kernel.requestById(requestId);
-    const inputId = `${requestId}:deadline`;
-    const inputRecord = kernel.requestInputById(authority.sessionId, inputId);
-    const invocation = kernel.actionById(requestId);
-    const decision = decideRequestTransition(
-      {
-        version: 1,
-        sessionId: authority.sessionId,
-        inputId,
-        at: context.now,
-        expectedRevision: row.revision,
-        authority: { owner: authority.owner, fence: authority.fence },
-        payload: { kind: "request.timeout", requestId },
-      },
-      {
-        row,
-        ...(inputRecord === undefined ? {} : { inputRecord }),
-        ...(invocation === undefined ? {} : { invocation }),
-        ...(request === undefined ? {} : { request }),
-        requests: kernel.requestRows(authority.sessionId),
-        ...(request === undefined || domainRevisions === undefined
-          ? {}
-          : { domainRevisions: domainRevisions(request) }),
-      },
-    );
-    if (decision.actions.length === 0) return "noop" as const;
-    yield* kernel.commit({
-      sessionId: authority.sessionId,
-      owner: authority.owner,
-      fence: authority.fence,
-      now: context.now,
-      expectedRevision: row.revision,
-      actions: [...decision.actions],
-      state: row.state,
-      ...(decision.requestCount === undefined ? {} : { requestCount: decision.requestCount }),
-    });
-    return "applied" as const;
-  }).pipe(Effect.orDie);
-}
-
-/** Watch-plane fold bodies, injected by the composition that owns the watch sources. */
-export interface SessionTimerHooks {
-  readonly requestDomainRevisions?: (
-    request: SessionTransition.Request,
-  ) => Readonly<Record<string, number>>;
-  readonly watchFired?: (
-    context: SessionEntityTimerContext,
-    payload: {
-      readonly watchId: string;
-      readonly epoch: number;
-      readonly sourceKey: string;
-      readonly batch: string;
-    },
-  ) => Effect.Effect<SessionTimerOutcome>;
-  readonly watchTimeout?: (
-    context: SessionEntityTimerContext,
-    payload: { readonly watchId: string; readonly epoch: number; readonly fireAt: number },
-  ) => Effect.Effect<SessionTimerOutcome>;
-}
-
-/**
- * Chain-guarded timer folds (plan F2/D5): a persisted DeliverAt message is
- * never cancelled; a superseded delivery consults the chain and acks `noop`.
- * A watch wake without a composed watch plane acks `noop` — fail-closed.
- */
-export function sessionTimerPort(hooks: SessionTimerHooks = {}): SessionEntityPorts["timers"] {
-  return {
-    retryScheduled: (context, payload) =>
-      Effect.sync(() =>
-        retryDelivery(chainReads(context), payload.alarmId).op === "run"
-          ? ("applied" as const)
-          : ("noop" as const),
-      ),
-    deadline: (context, payload) =>
-      Effect.suspend(() =>
-        deadlineDelivery(chainReads(context), payload.requestId).op === "run"
-          ? commitRequestDeadline(context, payload.requestId, hooks.requestDomainRevisions)
-          : Effect.succeed("noop" as const),
-      ),
-    watchFired: (context, payload) =>
-      Effect.suspend(() =>
-        watchFiredDelivery(chainReads(context), payload.sourceKey).op === "run" &&
-        hooks.watchFired !== undefined
-          ? hooks.watchFired(context, payload)
-          : Effect.succeed("noop" as const),
-      ),
-    watchTimeout: (context, payload) =>
-      Effect.suspend(() =>
-        watchTimeoutDelivery(chainReads(context), payload).op === "run" &&
-        hooks.watchTimeout !== undefined
-          ? hooks.watchTimeout(context, payload)
-          : Effect.succeed("noop" as const),
-      ),
-  };
-}
-
 /**
  * Late-bound entity ports (plan §1): the entity layer is composed before the
  * Resident exists, so the composition root hands the layer this slot and
@@ -368,27 +240,89 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
     },
     ports: {
       runTurn: (input) => Effect.suspend(() => resolve().runTurn(input)),
-      timers: {
-        retryScheduled: (context, payload) =>
-          Effect.suspend(() => resolve().timers.retryScheduled(context, payload)),
-        deadline: (context, payload) =>
-          Effect.suspend(() => resolve().timers.deadline(context, payload)),
-        watchFired: (context, payload) =>
-          Effect.suspend(() => resolve().timers.watchFired(context, payload)),
-        watchTimeout: (context, payload) =>
-          Effect.suspend(() => resolve().timers.watchTimeout(context, payload)),
-      },
       requestDomainRevisions: (request) => resolve().requestDomainRevisions?.(request) ?? {},
+      sendAlarm: (sessionId, occurrence) =>
+        Effect.suspend(() => resolve().sendAlarm?.(sessionId, occurrence) ?? Effect.void),
+      // #1254 S4: capability + keep-alive observation delegate late like the
+      // turn port — purposes resolve against whatever boot bound (none = []).
+      alarmCapability: {
+        get purposes(): readonly string[] {
+          return bound?.alarmCapability?.purposes ?? [];
+        },
+        wake: (fired, ctx) =>
+          Effect.suspend(() => {
+            const capability = resolve().alarmCapability;
+            if (capability === undefined)
+              return Effect.die(new AppInvariantError("alarm capability wake without a bound capability"));
+            return capability.wake(fired, ctx);
+          }),
+      },
+      onKeepAlive: (enabled) => bound?.onKeepAlive?.(enabled),
     },
   };
+}
+
+// ─── #1254 S3: boot alarm rescan ───
+
+type AlarmSweepConfig = Core.AlarmSweepConfig;
+
+/** One empty rescan wake (#1254 S3): entity-internal, appends no fact. */
+export interface RescanOccurrence {
+  readonly sessionId: string;
+  readonly occurrence: {
+    readonly occurrenceId: string;
+    readonly purpose: "rescan";
+    readonly alarmId: string;
+    readonly armSeq: number;
+    readonly sourceKey: "rescan";
+    readonly payload: string;
+    readonly fireAt: number;
+  };
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Boot alarm rescan targets (#1254 S3): `sweep.full` rescans every session;
+ * otherwise every `has_armed` session plus sessions idle for at least
+ * `sweep.idleDays`. The occurrence is keyed `sessionId:rescan:<bootId>` so a
+ * second boot is a new wake while one boot's duplicates fold in the cluster.
+ */
+export function rescanOccurrences(input: {
+  readonly armedSessionIds: readonly string[];
+  readonly sessions: readonly { readonly id: string; readonly lastActivityAt: number }[];
+  readonly sweep: AlarmSweepConfig;
+  readonly bootId: string;
+  readonly now: number;
+}): readonly RescanOccurrence[] {
+  const targets = new Set<string>(input.armedSessionIds);
+  for (const session of input.sessions) {
+    if (input.sweep.full || input.now - session.lastActivityAt >= input.sweep.idleDays * DAY_MS) {
+      targets.add(session.id);
+    }
+  }
+  return [...targets].sort().map((sessionId) => ({
+    sessionId,
+    occurrence: {
+      occurrenceId: `${sessionId}:rescan:${input.bootId}`,
+      purpose: "rescan" as const,
+      alarmId: `${sessionId}:rescan`,
+      armSeq: 0,
+      sourceKey: "rescan" as const,
+      payload: "{}",
+      fireAt: input.now,
+    },
+  }));
 }
 
 export interface SessionEntityRuntimeOptions {
   /** Writer identity stamped into `lease_owner` (audit only; the fence authorizes). */
   readonly owner: string;
   readonly clock: () => number;
-  /** Turn execution + timer ports; the turn port is composition-owned (plan §1). */
+  /** Turn execution + alarm ports; the turn port is composition-owned (plan §1). */
   readonly ports: SessionEntityPorts;
+  /** D3 loop consumption values (#1254 S4), resolved by `resolveAlarmDrain`. */
+  readonly drain: AlarmDrainConfig;
 }
 
 /**
@@ -409,7 +343,7 @@ export function sessionEntityLayer(options: SessionEntityRuntimeOptions) {
       };
     }),
   );
-  return SessionEntityLive.pipe(Layer.provide(env));
+  return createSessionEntityLayer(options.drain).pipe(Layer.provide(env));
 }
 
 type SessionRunnerInput = Parameters<SessionRunner>[0];

@@ -29,7 +29,8 @@ export const CATALOG_SCHEMA: readonly string[] = [
     parent_id TEXT,
     role TEXT NOT NULL CHECK (role IN ('resident', 'worker')),
     fence INTEGER NOT NULL DEFAULT 0 CHECK (fence >= 0),
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    has_armed INTEGER NOT NULL DEFAULT 0 CHECK (has_armed IN (0, 1))
   )`,
   "CREATE INDEX IF NOT EXISTS idx_session_index_parent ON session_index(parent_id, id)",
   `CREATE TABLE IF NOT EXISTS actor_identity (
@@ -160,7 +161,7 @@ export const CATALOG_SCHEMA: readonly string[] = [
  * catalog is created or opened by code at least this new. A file whose marker
  * is greater than this constant was written by newer code and opens read-only.
  */
-const CATALOG_SCHEMA_VERSION = 1;
+const CATALOG_SCHEMA_VERSION = 2;
 
 const UserVersion = z.object({ user_version: z.number().int().nonnegative() });
 
@@ -171,9 +172,11 @@ export interface SessionIndexRow {
   readonly role: "resident" | "worker";
   readonly fence: number;
   readonly createdAt: number;
+  /** #1254 S3: the session MAY hold armed alarms; the boot sweep rescans it. */
+  readonly hasArmed: boolean;
 }
 
-export type SessionIndexInsert = Omit<SessionIndexRow, "fence">;
+export type SessionIndexInsert = Omit<SessionIndexRow, "fence" | "hasArmed">;
 
 const SessionIndexSqlRow = z
   .object({
@@ -182,6 +185,8 @@ const SessionIndexSqlRow = z
     role: z.enum(["resident", "worker"]),
     fence: z.number().int().nonnegative(),
     created_at: z.number(),
+    // Optional: a newer-code file opened read-only may shape this differently.
+    has_armed: z.number().int().optional(),
   })
   .transform(
     (row): SessionIndexRow => ({
@@ -190,6 +195,7 @@ const SessionIndexSqlRow = z
       role: row.role,
       fence: row.fence,
       createdAt: row.created_at,
+      hasArmed: (row.has_armed ?? 0) === 1,
     }),
   );
 
@@ -227,7 +233,7 @@ export class CatalogStore extends StoreHandle {
   }
 
   /** Refuses mutation on a catalog written by newer code (#1252): read-only. */
-  private refuseNewerSchema(operation: "indexSession" | "rotateFence"): void {
+  private refuseNewerSchema(operation: "indexSession" | "rotateFence" | "markArmed"): void {
     if (this.newerFileVersion === undefined) return;
     throw new CatalogVersionRefused({
       fileVersion: this.newerFileVersion,
@@ -274,6 +280,29 @@ export class CatalogStore extends StoreHandle {
   }
 
   /**
+   * #1254 S3 ordering law: `has_armed = 1` is written BEFORE the session
+   * commit that arms; `has_armed = 0` only after a session transaction
+   * confirmed `armed_alarms` is empty. An extra true costs a rescan; a
+   * premature false would lose recovery, so only the confirmed-empty path
+   * clears it. An unindexed session is not an error here: activation
+   * self-heals the index row.
+   */
+  markArmed(sessionId: string, armed: boolean): void {
+    this.refuseNewerSchema("markArmed");
+    this.db
+      .query("UPDATE session_index SET has_armed = ? WHERE id = ?")
+      .run(armed ? 1 : 0, sessionId);
+  }
+
+  /** Sessions flagged as possibly holding armed alarms (#1254 S3 boot sweep). */
+  armedSessionIds(): readonly string[] {
+    return z
+      .array(z.object({ id: z.string() }))
+      .parse(this.db.query("SELECT id FROM session_index WHERE has_armed = 1 ORDER BY id").all())
+      .map((row) => row.id);
+  }
+
+  /**
    * Runner-generation fence CAS (W5.2 review F5): one atomic increment under
    * BEGIN IMMEDIATE per entity activation. The winner writes the returned
    * fence into the session file; any writer still on an older fence is
@@ -315,7 +344,16 @@ export function openCatalogStore(path: string, options: OpenCatalogStoreOptions)
       return handle;
     }
     bootstrapStoreDatabase(db, CATALOG_SCHEMA);
-    if (fileVersion < CATALOG_SCHEMA_VERSION) db.run(`PRAGMA user_version = ${CATALOG_SCHEMA_VERSION}`);
+    if (fileVersion === 1) {
+      // v1 -> v2 (#1254 S3): the one guarded column add plus the marker, in
+      // one transaction. Fresh files get the column from CATALOG_SCHEMA.
+      db.transaction(() => {
+        db.run("ALTER TABLE session_index ADD COLUMN has_armed INTEGER NOT NULL DEFAULT 0");
+        db.run(`PRAGMA user_version = ${CATALOG_SCHEMA_VERSION}`);
+      }).immediate();
+    } else if (fileVersion < CATALOG_SCHEMA_VERSION) {
+      db.run(`PRAGMA user_version = ${CATALOG_SCHEMA_VERSION}`);
+    }
     handle = new CatalogStore(db, sink, options.now);
     return handle;
   } finally {

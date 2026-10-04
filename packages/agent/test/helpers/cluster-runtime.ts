@@ -43,12 +43,12 @@ import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
-import { SessionEntity, SessionEntityContext, SessionEntityLive, type SessionEntityEnv, } from "../../src/core/entity";
+import { SessionEntity, SessionEntityContext, createSessionEntityLayer, type SessionEntityEnv, } from "../../src/core/entity";
+import type { AlarmCapability, AlarmDrainConfig } from "../../src/core/alarm";
 
 /** Integration-helper composition root: cluster fixtures run on the real wall clock. */
 const wallClock = () => Date.now();
-import { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads, } from "../../src/core/alarm";
-import type { SessionEntityPorts, SessionEntityTimerContext, SessionEntityTurnInput, } from "../../src/core/run";
+import type { SessionEntityPorts, SessionEntityTurnInput, } from "../../src/core/run";
 import type { SessionError } from "../../src/core/failure";
 import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/core/commit";
 import { runAgent } from "./executor";
@@ -64,6 +64,28 @@ export interface TestClusterOptions {
   readonly detachTurns?: boolean;
   /** Crypto service for the cluster host; defaults to Bun webcrypto. */
   readonly crypto?: Layer.Layer<Crypto.Crypto>;
+  /** #1254 S4: D3 drain values; defaults mirror the app's (4 / 64 / idleMs). */
+  readonly drain?: Partial<AlarmDrainConfig>;
+  /** #1254 S4: the composed non-reserved alarm capability (absent = none). */
+  readonly alarmCapability?: AlarmCapability;
+  /** #1254 S4: keep-alive toggles observed around detached turns. */
+  readonly onKeepAlive?: (enabled: boolean) => void;
+  /** Injected entity clock (byte-equality fixtures); default wall clock. */
+  readonly clock?: () => number;
+  /** Wraps each freshly opened per-session store (fault injection). */
+  readonly wrapStore?: (
+    sessionId: string,
+    store: ReturnType<typeof openSessionStore>,
+  ) => ReturnType<typeof openSessionStore>;
+  /**
+   * #1254 S3: observes each activation/rescan resend AFTER its Alarm RPC
+   * replied — the deterministic "the resent occurrence was consumed" signal.
+   */
+  readonly onAlarmResend?: (
+    sessionId: string,
+    occurrence: { readonly occurrenceId: string; readonly purpose: string },
+    receipt: { readonly outcome: "delivered" | "stale" },
+  ) => void;
 }
 
 /** What the test turn port hands the pluggable runner for one admitted turn. */
@@ -127,7 +149,11 @@ const BunTestCrypto = Layer.succeed(
  * pluggable runner, then commits the terminal (state -> idle/interrupted).
  * Every commit rides the activation's catalog fence.
  */
-function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntityPorts["runTurn"] {
+export function makeTurnPort(
+  runner: TestTurnRunner,
+  detachTurns = false,
+  now: () => number = () => Date.now(),
+): SessionEntityPorts["runTurn"] {
   return (input: SessionEntityTurnInput) =>
     Effect.gen(function* () {
       const { kernel, authority, decision, snapshot } = input;
@@ -140,7 +166,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
           sessionId,
           owner,
           fence,
-          now: Date.now(),
+          now: now(),
           expectedRevision: kernel.row(sessionId).revision,
           actions,
           state,
@@ -162,7 +188,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
               result,
               resumeCount,
               boundaryActionId: null,
-              at: Date.now(),
+              at: now(),
             }),
           ],
           result.kind === "result" ? "idle" : "interrupted",
@@ -201,7 +227,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
               generation: kernel.latestGenerationFor(sessionId),
               resumeCount,
               boundaryActionId: null,
-              at: Date.now(),
+              at: now(),
             }),
             ...deliveryActions(
               [item],
@@ -236,7 +262,7 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
             generation: kernel.latestGenerationFor(sessionId),
             resumeCount: 0,
             boundaryActionId: null,
-            at: Date.now(),
+            at: now(),
           }),
           ...deliveryActions(
             [item],
@@ -255,49 +281,52 @@ function makeTurnPort(runner: TestTurnRunner, detachTurns = false): SessionEntit
     }).pipe(Effect.orDie);
 }
 
-/** Chain-guarded alarm folds straight from `src/core/alarm` (C2/F2). */
-function makeTimerPort(): SessionEntityPorts["timers"] {
-  const reads = (context: SessionEntityTimerContext): AlarmChainReads => ({
-    actionById: context.kernel.actionById,
-    requestById: context.kernel.requestById,
-    resultFor: (intentId) => context.kernel.resultFor(context.authority.sessionId, intentId),
-    operationChildrenPage: (parentId, cursor) =>
-      context.kernel.operationChildrenPage(context.authority.sessionId, parentId, cursor),
-  });
-  const outcome = (disposition: { readonly op: "run" | "skip" }) =>
-    disposition.op === "run" ? ("applied" as const) : ("noop" as const);
-  return {
-    retryScheduled: (context, payload) =>
-      Effect.sync(() => outcome(retryDelivery(reads(context), payload.alarmId))),
-    deadline: (context, payload) =>
-      Effect.sync(() => outcome(deadlineDelivery(reads(context), payload.requestId))),
-    watchFired: (context, payload) =>
-      Effect.sync(() => outcome(watchFiredDelivery(reads(context), payload.sourceKey))),
-    watchTimeout: (context, payload) =>
-      Effect.sync(() => outcome(watchTimeoutDelivery(reads(context), payload))),
-  };
-}
-
 /** The composition-owned entity environment, scoped to one test runtime. */
 function entityEnvLayer(options: TestClusterOptions) {
   return Layer.effect(
     SessionEntityContext,
-    Effect.acquireRelease(
-      Effect.sync(
-        (): SessionEntityEnv => ({
-          owner: `test-runner-${process.pid}`,
-          clock: () => Date.now(),
-          catalog: openCatalogStore(options.catalogFile, { now: wallClock }),
-          openSession: (sessionId) =>
-            openSessionStore(sessionFileFor(options.sessionsDir, sessionId), { now: wallClock }),
-          ports: {
-            runTurn: makeTurnPort(options.runner ?? resolvedRunner("ok"), options.detachTurns),
-            timers: makeTimerPort(),
-          },
-        }),
-      ),
-      (env) => Effect.sync(() => env.catalog.close()),
-    ),
+    Effect.gen(function* () {
+      // #1254 S3: the activation resend door — the entity's own persisted
+      // Alarm RPC, exactly the production path (occurrence id = dedupe key).
+      const makeClient = yield* SessionEntity.client;
+      return yield* Effect.acquireRelease(
+        Effect.sync(
+          (): SessionEntityEnv => ({
+            owner: `test-runner-${process.pid}`,
+            clock: options.clock ?? (() => Date.now()),
+            catalog: openCatalogStore(options.catalogFile, { now: wallClock }),
+            openSession: (sessionId) => {
+              const store = openSessionStore(sessionFileFor(options.sessionsDir, sessionId), {
+                now: wallClock,
+              });
+              return options.wrapStore === undefined ? store : options.wrapStore(sessionId, store);
+            },
+            ports: {
+              runTurn: makeTurnPort(
+                options.runner ?? resolvedRunner("ok"),
+                options.detachTurns,
+                options.clock ?? (() => Date.now()),
+              ),
+              ...(options.alarmCapability === undefined
+                ? {}
+                : { alarmCapability: options.alarmCapability }),
+              ...(options.onKeepAlive === undefined ? {} : { onKeepAlive: options.onKeepAlive }),
+              sendAlarm: (sessionId, occurrence) =>
+                makeClient(sessionId)
+                  .Alarm(occurrence)
+                  .pipe(
+                    Effect.tap((receipt) =>
+                      Effect.sync(() => options.onAlarmResend?.(sessionId, occurrence, receipt)),
+                    ),
+                    Effect.asVoid,
+                    Effect.orDie,
+                  ),
+            },
+          }),
+        ),
+        (env) => Effect.sync(() => env.catalog.close()),
+      );
+    }),
   );
 }
 
@@ -320,9 +349,20 @@ function clusterHostLayer(options: TestClusterOptions) {
   );
 }
 
+/** D3 drain values for one test cluster: the app defaults with the host idle budget. */
+function testDrainConfig(options: TestClusterOptions): AlarmDrainConfig {
+  return {
+    alarmsBeforePrompt: 4,
+    maxArmed: 64,
+    idleMs: options.idleMs ?? 60_000,
+    sweep: { full: false, idleDays: 7 },
+    ...options.drain,
+  };
+}
+
 /** The real Session entity over the single-node host (plan §1 composition). */
 export function makeTestClusterRuntime(options: TestClusterOptions) {
-  return SessionEntityLive.pipe(
+  return createSessionEntityLayer(testDrainConfig(options)).pipe(
     Layer.provide(entityEnvLayer(options)),
     Layer.merge(Layer.succeed(TestClusterEnv, options)),
     Layer.provideMerge(clusterHostLayer(options)),
@@ -418,7 +458,10 @@ export const sendDeadline = (sessionId: string, requestId: string, deadlineAt: n
   sendAlarm(sessionId, {
     occurrenceId: `${requestId}:deadline`,
     purpose: "deadline",
-    body: JSON.stringify({ requestId }),
+    alarmId: `${requestId}:deadline`,
+    armSeq: 1,
+    sourceKey: "deadline",
+    payload: JSON.stringify({ requestId }),
     fireAt: deadlineAt,
   });
 
@@ -623,8 +666,11 @@ export const sendAlarm = (
   sessionId: string,
   occurrence: {
     readonly occurrenceId: string;
-    readonly purpose: "retry" | "deadline" | "watch.fired" | "watch.timeout";
-    readonly body: string;
+    readonly purpose: string;
+    readonly alarmId: string;
+    readonly armSeq: number;
+    readonly sourceKey: string;
+    readonly payload: string;
     readonly fireAt: number;
   },
 ) =>

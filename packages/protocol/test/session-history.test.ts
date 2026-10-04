@@ -98,11 +98,10 @@ describe("SessionHistory projections", () => {
     digest: "d",
   };
 
-  test("causes are one of action, inbox, alarm or root and carry only identities", () => {
+  test("causes are one of action, inbox or root and carry only identities", () => {
     const causes: SessionHistory.Cause[] = [
       { kind: "action", actionId: "a" },
       { kind: "inbox", inboxIds: ["i"] },
-      { kind: "alarm", alarmId: "m", epoch: 1 },
       { kind: "root" },
     ];
     for (const cause of causes)
@@ -110,6 +109,7 @@ describe("SessionHistory projections", () => {
     for (const cause of [
       { kind: "inbox", inboxIds: [] },
       { kind: "root", actionId: "a" },
+      { kind: "alarm", alarmId: "m" },
     ])
       expect(SessionHistory.Transition.safeParse({ ...transition, cause }).success).toBe(false);
   });

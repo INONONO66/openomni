@@ -32,6 +32,18 @@ export class SessionPolicyRefusal {
 // ─── #1253: the four-entity-RPC surface ───
 
 /**
+ * Typed admission failure (#1254 S4): the single writer bounds the revision
+ * CAS to three attempts (`code: "revision"`) and answers requests left in the
+ * queue at scope close with `code: "shutdown"`. Both are refusals of THIS
+ * delivery attempt — the persisted envelope redelivers.
+ */
+export class AdmissionFailure extends Schema.TaggedError<AdmissionFailure>(
+  "@openomni/agent/cluster/AdmissionFailure",
+)("AdmissionFailure", {
+  code: Schema.Literals(["revision", "shutdown"]),
+}) {}
+
+/**
  * Typed `deliver` rejection (#1253): the closed code set is exactly
  * `unknown_kind | missing_key | closed | denied`. A rejection appends
  * nothing — zero new journal facts ride a refused delivery.
@@ -79,7 +91,7 @@ export const DeliverRpc = Rpc.make("Deliver", {
     idempotencyKey: Schema.String,
   },
   success: DeliverReceipt,
-  error: DeliverRefused,
+  error: Schema.Union([DeliverRefused, AdmissionFailure]),
   primaryKey: (payload) => payload.idempotencyKey,
 }).annotate(ClusterSchema.Persisted, true);
 
@@ -97,31 +109,19 @@ export const ResolveRpc = Rpc.make("Resolve", {
     inputId: Schema.String,
   },
   success: RequestReceipt,
-  error: ResolveRefused,
+  error: Schema.Union([ResolveRefused, AdmissionFailure]),
   primaryKey: (payload) => payload.inputId,
 }).annotate(ClusterSchema.Persisted, true);
 
-/** The alarm purposes the core dispatches today; #1254 owns the purpose set. */
-const AlarmPurpose = Schema.Literals(["retry", "deadline", "watch.fired", "watch.timeout"]);
-export type AlarmPurpose = typeof AlarmPurpose.Type;
-
-/** Purpose-shaped alarm bodies (canonical JSON of `AlarmRpc.body`). */
-export const RetryAlarmBody = Schema.Struct({ alarmId: Schema.String, attempt: Schema.Number });
+/** Purpose-shaped alarm payloads (canonical JSON of `AlarmOccurrence.payload`). */
 export const DeadlineAlarmBody = Schema.Struct({ requestId: Schema.String });
-export const WatchFiredAlarmBody = Schema.Struct({
-  watchId: Schema.String,
-  epoch: Schema.Number,
-  sourceKey: Schema.String,
-  batch: Schema.String,
-});
-export const WatchTimeoutAlarmBody = Schema.Struct({
-  watchId: Schema.String,
-  epoch: Schema.Number,
-});
+
 
 /**
- * One alarm occurrence (#1253): `occurrenceId` is the cluster primary key and
- * the chain-guard identity; `fireAt` is the DeliverAt instant. A superseded
+ * One alarm occurrence (#1254): `occurrenceId` is the cluster primary key and
+ * the chain-guard identity; `alarmId`/`armSeq`/`sourceKey` are the minter
+ * inputs that reproduce it; `purpose` is an open string resolved against the
+ * composed purpose registry; `fireAt` is the DeliverAt instant. A superseded
  * occurrence folds to a recorded `alarm{fired, outcome: stale}` fact and never
  * wakes the loop — a stale occurrence is a fact, not a rejection.
  */
@@ -129,8 +129,12 @@ export class AlarmOccurrence extends Schema.Class<AlarmOccurrence>(
   "@openomni/agent/cluster/AlarmOccurrence",
 )({
   occurrenceId: Schema.String,
-  purpose: AlarmPurpose,
-  body: Schema.String,
+  purpose: Schema.String,
+  alarmId: Schema.String,
+  armSeq: Schema.Number,
+  sourceKey: Schema.String,
+  /** Canonical JSON of the arm's payload. */
+  payload: Schema.String,
   fireAt: Schema.Number,
 }) {
   [PrimaryKey.symbol](): string {
@@ -150,6 +154,7 @@ export type AlarmReceipt = typeof AlarmReceipt.Type;
 export const AlarmRpc = Rpc.make("Alarm", {
   payload: AlarmOccurrence,
   success: AlarmReceipt,
+  error: AdmissionFailure,
 }).annotate(ClusterSchema.Persisted, true);
 
 /**
@@ -199,4 +204,5 @@ export const ReadRpc = Rpc.make("Read", {
     cursor: Schema.Number,
   },
   success: ReadPage,
+  error: AdmissionFailure,
 });

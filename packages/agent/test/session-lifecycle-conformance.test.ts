@@ -597,7 +597,7 @@ describe("session lifecycle conformance", () => {
             ],
         });
         const wait = result.named.get("WAIT")?.get("W");
-        expect(shape(wait)).toEqual([...TURN_PREFIX, ...WAVE_PRE, ...WAVE_INTENT, "request:open"]);
+        expect(shape(wait)).toEqual([...TURN_PREFIX, ...WAVE_PRE, ...WAVE_INTENT, "request:open", "alarm:-"]);
         expect(wait?.requests.map((request: SessionTransition.Request) => request.state)).toEqual(["open"]);
         const approved = result.named.get("WAVE_APPROVED")?.get("W");
         expect(shape(approved)).toEqual([
@@ -605,13 +605,15 @@ describe("session lifecycle conformance", () => {
             ...WAVE_PRE,
             ...WAVE_INTENT,
             "request:open",
+            "alarm:-",
             "request:answered",
             "request:resolved",
+            "alarm:-",
             ...WAVE.map(() => "tool:application"),
             ...WAVE.flatMap(() => ["policy.decision:result", "tool:result"]),
             ...TURN_SUFFIX,
         ]);
-        expect(approved?.row.revision).toBe(31);
+        expect(approved?.row.revision).toBe(33);
         expect(approved?.requests.map((request: SessionTransition.Request) => [request.state, request.outcome])).toEqual([
             ["resolved", "answered"],
         ]);
@@ -714,12 +716,14 @@ describe("session lifecycle conformance", () => {
                 ...TURN_PREFIX,
                 ...WAVE_PRE,
                 ...WAVE_INTENT,
+                // #1254 S4: a deadline request opens with its alarm arm row
+                // and its terminal transition retires the chain in-batch.
                 ...(id === "REFUSED"
-                    ? ["request:open", "request:answered", "request:resolved"]
-                    : ["request:open", "request:expired", "request:expired"]),
+                    ? ["request:open", "alarm:-", "request:answered", "request:resolved", "alarm:-"]
+                    : ["request:open", "alarm:-", "request:expired", "request:expired", "alarm:-"]),
                 ...blockedTail,
             ]);
-            expect(final?.row).toMatchObject({ revision: 29, state: "idle" });
+            expect(final?.row).toMatchObject({ revision: 31, state: "idle" });
             const blocked = final?.actions.find((action: LedgerAction.Node) => action.kind === "tool" && objectValue(action.effect.value)?.terminal === "blocked_pre");
             expect(blocked === undefined ? undefined : objectValue(blocked.effect.value)).toMatchObject({
                 callId: "B",
@@ -748,14 +752,16 @@ describe("session lifecycle conformance", () => {
             ...WAVE_PRE,
             ...WAVE_INTENT,
             "request:open",
+            "alarm:-",
             "signal:-",
             "request:resolved",
             "request:resolved",
+            "alarm:-",
             ...WAVE.map(() => "tool:result"),
             "signal:delivery",
             "turn:terminal",
         ]);
-        expect(cancelled?.row).toMatchObject({ revision: 24, state: "interrupted" });
+        expect(cancelled?.row).toMatchObject({ revision: 26, state: "interrupted" });
         expect(cancelled?.requests.map((request: SessionTransition.Request) => [request.state, request.outcome])).toEqual([
             ["cancelled", "cancelled"],
         ]);
@@ -1099,11 +1105,13 @@ describe("session lifecycle conformance", () => {
         expect(stale?.requests[0]).toMatchObject({ state: "resolved", outcome: "answered" });
         expect(resolutions(stale)).toEqual([
             ["request", "opened"],
+            ["alarm", undefined],
             ["request", "rejected"],
             ["request", "rejected"],
             ["request", "rejected"],
             ["request", "resolved"],
             ["request", "resolved"],
+            ["alarm", undefined],
             ["prompt", undefined],
         ]);
         // A misrouted answer is refused before any record: neither session keeps it.
@@ -1179,8 +1187,8 @@ function assertRequestRaces(result: TraceResult): void {
     });
     // Late reply settles the request as outcome_unknown once; the delayed timer
     // is recorded once as a duplicate input, its retry commits nothing.
-    expect(kinds(late).slice(4)).toEqual(["request", "request", "request", "request"]);
-    expect(late?.actions.slice(4).map((action: LedgerAction.Node) => objectValue(action.effect.value)?.resolution)).toEqual(["opened", "late_unknown", "late_unknown", "duplicate"]);
+    expect(kinds(late).slice(4)).toEqual(["request", "alarm", "request", "request", "alarm", "request"]);
+    expect(late?.actions.slice(4).map((action: LedgerAction.Node) => objectValue(action.effect.value)?.resolution)).toEqual(["opened", undefined, "late_unknown", "late_unknown", undefined, "duplicate"]);
     const cancelled = result.final.get("QCANCEL");
     expect(cancelled?.requests[0]).toMatchObject({
         state: "cancelled",
@@ -1190,8 +1198,10 @@ function assertRequestRaces(result: TraceResult): void {
     });
     expect(resolutions(cancelled)).toEqual([
         ["request", "opened"],
+        ["alarm", undefined],
         ["request", "cancelled"],
         ["request", "cancelled"],
+        ["alarm", undefined],
         ["request", "duplicate"],
     ]);
     expect(cancelled?.inbox).toEqual([]);
@@ -1205,8 +1215,10 @@ function assertRequestRaces(result: TraceResult): void {
     // later Owner cancel is recorded once as a duplicate and changes nothing.
     expect(resolutions(answered)).toEqual([
         ["request", "opened"],
+        ["alarm", undefined],
         ["request", "resolved"],
         ["request", "resolved"],
+        ["alarm", undefined],
         ["prompt", undefined],
         ["request", "duplicate"],
     ]);
@@ -1217,6 +1229,7 @@ function assertRequestRaces(result: TraceResult): void {
     expect(rejected?.requests[0]).toMatchObject({ state: "open", seenReplyIds: [], replies: [] });
     expect(resolutions(rejected)).toEqual([
         ["request", "opened"],
+        ["alarm", undefined],
         ["request", "rejected"],
         ["request", "rejected"],
         ["request", "rejected"],

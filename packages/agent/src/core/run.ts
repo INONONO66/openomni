@@ -10,7 +10,7 @@ export { GenerationRawSlots } from "./gate/decide";
 import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./entity";
 import type { InspectRequest, InspectionPage } from "../inspect";
-import { Inbox, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
+import { Inbox, isReservedAlarmPurpose, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, AgentResult } from "./types";
 import type { decideSessionAdmission } from "./mailbox";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
@@ -287,43 +287,22 @@ export interface SessionEntityTurnInput {
   readonly detach: (body: Effect.Effect<void, SessionError>) => Effect.Effect<void, SessionError>;
 }
 
-export interface SessionEntityTimerContext {
-  readonly authority: SessionEntityAuthority;
-  readonly kernel: SessionKernel;
-  readonly now: number;
-}
-
-export type SessionTimerOutcome = "applied" | "noop";
-
-/** Chain-guarded timer folds (plan C2/F2); superseded wakes resolve to `noop`. */
-interface SessionEntityTimerPort {
-  readonly retryScheduled: (
-    context: SessionEntityTimerContext,
-    payload: { readonly alarmId: string; readonly attempt: number; readonly notBefore: number },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-  readonly deadline: (
-    context: SessionEntityTimerContext,
-    payload: { readonly requestId: string; readonly deadlineAt: number },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-  readonly watchFired: (
-    context: SessionEntityTimerContext,
-    payload: {
-      readonly watchId: string;
-      readonly epoch: number;
-      readonly sourceKey: string;
-      readonly batch: string;
-    },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-  readonly watchTimeout: (
-    context: SessionEntityTimerContext,
-    payload: { readonly watchId: string; readonly epoch: number; readonly fireAt: number },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-}
-
 export interface SessionEntityPorts {
   /** Runs one admitted decision to a durable boundary; the ack follows its commits. */
   readonly runTurn: (input: SessionEntityTurnInput) => Effect.Effect<void, SessionError>;
-  readonly timers: SessionEntityTimerPort;
+  /**
+   * #1254 S4: the composed non-reserved alarm capability. A delivered
+   * occurrence whose purpose is neither loop-reserved nor declared here folds
+   * to a recorded `fired{stale}` fact with zero execution. Absent means no
+   * capability purposes are registered.
+   */
+  readonly alarmCapability?: import("./alarm").AlarmCapability;
+  /**
+   * #1254 S4: observation hook for the entity's cluster keep-alive toggles
+   * around a detached turn (true while a turn runs). Test seam; the real
+   * keep-alive rides `Entity.keepAlive`.
+   */
+  readonly onKeepAlive?: (enabled: boolean) => void;
   /**
    * The input registration table `deliver` admits against (#1253): the core
    * registers `prompt` and `signal`; the action capability registers `action`.
@@ -334,6 +313,15 @@ export interface SessionEntityPorts {
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,
   ) => Readonly<Record<string, number>>;
+  /**
+   * #1254 S3: resends one armed occurrence through the cluster's persisted
+   * DeliverAt door (the occurrence id is the dedupe key, so a live duplicate
+   * folds in the cluster). Absent means no resend plane is composed.
+   */
+  readonly sendAlarm?: (
+    sessionId: string,
+    occurrence: import("./alarm").AlarmFired,
+  ) => Effect.Effect<void>;
 }
 
 // ─── from controller-state (#1247) ───
@@ -722,15 +710,53 @@ export function sessionStopEvidence(
 }
 
 /**
- * Live wait evidence is a chain fold (the alarm table is gone): every armed
- * `alarm` action committed after this turn opened whose alarm no later fired
- * `alarm` child settled is still armed (#1252: one alarm kind, op arm|fired).
+ * Live wait evidence is a chain fold over the one `alarm` kind (#1252 op
+ * arm|fired; #1254 chain scheme): per `alarmId`, an `arm` with an `at`
+ * arms the chain, an `arm{at: null}` retires it, and a `fired` row for the
+ * currently armed occurrence settles it. Every capability chain still armed
+ * at the end of this turn's window is live-wait evidence. Loop-reserved
+ * purposes (`deadline`, `retry`, `step_watchdog`, `resume`) are the loop's
+ * own bookkeeping — a request deadline armed by `send_message` parks nothing;
+ * the turn continues to the model as before #1254 moved that arm into the chain.
  */
-function alarmOp(action: LedgerAction.Node): "arm" | "fired" | undefined {
+const AlarmFoldRow = z.discriminatedUnion("op", [
+  z.object({
+    op: z.literal("arm"),
+    alarmId: z.string().min(1),
+    purpose: z.string().min(1),
+    at: z.number().nullable(),
+  }),
+  z.object({ op: z.literal("fired"), alarmId: z.string().min(1), occurrenceId: z.string().min(1) }),
+]);
+const ArmFoldEffect = z.object({ occurrenceId: z.string().min(1) });
+
+function alarmFoldRow(action: LedgerAction.Node): z.infer<typeof AlarmFoldRow> | undefined {
   if (action.kind !== "alarm") return undefined;
-  const intent = action.intent.value;
-  if (intent === null || typeof intent !== "object" || Array.isArray(intent)) return undefined;
-  return intent.op === "arm" ? "arm" : intent.op === "fired" ? "fired" : undefined;
+  const row = AlarmFoldRow.safeParse(action.intent.value);
+  return row.success ? row.data : undefined;
+}
+
+function alarmOp(action: LedgerAction.Node): "arm" | "fired" | undefined {
+  return alarmFoldRow(action)?.op;
+}
+
+type ArmedChains = Map<string, { readonly id: string; readonly occurrenceId: string }>;
+
+/** One chain step: arm (capability purpose, live `at`) arms, `at: null` retires, a matching fired settles. */
+function foldAlarmChain(armed: ArmedChains, action: LedgerAction.Node): void {
+  const row = alarmFoldRow(action);
+  if (row === undefined) return;
+  if (row.op === "fired") {
+    if (armed.get(row.alarmId)?.occurrenceId === row.occurrenceId) armed.delete(row.alarmId);
+    return;
+  }
+  if (isReservedAlarmPurpose(row.purpose)) return;
+  if (row.at === null) {
+    armed.delete(row.alarmId);
+    return;
+  }
+  const effect = ArmFoldEffect.safeParse(action.effect.value);
+  if (effect.success) armed.set(row.alarmId, { id: action.id, occurrenceId: effect.data.occurrenceId });
 }
 
 function openAlarmIds(
@@ -739,19 +765,18 @@ function openAlarmIds(
   start: number,
   revision: number,
 ): string[] {
-  const armed = new Map<string, string>();
+  const armed: ArmedChains = new Map();
   let cursor = start;
   while (cursor < revision) {
     const page = kernel.historyPage(sessionId, { afterRevision: cursor, limit: 256 });
     for (const action of page.actions) {
       if (action.ordinal > revision) break;
-      if (alarmOp(action) === "arm") armed.set(action.id, action.id);
-      if (alarmOp(action) === "fired" && action.parentId !== null) armed.delete(action.parentId);
       cursor = action.ordinal;
+      foldAlarmChain(armed, action);
     }
     if (page.nextRevision === null) break;
   }
-  return [...armed.keys()];
+  return [...armed.values()].map((chain) => chain.id);
 }
 
 function effectBlocked(action: LedgerAction.Node): boolean {

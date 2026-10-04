@@ -23,6 +23,7 @@ import {
   sessionEntityLayer,
   type ClusterServices,
 } from "./composition/cluster-runtime";
+import { resolveAlarmDrain } from "./config";
 import { GenerationLayersLive } from "./composition/generation-layers";
 import { AppPointTable, composedPointTable } from "./composition/point-table";
 import { captureNow, platformEntropy, wallClockLayer } from "./composition/platform";
@@ -60,6 +61,11 @@ export interface AppRuntimeOptions {
   readonly sessionsDir?: string;
   /** Milliseconds of mailbox silence before a session entity passivates. */
   readonly entityIdleMs?: number;
+  /**
+   * D3 loop consumption values (#1254 S4); absent = `resolveAlarmDrain`
+   * over `entityIdleMs` (the config module owns the defaults).
+   */
+  readonly alarmDrain?: Core.AlarmDrainConfig;
   /**
    * Where the SingleRunner keeps its cluster_* tables; defaults to the
    * catalog. A process child MUST pin ":memory:" — two runners on one
@@ -140,6 +146,11 @@ function wiredLayer(
     owner: seam.owner,
     clock: now,
     ports: seam.ports,
+    drain:
+      options.alarmDrain ??
+      resolveAlarmDrain(
+        options.entityIdleMs === undefined ? {} : { entityIdleMs: options.entityIdleMs },
+      ),
   });
   const binding = Layer.succeed(SessionEntityBinding, { bind: seam.bind });
   const app = Layer.mergeAll(

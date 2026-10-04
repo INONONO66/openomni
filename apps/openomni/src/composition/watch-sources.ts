@@ -1,15 +1,17 @@
 import { statSync, watch } from "node:fs";
 import { basename, dirname } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { Bundle } from "@openomni/agent";
 import type { Alarm, Machine } from "@openomni/protocol";
 import { processEnvironment } from "../cli/env-file";
 
 /**
- * Watch plane over the Session entity (W5.2, plan §1 F2): this module owns the
- * native OS handles (PTY, fs watcher). Every occurrence is sent as a
- * `WatchFired` entity message and every timed watch arms one `WatchTimeout`
- * DeliverAt message; durable dedupe is the chain's committed occurrence id,
- * never cancelled storage.
+ * Watch plane over the Session entity (W5.2 plan §1 F2, #1254): this module
+ * owns the native OS handles (PTY, fs watcher). A native hit resends the
+ * chain's armed `monitor.hit` occurrence through the entity's one alarm door;
+ * the timeout alarm is armed by the capability's watch verb, never here.
+ * Durable dedupe is the chain's committed occurrence id, never cancelled
+ * storage.
  */
 
 export class AlarmRuntimeError extends Error {
@@ -298,39 +300,58 @@ export function pathSource(
   };
 }
 
-export interface WatchFire {
-  /** The session whose chain owns this watch (entity address). */
-  readonly sessionId: string;
-  readonly watchId: string;
-  readonly epoch: number;
-  /** Transport occurrence captured at the source (line slot, path stat identity, exit). */
-  readonly sourceKey: string;
-  readonly content: string;
-  readonly terminal: boolean;
+/** The armed occurrence a native hit resends (the cluster dedupes on it). */
+interface WatchOccurrenceRef {
+  readonly occurrenceId: string;
+  readonly alarmId: string;
+  readonly armSeq: number;
 }
 
-export interface WatchTimeoutArm {
+/** One native hit, merged onto the armed occurrence payload the source resends. */
+interface WatchHit {
+  readonly content: string;
+  readonly terminal: boolean;
+  /** Transport detail (PTY line slot, path stat identity, exit) — never an id. */
+  readonly detail: string;
+}
+
+/** The full `monitor.hit` occurrence a native source sends through the entity's one alarm door. */
+export interface WatchHitSend {
+  /** The session whose chain owns this watch (entity address). */
   readonly sessionId: string;
-  readonly watchId: string;
-  readonly epoch: number;
+  readonly occurrenceId: string;
+  readonly purpose: string;
+  readonly alarmId: string;
+  readonly armSeq: number;
+  readonly sourceKey: string;
+  readonly payload: string;
   readonly fireAt: number;
 }
 
-/** Entity-message senders, implemented over the Session entity client. */
+/** Entity-message sender, implemented over the Session entity client. */
 export interface WatchSenders {
-  watchFired(fire: WatchFire): Promise<void>;
-  watchTimeout(arm: WatchTimeoutArm): Promise<void>;
+  deliver(send: WatchHitSend): Promise<void>;
 }
 
-interface WatchSourceSpec {
+/** One armed watch: identity, native spec, and the chain state its hits carry. */
+export interface ArmedWatch {
   readonly sessionId: string;
   readonly id: string;
-  readonly epoch: number;
-  readonly watch: Alarm.Watch;
+  readonly occurrence: WatchOccurrenceRef;
+  readonly base: {
+    readonly spec: Alarm.WatchSpec;
+    readonly notifications: number;
+  };
 }
 
 export interface WatchSources {
-  install(spec: WatchSourceSpec): Promise<void>;
+  install(spec: ArmedWatch): Promise<void>;
+  /**
+   * Swaps the armed occurrence after a re-arm WITHOUT touching the native
+   * handle (a mid-stream reinstall would restart the command). Returns false
+   * when no handle exists — the caller installs instead.
+   */
+  refresh(spec: ArmedWatch): boolean;
   /** Reconciles a path watch's stat identity outside its native callback. */
   observe(id: string): void;
   close(id: string): Promise<void>;
@@ -341,6 +362,8 @@ interface Holder {
   source: AlarmSource;
   /** Per-watch send serialization: occurrences leave in source order. */
   tail: Promise<void>;
+  /** The chain's current occurrence and budget — swapped on every re-arm. */
+  current: ArmedWatch;
 }
 
 export function createWatchSources(
@@ -357,39 +380,47 @@ export function createWatchSources(
   assertAlarmRuntime();
   const holders = new Map<string, Holder>();
 
-  function enqueue(holder: Holder, fire: WatchFire): void {
+  function enqueue(holder: Holder, hit: WatchHit): void {
+    const { sessionId, occurrence, base } = holder.current;
+    const send: WatchHitSend = {
+      sessionId,
+      occurrenceId: occurrence.occurrenceId,
+      purpose: Bundle.MONITOR_HIT,
+      alarmId: occurrence.alarmId,
+      armSeq: occurrence.armSeq,
+      sourceKey: Bundle.MONITOR_SOURCE,
+      payload: JSON.stringify({ spec: base.spec, notifications: base.notifications, hit }),
+      fireAt: options.clock(),
+    };
     holder.tail = holder.tail
-      .then(() => senders.watchFired(fire))
-      .catch((error: Error) => options.failure(fire.watchId, error));
+      .then(() => senders.deliver(send))
+      .catch((error: Error) => options.failure(occurrence.alarmId, error));
   }
 
   function summary(
-    spec: WatchSourceSpec,
+    spec: ArmedWatch,
     reason: "exit" | "source_error",
     exitCode: number | null,
     output?: string,
-  ) {
+  ): WatchHit {
     return {
-      sessionId: spec.sessionId,
-      watchId: spec.id,
-      epoch: spec.epoch,
-      sourceKey: `${reason}:${spec.epoch}`,
       content: JSON.stringify(
         output === undefined
-          ? { watchId: spec.id, epoch: spec.epoch, reason, exitCode }
-          : { watchId: spec.id, epoch: spec.epoch, reason, exitCode, output },
+          ? { watchId: spec.id, reason, exitCode }
+          : { watchId: spec.id, reason, exitCode, output },
       ),
       terminal: true,
-    } satisfies WatchFire;
+      detail: reason === "exit" ? `exit:${exitCode ?? "null"}` : reason,
+    };
   }
 
-  function sourceFailure(spec: WatchSourceSpec, holder: Holder, error: Error): void {
+  function sourceFailure(spec: ArmedWatch, holder: Holder, error: Error): void {
     enqueue(holder, summary(spec, "source_error", null));
     options.failure(spec.id, error);
   }
 
   function startCommand(
-    spec: WatchSourceSpec,
+    spec: ArmedWatch,
     watchSpec: Extract<Alarm.Watch, { command: string }>,
     holder: Holder,
   ): AlarmSource {
@@ -405,14 +436,7 @@ export function createWatchSources(
         lines += 1;
         if (content.length > 0) lastLine = content;
         if (filter === undefined || filter.test(content))
-          enqueue(holder, {
-            sessionId: spec.sessionId,
-            watchId: spec.id,
-            epoch: spec.epoch,
-            sourceKey: `line:${spec.epoch}:${lines}`,
-            content,
-            terminal: false,
-          });
+          enqueue(holder, { content, terminal: false, detail: `line:${lines}` });
       },
       (code) => enqueue(holder, summary(spec, "exit", code, code === 0 || lastLine === "" ? undefined : lastLine)),
       (error) => sourceFailure(spec, holder, error),
@@ -420,7 +444,7 @@ export function createWatchSources(
   }
 
   function startTerminal(
-    spec: WatchSourceSpec,
+    spec: ArmedWatch,
     watchSpec: Extract<Alarm.Watch, { session: string }>,
     holder: Holder,
   ): AlarmSource {
@@ -435,35 +459,21 @@ export function createWatchSources(
       (content) => {
         lines += 1;
         if (filter === undefined || filter.test(content))
-          enqueue(holder, {
-            sessionId: spec.sessionId,
-            watchId: spec.id,
-            epoch: spec.epoch,
-            sourceKey: `pty:${spec.epoch}:${lines}`,
-            content,
-            terminal: false,
-          });
+          enqueue(holder, { content, terminal: false, detail: `pty:${lines}` });
       },
       (error) => sourceFailure(spec, holder, error),
     );
   }
 
   function startPath(
-    spec: WatchSourceSpec,
+    spec: ArmedWatch,
     watchSpec: Extract<Alarm.Watch, { path: string }>,
     holder: Holder,
   ): AlarmSource {
     return pathSource(
       watchSpec,
       (content, identity) =>
-        enqueue(holder, {
-          sessionId: spec.sessionId,
-          watchId: spec.id,
-          epoch: spec.epoch,
-          sourceKey: `path:${identity}`,
-          content,
-          terminal: false,
-        }),
+        enqueue(holder, { content, terminal: false, detail: `path:${identity}` }),
       (error) => sourceFailure(spec, holder, error),
     );
   }
@@ -478,25 +488,20 @@ export function createWatchSources(
 
   return {
     async install(spec) {
-      // Reinstall replaces the previous epoch's handle before any new occurrence.
+      // Reinstall replaces any previous handle before a new occurrence leaves.
       await close(spec.id);
-      if (spec.watch.timeout_ms !== undefined)
-        await senders.watchTimeout({
-          sessionId: spec.sessionId,
-          watchId: spec.id,
-          epoch: spec.epoch,
-          fireAt: options.clock() + spec.watch.timeout_ms,
-        });
       const holder: Holder = {
         source: { close: () => Promise.resolve() },
         tail: Promise.resolve(),
+        current: spec,
       };
+      const watchSpec = spec.base.spec.watch;
       holder.source =
-        "command" in spec.watch
-          ? startCommand(spec, spec.watch, holder)
-          : "path" in spec.watch
-            ? startPath(spec, spec.watch, holder)
-            : startTerminal(spec, spec.watch, holder);
+        "command" in watchSpec
+          ? startCommand(spec, watchSpec, holder)
+          : "path" in watchSpec
+            ? startPath(spec, watchSpec, holder)
+            : startTerminal(spec, watchSpec, holder);
       // A terminal watch subscribes before create/rearm returns, so no trigger
       // can race the cursor baseline; a failed subscription refuses the arm.
       try {
@@ -506,6 +511,12 @@ export function createWatchSources(
         throw error;
       }
       holders.set(spec.id, holder);
+    },
+    refresh(spec) {
+      const holder = holders.get(spec.id);
+      if (holder === undefined) return false;
+      holder.current = spec;
+      return true;
     },
     observe(id) {
       holders.get(id)?.source.observe?.();

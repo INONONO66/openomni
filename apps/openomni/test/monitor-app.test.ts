@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Bus, newTraceId } from "./helpers/bus";
 import { L0Observation } from "@openomni/protocol";
-import { watchState } from "../src/composition/monitor-ports";
+import { foldAlarmChains, watchStateOf } from "../src/composition/alarm-plane";
 import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { planeOf } from "./helpers/ledger";
 import { residentSuite, fakeProviderModel } from "./helpers/resident-suite";
@@ -15,7 +15,7 @@ import { testSelfMachine } from "./helpers/self-machine";
 
 const suite = residentSuite();
 
-test("app monitor source escapes the creating tool wave and wakes a hibernated session", async () => {
+test("app monitor source escapes the creating tool wave and wakes the session on its hit", async () => {
   const directory = suite.tempDir("monitor-app-");
   const fifo = join(directory, "source");
   expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
@@ -79,21 +79,28 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   if (arm === undefined) throw new Error("no created watch");
   const kernel = plane.openKernel(arm.sessionId);
   expect(calls).toBe(1);
-  const armed = watchState(kernel, arm.sessionId, arm.watchId);
-  expect(armed?.state).toMatchObject({ status: "armed", epoch: 1 }); // Already started by the tool-origin bus publication.
+  const chain = foldAlarmChains(kernel, arm.sessionId).get(arm.watchId);
+  if (chain === undefined) throw new Error("no armed chain");
+  expect(watchStateOf(chain, arm.sessionId)).toMatchObject({
+    kind: "watch",
+    status: "armed",
+    notifications: 0,
+  });
   expect(kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind).toBe(
     "waiting",
   );
   expect(app.sessions.get(arm.sessionId)).toBeUndefined();
 
+  // #1254 S4: the native hit resends the ARMED occurrence through the entity's
+  // alarm door; the composed monitor capability wakes the session with one
+  // alarm prompt and re-arms the persistent chain under the next occurrence.
   const woke = Promise.withResolvers<void>();
-  const guard = AbortSignal.timeout(5000);
-  const abort = () => woke.reject(new Error("monitor app wake timed out"));
+  const guard = AbortSignal.timeout(10_000);
+  const abort = () => woke.reject(new Error("monitor hit never woke the session"));
   guard.addEventListener("abort", abort, { once: true });
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     if (event.sessionId !== arm.sessionId || event.kind !== "turn") return;
-    if (kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind === "result")
-      woke.resolve();
+    if (kernel.getSnapshot(arm.sessionId).turns.at(-1)?.terminal?.kind === "result") woke.resolve();
   });
   suite.defer(() => {
     unsubscribe();
@@ -107,19 +114,23 @@ test("app monitor source escapes the creating tool wave and wakes a hibernated s
   });
   await woke.promise;
   expect(await writer.exited).toBe(0);
+  // One matching line is one wake: a second turn ran over one alarm prompt
+  // carrying the hit, and nothing else.
   expect(calls).toBe(2);
   const tree = sessionTree(arm.sessionId, plane.sessionStore(arm.sessionId).actions);
-  const prompts = tree.filter((action) => {
+  const alarmPrompts = tree.filter((action) => {
     if (action.kind !== "prompt") return false;
-    const intent = action.intent.value as { kind?: string; watchId?: string };
-    return intent.kind === "alarm" && intent.watchId === arm.watchId;
+    const intent = action.intent.value as { kind?: string; alarmId?: string };
+    return intent.kind === "alarm" && intent.alarmId === arm.watchId;
   });
-  expect(prompts).toHaveLength(1);
-  const prompt = prompts[0];
-  if (prompt === undefined) throw new Error("missing watch prompt");
-  expect((prompt.effect.value as { content?: string }).content).toContain("WAKE");
-  expect(kernel.pendingMessages(arm.sessionId)).not.toContain(prompt.id);
-  expect(tree.filter((action) => action.kind === "alarm" && action.id.includes(":occ:"))).toHaveLength(1);
+  expect(alarmPrompts).toHaveLength(1);
+  expect((alarmPrompts[0]?.effect.value as { content?: string }).content).toBe("WAKE");
+  // The chain settled the fired occurrence once and re-armed under a new one.
+  expect(tree.filter((action) => action.kind === "alarm" && action.id.endsWith(":delivered"))).toHaveLength(1);
+  const rearmed = foldAlarmChains(kernel, arm.sessionId).get(arm.watchId);
+  if (rearmed === undefined) throw new Error("chain lost after the hit");
+  expect(watchStateOf(rearmed, arm.sessionId)).toMatchObject({ status: "armed", notifications: 1 });
+  expect(rearmed.latest.occurrenceId).not.toBe(chain.latest.occurrenceId);
 });
 
 /**
@@ -252,14 +263,14 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
   const tree = sessionTree(arm.sessionId, plane.sessionStore(arm.sessionId).actions);
   const prompts = tree.filter((action) => {
     if (action.kind !== "prompt") return false;
-    const intent = action.intent.value as { kind?: string; watchId?: string };
-    return intent.kind === "alarm" && intent.watchId === arm.watchId;
+    const intent = action.intent.value as { kind?: string; alarmId?: string };
+    return intent.kind === "alarm" && intent.alarmId === arm.watchId;
   });
   expect(prompts).toHaveLength(1);
   const prompt = prompts[0];
   if (prompt === undefined) throw new Error("missing watch prompt");
   expect((prompt.effect.value as { content?: string }).content).toContain("WAKE-7342");
-  expect(tree.filter((action) => action.kind === "alarm" && action.id.includes(":occ:"))).toHaveLength(1);
+  expect(tree.filter((action) => action.kind === "alarm" && action.id.endsWith(":delivered"))).toHaveLength(1);
   // Watch cancellation/daemon shutdown never close the terminal: the tmux
   // server owns it.
   await runEffect(daemon.close());

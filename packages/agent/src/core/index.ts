@@ -28,16 +28,14 @@ export {
   adoptSessionAuthority, makeSessionGenerations, createSessionChatRunner, closeSessions, getSessionHandle,
   type GenerationBundle, type SessionHandle, type SessionRunner, type SessionRuntime,
   type SessionCreateOptions, type SessionRunnerInput, type SessionRunnerResult,
-  type SessionEntityPorts, type SessionEntityTimerContext, type SessionEntityTurnInput,
+  type SessionEntityPorts, type SessionEntityTurnInput,
   type SessionSystem, type ResolvedSessionRuntime,
 } from "./run";
 export { decideSessionAdmission, requestAuthorityKernel, commitSessionRequest } from "./mailbox";
 export { createSessionRequests, decideRequestTransition, requestBindingDigest } from "./request";
 export { receivedMessageAction, receivedMessages } from "./commit";
-export { alarmAction } from "./alarm";
-export { SessionEntity, SessionEntityContext, SessionEntityLive, createSessionEntityRunTurn, type SessionKernel } from "./entity";
-export type { AlarmPurpose } from "./messages";
-export { deadlineDelivery, retryDelivery, watchFiredDelivery, watchTimeoutDelivery, type AlarmChainReads } from "./alarm";
+export { armAction, firedAction, alarmDisposition, composeAlarmPurposes, AlarmComposeError, ArmRefused, AlarmWakeError, type AlarmCapability, type AlarmChainReads, type AlarmDisposition, type AlarmDrainConfig, type AlarmFired, type AlarmPurposeRegistry, type AlarmSweepConfig, type AlarmWakeContext, type AlarmWakeOutcome, type ArmVerb } from "./alarm";
+export { SessionEntity, SessionEntityContext, createSessionEntityLayer, createSessionEntityRunTurn, type SessionKernel } from "./entity";
 export { makeObservationBus, observationBusLayer, scopeObservation } from "./bus";
 
 // ─── journal/store surface (formerly the Journal namespace, #1276) ───

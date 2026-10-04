@@ -153,6 +153,8 @@ const CONFIG_ENV = [
   "OPENOMNI_MACHINES_SELF",
   "OPENOMNI_MACHINES_DEFAULT",
   "OPENOMNI_VAULT_KEY",
+  "OPENOMNI_ALARM_SWEEP_FULL",
+  "OPENOMNI_ALARM_SWEEP_IDLE_DAYS",
 ] as const;
 
 describe("OpenOmni Resident WebSocket", () => {

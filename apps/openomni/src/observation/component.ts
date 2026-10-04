@@ -1,4 +1,5 @@
-import { Effect, Cause } from "effect";
+import { Effect } from "effect";
+import { Core } from "@openomni/agent";
 import { type BusEvent, Component, type ObservationSink, type TraceContext } from "@openomni/protocol";
 
 export interface ObservedComponent {
@@ -40,7 +41,7 @@ export function observeComponent(trace: ComponentIdentity, sink: ObservationSink
         events.publish(Component.Events.Active, componentPayload(trace));
         return operation.pipe(Effect.onExit((exit) => Effect.sync(() => {
           if (exit._tag === "Failure")
-            events.publish(Component.Events.Failed, { ...componentPayload(trace), error: Cause.pretty(exit.cause) });
+            events.publish(Component.Events.Failed, { ...componentPayload(trace), error: Core.pretty(exit.cause) });
           events.publish(Component.Events.Disposed, {
             ...componentPayload(trace), outcome: exit._tag === "Success" ? "completed" : "failed",
           });

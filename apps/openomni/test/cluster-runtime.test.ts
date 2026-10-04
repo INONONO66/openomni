@@ -6,7 +6,6 @@ import { afterAll, expect, spyOn, test } from "bun:test";
 import { Core } from "@openomni/agent";
 const SessionEntity = Core.SessionEntity;
 type SessionEntityPorts = Core.SessionEntityPorts;
-type SessionEntityTimerContext = Core.SessionEntityTimerContext;
 type SessionEntityTurnInput = Core.SessionEntityTurnInput;
 type ObservationPublishFailure = Core.ObservationPublishFailure;
 const openCatalogStore = Core.openCatalogStore;
@@ -18,13 +17,9 @@ import {
   createAppLedger,
   createSessionEntityPortsSlot,
   sessionFilePath,
-  sessionTimerPort,
 } from "../src/composition/cluster-runtime";
 import { runEffect } from "./helpers/effect";
-import {
-  requestFixture,
-  requestStateAction,
-} from "../../../packages/agent/test/store/helpers/request";
+import { requestFixture } from "../../../packages/agent/test/store/helpers/request";
 import { materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import { testClock } from "./helpers/test-entropy";
 import { Bus } from "./helpers/bus";
@@ -118,9 +113,9 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
         // the durable boundary and later drains defer to the live turn.
         return input.detach(Effect.never);
       }),
-    timers: sessionTimerPort(),
   };
-  const runtime = gatewayRuntime({ observations: Bus,
+  const runtime = gatewayRuntime({
+    observations: Bus,
     catalogPath,
     sessionsDir,
     entityIdleMs: 60_000,
@@ -145,24 +140,33 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
           // receipt byte-identically; nothing runs twice.
           const replay = yield* entity.Deliver(message);
           // Chain-guarded alarm folds (F2/#1253): unknown alarm/request keys
-          // and watch wakes without a composed watch plane (sessionTimerPort()
-          // has no hooks here) fold to recorded stale facts — fail-closed.
+          // and capability purposes with no bound alarm capability (#1254 S4)
+          // fold to recorded stale facts — fail-closed.
           const retry = yield* entity.Alarm({
             occurrenceId: "missing-alarm:retry:1",
             purpose: "retry",
-            body: JSON.stringify({ alarmId: "missing-alarm", attempt: 1 }),
+            alarmId: "missing-alarm:retry:1",
+            armSeq: 1,
+            sourceKey: "retry",
+            payload: JSON.stringify({ attempt: 1 }),
             fireAt: Date.now(),
           });
           const deadline = yield* entity.Alarm({
             occurrenceId: "missing-request:deadline",
             purpose: "deadline",
-            body: JSON.stringify({ requestId: "missing-request" }),
+            alarmId: "missing-request:deadline",
+            armSeq: 1,
+            sourceKey: "deadline",
+            payload: JSON.stringify({ requestId: "missing-request" }),
             fireAt: Date.now(),
           });
           const fired = yield* entity.Alarm({
             occurrenceId: "missing-watch:1:missing-source",
             purpose: "watch.fired",
-            body: JSON.stringify({
+            alarmId: "missing-watch",
+            armSeq: 1,
+            sourceKey: "missing-watch:1:missing-source",
+            payload: JSON.stringify({
               watchId: "missing-watch",
               epoch: 1,
               sourceKey: "missing-watch:1:missing-source",
@@ -173,7 +177,10 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
           const timeout = yield* entity.Alarm({
             occurrenceId: "missing-watch:timeout:1",
             purpose: "watch.timeout",
-            body: JSON.stringify({ watchId: "missing-watch", epoch: 1 }),
+            alarmId: "missing-watch",
+            armSeq: 1,
+            sourceKey: "watch.timeout",
+            payload: JSON.stringify({ watchId: "missing-watch" }),
             fireAt: Date.now(),
           });
           return { first, replay, retry, deadline, fired, timeout };
@@ -198,7 +205,8 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
 
 test("a post-commit publish failure reaches the injected port and leaves the write result intact", () => {
   const failures: ObservationPublishFailure[] = [];
-  const plane = createAppLedger({ now: testClock(),
+  const plane = createAppLedger({
+    now: testClock(),
     observationSink: REFUSING_SINK,
     onObservationFailure: (failure) => failures.push(failure),
   });
@@ -218,13 +226,17 @@ test("a post-commit publish failure reaches the injected port and leaves the wri
 
 test("without an injected port a publish failure on a file-mode handle is an incident log line", () => {
   const incident = spyOn(console, "error").mockImplementation((): void => undefined);
-  const plane = createAppLedger({ now: testClock(),
+  const plane = createAppLedger({
+    now: testClock(),
     sessionsDir: join(tempDir(), "sessions"),
     observationSink: REFUSING_SINK,
   });
   const store = plane.handles.openSession("ported-session");
   try {
-    materializeSession(Core.SessionHandleStore.createSessionKernel(store, plane.catalog), "ported-session");
+    materializeSession(
+      Core.SessionHandleStore.createSessionKernel(store, plane.catalog),
+      "ported-session",
+    );
     expect(store.sessions.get("ported-session")?.id).toBe("ported-session");
     expect(incident.mock.calls).toEqual([
       ["ledger observation publish failed: ported-session:configure", new Error("sink failed")],
@@ -236,143 +248,73 @@ test("without an injected port a publish failure on a file-mode handle is an inc
   }
 });
 
-test("deadline delivery expires an open request through the activation fence", async () => {
-  const plane = createAppLedger({ now: testClock() });
-  try {
-    const kernel = plane.openKernel("request-session");
-    const fixture = requestFixture(kernel);
-    fixture.commit([fixture.original, requestStateAction(fixture.request)]);
-    const outcome = await runEffect(
-      sessionTimerPort().deadline(
-        {
-          authority: fixture.authority,
-          kernel,
-          now: fixture.request.deadline ?? 100,
-        },
-        {
-          requestId: fixture.request.requestId,
-          deadlineAt: fixture.request.deadline ?? 100,
-        },
-      ),
-    );
-
-    expect(outcome).toBe("applied");
-    expect(kernel.requestById(fixture.request.requestId)?.state).toBe("expired");
-  } finally {
-    plane.close();
-  }
-});
-
 test("late-bound entity ports refuse early use and forward after one binding", async () => {
   const plane = createAppLedger({ now: testClock() });
+  const slot = createSessionEntityPortsSlot();
+  const { sendAlarm, alarmCapability, onKeepAlive, requestDomainRevisions } = slot.ports;
+  if (
+    sendAlarm === undefined ||
+    alarmCapability === undefined ||
+    onKeepAlive === undefined ||
+    requestDomainRevisions === undefined
+  )
+    throw new Error("the slot must delegate every optional entity port");
+  const occurrence = {
+    occurrenceId: "late:fire:1",
+    purpose: "cron.tick",
+    alarmId: "late",
+    armSeq: 1,
+    sourceKey: "cron",
+    payload: "{}",
+    fireAt: 100,
+  };
+  const context: Core.AlarmWakeContext = {
+    sessionId: "late-session",
+    reads: { latestArm: () => undefined, settled: () => false },
+    arm: () => Effect.die(new Error("unused arm")),
+    now: 100,
+    prompt: () => Effect.succeed({ seq: 1 }),
+  };
   try {
-    const kernel = plane.openKernel("request-session");
-    const fixture = requestFixture(kernel);
-    fixture.commit([
-      {
-        id: "request-session:llm",
-        parentId: "request-session:configure",
-        sessionId: fixture.request.sessionId,
-        kind: "llm",
-        intent: { encodingVersion: 1, value: { phase: "intent" } },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: 100,
-        irreversible: true,
-      },
-      {
-        id: "request-session:llm:attempt:1",
-        parentId: "request-session:llm",
-        sessionId: fixture.request.sessionId,
-        kind: "llm",
-        intent: { encodingVersion: 1, value: { phase: "intent" } },
-        effect: { encodingVersion: 1, value: { phase: "pending" } },
-        ts: 100,
-        irreversible: true,
-      },
-    ]);
-    const context: SessionEntityTimerContext = {
-      authority: fixture.authority,
-      kernel,
-      now: 100,
-    };
-    expect(
-      await runEffect(
-        sessionTimerPort().retryScheduled(context, {
-          alarmId: "request-session:llm:attempt:1:retry:1",
-          attempt: 1,
-          notBefore: 100,
-        }),
-      ),
-    ).toBe("applied");
-    const slot = createSessionEntityPortsSlot();
-    await expect(
-      runEffect(
-        slot.ports.timers.retryScheduled(context, {
-          alarmId: "retry",
-          attempt: 1,
-          notBefore: 100,
-        }),
-      ),
-    ).rejects.toThrow("session entity ports are not bound yet");
+    // Before boot binds the real ports, every delegating port is a typed
+    // refusal and the capability reports no purposes — no wake can dispatch.
+    await expect(runEffect(sendAlarm("late-session", occurrence))).rejects.toThrow(
+      "session entity ports are not bound yet",
+    );
+    await expect(runEffect(alarmCapability.wake(occurrence, context))).rejects.toThrow(
+      "session entity ports are not bound yet",
+    );
+    expect(alarmCapability.purposes).toEqual([]);
+    expect(() => onKeepAlive(true)).not.toThrow();
     const forwarded: string[] = [];
+    const keepAlive: boolean[] = [];
     const ports: SessionEntityPorts = {
       runTurn: () => Effect.void,
-      timers: {
-        retryScheduled: () =>
+      sendAlarm: (sessionId, fired) =>
+        Effect.sync(() => {
+          forwarded.push(`${sessionId}:${fired.occurrenceId}`);
+        }),
+      alarmCapability: {
+        purposes: ["cron.tick"],
+        wake: (fired) =>
           Effect.sync(() => {
-            forwarded.push("retry");
-            return "applied" as const;
-          }),
-        deadline: () => Effect.succeed("noop"),
-        watchFired: () => Effect.succeed("noop"),
-        watchTimeout: () =>
-          Effect.sync(() => {
-            forwarded.push("watch-timeout");
-            return "applied" as const;
+            forwarded.push(`wake:${fired.purpose}`);
+            return "delivered" as const;
           }),
       },
+      onKeepAlive: (enabled) => keepAlive.push(enabled),
       requestDomainRevisions: () => ({ person: 3 }),
     };
     slot.bind(ports);
-
-    expect(
-      await runEffect(
-        slot.ports.timers.retryScheduled(context, {
-          alarmId: "request-session:llm:attempt:1:retry:1",
-          attempt: 1,
-          notBefore: 100,
-        }),
-      ),
-    ).toBe("applied");
-    expect(
-      await runEffect(
-        slot.ports.timers.deadline(context, {
-          requestId: "request",
-          deadlineAt: 100,
-        }),
-      ),
-    ).toBe("noop");
-    expect(
-      await runEffect(
-        slot.ports.timers.watchFired(context, {
-          watchId: "watch",
-          epoch: 1,
-          sourceKey: "watch:1:source",
-          batch: "[]",
-        }),
-      ),
-    ).toBe("noop");
-    expect(
-      await runEffect(
-        slot.ports.timers.watchTimeout(context, {
-          watchId: "watch",
-          epoch: 1,
-          fireAt: 100,
-        }),
-      ),
-    ).toBe("applied");
-    expect(slot.ports.requestDomainRevisions?.(fixture.request)).toEqual({ person: 3 });
-    expect(forwarded).toEqual(["retry", "watch-timeout"]);
+    await runEffect(sendAlarm("late-session", occurrence));
+    expect(await runEffect(alarmCapability.wake(occurrence, context))).toBe("delivered");
+    expect(alarmCapability.purposes).toEqual(["cron.tick"]);
+    onKeepAlive(true);
+    onKeepAlive(false);
+    expect(forwarded).toEqual(["late-session:late:fire:1", "wake:cron.tick"]);
+    expect(keepAlive).toEqual([true, false]);
+    const fixture = requestFixture(plane.openKernel("late-session"));
+    expect(requestDomainRevisions(fixture.request)).toEqual({ person: 3 });
     expect(() => slot.bind(ports)).toThrow("session entity ports are already bound");
   } finally {
     plane.close();
