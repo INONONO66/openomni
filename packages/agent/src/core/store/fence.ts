@@ -369,7 +369,8 @@ const ReceivedEffect = z.object({
  */
 /**
  * Every input row, consumed or pending (#1257): the SQL projection that
- * replaced the retired `receivedMessages` chain fold. Status comes from the
+ * replaced the retired whole-history received-message chain fold. Status
+ * comes from the
  * same delivery-reference rule the pending read uses.
  */
 function inputMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {

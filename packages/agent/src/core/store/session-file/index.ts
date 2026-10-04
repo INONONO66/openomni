@@ -434,7 +434,7 @@ function createActionReads(db: Database, sink: ObservationSink): Reads {
           .all(sessionId),
       );
     },
-    // #1257: the SQL replacement for the retired `receivedMessages` TS fold.
+    // #1257: the SQL replacement for the retired received-message TS re-fold.
     inputMessages(sessionId) {
       return decodeRows(
         db

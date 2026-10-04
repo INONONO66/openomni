@@ -957,8 +957,8 @@ export function createSessionTurn(
         if (controller.signal.aborted) return yield* Effect.interrupt;
         const hydrated = hydrateSessionHistory(kernel, sessionId);
         const promptId = hydrated.messages.filter((message) => message.role === "user").at(-1)?.id;
-        // #1257: the prompt's origin is its action row's intent — a point read,
-        // not a whole-chain `receivedMessages` fold (retired).
+        // #1257: the prompt's origin is its action row's intent — a point
+        // read, not the retired whole-chain received-message fold.
         const origin = promptId === undefined ? undefined : kernel.actionById(promptId)?.intent;
         const inbound = inboundAuthority(origin?.value);
         if (inbound.violation !== undefined) {
