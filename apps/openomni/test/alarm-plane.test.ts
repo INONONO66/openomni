@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { Core } from "@openomni/agent";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import {
   alarmChainReads,
   createLiveArmRegistry,
   foldAlarmChains,
   watchStateOf,
 } from "../src/composition/alarm-plane";
-import { runEffect } from "./helpers/effect";
+import { runEffect, runSyncResult } from "./helpers/effect";
 import {
   awaitScheduled,
   commitArm,
@@ -54,9 +54,10 @@ test("the live arm registry binds continuations to the authorizing activation's 
   const continuation = registry.arm(SESSION, "t1")(armInput);
   // The successor activation registers; it owns t2, never t1.
   registry.onLive(SESSION, { arm: verbOf("occ-new"), ownsTurn: (turnId) => turnId === "t2" });
-  // Executing the stale continuation refuses stale_turn: it is never
-  // re-resolved to the successor and NEITHER verb commits anything.
-  expect((await runEffect(Effect.flip(continuation))).code).toBe("stale_turn");
+  // Executing the stale continuation refuses stale_activation (r3 H1: the
+  // activation binding is the primary guard): it is never re-resolved to the
+  // successor and NEITHER verb commits anything.
+  expect((await runEffect(Effect.flip(continuation))).code).toBe("stale_activation");
   expect(calls).toEqual([]);
   // The successor's own turn commits through the successor's verb.
   expect((await runEffect(registry.arm(SESSION, "t2")(armInput))).occurrenceId).toBe("occ-new");
@@ -68,6 +69,42 @@ test("the live arm registry binds continuations to the authorizing activation's 
   expect((await runEffect(Effect.flip(registry.arm("other-session", "t2")(armInput)))).code).toBe(
     "not_live",
   );
+});
+
+test("r3 H1: a recovered turn never lets an old activation's continuation borrow the successor", () => {
+  const registry = createLiveArmRegistry();
+  const armInput = {
+    purpose: "monitor.hit",
+    at: 1000,
+    alarmId: "watch-1",
+    sourceKey: "monitor",
+    payload: {},
+  };
+  const calls: string[] = [];
+  const verbOf =
+    (occurrenceId: string): Core.ArmVerb =>
+    (input) =>
+      Effect.sync(() => {
+        calls.push(occurrenceId);
+        return { alarmId: input.alarmId ?? "minted", occurrenceId, armSeq: 1 };
+      });
+  // Recovery retains the open turn id (core/mailbox resumeTurn): BOTH the old
+  // activation and its successor own the SAME durable turn token.
+  const ownsPersisted = (turnId: string) => turnId === "persisted-turn";
+  registry.onLive(SESSION, { arm: verbOf("occ-old"), ownsTurn: ownsPersisted });
+  // A continuation minted under the old activation — NOT yet executed.
+  const continuation = registry.arm(SESSION, "persisted-turn")(armInput);
+  // The successor activation recovers the same turn and registers.
+  registry.onLive(SESSION, { arm: verbOf("occ-successor"), ownsTurn: ownsPersisted });
+  // The zombie's deferred execution is a typed refusal: the successor's verb
+  // is NEVER called and nothing is appended.
+  const outcome = runSyncResult(continuation);
+  expect(Result.isFailure(outcome) && outcome.failure.code).toBe("stale_activation");
+  expect(calls).toEqual([]);
+  // A verb created under the live successor still commits.
+  const committed = runSyncResult(registry.arm(SESSION, "persisted-turn")(armInput));
+  expect(Result.isSuccess(committed) && committed.success.occurrenceId).toBe("occ-successor");
+  expect(calls).toEqual(["occ-successor"]);
 });
 
 test("the chain fold pages full history and feeds the chain-guard reads", async () => {

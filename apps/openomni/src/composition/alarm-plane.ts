@@ -178,11 +178,14 @@ export interface LiveArmRegistry {
   /** Bound as `SessionEntityPorts.onLive`; returns the passivation release. */
   readonly onLive: (sessionId: string, verbs: LiveActivationArm) => () => void;
   /**
-   * The arm verb `Bundle.alarmCapability` composes: delegates to the live
-   * activation, carrying the calling turn's token (#1254 r2 H3). A session
-   * with no live activation refuses `not_live`; a live activation that does
-   * not own the token refuses `stale_turn` — a continuation authorized under
-   * one activation is NEVER re-resolved to a successor.
+   * The arm verb `Bundle.alarmCapability` composes: bound at creation to the
+   * activation that is live when the verb is minted (#1254 r3 H1). A turn
+   * token alone cannot distinguish recovery — a successor activation keeps
+   * the recovered `open.turnId` — so execution refuses `stale_activation`
+   * when the authorizing activation is no longer the live one; a continuation
+   * is NEVER re-resolved to a successor. A session with no live activation
+   * refuses `not_live`; the live activation additionally refuses `stale_turn`
+   * for a turn token it does not own (#1254 r2 H3).
    */
   readonly arm: (sessionId: string, turnId: string) => Bundle.ArmVerb;
 }
@@ -196,14 +199,21 @@ export function createLiveArmRegistry(): LiveArmRegistry {
         if (live.get(sessionId) === verbs) live.delete(sessionId);
       };
     },
-    arm: (sessionId, turnId) => (input) =>
-      Effect.suspend(() => {
-        const entry = live.get(sessionId);
-        if (entry === undefined) return Effect.fail(new Core.ArmRefused({ code: "not_live" }));
-        if (!entry.ownsTurn(turnId))
-          return Effect.fail(new Core.ArmRefused({ code: "stale_turn" }));
-        return entry.arm(input);
-      }),
+    arm: (sessionId, turnId) => {
+      // #1254 r3 H1: capture the authorizing activation when the tool-facing
+      // verb is created; execution never re-resolves to a successor.
+      const authorized = live.get(sessionId);
+      return (input) =>
+        Effect.suspend(() => {
+          const entry = live.get(sessionId);
+          if (entry === undefined) return Effect.fail(new Core.ArmRefused({ code: "not_live" }));
+          if (entry !== authorized)
+            return Effect.fail(new Core.ArmRefused({ code: "stale_activation" }));
+          if (!entry.ownsTurn(turnId))
+            return Effect.fail(new Core.ArmRefused({ code: "stale_turn" }));
+          return entry.arm(input);
+        });
+    },
   };
 }
 

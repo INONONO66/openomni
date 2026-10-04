@@ -1135,10 +1135,12 @@ export function createSessionEntityLayer(drainConfig: AlarmDrainConfig) {
       // root — the ONE committing arm path the app's capability verbs
       // delegate to. Registered before the armed resend so a send-refusal
       // retire never races the registration window; released at passivation.
-      // The turn token (#1254 r2 H3): a turn belongs to exactly one
-      // activation, and the activation's journal is what it knows — it owns
-      // exactly the turn currently open under its pinned fence (started or
-      // recovered by it; the single-writer fence makes that activation-unique).
+      // The turn token (#1254 r2 H3): the activation owns exactly the turn
+      // currently open in its journal. The token is NOT activation-unique —
+      // recovery retains `open.turnId`, so a successor owns the same token as
+      // the activation it replaced (#1254 r3 H1); the registry binds each
+      // tool-facing verb to the activation live at its creation and refuses
+      // `stale_activation` once this registration is replaced.
       const releaseLive = env.ports.onLive?.(sessionId, {
         arm: entityArmVerb(handle),
         ownsTurn: (turnId) => kernel.latestOpenTurn(sessionId)?.turnId === turnId,
