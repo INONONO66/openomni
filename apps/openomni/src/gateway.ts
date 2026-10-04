@@ -18,7 +18,6 @@ const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
 const currentInvocation = Core.currentInvocation;
 type SessionEntryServices = Core.SessionEntryServices;
-type BundleDefinitions = Bundle.BundleDefinitions;
 const createSessionRequests = Core.createSessionRequests;
 const currentExecutor = Core.currentExecutor;
 const AgentFailure = Core.AgentFailure;
@@ -32,6 +31,7 @@ import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/in
 import { outboundMessage } from "./composition/terminal-message";
 import { type Context, Effect, Result, Exit, ManagedRuntime, Scope } from "effect";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
+import type { ComposedGeneration } from "./composition/composed";
 import { captureNow } from "./composition/platform";
 import { createAlarmMonitorPorts } from "./composition/alarm-plane";
 import { MonitorRefused, type MonitorPorts } from "./tools/core/watch";
@@ -525,7 +525,7 @@ export function createResidentGateway(
     readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
   },
   messaging?: OutboundMessaging,
-): Effect.Effect<GatewayRouter, Core.ExecutionError, SessionEntryServices | BundleDefinitions | AppLedger> {
+): Effect.Effect<GatewayRouter, Core.ExecutionError, SessionEntryServices | ComposedGeneration | AppLedger> {
   return Effect.gen(function* () {
     const plane = yield* AppLedger;
     const observations = yield* ObservationSink;

@@ -87,6 +87,8 @@ export interface MaterializeInput {
     readonly blocks: readonly SessionGeneration.SystemBlock[];
   };
   readonly policyGeneration: number;
+  /** The composed manifest's `Generation.hash` this session adopts at creation (#1255). */
+  readonly manifestHash?: string;
   readonly actionId: string;
   readonly at: number;
 }
@@ -110,6 +112,7 @@ function materializeIn(
       bundles: input.bundles,
       system: input.system,
       policyGeneration: input.policyGeneration,
+      ...(input.manifestHash === undefined ? {} : { manifestHash: input.manifestHash }),
     }),
   ).pipe(
     Effect.flatMap((snapshot) =>

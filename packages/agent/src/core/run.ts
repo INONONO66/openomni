@@ -480,6 +480,9 @@ export function createSessionConfiguration(
         generation, revertTo: previous.generation, tools: nextTools,
         system: nextSystem, policyGeneration: previous.policyGeneration,
         bundles: previous.bundles,
+        // #1255: an app-level configure keeps the adopted manifest — dropping
+        // the hash would force a spurious compose adoption at next turn start.
+        ...(previous.manifestHash === undefined ? {} : { manifestHash: previous.manifestHash }),
       });
       const configured = SessionHandleStore.configureAction({
         id: entropy(), sessionId, parentId: kernel.latestAction(sessionId)?.id ?? null,

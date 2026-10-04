@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
 import { Core, Bundle, Testing } from "@openomni/agent";
-const bundle = Bundle.bundle;
-const BundlesLive = Bundle.BundlesLive;
 const AgentFailure = Core.AgentFailure;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -13,6 +11,7 @@ import { seedKernelPolicyRows } from "../src/policy-seed";
 import { composedPointTable } from "../src/composition/point-table";
 import type { PolicyRow } from "@openomni/protocol";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
+import { composedHolder } from "./helpers/bundle-fixture";
 import { allowConfigure } from "./helpers/generation-services";
 import { configureAuthority } from "../src/composition/generation-layers";
 import { AppLedger } from "../src/composition/cluster-runtime";
@@ -78,8 +77,8 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
     }), ({ id, unsubscribe }) => Effect.sync(() => { unsubscribe(); closed.push(id); }));
     if (fail) return yield* new AgentFailure({ operation: "fixture.acquire", cause: String(id.id) });
   }));
-  const definition = bundle({ name: "probe", requires: [ObservationSink], provides: [], layer: live, events: [{ ns: "probe.event", version: 1 }] });
-  const runtime = gatewayRuntime({ observations: Bus, bundles: BundlesLive([definition]) });
+  const definition = Bundle.define({ name: "probe", requires: [], layer: live });
+  const runtime = gatewayRuntime({ observations: Bus, composed: composedHolder({ bundles: [definition] }) });
   try {
     const handle = await acquireAppResource(runtime, Effect.gen(function* () {
       yield* (yield* GenerationLayers).initialize({ resident: [], worker: [] });
@@ -98,7 +97,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
     await runAppEffect(runtime, handle.prompt("rewake"));
     expect(acquired).toEqual([1]);
     fail = true;
-    await expect(runAppEffect(runtime, handle.system.blocks.set([{ id: "two", source: "fixture", content: "candidate" }]))).rejects.toMatchObject({ _tag: "BundleError", code: "acquisition" });
+    await expect(runAppEffect(runtime, handle.system.blocks.set([{ id: "two", source: "fixture", content: "candidate" }]))).rejects.toMatchObject({ _tag: "AgentFailure", operation: "fixture.acquire" });
     fail = false;
     expect(closed).toEqual([2]);
     const generationOf = (id: string) =>
