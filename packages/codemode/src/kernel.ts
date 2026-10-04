@@ -441,9 +441,12 @@ class BrowserClient:
         self._connect()
 
     def _attach(self, executable_path):
+        # pty_list also reports sessions whose tmux side is gone as "lost"
+        # (a crashed launch exits the shell before close() can run); only a
+        # live session is reconnectable, a lost one is launched afresh.
         listed = _Machine(self.machine_id).ptyList()
         names = (
-            [entry["name"] for entry in listed.get("sessions", [])]
+            [entry["name"] for entry in listed.get("sessions", []) if entry.get("status") == "live"]
             if listed.get("status") == "ok"
             else []
         )

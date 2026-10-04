@@ -46,6 +46,7 @@ const profiles = {
   shared: join(base, "shared"),
   headed: join(base, "headed"),
   noDisplay: join(base, "no-display"),
+  lost: join(base, "lost"),
   closing: join(base, "closing"),
 };
 const socketPath = join(tmpdir(), `oc-${crypto.randomUUID()}.sock`);
@@ -286,6 +287,37 @@ test.if(process.platform === "linux")(
     expect(error).toContain("browser_lost");
     expect(error).toContain("before the DevTools readiness line");
     expect(await listedSessions()).not.toContain(sessionOf(profiles.noDisplay));
+  },
+  CELL_TIMEOUT_MS,
+);
+
+test(
+  "a browser session the daemon lists as lost is launched afresh instead of reconnected",
+  async () => {
+    const { mode, host } = harness();
+    // When Chromium dies by signal the launch shell exits and tmux drops the
+    // session before the client's close() runs, so the daemon keeps a record
+    // tmux no longer has and pty_list reports the name as lost. Killing the
+    // session behind the daemon's back reproduces that state without racing a
+    // shell exit; the next client must launch afresh, never reconnect to it.
+    const session = sessionOf(profiles.lost);
+    expect(await host.get("M").pty.open(session, profiles.lost)).toMatchObject({ status: "ok" });
+    expect(Bun.spawnSync(["tmux", "-L", TMUX_SOCKET, "kill-session", "-t", `=${session}`]).exitCode).toBe(0);
+    const listed = await host.get("M").pty.list();
+    expect(listed.status).toBe("ok");
+    expect(listed.status === "ok" ? listed.sessions : []).toContainEqual({ name: session, status: "lost" });
+    const relaunched = await mode.cell.run(
+      [
+        `again = browser("M", profile_dir=${JSON.stringify(profiles.lost)})`,
+        "connected = again.is_connected()",
+        "again.close()",
+        "connected",
+      ].join("\n"),
+      "browser",
+      { timeoutMs: CELL_TIMEOUT_MS },
+    );
+    expect(relaunched).toMatchObject({ status: "completed", value: "True" });
+    expect(await listedSessions()).not.toContain(session);
   },
   CELL_TIMEOUT_MS,
 );
