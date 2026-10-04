@@ -2,7 +2,8 @@
 
 ## #1254 alarm split: core timer, removable alarm capability (epic #1260, PR #1285, ⏳ pending merge)
 
-On `epic1260/1254-alarm-split` (2026-10-04, base `4ecb41f3`). The timer plane
+On `epic1260/1254-alarm-split` (2026-10-04, base `4ecb41f3`, merged with main
+`c8ae79d4` at `277b3ce5`). The timer plane
 is split in two. The core (`packages/agent/src/core/alarm.ts`, the `alarm`
 kind's single declared writer) keeps the cluster `DeliverAt` message, exactly
 four loop-reserved purposes (`step_watchdog`, `retry`, `deadline`, `resume`;
@@ -56,7 +57,20 @@ bundles `composition/bundles/{monitor,cron}.ts` (each documents its
 capability-off cascade land with #1255); `composition/monitor-ports.ts` and
 `tools/core/monitor-ports.ts` are deleted, `composition/watch-sources.ts` is
 the native source adapter and `tools/core/watch.ts` is epoch-free; the
-hibernation e2e pins a native hit landing as a recorded chain fact.
+hibernation e2e pins a native hit landing as a recorded chain fact. The
+merge with main `c8ae79d4` (`277b3ce5`; #1271 brain host as machine `self`,
+#1273 tmux `pty.session`) joins the terminal watch source to the
+`ArmedWatch`/occurrence shape, makes the native install part of the `watch`
+verb (the plugin's `WatchInstallDeps.install` is awaited after the arms commit
+and before the verb returns, so a terminal subscribe is never interrupted by
+the tool's `waiting` commit; a refused install retires the armed chain and
+its timeout with reason `install` and surfaces `WatchRefused`), returns
+`armSeq` from `ArmVerb`, binds the composed capability into the entity ports
+(`alarmCapability`; before the bind every `monitor.hit`/`cron.tick` wake
+folded to a recorded `fired{stale}` fact), and exempts `monitor.hit`
+occurrences from the entity's `sendAlarm` time delivery (the installed native
+source resends them with the hit; `monitor-app.test.ts` pins the second turn,
+the alarm prompt, the `<occurrenceId>:delivered` row and the re-armed chain).
 `Protocol.Cron.next(expr, fromMs, tz)` / `Cron.occurrences(expr, afterMs,
 untilMs, tz, limit)` is a dependency-free Vixie grid over `Intl.DateTimeFormat`
 zone math (DST gap skipped, overlap fires once, 366-day `unreachable` bound,
