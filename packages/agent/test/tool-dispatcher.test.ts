@@ -3,7 +3,7 @@ import { catalogLayer } from "./helpers/service-layers";
 import { Effect, Fiber } from "effect";
 import { isolated } from "./helpers/isolated";
 import { describe, expect, it } from "bun:test";
-import { createDispatcher, defineTool, eraseTool, sessionTool, ToolRefused, toolInputSchema, toolSpec } from "../src/core/tool";
+import { createDispatcher, defineTool, eraseTool, projectTools, ToolRefused, toolInputSchema } from "../src/core/tool";
 import { recordingExecutor } from "./helpers/effect-g2";
 import { valueTool } from "./helpers/query-tool";
 import { z } from "zod";
@@ -95,10 +95,10 @@ describe("tool dispatcher public contract", () => {
     const execution = definition({ name: "run", category: "execution" });
 
     expect(toolInputSchema(eraseTool(query))).toMatchObject({ type: "object" });
-    expect(toolSpec(eraseTool(query))).toMatchObject({ name: "echo", safe: true });
-    expect(toolSpec(eraseTool(query))).not.toHaveProperty("placement");
-    expect(toolSpec(eraseTool(execution))).toMatchObject({ name: "run", safe: false });
-    expect(sessionTool(eraseTool(execution))).toMatchObject({ name: "run", category: "execution" });
+    expect(projectTools([eraseTool(query)]).specs[0]).toMatchObject({ name: "echo", safe: true });
+    expect(projectTools([eraseTool(query)]).specs[0]).not.toHaveProperty("placement");
+    expect(projectTools([eraseTool(execution)]).specs[0]).toMatchObject({ name: "run", safe: false });
+    expect(projectTools([eraseTool(execution)]).session[0]).toMatchObject({ name: "run", category: "execution" });
   });
 
   it("classifies missing tools and invalid inputs without invoking a tool", () =>

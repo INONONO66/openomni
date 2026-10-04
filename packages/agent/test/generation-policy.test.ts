@@ -8,7 +8,7 @@ import { z } from "zod";
 import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/core/compose";
 import { makeSessionGenerations } from "../src/core/run";
 import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
-import { createTurnDispatcher, defineTool, sessionTool } from "../src/core/tool";
+import { createTurnDispatcher, defineTool, projectTools } from "../src/core/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
 import { sessionTree } from "./helpers/session-tree";
@@ -40,7 +40,7 @@ function generationFixture(rows: readonly BundleRow[], bodies: PlainValue[]) {
     const policyGeneration = source.appendGeneration(() => [...SEEDED_POLICY_ROWS, ...selected.rows]);
     const snapshot = SessionHandleStore.generationSnapshot({
       generation: 1, revertTo: 0, policyGeneration, bundles: selected.names,
-      tools: selected.tools.map(sessionTool), system: { preset: "", blocks: [] },
+      tools: projectTools([...selected.tools]).session, system: { preset: "", blocks: [] },
     });
     const seed = Layer.mergeAll(
       Layer.succeed(Clock.Clock, yield* Clock.clockWith(Effect.succeed)), Layer.succeed(Entropy, yield* Entropy),
