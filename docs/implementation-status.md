@@ -1,5 +1,9 @@
 # Implementation Status
 
+## #1053 machine plane epic landed (six children, 2026-10-03/04)
+
+The machine plane moved from a localhost Unix-socket endpoint frozen at 2026-08-24 to a network-attachable WHERE with persistent terminals, computer use and browser use, all reached through the existing twelve-tool catalog and code-mode handles; no new model tool was added. Children, in merge order: #1272 code mode extracted into `packages/codemode` (`3e36a657`, PR #1280); #1270 TCP transport with host-certificate chain validation + SPKI pin and automatic reattach (`76598609`, PR #1281); #1274 `screen.read`/`input.write` via macOS shell-out (`a004bdb0`, PR #1282); #1271 brain host attaches as machine `self`, local execution path removed from the tools (`a66dc3a7`, PR #1284); #1273 persistent `pty.session` terminals over tmux with `bash{session}` (`a1a3de0f`, PR #1283); #1275 `browser()` over CDP inside a `pty.session` (`05bb44dd`, PR #1286). Each child merged after CI all-green and an independent line-level review with zero High/Medium findings; real-surface evidence (attach transcripts, restart/reattach logs, typed refusals, screenshot bytes) is attached to each child's closing comment. Not claimed: native computer use (#887), media streaming, sandbox/egress hardening (#950), cli contact (#1180), embedded desktop browser (#1023). Open design decision recorded on the epic: host-side chain validation of daemon certificates (today the listener judges the daemon key against enrollment at handshake).
+
 ## #1275 browser automation recipe: browser() over CDP in a pty.session
 
 On `machines/1275-browser-recipe` (2026-10-03, draft PR #1286). The codemode
