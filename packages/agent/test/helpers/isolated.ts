@@ -12,7 +12,7 @@ import {
 import { LlmLive } from "../../src/model";
 import { KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, compilePolicySnapshot } from "../../src/core/gate/compile";
 import { Entropy, GenerationOwnership, ObservationSink, SessionLayer, ToolCatalog, type GenerationServices, type RunnerServices } from "../../src/core/ports";
-import { NamedPolicyRegistry } from "../../src/core/compose";
+import { GenerationHandlers } from "../../src/core/compose";
 import { makeSessionGenerations, type GenerationRawSlots } from "../../src/core/run";
 import { entropySource } from "./time";
 
@@ -98,10 +98,10 @@ export const runnerTestLayer = Layer.mergeAll(
     const sink = (yield* makeObservationBus({ id: entropySource("runner-event").id, now: () => 0 })).sink;
     const owner = yield* makeSessionGenerations({ id: { sessionId: "fixture", generation: 1 }, snapshot, activate: Effect.void,
       layer: Layer.mergeAll(Layer.succeed(SessionLayer, { snapshot, policy }), Layer.succeed(ToolCatalog, { definitions: [] }),
-        Layer.succeed(ObservationSink, sink), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY)) });
+        Layer.succeed(ObservationSink, sink), Layer.succeed(GenerationHandlers, KERNEL_POLICY_REGISTRY)) });
     const captured = yield* owner.capture();
     const context = yield* captured.provide(Effect.context<GenerationServices | GenerationOwnership | GenerationRawSlots>());
-    return Context.pick(SessionLayer, ToolCatalog, ObservationSink, NamedPolicyRegistry, GenerationOwnership)(context);
+    return Context.pick(SessionLayer, ToolCatalog, ObservationSink, GenerationHandlers, GenerationOwnership)(context);
   })),
 );
 

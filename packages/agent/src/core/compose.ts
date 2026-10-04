@@ -3,11 +3,11 @@
  * The former runtime bundle plane (the imperative bundle loader and its
  * definitions service) is deleted (#1255 P3): the one loader path is
  * `Manifest.define` -> `compose(manifest) -> Generation`
- * below. Only the `NamedPolicyRegistry` Context tag survives — it is part of
+ * below. Only the `GenerationHandlers` Context tag survives — it is part of
  * the live `GenerationServices` contract the app's generation Layers provide.
  * ──────────────────────────────────────────────────────────────────────────
  */
-import type { NamedPolicyRegistry as PolicyRegistry } from "./gate/compile";
+import type { HandlerTable as PolicyRegistry } from "./gate/compile";
 import { canonicalDigest, CORE_POINT_RECORDS, type PlainValue } from "@openomni/protocol";
 import { Context, Effect, Schema } from "effect";
 import type {
@@ -19,7 +19,7 @@ import type {
   ManifestDefinition,
 } from "./capability";
 
-export class NamedPolicyRegistry extends Context.Service<NamedPolicyRegistry, PolicyRegistry>()("@openomni/agent/NamedPolicyRegistry") {}
+export class GenerationHandlers extends Context.Service<GenerationHandlers, PolicyRegistry>()("@openomni/agent/GenerationHandlers") {}
 
 /*
  * ──────────────────────────────────────────────────────────────────────────

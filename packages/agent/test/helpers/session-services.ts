@@ -2,7 +2,7 @@ import { LlmLive } from "../../src/model";
 import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
 import { LedgerAction, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
 import { Clock, type Context, Effect, Layer, Scope, Semaphore } from "effect";
-import { NamedPolicyRegistry } from "../../src/core/compose";
+import { GenerationHandlers } from "../../src/core/compose";
 import type { SessionKernel } from "../../src/core/entity";
 import { GenerationUnavailable, type SessionError } from "../../src/core/failure";
 import { AgentGenerationLive } from "./generation-layer";
@@ -54,7 +54,7 @@ function sessionServices(fixture: SessionFixture) {
         id: { sessionId, generation: snapshot.generation }, snapshot, activate: Effect.void,
         layer: Layer.mergeAll(
           AgentGenerationLive({ snapshot, policy: compiler.pin(snapshot.policyGeneration), definitions: [] }),
-          Layer.succeed(ObservationSink, observations), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
+          Layer.succeed(ObservationSink, observations), Layer.succeed(GenerationHandlers, KERNEL_POLICY_REGISTRY),
         ),
       };
     }

@@ -1,11 +1,11 @@
 import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
 import * as SessionHandleStore from "../src/core/store/fence";
-import { createNamedPolicyRegistry, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../src/core/gate/compile";
+import { createHandlerTable, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../src/core/gate/compile";
 import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 import { Clock, Effect, Layer } from "effect";
 import { z } from "zod";
-import { NamedPolicyRegistry } from "../src/core/compose";
+import { GenerationHandlers } from "../src/core/compose";
 import { makeSessionGenerations } from "../src/core/run";
 import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
 import { createTurnDispatcher, defineTool, projectTools } from "../src/core/tool";
@@ -22,7 +22,7 @@ function policyRow(name: string, verdict: PlainValue, priority = 100): SeedRow {
 }
 
 /**
- * The composed `NamedPolicyRegistry` carries product transformers/obligations
+ * The composed `GenerationHandlers` carries product transformers/obligations
  * alongside the kernel refs (#1255: the registry is a generation service, the
  * deleted runtime bundle plane no longer provides it).
  */
@@ -35,7 +35,7 @@ function generationFixture(rows: readonly SeedRow[], bodies: PlainValue[]) {
       execute: async (input: z.infer<typeof Input>) => { bodies.push(input); return input.value; },
       render: (_input: z.infer<typeof Input>, value: string) => value,
     });
-    const registry = createNamedPolicyRegistry({
+    const registry = createHandlerTable({
       transformers: [...KERNEL_POLICY_REGISTRY.transformers, { name: "demo/replace", apply: (_input: PlainValue, config: PlainValue) => config }],
       obligations: [...KERNEL_POLICY_REGISTRY.obligations, { name: "demo/cap" }],
     });
@@ -50,10 +50,10 @@ function generationFixture(rows: readonly SeedRow[], bodies: PlainValue[]) {
       Layer.succeed(Clock.Clock, yield* Clock.clockWith(Effect.succeed)), Layer.succeed(Entropy, yield* Entropy),
       Layer.succeed(ToolCatalog, { definitions: tools }),
       Layer.succeed(ObservationSink, testBus()),
-      Layer.succeed(NamedPolicyRegistry, registry),
+      Layer.succeed(GenerationHandlers, registry),
     );
     const layer = Layer.effect(SessionLayer, Effect.gen(function* () {
-      const composed = yield* NamedPolicyRegistry;
+      const composed = yield* GenerationHandlers;
       return { snapshot, policy: createPolicyCompiler({ registry: composed, source }).pin(policyGeneration) };
     })).pipe(Layer.provideMerge(seed));
     const owner = yield* makeSessionGenerations({ id: { sessionId: fiberSessionId, generation: 1 }, snapshot, layer, activate: Effect.void });

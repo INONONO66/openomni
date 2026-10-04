@@ -4,8 +4,8 @@ type Entropy = Core.Entropy;
 const AgentFailure = Core.AgentFailure;
 const GenerationLayers = Core.GenerationLayers;
 const GenerationUnavailable = Core.GenerationUnavailable;
-const NamedPolicyRegistry = Bundle.NamedPolicyRegistry;
-type NamedPolicyRegistry = Bundle.NamedPolicyRegistry;
+const GenerationHandlers = Bundle.GenerationHandlers;
+type GenerationHandlers = Bundle.GenerationHandlers;
 const ObservationSink = Core.ObservationSink;
 type ObservationSink = Core.ObservationSink;
 const SessionLayer = Core.SessionLayer;
@@ -28,14 +28,14 @@ import { AppPointTable } from "./point-table";
 import { captureNow } from "./platform";
 
 /**
- * The live `NamedPolicyRegistry` for one composed generation (#1255 P3): the
+ * The live `GenerationHandlers` for one composed generation (#1255 P3): the
  * kernel's built-in handlers plus every handler the generation's capabilities
  * and bundles registered. A handler with an `apply` function is a transformer;
  * anything else is an obligation marker. Kernel names win a collision — the
  * generation's `kernel/*` registrations are declarations of intent to use
  * them, not replacements.
  */
-export function composedPolicyRegistry(generation: Bundle.Generation): Core.NamedPolicyRegistry {
+export function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTable {
   const transformers = [...Core.KERNEL_POLICY_REGISTRY.transformers];
   const obligations = [...Core.KERNEL_POLICY_REGISTRY.obligations];
   const known = new Set([...transformers, ...obligations].map((entry) => entry.name));
@@ -62,7 +62,7 @@ export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (d
   return Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze([...select(catalogDefinitions(ports))]) }));
 }
 
-type GenerationSeed = Core.Entropy | ObservationSink | Core.ToolCatalog | NamedPolicyRegistry;
+type GenerationSeed = Core.Entropy | ObservationSink | Core.ToolCatalog | GenerationHandlers;
 
 function bundleLayerStack<R extends GenerationSeed, E>(
   context: ComposedContext,
@@ -137,7 +137,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         return sink;
       }));
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
-      const seeded = Layer.succeed(NamedPolicyRegistry, composedPolicyRegistry(generation)).pipe(Layer.provideMerge(seed));
+      const seeded = Layer.succeed(GenerationHandlers, composedPolicyRegistry(generation)).pipe(Layer.provideMerge(seed));
       // #1255 P3: the composed ON bundles' Layers acquire INSIDE this
       // generation's Scope in composition order, each provided the seed plus
       // every earlier bundle's outputs — the per-generation resource semantics
@@ -145,7 +145,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       // typed candidate failure `configure`/`capture` unwinds on.
       const registry = bundleLayerStack(composed.current(), seeded);
       const layer = Layer.unwrap(Effect.gen(function* () {
-        const registry = yield* NamedPolicyRegistry;
+        const registry = yield* GenerationHandlers;
         const policy = yield* Effect.try({
           try: () => compilePolicySnapshot({ rows: plane.openKernel(sessionId).policyRows(snapshot.policyGeneration), generation: snapshot.policyGeneration, kinds: LedgerAction.Kind.options, registry, table: pointTable }),
           catch: String,

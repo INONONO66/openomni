@@ -7,7 +7,7 @@ import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } fro
 import { Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { makeSessionGenerations, GenerationRawSlots } from "../src/core/run";
 import { SessionLayer, ToolCatalog, ObservationSink } from "../src/core/ports";
-import { NamedPolicyRegistry } from "../src/core/compose";
+import { GenerationHandlers } from "../src/core/compose";
 
 function generation(number: number, close: () => void) {
   const snapshot = SessionHandleStore.generationSnapshot({ generation: number, revertTo: number - 1,
@@ -18,7 +18,7 @@ function generation(number: number, close: () => void) {
       Layer.succeed(SessionLayer, { snapshot, policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
         generation: 1, rows: SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })) }) }),
       Layer.succeed(ToolCatalog, { definitions: [] }), Layer.succeed(ObservationSink, testBus()),
-      Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
+      Layer.succeed(GenerationHandlers, KERNEL_POLICY_REGISTRY),
       Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(close))),
     ),
   };

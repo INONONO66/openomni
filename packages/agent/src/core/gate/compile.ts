@@ -9,11 +9,11 @@ import {
   PolicyCompileError,
   type RuleName,
 } from "./legacy-rows";
-import { createNamedPolicyRegistry, wrapTransformer, type NamedPolicyRegistry } from "./registry";
+import { createHandlerTable, wrapTransformer, type HandlerTable } from "./registry";
 import { projectGeneration, type ProjectedGeneration } from "./project";
 import { evaluateProjected, failedSnapshot, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
 
-export { createNamedPolicyRegistry, NamedPolicyRegistryError, KERNEL_POLICY_REGISTRY, type NamedPolicyRegistry, type NamedTransformer } from "./registry";
+export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer } from "./registry";
 export { PolicyCompileError } from "./legacy-rows";
 export type { CompiledPolicySnapshot, PolicyEvaluation, PolicyEvaluationInput } from "./evaluate";
 
@@ -25,7 +25,7 @@ export type { CompiledPolicySnapshot, PolicyEvaluation, PolicyEvaluationInput } 
  */
 
 export interface CompilePolicySnapshotOptions {
-  readonly registry: NamedPolicyRegistry;
+  readonly registry: HandlerTable;
   readonly generation: number;
   readonly rows: readonly PolicyRow.Row[];
   readonly mandatory?: readonly RuleName[];
@@ -53,7 +53,7 @@ export function compilePolicySnapshot(
     }
   }
   const kinds = new Set(options.kinds ?? DEFAULT_COMPILE_KINDS);
-  const registry = createNamedPolicyRegistry(options.registry);
+  const registry = createHandlerTable(options.registry);
   const table = options.table ?? kernelPointTable();
   // Historical compaction rows convert onto the compaction point before
   // evaluation, so a base-era `turn/post {op: compaction}` deny keeps
@@ -93,13 +93,13 @@ export interface PolicyCompiler {
 }
 
 export function createPolicyCompiler(options: {
-  readonly registry: NamedPolicyRegistry;
+  readonly registry: HandlerTable;
   readonly source: Pick<Storage.PolicyRowSubAdapter, "rows">;
   readonly mandatory?: readonly RuleName[];
   readonly kinds?: readonly string[];
   readonly table?: GatePointTable;
 }): PolicyCompiler {
-  const registry = createNamedPolicyRegistry(options.registry);
+  const registry = createHandlerTable(options.registry);
   const cache = new Map<number, CompiledPolicySnapshot>();
   const mandatory = options.mandatory ?? MANDATORY_RULE_NAMES;
   const table = options.table ?? kernelPointTable();

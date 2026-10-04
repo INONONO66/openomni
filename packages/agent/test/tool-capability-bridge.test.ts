@@ -6,7 +6,7 @@ import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import type { AnyToolDefinition, LedgerAction, PlainValue, ToolExecutionContext } from "@openomni/protocol";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { z } from "zod";
-import { NamedPolicyRegistry } from "../src/core/compose";
+import { GenerationHandlers } from "../src/core/compose";
 import { CommitFailed, InvocationClosed, ToolBodyFailed, type ExecutionError } from "../src/core/failure";
 import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocation, type InvocationFrame } from "../src/core/gate/decide";
 import type { ExecutionResult } from "../src/core/gate/decide";
@@ -45,7 +45,7 @@ function bundle(generation: number, definitions: readonly AnyToolDefinition[], b
     tools: projectTools(definitions).session,
     system: { preset: "bridge", blocks: [] }, policyGeneration: 1 });
   return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void,
-    layer: Layer.mergeAll(Layer.succeed(ObservationSink, bus), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
+    layer: Layer.mergeAll(Layer.succeed(ObservationSink, bus), Layer.succeed(GenerationHandlers, KERNEL_POLICY_REGISTRY),
       Layer.succeed(SessionLayer, { snapshot, policy: nativePolicy }), Layer.succeed(ToolCatalog, { definitions })) };
 }
 function setup(definitions: readonly AnyToolDefinition[], signal?: AbortSignal) {

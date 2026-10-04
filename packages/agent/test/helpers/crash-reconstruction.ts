@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { appendFileSync, writeSync } from "node:fs";
 import { Cause, Effect, Exit, Layer } from "effect";
 import { KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
-import { NamedPolicyRegistry } from "../../src/core/compose";
+import { GenerationHandlers } from "../../src/core/compose";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations } from "../../src/core/run";
 import * as SessionHandleStore from "../../src/core/store/fence";
@@ -264,7 +264,7 @@ function restartGenerations(captures: number[], missing: boolean) {
         layer: Layer.mergeAll(
           AgentGenerationLive({ snapshot, policy: compiledPolicy(), definitions: [] }),
           Layer.succeed(ObservationSink, observations),
-          Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
+          Layer.succeed(GenerationHandlers, KERNEL_POLICY_REGISTRY),
         ),
       });
       return {

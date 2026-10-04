@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
 import { PlainObjectSchema } from "@openomni/protocol";
 import { Cause, Effect, Fiber } from "effect";
-import { createNamedPolicyRegistry } from "../../../src/core/gate/compile";
+import { createHandlerTable } from "../../../src/core/gate/compile";
 import { requestLedger, crashAfterRequestOpen, failure } from "../../helpers/effect-g1";
 import { z } from "zod";
 import { createExecutor } from "../../../src/core/gate/decide";
@@ -17,7 +17,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
   const recorded = yield* requestLedger();
   let transformations = 0;
   const executed: string[] = [];
-  const registry = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+  const registry = createHandlerTable({ ...KERNEL_POLICY_REGISTRY, transformers: [
     ...KERNEL_POLICY_REGISTRY.transformers,
     { name: "demo/normalize", apply: () => { transformations += 1; return { text: `admitted-${transformations}` }; } },
   ] });
@@ -42,7 +42,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
   // Recovery replays the committed gate decision: the transformer is gone
   // from this process (it throws), yet the recorded output still admits (r3).
   const recoveredPolicy = compilePolicySnapshot({
-    registry: createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+    registry: createHandlerTable({ ...KERNEL_POLICY_REGISTRY, transformers: [
       ...KERNEL_POLICY_REGISTRY.transformers,
       { name: "demo/normalize", apply: () => { throw new Error("handler must not run during replay"); } },
     ] }),

@@ -3,7 +3,7 @@ import { listenForAbort, type AnyToolDefinition, type ObservationSink as Observa
 import type { CompiledPolicySnapshot } from "./gate/compile";
 import type { Llm } from "../model";
 import type { SessionError } from "./failure";
-import type { NamedPolicyRegistry } from "./compose";
+import type { GenerationHandlers } from "./compose";
 import type { GenerationRawSlots } from "./run";
 import type { ToolDispatchDefinition } from "./tool";
 
@@ -36,7 +36,7 @@ export function interruptOn(signal: AbortSignal): Effect.Effect<never> {
 
 // ─── from services.ts (#1247) ───
 export type ProcessServices = Entropy | ObservationSink;
-export type GenerationServices = SessionLayer | ToolCatalog | ObservationSink | NamedPolicyRegistry;
+export type GenerationServices = SessionLayer | ToolCatalog | ObservationSink | GenerationHandlers;
 export type SessionEntryServices = ProcessServices | Llm | GenerationLayers;
 export type RunnerServices = ProcessServices | SessionLayer | ToolCatalog | Llm | GenerationOwnership;
 
