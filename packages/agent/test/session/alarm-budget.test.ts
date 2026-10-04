@@ -12,11 +12,12 @@
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Effect, Result } from "effect";
-import { armAction, type AlarmCapability, type ArmRefused } from "../../src/core/alarm";
+import { armAction, composeAlarmPurposes, type AlarmCapability, type ArmRefused, type ArmVerb } from "../../src/core/alarm";
+import { alarmCapability } from "../../src/plugins/alarm";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
-import { clusterTempDir, runCluster, sendAlarm, sessionFileFor } from "../helpers/cluster-runtime";
+import { clusterTempDir, runCluster, sendAlarm, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-alarm-budget-");
@@ -232,4 +233,104 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; re-ar
     sourceKey: "boot",
     payload: { detail: "line:1" },
   });
+});
+
+test("the app capability path arms through the live activation's budgeted entity verb — one committing door (H3)", async () => {
+  const sessionId = "live-budget-session";
+  // Seed: the session exists (materialized + indexed) but holds no armed rows.
+  await runAgent(
+    Effect.gen(function* () {
+      const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+      const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
+      const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+      yield* kernel.materialize({
+        id: sessionId,
+        parentId: null,
+        role: "resident",
+        tools: [],
+        system: { preset: "", blocks: [] },
+        policyGeneration: 1,
+        actionId: `${sessionId}:materialize`,
+        at: 1,
+      });
+      catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: 1 });
+      store.close();
+      catalog.close();
+    }),
+  );
+
+  // The app-side registry shape (H3): activations hand their budgeted arm
+  // verb to the composition root; the capability delegates — no app commit.
+  const liveVerbs = new Map<string, ArmVerb>();
+  const outcome = await runCluster(
+    {
+      sessionsDir,
+      catalogFile,
+      onLive: (id, verbs) => {
+        liveVerbs.set(id, verbs.arm);
+        return () => {
+          liveVerbs.delete(id);
+        };
+      },
+    },
+    Effect.gen(function* () {
+      // Activation: the Deliver turn resolves and the entity stays live (idle 60s).
+      yield* sendPrompt(sessionId, `${sessionId}:m-1`, "hello");
+      const capability = yield* alarmCapability({
+        bundles: [
+          {
+            bundle: "t",
+            purposes: [{ name: "test.tick", handler: () => Effect.succeed("delivered" as const) }],
+          },
+        ],
+        compose: composeAlarmPurposes,
+        arm: (id) => (input) =>
+          Effect.suspend(() => {
+            const verb = liveVerbs.get(id);
+            return verb === undefined
+              ? Effect.die(new Error(`no live activation for ${id}`))
+              : verb(input);
+          }),
+        watch: { install: () => Effect.void },
+      });
+      let armed = 0;
+      let refusal: ArmRefused | undefined;
+      for (let index = 0; index <= MAX_ARMED; index += 1) {
+        const attempt = yield* Effect.result(
+          capability.verbs.arm(sessionId)({
+            purpose: "test.tick",
+            at: FAR_FUTURE + index,
+            alarmId: `app-${index}`,
+            sourceKey: "t",
+            payload: { index },
+          }),
+        );
+        if (Result.isFailure(attempt)) {
+          refusal = attempt.failure;
+          break;
+        }
+        armed += 1;
+      }
+      return { armed, refusal };
+    }),
+  );
+  // 64 chains through the app path commit against the entity's budget; the
+  // 65th is the typed refusal, not an app-side commit.
+  expect(outcome.armed).toBe(MAX_ARMED);
+  expect(outcome.refusal?.code).toBe("alarm_budget");
+
+  // Durable index: exactly the budget — no second committing path added rows.
+  const after = await runAgent(
+    Effect.sync(() => {
+      const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+      const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
+      try {
+        return SessionHandleStore.createSessionKernel(store, catalog).armedAlarms().length;
+      } finally {
+        store.close();
+        catalog.close();
+      }
+    }),
+  );
+  expect(after).toBe(MAX_ARMED);
 });

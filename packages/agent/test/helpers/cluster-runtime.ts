@@ -74,6 +74,8 @@ export interface TestClusterOptions {
   readonly ready?: Effect.Effect<void>;
   /** Fires after the entity commits one request transition. */
   readonly onRequestReady?: (sessionId: string) => void;
+  /** #1254 H3: live-activation hook handing out the entity's budgeted arm verb. */
+  readonly onLive?: SessionEntityPorts["onLive"];
   /** Injected entity clock (byte-equality fixtures); default wall clock. */
   readonly clock?: () => number;
   /** Wraps each freshly opened per-session store (fault injection). */
@@ -319,6 +321,7 @@ function entityEnvLayer(options: TestClusterOptions) {
               ...(options.onRequestReady === undefined
                 ? {}
                 : { onRequestReady: options.onRequestReady }),
+              ...(options.onLive === undefined ? {} : { onLive: options.onLive }),
               sendAlarm: (sessionId, occurrence) =>
                 makeClient(sessionId)
                   .Alarm(occurrence)

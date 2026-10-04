@@ -81,7 +81,7 @@ import {
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
-import { createAlarmArmVerb } from "./composition/alarm-plane";
+import { createLiveArmRegistry } from "./composition/alarm-plane";
 import { monitorPurposes } from "./composition/bundles/monitor";
 import { cronPurposes } from "./composition/bundles/cron";
 import {
@@ -528,35 +528,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
     );
     const closeWatch = (watchId: string) => void watchSources.close(watchId);
-    const armVerb = createAlarmArmVerb({
-      openKernel: plane.openKernel,
-      clock: services.now,
-      entropy: services.entropy.id,
-      schedule: (sessionId, occurrence) => scheduleAlarm(sessionId, occurrence),
-      // Native handles follow committed arm rows: a re-arm after a hit moves
-      // the live source onto the new occurrence; a retiring arm closes it.
-      // First install is the capability's install seam below, awaited by the
-      // watch verb so `create` returns subscribed.
-      onArm: (notice) => {
-        if (notice.purpose !== Bundle.MONITOR_HIT) return;
-        if (notice.at === null) {
-          closeWatch(notice.alarmId);
-          return;
-        }
-        const payload = Bundle.WatchHitPayload.safeParse(notice.payload);
-        if (!payload.success) return;
-        watchSources.refresh({
-          sessionId: notice.sessionId,
-          id: notice.alarmId,
-          occurrence: {
-            occurrenceId: notice.occurrenceId,
-            alarmId: notice.alarmId,
-            armSeq: notice.armSeq,
-          },
-          base: { spec: payload.data.spec, notifications: payload.data.notifications },
-        });
-      },
-    });
+    // #1254 H3: ONE committing arm path. Every app-side arm (monitor tool,
+    // watch verb, cron create) delegates to the live activation's budgeted
+    // entity verb through this registry; no app code commits an arm row.
+    const liveArms = createLiveArmRegistry();
     const alarmPlane = await runAppBoot(
       runtime,
       Bundle.alarmCapability({
@@ -581,7 +556,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 }),
             }),
         },
-        arm: armVerb,
+        arm: liveArms.arm,
       }),
     );
     const resident = createResident({
@@ -831,6 +806,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // delivered non-reserved occurrence to; unbound it would fold every
       // watch hit and cron tick to a recorded stale fact with zero execution.
       alarmCapability: alarmPlane,
+      // #1254 H3: each activation registers its budgeted arm verb here — the
+      // app-side capability path above delegates to it (one committing door).
+      onLive: liveArms.onLive,
       // #1254 S3: an activation resends its armed occurrences through the
       // entity's own persisted Alarm door (occurrence id = cluster dedupe).
       // Persist-and-return (M3): a DeliverAt envelope only replies at

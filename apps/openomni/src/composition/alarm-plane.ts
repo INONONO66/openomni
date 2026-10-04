@@ -9,9 +9,10 @@ import type { SessionKernel } from "./cluster-runtime";
 /**
  * The app's alarm plane (#1254): every lifecycle fact is one `alarm{arm}` /
  * `alarm{fired}` chain row from the core writers, folded on read — no epochs,
- * no process memory. The committing `arm` verb below is what the composition
- * injects into `Bundle.alarmCapability`; the capability only guards purposes
- * and delegates here.
+ * no process memory. The app never commits an arm row itself (H3): the live
+ * registry below hands `Bundle.alarmCapability` each activation's budgeted
+ * entity arm verb — the ONE committing arm path — and refuses `not_live`
+ * when no activation is registered.
  *
  * Interim at this sha: scheduled occurrences are sent through the entity's
  * `alarm` door where unregistered purposes fold to recorded stale facts —
@@ -162,133 +163,38 @@ export function alarmChainReads(kernel: SessionKernel, sessionId: string): Core.
   };
 }
 
-const ARM_COMMIT_RETRIES = 5;
-
-/** The full occurrence record one scheduled arm sends through the entity's `alarm` door. */
-export interface ScheduledOccurrence {
-  readonly occurrenceId: string;
-  readonly purpose: string;
-  readonly alarmId: string;
-  readonly armSeq: number;
-  readonly sourceKey: string;
-  readonly payload: string;
-  readonly fireAt: number;
-}
-
-/** Everything a committed `alarm{arm}` row carries, surfaced to the native-source hook. */
-export interface ArmNotice {
-  readonly sessionId: string;
-  readonly purpose: string;
-  readonly alarmId: string;
-  readonly occurrenceId: string;
-  readonly armSeq: number;
-  readonly at: number | null;
-  readonly supersedes: string | null;
-  readonly payload: PlainObject;
-}
-
-export interface AlarmArmDeps {
-  readonly openKernel: (sessionId: string) => SessionKernel;
-  readonly clock: () => number;
-  readonly entropy: () => string;
-  /**
-   * Persisted DeliverAt send for a scheduled occurrence. `monitor.hit` arms
-   * are never scheduled — their native source resends the armed occurrence.
-   */
-  readonly schedule: (
-    sessionId: string,
-    occurrence: ScheduledOccurrence,
-  ) => Effect.Effect<void, Error>;
-  /** Observes every committed arm (native-source install/refresh/close hook). */
-  readonly onArm?: (notice: ArmNotice) => void;
-}
-
 /**
- * Out-of-band arm commit: rides the session's CURRENT activation authority
- * (never adopts a fence of its own) and retries a lost revision race against
- * concurrent turn commits. A session without an active writer is a wiring
- * defect at every call site (tool turn or wake), so it dies, not refuses.
+ * #1254 H3: the live-activation arm registry — the app side of the entity's
+ * ONE committing arm path. Each activation registers its budgeted arm verb
+ * through `SessionEntityPorts.onLive` (after fence adoption, released at
+ * passivation); the capability's app-side verbs delegate through `arm`. A
+ * session with no live activation refuses `not_live` — the app never commits
+ * an arm row of its own.
  */
-export function createAlarmArmVerb(deps: AlarmArmDeps): (sessionId: string) => Bundle.ArmVerb {
-  return (sessionId) => (input) =>
-    Effect.gen(function* () {
-      const kernel = deps.openKernel(sessionId);
-      const alarmId = input.alarmId ?? deps.entropy();
-      const committed = yield* commitArm(kernel, sessionId, { ...input, alarmId }, deps.clock);
-      if (input.at !== null && input.purpose !== Bundle.MONITOR_HIT)
-        yield* deps.schedule(sessionId, {
-          occurrenceId: committed.occurrenceId,
-          purpose: input.purpose,
-          alarmId,
-          armSeq: committed.armSeq,
-          sourceKey: input.sourceKey,
-          payload: JSON.stringify(input.payload),
-          fireAt: input.at,
-        }).pipe(Effect.orDie);
-      deps.onArm?.({
-        sessionId,
-        purpose: input.purpose,
-        alarmId,
-        occurrenceId: committed.occurrenceId,
-        armSeq: committed.armSeq,
-        at: input.at,
-        supersedes: input.supersedes ?? null,
-        payload: input.payload,
-      });
-      return { alarmId, occurrenceId: committed.occurrenceId, armSeq: committed.armSeq };
-    });
+export interface LiveArmRegistry {
+  /** Bound as `SessionEntityPorts.onLive`; returns the passivation release. */
+  readonly onLive: (sessionId: string, verbs: { readonly arm: Core.ArmVerb }) => () => void;
+  /** The arm verb `Bundle.alarmCapability` composes: delegates to the live activation. */
+  readonly arm: (sessionId: string) => Bundle.ArmVerb;
 }
 
-function commitArm(
-  kernel: SessionKernel,
-  sessionId: string,
-  input: {
-    readonly purpose: string;
-    readonly at: number | null;
-    readonly supersedes?: string;
-    readonly alarmId: string;
-    readonly sourceKey: string;
-    readonly payload: PlainObject;
-  },
-  clock: () => number,
-  retries = ARM_COMMIT_RETRIES,
-): Effect.Effect<{ occurrenceId: string; armSeq: number }, never> {
-  return Effect.suspend(() => {
-    const row = kernel.row(sessionId);
-    if (row.fenceOwner === null)
-      return Effect.die(new Error(`alarm arm refused: ${sessionId} has no active writer`));
-    const armSeq = row.revision + 1;
-    const { action, occurrenceId } = Core.armAction({
-      parentId: kernel.latestAction(sessionId)?.id ?? null,
-      sessionId,
-      purpose: input.purpose,
-      at: input.at,
-      supersedes: input.supersedes ?? null,
-      alarmId: input.alarmId,
-      sourceKey: input.sourceKey,
-      payload: input.payload,
-      armSeq,
-      ts: clock(),
-    });
-    return kernel
-      .commit({
-        sessionId,
-        owner: row.fenceOwner,
-        fence: row.fence,
-        now: clock(),
-        expectedRevision: row.revision,
-        actions: [action],
-        state: row.state,
-      })
-      .pipe(
-        Effect.as({ occurrenceId, armSeq }),
-        Effect.catch((error) =>
-          retries > 0 && error._tag === "CommitRefused"
-            ? commitArm(kernel, sessionId, input, clock, retries - 1)
-            : Effect.die(error),
-        ),
-      );
-  });
+export function createLiveArmRegistry(): LiveArmRegistry {
+  const live = new Map<string, Core.ArmVerb>();
+  return {
+    onLive: (sessionId, verbs) => {
+      live.set(sessionId, verbs.arm);
+      return () => {
+        if (live.get(sessionId) === verbs.arm) live.delete(sessionId);
+      };
+    },
+    arm: (sessionId) => (input) =>
+      Effect.suspend(() => {
+        const verb = live.get(sessionId);
+        return verb === undefined
+          ? Effect.fail(new Core.ArmRefused({ code: "not_live" }))
+          : verb(input);
+      }),
+  };
 }
 
 const RETIRED_STATUS: Record<string, WatchState["status"]> = {

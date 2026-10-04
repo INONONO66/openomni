@@ -341,6 +341,17 @@ export interface SessionEntityPorts {
     sessionId: string,
     occurrence: import("./alarm").AlarmFired,
   ) => Effect.Effect<void>;
+  /**
+   * #1254 H3: live-activation hook. Called once per activation (after fence
+   * adoption, before the armed resend) with the entity's budgeted `arm` verb
+   * — the ONE committing arm path; app-side capability verbs delegate to it
+   * and refuse `not_live` when no activation is registered. The returned
+   * release runs at passivation. Absent means no app-side arm path exists.
+   */
+  readonly onLive?: (
+    sessionId: string,
+    verbs: { readonly arm: import("./alarm").ArmVerb },
+  ) => () => void;
 }
 
 // ─── from controller-state (#1247) ───

@@ -1,20 +1,20 @@
 import { expect, test } from "bun:test";
 import { type Bundle, Core } from "@openomni/agent";
-import { Effect, Exit } from "effect";
+import { Effect } from "effect";
 import {
   alarmChainReads,
-  createAlarmArmVerb,
+  createLiveArmRegistry,
   foldAlarmChains,
   watchStateOf,
-  type ArmNotice,
-  type ScheduledOccurrence,
 } from "../src/composition/alarm-plane";
-import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { runEffect } from "./helpers/effect";
-import { alarmPortsFixture, watchFixture } from "./helpers/watch-fixture";
-
-const CommitRefused = Core.CommitRefused;
-const AgentFailure = Core.AgentFailure;
+import {
+  alarmPortsFixture,
+  fixtureEntityArmVerb,
+  watchFixture,
+  type FixtureArmNotice,
+  type FixtureScheduledOccurrence,
+} from "./helpers/watch-fixture";
 
 const OWNER = "alarm-plane-owner";
 const SESSION = "alarm-plane-session";
@@ -27,26 +27,26 @@ const watchSpec = (notificationLimit: number) => ({
 
 interface Plane {
   readonly state: Awaited<ReturnType<typeof watchFixture>>;
-  readonly scheduled: ScheduledOccurrence[];
-  readonly notices: ArmNotice[];
+  readonly scheduled: FixtureScheduledOccurrence[];
+  readonly notices: FixtureArmNotice[];
   readonly arm: (sessionId: string) => Bundle.ArmVerb;
 }
 
-async function armFixture(openKernel?: (sessionId: string) => SessionKernel): Promise<Plane> {
+async function armFixture(): Promise<Plane> {
   const state = await watchFixture(SESSION, OWNER);
-  const scheduled: ScheduledOccurrence[] = [];
-  const notices: ArmNotice[] = [];
-  const arm = createAlarmArmVerb({
-    openKernel: openKernel ?? state.plane.openKernel,
+  const scheduled: FixtureScheduledOccurrence[] = [];
+  const notices: FixtureArmNotice[] = [];
+  const arm = fixtureEntityArmVerb({
+    openKernel: state.plane.openKernel,
     clock: () => 1000,
     entropy: () => "minted",
-    schedule: (_sessionId, occurrence) => Effect.sync(() => void scheduled.push(occurrence)),
+    schedule: (_sessionId, occurrence) => void scheduled.push(occurrence),
     onArm: (notice) => notices.push(notice),
   });
   return { state, scheduled, notices, arm };
 }
 
-test("the arm verb commits one chain row, schedules non-monitor purposes, and notifies onArm", async () => {
+test("the fixture entity verb commits one chain row, schedules non-monitor purposes, and notifies onArm", async () => {
   const { state, scheduled, notices, arm } = await armFixture();
   try {
     const hit = await runEffect(
@@ -111,64 +111,34 @@ test("the arm verb commits one chain row, schedules non-monitor purposes, and no
   }
 });
 
-test("the arm verb retries a lost revision race and dies on a non-race commit failure", async () => {
-  const base = await watchFixture(SESSION, OWNER);
-  try {
-    let commits = 0;
-    const racedCommit: SessionKernel["commit"] = (input) => {
-      commits += 1;
-      if (commits === 1) {
-        const row = base.kernel.row(input.sessionId);
-        return Effect.fail(
-          new CommitRefused({
-            reason: "revision",
-            currentFence: row.fence,
-            currentRevision: row.revision + 1,
-            expectedRevision: input.expectedRevision,
-            fence: input.fence,
-            sessionId: input.sessionId,
-          }),
-        );
-      }
-      return base.kernel.commit(input);
-    };
-    const racedKernel: SessionKernel = { ...base.kernel, commit: racedCommit };
-    const raced = await armFixture(() => racedKernel);
-    const armed = await runEffect(
-      raced.arm(SESSION)({
-        purpose: "monitor.hit",
-        at: 1000,
-        alarmId: "retry",
-        sourceKey: "monitor",
-        payload: { spec: watchSpec(2), notifications: 0 },
-      }),
-    );
-    expect(commits).toBe(2);
-    expect(foldAlarmChains(base.kernel, SESSION).get("retry")?.latest.occurrenceId).toBe(
-      armed.occurrenceId,
-    );
-
-    const brokenKernel: SessionKernel = {
-      ...base.kernel,
-      commit: () => Effect.fail(new AgentFailure({ operation: "commit", cause: "disk full" })),
-    };
-    const broken = await armFixture(() => brokenKernel);
-    const exit = await runEffect(
-      Effect.exit(
-        broken.arm(SESSION)({
-          purpose: "monitor.hit",
-          at: 1000,
-          alarmId: "broken",
-          sourceKey: "monitor",
-          payload: {},
-        }),
-      ),
-    );
-    expect(Exit.isFailure(exit)).toBe(true);
-    expect(broken.notices).toEqual([]);
-  } finally {
-    base.plane.close();
-  }
+test("the live arm registry delegates to the registered activation verb and refuses not_live otherwise (H3)", async () => {
+  const registry = createLiveArmRegistry();
+  const armInput = {
+    purpose: "monitor.hit",
+    at: 1000,
+    alarmId: "watch-1",
+    sourceKey: "monitor",
+    payload: {},
+  };
+  // No live activation: the app path commits nothing and refuses typed.
+  const refused = await runEffect(Effect.flip(registry.arm(SESSION)(armInput)));
+  expect(refused.code).toBe("not_live");
+  // A registered activation's verb is the one committing path.
+  const verbOf = (occurrenceId: string): Core.ArmVerb => (input) =>
+    Effect.succeed({ alarmId: input.alarmId ?? "minted", occurrenceId, armSeq: 1 });
+  const release = registry.onLive(SESSION, { arm: verbOf("occ-1") });
+  expect((await runEffect(registry.arm(SESSION)(armInput))).occurrenceId).toBe("occ-1");
+  // Another session stays not_live.
+  const other = await runEffect(Effect.flip(registry.arm("other-session")(armInput)));
+  expect(other.code).toBe("not_live");
+  // Passivation releases the verb.
+  release();
+  expect((await runEffect(Effect.flip(registry.arm(SESSION)(armInput)))).code).toBe("not_live");
+  // A stale release (prior activation) never evicts the newer registration.
+  const first = registry.onLive(SESSION, { arm: verbOf("occ-old") });
+  registry.onLive(SESSION, { arm: verbOf("occ-new") });
+  first();
+  expect((await runEffect(registry.arm(SESSION)(armInput))).occurrenceId).toBe("occ-new");
 });
 
 test("the chain fold pages full history and feeds the chain-guard reads", async () => {

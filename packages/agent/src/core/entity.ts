@@ -1064,6 +1064,12 @@ export function createSessionEntityLayer(drainConfig: AlarmDrainConfig) {
       // Registered before the writer's own finalizer never runs — finalizers
       // are LIFO, so this runs after the queue drain and before store close.
       yield* Effect.addFinalizer(() => armResumeOnPassivation(handle));
+      // #1254 H3: hand this activation's budgeted arm verb to the composition
+      // root — the ONE committing arm path the app's capability verbs
+      // delegate to. Registered before the armed resend so a send-refusal
+      // retire never races the registration window; released at passivation.
+      const releaseLive = env.ports.onLive?.(sessionId, { arm: entityArmVerb(handle) });
+      if (releaseLive !== undefined) yield* Effect.addFinalizer(() => Effect.sync(releaseLive));
       // #1254 S3: restore scheduling — resend every armed occurrence (forked,
       // exactly once per activation).
       yield* resendArmedAlarms(handle);

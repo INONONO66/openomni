@@ -188,7 +188,7 @@ export interface AlarmFired {
 export class ArmRefused extends Schema.TaggedError<ArmRefused>(
   "@openomni/agent/core/ArmRefused",
 )("ArmRefused", {
-  code: Schema.Literals(["alarm_budget", "unknown_purpose", "reserved_purpose"]),
+  code: Schema.Literals(["alarm_budget", "unknown_purpose", "reserved_purpose", "not_live"]),
 }) {}
 
 /** The arm verb a capability schedules through; never a direct journal append. */

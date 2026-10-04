@@ -249,6 +249,9 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
       requestDomainRevisions: (request) => resolve().requestDomainRevisions?.(request) ?? {},
       sendAlarm: (sessionId, occurrence) =>
         Effect.suspend(() => resolve().sendAlarm?.(sessionId, occurrence) ?? Effect.void),
+      // #1254 H3: live-arm registration delegates late like the other ports.
+      // An activation awaits `ready` before any port call, so boot has bound.
+      onLive: (sessionId, verbs) => resolve().onLive?.(sessionId, verbs) ?? (() => undefined),
       // #1254 S4: capability + keep-alive observation delegate late like the
       // turn port — purposes resolve against whatever boot bound (none = []).
       alarmCapability: {
