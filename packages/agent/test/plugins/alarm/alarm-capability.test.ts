@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { runTestSync } from "../../helpers/isolated";
-import { Effect } from "effect";
+import { Effect, Logger } from "effect";
 import type { Alarm } from "@openomni/protocol";
 import { AlarmComposeError, composeAlarmPurposes } from "../../../src/core/alarm";
 import {
@@ -517,6 +517,49 @@ describe("verbs", () => {
       [MONITOR_HIT, null, "watch-9", "occ-1"],
     ]);
     expect(calls[1]?.payload).toEqual({ reason: "create" });
+    expect(installs).toEqual([]);
+  });
+
+  test("a refused compensating retire is logged, never masks the original refusal, and the install still never runs (r2 H2)", () => {
+    const calls: ArmCall[] = [];
+    const installs: string[] = [];
+    const logged: string[] = [];
+    let armSeq = 0;
+    // Main arm commits; the timeout arm refuses; the compensating retire of
+    // the main chain (at: null) refuses too — the double-refusal branch.
+    const doubleRefusal: ArmVerb = (input) => {
+      calls.push(input);
+      if (input.purpose === MONITOR_TIMEOUT) return Effect.fail(new ArmRefused({ code: "alarm_budget" }));
+      if (input.at === null) return Effect.fail(new ArmRefused({ code: "stale_activation" }));
+      armSeq += 1;
+      return Effect.succeed({ alarmId: input.alarmId ?? "minted-alarm", occurrenceId: `occ-${armSeq}`, armSeq });
+    };
+    const warnings = Logger.make((options) => {
+      for (const item of Array.isArray(options.message) ? options.message : [options.message]) {
+        if (typeof item === "string" && options.logLevel === "Warn") logged.push(item);
+      }
+    });
+    const definition = capability({ arm: doubleRefusal, installs });
+    const timed: Alarm.WatchSpec = {
+      ...spec,
+      watch: { command: "make build", description: "build watch", timeout_ms: 60_000 },
+    };
+    const error = runTestSync(
+      Effect.flip(
+        definition.verbs.watch({ sessionId: "session-1", turnId: "turn-1", watchId: "watch-9", spec: timed, now: 1_000 }),
+      ).pipe(Effect.provide(Logger.layer([warnings]))),
+    );
+    expect(error).toBeInstanceOf(ArmRefused);
+    // The ORIGINAL refusal reaches the caller, not the compensation's.
+    expect((error as ArmRefused).code).toBe("alarm_budget");
+    expect(calls.map((call) => [call.purpose, call.at, call.alarmId])).toEqual([
+      [MONITOR_HIT, 1_000, "watch-9"],
+      [MONITOR_TIMEOUT, 61_000, "watch-9:timeout"],
+      [MONITOR_HIT, null, "watch-9"],
+    ]);
+    // Exactly one warning, carrying the injected sentinel code (no prose pin).
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain("stale_activation");
     expect(installs).toEqual([]);
   });
 
