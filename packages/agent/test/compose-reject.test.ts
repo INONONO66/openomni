@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Context, Effect } from "effect";
+import { Cause, Context, Effect, Exit } from "effect";
 import { z } from "zod";
 import type { PlainValue, PointId } from "@openomni/protocol";
 import {
@@ -11,7 +11,7 @@ import {
   type CapabilityDefinition,
   type SeamTag,
 } from "../src/core/capability";
-import { runTestPromise } from "./helpers/isolated";
+import { runTestExit, runTestPromise } from "./helpers/isolated";
 import { compose, COMPOSE_REJECTION_CODES, ComposeRefused } from "../src/core/compose";
 
 class SeamA extends Context.Service<SeamA, object>()("@openomni/agent/test/compose/A") {}
@@ -311,4 +311,13 @@ test("composition preserves install order across bundles: tools and rows merge i
   expect(generation.bundles).toEqual(["zeta", "alpha"]);
   expect(generation.tools.map((tool) => tool.name)).toEqual(["zeta__one", "alpha__one"]);
   expect(generation.rows.map((entry) => entry.id)).toEqual(["zeta/x#1", "alpha/x#1"]);
+});
+
+test("a defect inside compose stays a defect: only ComposeRefused crosses as the typed failure", async () => {
+  const exit = await runTestExit(compose({} as ReturnType<typeof Manifest.define>));
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (!Exit.isFailure(exit)) throw new Error("unreachable");
+  expect(Cause.hasFails(exit.cause)).toBe(false);
+  expect(Cause.hasDies(exit.cause)).toBe(true);
+  expect(Cause.squash(exit.cause)).toBeInstanceOf(TypeError);
 });
