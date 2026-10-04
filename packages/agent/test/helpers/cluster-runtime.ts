@@ -94,6 +94,16 @@ export interface TestClusterOptions {
     occurrence: { readonly occurrenceId: string; readonly purpose: string },
     receipt: { readonly outcome: "delivered" | "stale" },
   ) => void;
+  /**
+   * #1254 r3 M2: wraps the entity's forked DeliverAt forward. A test can HOLD
+   * a forwarded occurrence (return `Effect.void` instead of sending) and later
+   * release it through the explicit `sendAlarm` door — the deterministic way
+   * to order "the chain settled first, the parked occurrence arrived second"
+   * without racing the real clock.
+   */
+  readonly wrapSendAlarm?: (
+    send: NonNullable<SessionEntityPorts["sendAlarm"]>,
+  ) => NonNullable<SessionEntityPorts["sendAlarm"]>;
 }
 
 /** What the test turn port hands the pluggable runner for one admitted turn. */
@@ -289,6 +299,29 @@ export function makeTurnPort(
     }).pipe(Effect.orDie);
 }
 
+/** The entity port set one test cluster composes from its options. */
+function entityPorts(
+  options: TestClusterOptions,
+  forward: NonNullable<SessionEntityPorts["sendAlarm"]>,
+): SessionEntityEnv["ports"] {
+  return {
+    runTurn: makeTurnPort(
+      options.runner ?? resolvedRunner("ok"),
+      options.detachTurns,
+      options.clock ?? (() => Date.now()),
+    ),
+    ...(options.alarmCapability === undefined
+      ? {}
+      : { alarmCapability: options.alarmCapability }),
+    ...(options.onKeepAlive === undefined ? {} : { onKeepAlive: options.onKeepAlive }),
+    ...(options.ready === undefined ? {} : { ready: options.ready }),
+    ...(options.onRequestReady === undefined ? {} : { onRequestReady: options.onRequestReady }),
+    ...(options.onLive === undefined ? {} : { onLive: options.onLive }),
+    ...(options.onArmed === undefined ? {} : { onArmed: options.onArmed }),
+    sendAlarm: options.wrapSendAlarm === undefined ? forward : options.wrapSendAlarm(forward),
+  };
+}
+
 /** The composition-owned entity environment, scoped to one test runtime. */
 function entityEnvLayer(options: TestClusterOptions) {
   return Layer.effect(
@@ -297,6 +330,16 @@ function entityEnvLayer(options: TestClusterOptions) {
       // #1254 S3: the activation resend door — the entity's own persisted
       // Alarm RPC, exactly the production path (occurrence id = dedupe key).
       const makeClient = yield* SessionEntity.client;
+      const forward: NonNullable<SessionEntityPorts["sendAlarm"]> = (sessionId, occurrence) =>
+        makeClient(sessionId)
+          .Alarm(occurrence)
+          .pipe(
+            Effect.tap((receipt) =>
+              Effect.sync(() => options.onAlarmResend?.(sessionId, occurrence, receipt)),
+            ),
+            Effect.asVoid,
+            Effect.orDie,
+          );
       return yield* Effect.acquireRelease(
         Effect.sync(
           (): SessionEntityEnv => ({
@@ -309,33 +352,7 @@ function entityEnvLayer(options: TestClusterOptions) {
               });
               return options.wrapStore === undefined ? store : options.wrapStore(sessionId, store);
             },
-            ports: {
-              runTurn: makeTurnPort(
-                options.runner ?? resolvedRunner("ok"),
-                options.detachTurns,
-                options.clock ?? (() => Date.now()),
-              ),
-              ...(options.alarmCapability === undefined
-                ? {}
-                : { alarmCapability: options.alarmCapability }),
-              ...(options.onKeepAlive === undefined ? {} : { onKeepAlive: options.onKeepAlive }),
-              ...(options.ready === undefined ? {} : { ready: options.ready }),
-              ...(options.onRequestReady === undefined
-                ? {}
-                : { onRequestReady: options.onRequestReady }),
-              ...(options.onLive === undefined ? {} : { onLive: options.onLive }),
-              ...(options.onArmed === undefined ? {} : { onArmed: options.onArmed }),
-              sendAlarm: (sessionId, occurrence) =>
-                makeClient(sessionId)
-                  .Alarm(occurrence)
-                  .pipe(
-                    Effect.tap((receipt) =>
-                      Effect.sync(() => options.onAlarmResend?.(sessionId, occurrence, receipt)),
-                    ),
-                    Effect.asVoid,
-                    Effect.orDie,
-                  ),
-            },
+            ports: entityPorts(options, forward),
           }),
         ),
         (env) => Effect.sync(() => env.catalog.close()),

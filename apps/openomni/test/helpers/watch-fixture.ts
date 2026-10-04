@@ -251,8 +251,11 @@ export async function withEntityAlarmPorts<A>(
 
 /**
  * Bounded wait for the entity's forked DeliverAt forward: polls the durable
- * cluster mailbox until an Alarm envelope with `deliver_at` lands (the commit
- * is sync, the schedule send is a fork — this is the only async edge).
+ * cluster mailbox until an Alarm envelope with `deliver_at` lands. This is the
+ * ONE sanctioned waitUntil (r3 M2): no in-process event marks the envelope
+ * persist — `onArmed` fires at the journal commit BEFORE the forked send, and
+ * the send's RPC reply only arrives at `deliver_at` — so the cross-boundary
+ * sqlite row is the earliest observable fact.
  */
 export function awaitScheduled(catalogFile: string, deliverAt: number): Promise<void> {
   return waitUntil(

@@ -18,7 +18,7 @@ import { alarmCapability, watchPurposes, WatchRefused, type WatchInstallDeps } f
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
-import { clusterMessages, clusterTempDir, runCluster, sendAlarm, sendPrompt, sessionFileFor, waitUntil } from "../helpers/cluster-runtime";
+import { clusterTempDir, runCluster, sendAlarm, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-alarm-budget-");
@@ -591,8 +591,9 @@ test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retir
   const liveVerbs = new Map<string, ArmVerb>();
   const closed: string[] = [];
   const installs: string[] = [];
-  // A short REAL timeout: its DeliverAt envelope fires after the watch settled.
-  const TIMEOUT_MS = 1_500;
+  // A far-future timeout: the DeliverAt door alone would release it in an
+  // hour, so the TEST — not the wall clock — decides when it arrives (r3 M2).
+  const TIMEOUT_MS = 3_600_000;
   const spec: Alarm.WatchSpec = {
     watch: { command: "true", description: "timed", timeout_ms: TIMEOUT_MS },
     policyGeneration: 1,
@@ -636,11 +637,21 @@ test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retir
       catalog.close();
     }
   });
+  // r3 M2: HOLD the entity's forked DeliverAt forwards instead of racing them.
+  // The explicit `sendAlarm` sends below are then the ONLY envelopes under
+  // those occurrence ids, and each RPC ack — sent only after the corresponding
+  // fired-fact commit (messages.ts F4) — is the exact, bounded completion
+  // barrier. No polling, no wall-clock ordering.
+  const heldForwards: string[] = [];
   const outcome = await runCluster(
     {
       sessionsDir,
       catalogFile,
       alarmCapability: capability,
+      wrapSendAlarm: () => (_, occurrence) =>
+        Effect.sync(() => {
+          heldForwards.push(occurrence.alarmId);
+        }),
       onLive: (id, verbs) => {
         liveVerbs.set(id, verbs.arm);
         return () => {
@@ -651,7 +662,7 @@ test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retir
     Effect.gen(function* () {
       yield* sendPrompt(sessionId, `${sessionId}:m-1`, "hello");
       // The REAL watch verb arms the main chain and its timeout companion;
-      // the entity forwards the timeout through the durable DeliverAt door.
+      // both DeliverAt forwards are held by the wrapper above.
       const armNow = Date.now();
       const main = yield* capability.verbs.watch({
         sessionId,
@@ -662,8 +673,9 @@ test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retir
       });
       const timeoutRow = (yield* readArmed).find((row) => row.alarmId === "h5:timeout");
       if (timeoutRow === undefined) return yield* Effect.die(new Error("missing timeout row"));
-      // The exhausting native hit (budget 1) lands BEFORE the timeout fires:
-      // one prompt, then the handler retires the main chain AND the companion.
+      // The exhausting native hit (budget 1) retires the main chain AND the
+      // companion; the `delivered` ack arrives only after the fired fact and
+      // the retiring arms committed — the committed-retirement barrier.
       const hit = yield* sendAlarm(sessionId, {
         occurrenceId: main.occurrenceId,
         purpose: "monitor.hit",
@@ -676,30 +688,38 @@ test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retir
           hit: { content: "DONE", terminal: false, detail: "line:1" },
         }),
         fireAt: armNow,
-      });
-      // Bounded wait on the exact event: the parked timeout envelope delivers
-      // at its DeliverAt deadline and the entity acknowledges (processed).
-      yield* Effect.promise(() =>
-        waitUntil(
-          "timeout envelope processed",
-          () =>
-            clusterMessages(catalogFile, "Session").some(
-              (row) =>
-                row.tag === "Alarm" && row.deliver_at === timeoutRow.fireAt && row.processed === 1,
-            ),
-          20_000,
-        ),
-      );
-      return { main, timeoutRow, hit };
+      }).pipe(Effect.timeout("15 seconds"), Effect.orDie);
+      // Only AFTER that committed retirement: release the held timeout
+      // occurrence through the entity\u2019s alarm RPC. `fireAt: armNow` makes the
+      // envelope due NOW — the chain guard folds on occurrenceId/alarmId/
+      // armSeq, not the instant — and the `stale` ack follows the committed
+      // `<occurrenceId>:stale` fact.
+      const late = yield* sendAlarm(sessionId, {
+        occurrenceId: timeoutRow.occurrenceId,
+        purpose: timeoutRow.purpose,
+        alarmId: timeoutRow.alarmId,
+        armSeq: timeoutRow.armSeq,
+        sourceKey: timeoutRow.sourceKey,
+        payload: timeoutRow.payload,
+        fireAt: armNow,
+      }).pipe(Effect.timeout("15 seconds"), Effect.orDie);
+      return { main, timeoutRow, hit, late, armNow };
     }),
   );
   expect(outcome.hit).toMatchObject({ outcome: "delivered" });
-  expect(outcome.timeoutRow.fireAt).toBeGreaterThan(Date.now() - 60_000);
+  // The retired companion\u2019s late delivery folded to the recorded stale fact.
+  expect(outcome.late).toMatchObject({ outcome: "stale" });
+  // The timeout was armed at exactly `now + timeout_ms` (injected instants,
+  // no elapsed-wall-clock assertion — r3 M2).
+  expect(outcome.timeoutRow.fireAt).toBe(outcome.armNow + TIMEOUT_MS);
+  // The entity forwarded both committed chains to the (held) DeliverAt door.
+  expect([...heldForwards].sort()).toEqual(["h5", "h5:timeout"]);
   expect(installs).toEqual(["h5"]);
-  // The exhausted hit's handler closed the native source exactly once.
+  // The exhausted hit\u2019s handler closed the native source exactly once; the
+  // stale timeout fold ran zero handler effects.
   expect(closed).toEqual(["h5"]);
-  // Durable facts: zero armed rows survive; exactly ONE prompt committed; the
-  // late timeout delivery folded to fired{stale} with zero handler effects.
+  // Durable facts: zero watch-plane rows survive; exactly ONE prompt
+  // committed; the late timeout delivery folded to fired{stale}.
   const after = await runAgent(
     Effect.sync(() => {
       const catalog = openCatalogStore(catalogFile, { now: () => 1 });
@@ -718,7 +738,7 @@ test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retir
       }
     }),
   );
-  // Zero watch-plane rows survive (the entity's own passivation `resume`
+  // Zero watch-plane rows survive (the entity\u2019s own passivation `resume`
   // chain is loop-reserved bookkeeping, not a monitor arm).
   expect(after.armed.filter((row) => row.sourceKey === "monitor")).toEqual([]);
   expect(after.hitPrompt?.kind).toBe("prompt");
