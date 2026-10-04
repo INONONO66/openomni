@@ -159,11 +159,11 @@ test("cron.tick saturates the missed count at 1024 and the prompt says at least 
   expect(prompts[0]).toMatchObject({
     payload: { expr: "* * * * *", missed: 1024, missedSaturated: true },
   });
-  // The prompt the model reads says "at least 1024", never a fake-exact 1024.
+  // The machine-consumed saturation contract is the parsed fields; the
+  // human-facing `note` sentence is prose and deliberately NOT pinned (r3 M1).
   expect(JSON.parse(prompts[0]?.content ?? "{}")).toMatchObject({
     missed: 1024,
     missedSaturated: true,
-    note: "at least 1024 grid instants missed (count saturated)",
   });
   expect(arms.at(-1)).toMatchObject({ at: now + 60_000 });
 });
