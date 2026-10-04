@@ -43,7 +43,7 @@ import {
   MachinesFailure,
   type MachineHost,
 } from "@openomni/machines";
-import { traceIdFromUuid, type Channel } from "@openomni/protocol";
+import { Alarm, traceIdFromUuid, type Channel } from "@openomni/protocol";
 import { desiredChannels, materializePersons } from "./provisioning/declared";
 import { type ChannelSupervisor, createChannelSupervisor } from "./provisioning/supervisor";
 import type { ProvisionPort } from "./provisioning/channels";
@@ -68,16 +68,11 @@ import {
   requestAuthorityKernel,
   rescanOccurrences,
   sessionFilePath,
-  sessionTimerPort,
 } from "./composition/cluster-runtime";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
-import {
-  watchFiredHook,
-  watchOccurrenceKey,
-  watchTimeoutHook,
-} from "./composition/monitor-ports";
+import { watchOccurrenceKey } from "./composition/monitor-ports";
 import {
   acquireAppResource,
   channelRequests,
@@ -611,10 +606,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
             request.deadline === undefined
               ? Effect.void
               : sendAlarm(request.sessionId, {
-                  occurrenceId: `${request.requestId}:deadline`,
+                  // #1254 S4: the request authority commits the deadline arm
+                  // (alarmId `<requestId>:deadline`, armSeq 1) in the open
+                  // decision batch; this send forwards that SAME minted
+                  // occurrence, so the chain guard recognizes it as fresh.
+                  occurrenceId: Alarm.occurrenceId(
+                    request.sessionId,
+                    `${request.requestId}:deadline`,
+                    1,
+                    "deadline",
+                  ),
                   purpose: "deadline",
                   alarmId: `${request.requestId}:deadline`,
-                  armSeq: 0,
+                  armSeq: 1,
                   sourceKey: "deadline",
                   payload: JSON.stringify({ requestId: request.requestId }),
                   fireAt: request.deadline,
@@ -712,15 +716,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
               resolvedRuntime,
               services.scope,
             )(input),
-      timers: sessionTimerPort({
-        requestDomainRevisions: domainRevisions,
-        watchFired: watchFiredHook({
-          closeSource: (watchId) => void watchSources.close(watchId),
-        }),
-        watchTimeout: watchTimeoutHook({
-          closeSource: (watchId) => void watchSources.close(watchId),
-        }),
-      }),
       requestDomainRevisions: domainRevisions,
       // #1254 S3: an activation resends its armed occurrences through the
       // entity's own persisted Alarm door (occurrence id = cluster dedupe).

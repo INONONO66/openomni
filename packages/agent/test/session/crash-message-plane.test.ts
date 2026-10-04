@@ -380,17 +380,20 @@ function recoverRetryAlarm(witness: Witness) {
     { phase: "intent", attempt: 1 },
     { phase: "result" },
   ]);
-  const alarmId = `${nth(attempts, 0).id}:retry:1`;
-  const armed = actions().find((action) => action.id === alarmId);
+  // #1254 S4: the retry port arms the occurrence chain `<attemptId>:retry`;
+  // the arm row id is `<chain>:arm:1` and the effect names the minted
+  // occurrence.
+  const alarmId = `${nth(attempts, 0).id}:retry`;
+  const armed = actions().find((action) => action.id === `${alarmId}:arm:1`);
   expect(armed).toMatchObject({
     kind: "alarm",
-    effect: {
-      value: { status: "armed", spec: { kind: "retry.scheduled", attempt: 1, notBefore: 100 } },
+    intent: {
+      value: { op: "arm", purpose: "retry", at: 100, payload: { attempt: 1, reason: "transient_error" } },
     },
   });
-  expect(z.object({ reason: z.string() }).parse(effectOf(LedgerAction.Node.parse(armed)).spec).reason).toBe(
-    "transient_error",
-  );
+  const occurrenceId = z.object({ occurrenceId: z.string() }).parse(
+    effectOf(LedgerAction.Node.parse(armed)),
+  ).occurrenceId;
   expect(pendingInbox()).toEqual([]);
   // Redelivered RetryScheduled: the settled attempt makes the delivery a chain-
   // guarded no-op; a second delivery no-ops identically (never a cancel CAS).
@@ -424,14 +427,13 @@ function recoverRetryAlarm(witness: Witness) {
         );
       }),
   };
-  expect(alarmDisposition(reads, { alarmId, occurrenceId: alarmId })).toEqual({
+  // A foreign occurrence of the same chain is superseded by the live arm;
+  // the live occurrence itself still runs (the wait was lost, not the arm).
+  expect(alarmDisposition(reads, { alarmId, occurrenceId: `${alarmId}:bogus` })).toEqual({
     op: "skip",
-    reason: "unknown",
+    reason: "superseded",
   });
-  expect(alarmDisposition(reads, { alarmId, occurrenceId: alarmId })).toEqual({
-    op: "skip",
-    reason: "unknown",
-  });
+  expect(alarmDisposition(reads, { alarmId, occurrenceId })).toEqual({ op: "run" });
   expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
   expect(pendingInbox()).toEqual([]);

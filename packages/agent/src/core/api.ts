@@ -12,6 +12,7 @@ export { RunEvents } from "./run-events";
 // #1254 alarm seam: exactly what an alarm capability needs; frozen at S1 —
 // later steps add, never rename.
 export {
-  ArmRefused, AlarmWakeError, RESERVED_PURPOSES,
+  ArmRefused, AlarmWakeError, RESERVED_PURPOSES, composeAlarmPurposes, AlarmComposeError,
   type AlarmCapability, type AlarmWakeContext, type ArmVerb, type AlarmFired, type AlarmWakeOutcome,
+  type AlarmPurposeRegistry,
 } from "./alarm";

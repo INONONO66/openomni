@@ -343,19 +343,26 @@ test("the default retry port commits the retry.scheduled alarm before the wait a
   const actions = sessionTree(isolatedLedger().kernel, recording.identity.sessionId);
   const attemptIntents = intents(actions, "attempt");
   expect(attemptIntents).toHaveLength(2);
-  const alarmId = `${attemptIntents[0]?.id}:retry:1`;
-  const armed = LedgerAction.Node.parse(actions.find((action: LedgerAction.Node) => action.id === alarmId));
+  // #1254 S4: the chain-backed retry port arms `<attemptId>:retry` (arm:1)
+  // before the wait; the settled attempt retires the chain (arm:2, at: null).
+  const alarmId = `${attemptIntents[0]?.id}:retry`;
+  const armed = LedgerAction.Node.parse(actions.find((action: LedgerAction.Node) => action.id === `${alarmId}:arm:1`));
   expect(armed.kind).toBe("alarm");
-  expect(Alarm.RetrySchedule.parse(effectRecord(armed).spec)).toEqual({
-    kind: "retry.scheduled",
-    attempt: 1,
-    reason: "transient_error",
-    notBefore: 100,
+  expect(armed.intent.value).toMatchObject({
+    op: "arm",
+    purpose: "retry",
+    at: 100,
+    payload: { attempt: 1, reason: "transient_error" },
   });
   const secondIntent = LedgerAction.Node.parse(attemptIntents[1]);
-  // Record before act: the armed schedule precedes the re-attempt. W5.2: the
-  // cancel/settle plane is gone (supersede happens at delivery), so the single
-  // armed row plus exactly one re-attempt is the consumed-once evidence.
+  // Record before act: the armed schedule precedes the re-attempt; the retire
+  // arm is the consumed-once evidence (supersede still folds at delivery).
   expect(armed.ordinal).toBeLessThan(secondIntent.ordinal);
-  expect(actions.filter((action: LedgerAction.Node) => action.kind === "alarm")).toHaveLength(1);
+  const alarmRows = actions.filter((action: LedgerAction.Node) => action.kind === "alarm");
+  expect(alarmRows.map((action: LedgerAction.Node) => action.id)).toEqual([
+    `${alarmId}:arm:1`,
+    `${alarmId}:arm:2`,
+  ]);
+  const retire = LedgerAction.Node.parse(alarmRows[1]);
+  expect(retire.intent.value).toMatchObject({ op: "arm", at: null });
 }))));

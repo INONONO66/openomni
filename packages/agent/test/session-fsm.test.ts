@@ -366,7 +366,14 @@ describe("T12/T13 request source x event x authority product", () => {
     expect(result.resolution).toBe("late_unknown");
     expect(result.receive).toBeUndefined();
     expect(result.request?.state).toBe("expired");
-    expect(result.actions.map((action) => action.ts)).toEqual([request.deadline, request.deadline]);
+    // #1254 S4: the terminal transition also retires the deadline alarm chain
+    // (an `at: null` arm row) in the same decision batch.
+    expect(result.actions.map((action) => action.ts)).toEqual([
+      request.deadline,
+      request.deadline,
+      request.deadline,
+    ]);
+    expect(result.actions.at(-1)?.id).toBe(`${request.requestId}:deadline:arm:2`);
   });
 });
 

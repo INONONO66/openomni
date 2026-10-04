@@ -16,7 +16,7 @@ import {
 } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
-import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
+import { FenceRefused, LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
 import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "./services";
 import type { CatalogStore } from "./catalog.js";
 import type { ArmedAlarmRow, SessionStore } from "./session-file/index.js";
@@ -74,6 +74,8 @@ export interface SessionKernelContext {
   readonly childSessionsPage: CatalogStore["childSessionsPage"];
   /** #1254 S3: the catalog `has_armed` flag write (ordering law in `commitIn`). */
   readonly markArmed?: (sessionId: string, armed: boolean) => void;
+  /** #1254 S4: the catalog's authoritative fence for the rotate/adopt window check. */
+  readonly catalogFence?: (sessionId: string) => number | undefined;
 }
 
 export interface MaterializeInput {
@@ -168,6 +170,19 @@ function commitIn(
     return delta === undefined ? [] : [delta];
   });
   return Effect.suspend(() => {
+    // #1254 S4 rotate/adopt window: a writer whose fence is already behind the
+    // catalog's rotation lost the activation race — refuse BEFORE the session
+    // file write, so an old executor can never interleave a commit between a
+    // new activation's rotate and adopt.
+    const catalogFence = context.catalogFence?.(input.sessionId);
+    if (catalogFence !== undefined && catalogFence > input.fence)
+      return Effect.fail(new FenceRefused({
+        sessionId: input.sessionId,
+        reason: "stale",
+        holder: null,
+        fence: catalogFence,
+        expiresAt: null,
+      }));
     if (deltas.some((delta) => delta.op === "upsert"))
       context.markArmed?.(input.sessionId, true);
     return sessionWritesIn(context).pipe(
@@ -963,5 +978,6 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
     writable: () => true,
     childSessionsPage: (parentId, afterId, limit) => catalog.childSessionsPage(parentId, afterId, limit),
     markArmed: (sessionId, armed) => catalog.markArmed(sessionId, armed),
+    catalogFence: (sessionId) => catalog.sessionIndex(sessionId)?.fence,
   });
 }

@@ -287,43 +287,22 @@ export interface SessionEntityTurnInput {
   readonly detach: (body: Effect.Effect<void, SessionError>) => Effect.Effect<void, SessionError>;
 }
 
-export interface SessionEntityTimerContext {
-  readonly authority: SessionEntityAuthority;
-  readonly kernel: SessionKernel;
-  readonly now: number;
-}
-
-export type SessionTimerOutcome = "applied" | "noop";
-
-/** Chain-guarded timer folds (plan C2/F2); superseded wakes resolve to `noop`. */
-interface SessionEntityTimerPort {
-  readonly retryScheduled: (
-    context: SessionEntityTimerContext,
-    payload: { readonly alarmId: string; readonly attempt: number; readonly notBefore: number },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-  readonly deadline: (
-    context: SessionEntityTimerContext,
-    payload: { readonly requestId: string; readonly deadlineAt: number },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-  readonly watchFired: (
-    context: SessionEntityTimerContext,
-    payload: {
-      readonly watchId: string;
-      readonly epoch: number;
-      readonly sourceKey: string;
-      readonly batch: string;
-    },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-  readonly watchTimeout: (
-    context: SessionEntityTimerContext,
-    payload: { readonly watchId: string; readonly epoch: number; readonly fireAt: number },
-  ) => Effect.Effect<SessionTimerOutcome, SessionError>;
-}
-
 export interface SessionEntityPorts {
   /** Runs one admitted decision to a durable boundary; the ack follows its commits. */
   readonly runTurn: (input: SessionEntityTurnInput) => Effect.Effect<void, SessionError>;
-  readonly timers: SessionEntityTimerPort;
+  /**
+   * #1254 S4: the composed non-reserved alarm capability. A delivered
+   * occurrence whose purpose is neither loop-reserved nor declared here folds
+   * to a recorded `fired{stale}` fact with zero execution. Absent means no
+   * capability purposes are registered.
+   */
+  readonly alarmCapability?: import("./alarm").AlarmCapability;
+  /**
+   * #1254 S4: observation hook for the entity's cluster keep-alive toggles
+   * around a detached turn (true while a turn runs). Test seam; the real
+   * keep-alive rides `Entity.keepAlive`.
+   */
+  readonly onKeepAlive?: (enabled: boolean) => void;
   /**
    * The input registration table `deliver` admits against (#1253): the core
    * registers `prompt` and `signal`; the action capability registers `action`.

@@ -1,41 +1,88 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Fiber, Option } from "effect";
+import type { LedgerAction } from "@openomni/protocol";
 import { runAgent } from "../helpers/executor";
 import { TestClock } from "effect/testing";
 import { CommitRefused } from "../../src/core/store/errors";
 import { CommitFailed } from "../../src/core/failure";
 import type { ExecutorOptions } from "../../src/core/gate/decide";
-import { createRetryAlarmPort } from "../../src/core/alarm";
+import { createRetryAlarmPort, type AlarmFired } from "../../src/core/alarm";
+import type { RetryAlarmDeps } from "../../src/core/alarm-ports";
 
-// Type-level drop-in proof: the timer port replaces the alarm-table port.
+// Type-level drop-in proof: the chain-backed port replaces the timer port.
 type RetryPortSlot = NonNullable<ExecutorOptions["retryAlarm"]>;
 const _dropIn: RetryPortSlot = createRetryAlarmPort({
-  commitScheduled: () => Effect.void,
+  sessionId: "s",
+  commitArm: () => Effect.void,
   send: () => Effect.void,
   clock: () => 0,
 });
 void _dropIn;
 
-describe("retry timer port over DeliverAt", () => {
-  const schedule = { id: "attempt-1:retry:1", attempt: 1, reason: "transient_error", fireAt: 150 };
+interface Recorded {
+  readonly commits: LedgerAction.Append[];
+  readonly sent: AlarmFired[];
+  readonly order: string[];
+}
 
-  test("arm persists chain evidence strictly before the rearm message", () =>
+function recordingDeps(clock: () => number): { readonly deps: RetryAlarmDeps } & Recorded {
+  const commits: LedgerAction.Append[] = [];
+  const sent: AlarmFired[] = [];
+  const order: string[] = [];
+  return {
+    commits,
+    sent,
+    order,
+    deps: {
+      sessionId: "s1",
+      commitArm: (action) =>
+        Effect.sync(() => {
+          commits.push(action);
+          order.push(`commit:${action.id}`);
+        }),
+      send: (occurrence) =>
+        Effect.sync(() => {
+          sent.push(occurrence);
+          order.push(`send:${occurrence.alarmId}:${occurrence.fireAt}`);
+        }),
+      clock,
+    },
+  };
+}
+
+describe("retry alarm port over the alarm chain", () => {
+  const schedule = { id: "attempt-1", attempt: 1, reason: "transient_error", fireAt: 150 };
+
+  test("arm commits the chain arm row strictly before the DeliverAt send", () =>
     runAgent(
       Effect.gen(function* () {
-        const order: string[] = [];
-        const port = createRetryAlarmPort({
-          commitScheduled: (input) =>
-            Effect.sync(() => {
-              order.push(`commit:${input.id}:${input.notBefore}`);
-            }),
-          send: (message) =>
-            Effect.sync(() => {
-              order.push(`send:${message.alarmId}:${message.notBefore}`);
-            }),
-          clock: () => 100,
-        });
+        const recorded = recordingDeps(() => 100);
+        yield* createRetryAlarmPort(recorded.deps).arm(schedule);
+        expect(recorded.order).toEqual(["commit:attempt-1:retry:arm:1", "send:attempt-1:retry:150"]);
+        const occurrence = recorded.sent[0];
+        expect(occurrence?.purpose).toBe("retry");
+        expect(occurrence?.alarmId).toBe("attempt-1:retry");
+        expect(occurrence?.armSeq).toBe(1);
+        expect(occurrence?.fireAt).toBe(150);
+        // The committed arm names the SAME occurrence the send carries.
+        const effect = recorded.commits[0]?.effect.value;
+        expect(effect).toEqual({ occurrenceId: occurrence?.occurrenceId ?? "" });
+      }),
+    ));
+
+  test("a second attempt supersedes the first attempt's occurrence", () =>
+    runAgent(
+      Effect.gen(function* () {
+        const recorded = recordingDeps(() => 100);
+        const port = createRetryAlarmPort(recorded.deps);
         yield* port.arm(schedule);
-        expect(order).toEqual(["commit:attempt-1:retry:1:150", "send:attempt-1:retry:1:150"]);
+        yield* port.arm({ ...schedule, attempt: 2, fireAt: 300 });
+        expect(recorded.commits.map((action) => action.id)).toEqual([
+          "attempt-1:retry:arm:1",
+          "attempt-1:retry:arm:3",
+        ]);
+        const second = recorded.commits[1]?.intent.value as { supersedes?: string };
+        expect(second.supersedes).toBe(recorded.sent[0]?.occurrenceId ?? "");
       }),
     ));
 
@@ -54,7 +101,8 @@ describe("retry timer port over DeliverAt", () => {
           }),
         });
         const port = createRetryAlarmPort({
-          commitScheduled: () => Effect.fail(refusal),
+          sessionId: "s1",
+          commitArm: () => Effect.fail(refusal),
           send: () =>
             Effect.sync(() => {
               sent += 1;
@@ -66,20 +114,24 @@ describe("retry timer port over DeliverAt", () => {
       }),
     ));
 
-  test("settle is a no-op: supersede is decided at delivery, never as a cancel", () =>
+  test("settle retires the chain with an at:null arm and sends nothing", () =>
     runAgent(
       Effect.gen(function* () {
-        let sent = 0;
-        const port = createRetryAlarmPort({
-          commitScheduled: () => Effect.void,
-          send: () =>
-            Effect.sync(() => {
-              sent += 1;
-            }),
-          clock: () => 100,
-        });
-        yield* port.settle(schedule.id);
-        expect(sent).toBe(0);
+        const recorded = recordingDeps(() => 100);
+        const port = createRetryAlarmPort(recorded.deps);
+        yield* port.arm(schedule);
+        yield* port.settle({ id: schedule.id, attempt: schedule.attempt });
+        expect(recorded.sent).toHaveLength(1);
+        expect(recorded.commits.map((action) => action.id)).toEqual([
+          "attempt-1:retry:arm:1",
+          "attempt-1:retry:arm:2",
+        ]);
+        const retire = recorded.commits[1]?.intent.value as {
+          at?: number | null;
+          supersedes?: string;
+        };
+        expect(retire.at).toBeNull();
+        expect(retire.supersedes).toBe(recorded.sent[0]?.occurrenceId ?? "");
       }),
     ));
 
@@ -88,7 +140,8 @@ describe("retry timer port over DeliverAt", () => {
       Effect.gen(function* () {
         let now = 100;
         const port = createRetryAlarmPort({
-          commitScheduled: () => Effect.void,
+          sessionId: "s1",
+          commitArm: () => Effect.void,
           send: () => Effect.void,
           clock: () => now,
         });
@@ -107,7 +160,8 @@ describe("retry timer port over DeliverAt", () => {
     runAgent(
       Effect.gen(function* () {
         const port = createRetryAlarmPort({
-          commitScheduled: () => Effect.void,
+          sessionId: "s1",
+          commitArm: () => Effect.void,
           send: () => Effect.void,
           clock: () => 100,
         });

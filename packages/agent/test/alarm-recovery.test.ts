@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Result } from "effect";
-import { alarmAction, armAction, firedAction } from "../src/core/alarm";
+import { armAction, firedAction, type AlarmCapability } from "../src/core/alarm";
 import { openCatalogStore } from "../src/core/store/catalog";
 import { CatalogVersionRefused, type LedgerError } from "../src/core/store/errors";
 import { openSessionStore } from "../src/core/store/session-file";
@@ -188,15 +188,13 @@ describe("armed_alarms index in the append transaction", () => {
     await withSession(sessionId, async ({ kernel, commit }) => {
       const revisionBefore = kernel.row(sessionId).revision;
       const armed = arm(sessionId, "a-roll", 1, PAST_FIRE_AT);
-      // A second alarm row with a schema-invalid op refuses the whole batch.
-      const invalid = alarmAction({
-        id: "a-roll-invalid",
-        parentId: null,
-        sessionId,
-        intent: { op: "explode" },
-        effect: { ok: true },
-        ts: 2,
-      });
+      // A second alarm row with a schema-invalid op refuses the whole batch
+      // (a constructor-built row with its intent corrupted in memory: the
+      // store's write-side schema check is the subject here, not the writer).
+      const invalid = {
+        ...arm(sessionId, "a-roll-invalid", 1, PAST_FIRE_AT).action,
+        intent: { encodingVersion: 1 as const, value: { op: "explode" } },
+      };
       const result = await commit([armed.action, invalid]);
       expect(Result.isFailure(result)).toBe(true);
       expect(kernel.armedCount()).toBe(0);
@@ -316,6 +314,16 @@ describe("catalog schema v2 (has_armed)", () => {
 
 const RESEND_TIMEOUT_MS = 15_000;
 
+/**
+ * #1254 S4: non-reserved purposes dispatch to the composed capability; an
+ * unbound purpose folds stale. These recovery tests pin the RESEND path, so
+ * the `note.due` purpose is registered with a wake that just accepts.
+ */
+const noteCapability: AlarmCapability = {
+  purposes: ["note.due"],
+  wake: () => Effect.succeed("delivered" as const),
+};
+
 function resendSignal(): {
   readonly options: Pick<TestClusterOptions, "onAlarmResend">;
   readonly delivered: (occurrenceId: string) => Promise<void>;
@@ -366,7 +374,7 @@ describe("crash recovery through the cluster", () => {
     // activation resend re-fires the original occurrence.
     const signal = resendSignal();
     await runCluster(
-      { sessionsDir, catalogFile, ...signal.options },
+      { sessionsDir, catalogFile, alarmCapability: noteCapability, ...signal.options },
       Effect.gen(function* () {
         const receipt = yield* sendAlarm(sessionId, {
           occurrenceId: `${sessionId}:rescan:boot-1`,
@@ -405,7 +413,70 @@ describe("crash recovery through the cluster", () => {
     });
   }, 30_000);
 
+  test("resend is bounded: N armed rows resend exactly N occurrences, once per activation", async () => {
+    const sessionId = "crash-resend-bounded";
+    const occurrences: string[] = [];
+    await withSession(sessionId, async ({ commit }) => {
+      for (const alarmId of ["due-n1", "due-n2", "due-n3"]) {
+        const armed = arm(sessionId, alarmId, 1, PAST_FIRE_AT);
+        occurrences.push(armed.occurrenceId);
+        expect(Result.isSuccess(await commit([armed.action]))).toBe(true);
+      }
+    });
+
+    const resends: string[] = [];
+    const signal = resendSignal();
+    await runCluster(
+      {
+        sessionsDir,
+        catalogFile,
+        alarmCapability: noteCapability,
+        onAlarmResend: (innerSessionId, occurrence, receipt) => {
+          resends.push(occurrence.occurrenceId);
+          signal.options.onAlarmResend?.(innerSessionId, occurrence, receipt);
+        },
+      },
+      Effect.gen(function* () {
+        yield* sendAlarm(sessionId, {
+          occurrenceId: `${sessionId}:rescan:boot-n`,
+          purpose: "rescan",
+          alarmId: `${sessionId}:rescan`,
+          armSeq: 0,
+          sourceKey: "rescan",
+          payload: "{}",
+          fireAt: PAST_FIRE_AT,
+        });
+        for (const occurrenceId of occurrences) {
+          yield* Effect.promise(() => signal.delivered(occurrenceId));
+        }
+        // A second rescan on the SAME activation resends nothing: the resend
+        // ran exactly once and every delivered row already left the index.
+        const second = yield* sendAlarm(sessionId, {
+          occurrenceId: `${sessionId}:rescan:boot-n2`,
+          purpose: "rescan",
+          alarmId: `${sessionId}:rescan`,
+          armSeq: 0,
+          sourceKey: "rescan",
+          payload: "{}",
+          fireAt: PAST_FIRE_AT,
+        });
+        expect(second.outcome).toBe("delivered");
+      }),
+    );
+
+    // Exactly N resends — not N per rescan, not a self-retriggering storm.
+    expect([...resends].sort()).toEqual([...occurrences].sort());
+    for (const occurrenceId of occurrences) {
+      expect(firedRows(sessionId, occurrenceId)).toEqual({ delivered: 1, stale: 0 });
+    }
+    await readSession(sessionId, ({ kernel, catalog }) => {
+      expect(kernel.armedCount()).toBe(0);
+      expect(catalog.sessionIndex(sessionId)?.hasArmed).toBe(false);
+    });
+  }, 30_000);
+
   test("supersede then crash: the new occurrence fires, the late old one folds stale with zero execution", async () => {
+
     const sessionId = "crash-supersede";
     let oldOccurrence = "";
     let newOccurrence = "";
@@ -420,7 +491,7 @@ describe("crash recovery through the cluster", () => {
 
     const signal = resendSignal();
     await runCluster(
-      { sessionsDir, catalogFile, ...signal.options },
+      { sessionsDir, catalogFile, alarmCapability: noteCapability, ...signal.options },
       Effect.gen(function* () {
         yield* sendAlarm(sessionId, {
           occurrenceId: `${sessionId}:rescan:boot-2`,

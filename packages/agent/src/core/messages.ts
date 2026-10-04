@@ -32,6 +32,18 @@ export class SessionPolicyRefusal {
 // ─── #1253: the four-entity-RPC surface ───
 
 /**
+ * Typed admission failure (#1254 S4): the single writer bounds the revision
+ * CAS to three attempts (`code: "revision"`) and answers requests left in the
+ * queue at scope close with `code: "shutdown"`. Both are refusals of THIS
+ * delivery attempt — the persisted envelope redelivers.
+ */
+export class AdmissionFailure extends Schema.TaggedError<AdmissionFailure>(
+  "@openomni/agent/cluster/AdmissionFailure",
+)("AdmissionFailure", {
+  code: Schema.Literals(["revision", "shutdown"]),
+}) {}
+
+/**
  * Typed `deliver` rejection (#1253): the closed code set is exactly
  * `unknown_kind | missing_key | closed | denied`. A rejection appends
  * nothing — zero new journal facts ride a refused delivery.
@@ -79,7 +91,7 @@ export const DeliverRpc = Rpc.make("Deliver", {
     idempotencyKey: Schema.String,
   },
   success: DeliverReceipt,
-  error: DeliverRefused,
+  error: Schema.Union([DeliverRefused, AdmissionFailure]),
   primaryKey: (payload) => payload.idempotencyKey,
 }).annotate(ClusterSchema.Persisted, true);
 
@@ -97,23 +109,13 @@ export const ResolveRpc = Rpc.make("Resolve", {
     inputId: Schema.String,
   },
   success: RequestReceipt,
-  error: ResolveRefused,
+  error: Schema.Union([ResolveRefused, AdmissionFailure]),
   primaryKey: (payload) => payload.inputId,
 }).annotate(ClusterSchema.Persisted, true);
 
 /** Purpose-shaped alarm payloads (canonical JSON of `AlarmOccurrence.payload`). */
-export const RetryAlarmBody = Schema.Struct({ attempt: Schema.Number });
 export const DeadlineAlarmBody = Schema.Struct({ requestId: Schema.String });
-export const WatchFiredAlarmBody = Schema.Struct({
-  watchId: Schema.String,
-  epoch: Schema.Number,
-  sourceKey: Schema.String,
-  batch: Schema.String,
-});
-export const WatchTimeoutAlarmBody = Schema.Struct({
-  watchId: Schema.String,
-  epoch: Schema.Number,
-});
+
 
 /**
  * One alarm occurrence (#1254): `occurrenceId` is the cluster primary key and
@@ -152,6 +154,7 @@ export type AlarmReceipt = typeof AlarmReceipt.Type;
 export const AlarmRpc = Rpc.make("Alarm", {
   payload: AlarmOccurrence,
   success: AlarmReceipt,
+  error: AdmissionFailure,
 }).annotate(ClusterSchema.Persisted, true);
 
 /**
@@ -201,4 +204,5 @@ export const ReadRpc = Rpc.make("Read", {
     cursor: Schema.Number,
   },
   success: ReadPage,
+  error: AdmissionFailure,
 });

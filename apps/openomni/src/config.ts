@@ -193,6 +193,34 @@ export function resolveClusterStorage(
 /** Boot alarm sweep defaults (#1254 S3): flagged sessions only, 7 idle days. */
 const DEFAULT_ALARM_SWEEP = { full: false, idleDays: 7 } as const;
 
+/**
+ * D3 loop consumption defaults (#1254 S4): at most 4 alarm wakes admit before
+ * a queued prompt, 64 armed alarms per session, and passivation after the
+ * entity idle budget. Typed in core (`Core.AlarmDrainConfig`); the VALUES live
+ * here, at the composition root, and nowhere else.
+ */
+const DEFAULT_ALARM_DRAIN = { alarmsBeforePrompt: 4, maxArmed: 64 } as const;
+
+/** Core-shaped drain config (structurally `Core.AlarmDrainConfig`). */
+export interface AlarmDrainSettings {
+  readonly alarmsBeforePrompt: number;
+  readonly maxArmed: number;
+  readonly idleMs: number;
+  readonly sweep: { readonly full: boolean; readonly idleDays: number };
+}
+
+/** The one owner of the D3 drain values, mirroring `resolveClusterStorage`. */
+export function resolveAlarmDrain(
+  config: Pick<OpenOmniConfig, "alarmSweep" | "entityIdleMs">,
+): AlarmDrainSettings {
+  return {
+    alarmsBeforePrompt: DEFAULT_ALARM_DRAIN.alarmsBeforePrompt,
+    maxArmed: DEFAULT_ALARM_DRAIN.maxArmed,
+    idleMs: config.entityIdleMs ?? DEFAULT_ENTITY_IDLE_MS,
+    sweep: resolveAlarmSweep(config),
+  };
+}
+
 /** The one owner of the alarm sweep defaults, mirroring `resolveClusterStorage`. */
 export function resolveAlarmSweep(
   config: Pick<OpenOmniConfig, "alarmSweep">,

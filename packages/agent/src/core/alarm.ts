@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { interruptOn } from "./ports";
-import { Alarm, isReservedAlarmPurpose, RESERVED_ALARM_PURPOSES, type LedgerAction, type PlainObject } from "@openomni/protocol";
+import { Alarm, canonicalKey, isReservedAlarmPurpose, RESERVED_ALARM_PURPOSES, type LedgerAction, type PlainObject } from "@openomni/protocol";
 import type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
 export type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
@@ -78,23 +78,6 @@ function appendAlarm(input: {
 }
 
 /**
- * Legacy generic `alarm` append constructor (pre-#1254 watch lifecycle rows
- * and the gate's retry.scheduled evidence). New code uses `armAction` /
- * `firedAction`; this stays until Lane 2 rewrites the watch plane.
- */
-export function alarmAction(input: {
-  readonly id: string;
-  readonly parentId: string | null;
-  readonly sessionId: string;
-  readonly intent: PlainObject;
-  readonly effect: PlainObject;
-  readonly revert?: PlainObject;
-  readonly ts: number;
-}): LedgerAction.Append {
-  return appendAlarm(input);
-}
-
-/**
  * One `alarm{arm}` row (#1254): mints the occurrence id from the arm's own
  * journal sequence (`armSeq`) inside the committing transaction. An
  * `at: null` arm retires the chain; `supersedes` names the previous
@@ -161,7 +144,7 @@ export function firedAction(input: {
 }
 
 /**
- * Boot alarm sweep config (#1254 S3; S4 nests it inside `AlarmDrainConfig`).
+ * Boot alarm sweep config (#1254 S3; nested inside `AlarmDrainConfig` at S4).
  * `full: true` rescans every session at boot; `full: false` rescans
  * `has_armed` sessions plus sessions idle for at least `idleDays` days.
  * Values come from the composition root's config, never from core constants.
@@ -169,6 +152,22 @@ export function firedAction(input: {
 export interface AlarmSweepConfig {
   readonly full: boolean;
   readonly idleDays: number;
+}
+
+/**
+ * Loop consumption defaults (#1254 S4, D3): typed in core, VALUES supplied by
+ * the composition root (`assumed: loop consumption defaults — steer/followUp
+ * batch width all|one, alarms before prompt 4, armed-alarm cap 64,
+ * passivation idle 60 s`). The writer admits at most `alarmsBeforePrompt`
+ * alarm wakes before a queued prompt delivery; the `arm` verb refuses
+ * `alarm_budget` at `armedCount() >= maxArmed`; the entity's `maxIdleTime`
+ * is `idleMs`.
+ */
+export interface AlarmDrainConfig {
+  readonly alarmsBeforePrompt: number;
+  readonly maxArmed: number;
+  readonly idleMs: number;
+  readonly sweep: AlarmSweepConfig;
 }
 
 // ─── #1254 capability seam (frozen at S1: later steps add, never rename) ───
@@ -224,6 +223,15 @@ export interface AlarmWakeContext {
   readonly reads: AlarmChainReads;
   readonly arm: ArmVerb;
   readonly now: number;
+  /**
+   * #1254 S4: appends one `prompt{origin: "alarm"}` input row through the
+   * entity's writer path; `seq` is the committed revision. The origin is
+   * fixed by the core — a capability never owns a prompt write path.
+   */
+  readonly prompt: (input: {
+    readonly content: string;
+    readonly payload?: PlainObject;
+  }) => Effect.Effect<{ readonly seq: number }, AlarmWakeError>;
 }
 
 /** One alarm capability: declared purposes plus their wake dispatch. */
@@ -273,30 +281,77 @@ export function composeAlarmPurposes(input: {
   });
 }
 
+/**
+ * Durable retry schedule over the alarm chain (#1254 S4): `arm` commits one
+ * `alarm{arm}` row (purpose `retry`, alarmId `<attemptActionId>:retry`,
+ * armSeq `2*attempt - 1`, superseding the previous attempt's occurrence) and
+ * forwards the occurrence to the composed DeliverAt sender; `settle` retires
+ * the chain with an `at: null` arm (armSeq `2*attempt`) so a completed
+ * attempt leaves no open alarm. `wait` keeps the live in-process residual
+ * sleep; a crash inside it is woken by the redelivered occurrence, which the
+ * chain guard folds exactly once.
+ */
 export function createRetryAlarmPort(deps: RetryAlarmDeps): RetryAlarmPort {
+  const alarmIdOf = (actionId: string) => `${actionId}:retry`;
   return {
-    // Chain evidence strictly before the persisted rearm: a crash between the
-    // two resumes from the chain on activation; a crash inside the wait is
-    // woken by the redelivered message, which no-ops when the live path won.
-    arm: (input) =>
-      deps
-        .commitScheduled({
-          id: input.id,
-          attempt: input.attempt,
-          reason: input.reason,
-          notBefore: input.fireAt,
-        })
-        .pipe(
-          Effect.flatMap(() =>
-            deps.send({ alarmId: input.id, attempt: input.attempt, notBefore: input.fireAt }),
-          ),
+    arm: (input) => {
+      const alarmId = alarmIdOf(input.id);
+      const armSeq = 2 * input.attempt - 1;
+      const supersedes =
+        input.attempt > 1
+          ? Alarm.occurrenceId(deps.sessionId, alarmId, 2 * (input.attempt - 1) - 1, "retry")
+          : null;
+      const payload = { attempt: input.attempt, reason: input.reason };
+      const { action, occurrenceId } = armAction({
+        parentId: null,
+        sessionId: deps.sessionId,
+        purpose: "retry",
+        at: input.fireAt,
+        supersedes,
+        alarmId,
+        sourceKey: "retry",
+        payload,
+        armSeq,
+        ts: input.fireAt,
+      });
+      // Chain evidence strictly before the persisted rearm: a crash between
+      // the two resumes from the chain on activation; a crash inside the wait
+      // is woken by the redelivered occurrence, folded by the chain guard.
+      return deps.commitArm(action).pipe(
+        Effect.flatMap(() =>
+          deps.send({
+            occurrenceId,
+            purpose: "retry",
+            alarmId,
+            armSeq,
+            sourceKey: "retry",
+            payload: canonicalKey(payload),
+            fireAt: input.fireAt,
+          }),
         ),
+      );
+    },
     wait: (fireAt, signal) =>
       Effect.suspend(() => {
         const sleep = Effect.sleep(Math.max(0, fireAt - deps.clock()));
         if (signal === undefined) return sleep;
         return sleep.pipe(Effect.raceFirst(interruptOn(signal)));
       }),
-    settle: () => Effect.void,
+    settle: (input) => {
+      const alarmId = alarmIdOf(input.id);
+      const { action } = armAction({
+        parentId: null,
+        sessionId: deps.sessionId,
+        purpose: "retry",
+        at: null,
+        supersedes: Alarm.occurrenceId(deps.sessionId, alarmId, 2 * input.attempt - 1, "retry"),
+        alarmId,
+        sourceKey: "retry",
+        payload: { attempt: input.attempt },
+        armSeq: 2 * input.attempt,
+        ts: deps.clock(),
+      });
+      return deps.commitArm(action);
+    },
   };
 }
