@@ -6,7 +6,6 @@ import {
   clusterTempDir,
   runCluster,
   sendPrompt,
-  waitUntil,
 } from "../../../../packages/agent/test/helpers/cluster-runtime";
 import { createAlarmMonitorPorts, createLiveArmRegistry } from "../../src/composition/alarm-plane";
 import { cronPurposes } from "../../src/composition/bundles/cron";
@@ -149,6 +148,24 @@ export interface EntityAlarmFixture {
   readonly closed: string[];
 }
 
+/** Completed persisted DeliverAt sends per fixture, keyed by catalog file (#1254 r4 M2). */
+interface PersistedSendLog {
+  readonly sent: Set<number>;
+  readonly waiters: Map<number, Array<() => void>>;
+}
+
+const persistedSends = new Map<string, PersistedSendLog>();
+
+/** Buffers one completed persisted send and wakes its awaiters (no lost signal). */
+function recordPersistedSend(catalogFile: string, fireAt: number): void {
+  const log = persistedSends.get(catalogFile);
+  if (log === undefined) return;
+  log.sent.add(fireAt);
+  const pending = log.waiters.get(fireAt) ?? [];
+  log.waiters.delete(fireAt);
+  for (const wake of pending) wake();
+}
+
 /**
  * #1254 r2 M2: the alarm-plane lifecycle fixture over the REAL session entity.
  * One cluster activation holds a turn open (blocking detached runner), its
@@ -190,6 +207,9 @@ export async function withEntityAlarmPorts<A>(
     }),
   );
   const plane = createAppLedger({ now: () => FIXTURE_BASE, catalogPath: catalogFile, sessionsDir });
+  // The persisted-send recorder subscribes BEFORE any arm: completions buffer
+  // in `sent`, so a signal fired before awaitScheduled is called still lands.
+  persistedSends.set(catalogFile, { sent: new Set(), waiters: new Map() });
   try {
     return await runCluster(
       {
@@ -199,6 +219,17 @@ export async function withEntityAlarmPorts<A>(
         runner: blockingRunner(() => undefined),
         detachTurns: true,
         alarmCapability: capability,
+        // #1254 r4 M2: forward through the entity client's REAL persisted
+        // `{discard: true}` Alarm send — its completion IS the transport
+        // persistence barrier (Runners.ts awaits `storage.saveRequest` before
+        // the discard notification returns) — and record the durable
+        // deliver_at so `awaitScheduled` never polls.
+        wrapSendAlarm: (_send, sendPersisted) => (armedSession, occurrence) =>
+          sendPersisted(armedSession, occurrence).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => recordPersistedSend(catalogFile, occurrence.fireAt)),
+            ),
+          ),
         // Mirrors the app root's onArmed follower (#1254 H1): a retiring
         // monitor.hit arm closes the native handle at the commit.
         onArmed: (notice) => {
@@ -245,24 +276,49 @@ export async function withEntityAlarmPorts<A>(
       }),
     );
   } finally {
+    persistedSends.delete(catalogFile);
     plane.close();
   }
 }
 
+const SCHEDULE_SEND_CAP_MS = 15_000;
+
+/** Bounded (failure guard, never a synchronizer) wait for one recorded persisted send. */
+function awaitPersistedSend(log: PersistedSendLog, deliverAt: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(`timed out awaiting the persisted Alarm send with deliver_at ${deliverAt}`),
+      );
+    }, SCHEDULE_SEND_CAP_MS);
+    const pending = log.waiters.get(deliverAt) ?? [];
+    pending.push(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+    log.waiters.set(deliverAt, pending);
+  });
+}
+
 /**
- * Bounded wait for the entity's forked DeliverAt forward: polls the durable
- * cluster mailbox until an Alarm envelope with `deliver_at` lands. This is the
- * ONE sanctioned waitUntil (r3 M2): no in-process event marks the envelope
- * persist — `onArmed` fires at the journal commit BEFORE the forked send, and
- * the send's RPC reply only arrives at `deliver_at` — so the cross-boundary
- * sqlite row is the earliest observable fact.
+ * Exact completion seam for the entity's forked DeliverAt forward (#1254 r4
+ * M2, replacing the sqlite poll): resolves once the REAL persisted
+ * `{discard: true}` Alarm send carrying this `deliver_at` has COMPLETED —
+ * installed Effect cluster/Runners.ts awaits `storage.saveRequest` before the
+ * discard notification returns, so the envelope row is durable here. The
+ * fixture's recorder is wired at cluster construction (before any arm) and
+ * buffers completions, so no signal is lost. The mailbox is then inspected
+ * exactly once.
  */
-export function awaitScheduled(catalogFile: string, deliverAt: number): Promise<void> {
-  return waitUntil(
-    `scheduled Alarm envelope with deliver_at ${deliverAt}`,
-    () => scheduledAt(catalogFile, deliverAt),
-    5_000,
-  );
+export async function awaitScheduled(catalogFile: string, deliverAt: number): Promise<void> {
+  const log = persistedSends.get(catalogFile);
+  if (log === undefined)
+    throw new Error(`awaitScheduled outside withEntityAlarmPorts: ${catalogFile}`);
+  if (!log.sent.has(deliverAt)) await awaitPersistedSend(log, deliverAt);
+  if (!scheduledAt(catalogFile, deliverAt))
+    throw new Error(
+      `persisted Alarm send completed but no envelope carries deliver_at ${deliverAt}`,
+    );
 }
 
 /** True when some Alarm envelope carries the given deliver_at (deny-path zero checks). */

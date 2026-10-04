@@ -100,9 +100,17 @@ export interface TestClusterOptions {
    * release it through the explicit `sendAlarm` door — the deterministic way
    * to order "the chain settled first, the parked occurrence arrived second"
    * without racing the real clock.
+   *
+   * #1254 r4 M2: the wrapper also receives `sendPersisted`, the entity
+   * client's real `{discard: true}` Alarm send — the transport persistence
+   * barrier (installed Effect cluster/Runners.ts awaits `storage.saveRequest`
+   * before the discard notification returns). A fixture that only needs
+   * "the envelope is durable" forwards through it and signals on completion
+   * instead of polling the mailbox.
    */
   readonly wrapSendAlarm?: (
     send: NonNullable<SessionEntityPorts["sendAlarm"]>,
+    sendPersisted: NonNullable<SessionEntityPorts["sendAlarm"]>,
   ) => NonNullable<SessionEntityPorts["sendAlarm"]>;
 }
 
@@ -303,6 +311,7 @@ export function makeTurnPort(
 function entityPorts(
   options: TestClusterOptions,
   forward: NonNullable<SessionEntityPorts["sendAlarm"]>,
+  forwardPersisted: NonNullable<SessionEntityPorts["sendAlarm"]>,
 ): SessionEntityEnv["ports"] {
   return {
     runTurn: makeTurnPort(
@@ -318,7 +327,10 @@ function entityPorts(
     ...(options.onRequestReady === undefined ? {} : { onRequestReady: options.onRequestReady }),
     ...(options.onLive === undefined ? {} : { onLive: options.onLive }),
     ...(options.onArmed === undefined ? {} : { onArmed: options.onArmed }),
-    sendAlarm: options.wrapSendAlarm === undefined ? forward : options.wrapSendAlarm(forward),
+    sendAlarm:
+      options.wrapSendAlarm === undefined
+        ? forward
+        : options.wrapSendAlarm(forward, forwardPersisted),
   };
 }
 
@@ -340,6 +352,12 @@ function entityEnvLayer(options: TestClusterOptions) {
             Effect.asVoid,
             Effect.orDie,
           );
+      // #1254 r4 M2: the persisted discard send — completes once the
+      // occurrence envelope is durable, never awaiting the reply.
+      const forwardPersisted: NonNullable<SessionEntityPorts["sendAlarm"]> = (
+        sessionId,
+        occurrence,
+      ) => makeClient(sessionId).Alarm(occurrence, { discard: true }).pipe(Effect.asVoid, Effect.orDie);
       return yield* Effect.acquireRelease(
         Effect.sync(
           (): SessionEntityEnv => ({
@@ -352,7 +370,7 @@ function entityEnvLayer(options: TestClusterOptions) {
               });
               return options.wrapStore === undefined ? store : options.wrapStore(sessionId, store);
             },
-            ports: entityPorts(options, forward),
+            ports: entityPorts(options, forward, forwardPersisted),
           }),
         ),
         (env) => Effect.sync(() => env.catalog.close()),
