@@ -260,7 +260,7 @@ test("late-bound entity ports refuse early use and forward after one binding", a
   )
     throw new Error("the slot must delegate every optional entity port");
   const occurrence = {
-    occurrenceId: "late:occ:1",
+    occurrenceId: "late:fire:1",
     purpose: "cron.tick",
     alarmId: "late",
     armSeq: 1,
@@ -311,7 +311,7 @@ test("late-bound entity ports refuse early use and forward after one binding", a
     expect(alarmCapability.purposes).toEqual(["cron.tick"]);
     onKeepAlive(true);
     onKeepAlive(false);
-    expect(forwarded).toEqual(["late-session:late:occ:1", "wake:cron.tick"]);
+    expect(forwarded).toEqual(["late-session:late:fire:1", "wake:cron.tick"]);
     expect(keepAlive).toEqual([true, false]);
     const fixture = requestFixture(plane.openKernel("late-session"));
     expect(requestDomainRevisions(fixture.request)).toEqual({ person: 3 });

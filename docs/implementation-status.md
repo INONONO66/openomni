@@ -1,18 +1,111 @@
 # Implementation Status
 
-## #1254 alarm split: core timer, removable alarm capability (epic #1260, ⏳ in flight)
+## #1254 alarm split: core timer, removable alarm capability (epic #1260, PR #1285, ⏳ pending merge)
 
-On `epic1260/1254-alarm-split` (2026-10-04, base `4ecb41f3`). Receipt lands
-with the PR: the core keeps the DeliverAt timer, the four loop-reserved
-purposes and the `alarm` kind's single writer; `plugins/alarm` becomes the
-removable capability owning the purpose registry, wake dispatch, watch
-handlers, the `alarm.fired` point and the `arm`/`watch` verbs; one
-occurrence-id minter, the `armed_alarms` session-file index with catalog
-`has_armed` and boot rescan, pure `Cron.next` in protocol, and the
-queue/replier single writer. Until the PR merges this section is a pointer
-only; the #1253 section below is the current shipped shape. Correction
-carried in the same PR: the #1253 squash left one stray diff3 marker line
-(`||||||| parent of fb19bf2c`) in this file; it is deleted here.
+On `epic1260/1254-alarm-split` (2026-10-04, base `4ecb41f3`). The timer plane
+is split in two. The core (`packages/agent/src/core/alarm.ts`, the `alarm`
+kind's single declared writer) keeps the cluster `DeliverAt` message, exactly
+four loop-reserved purposes (`step_watchdog`, `retry`, `deadline`, `resume`;
+`RESERVED_PURPOSES` in `packages/protocol/src/journal/core/alarm.ts`), one
+occurrence-id minter `Alarm.occurrenceId(sessionId, alarmId, armSeq, sourceKey)`
+= `canonicalDigest(["alarm.occurrence", …])` minted from the arm row's own
+journal sequence inside the committing transaction, and one chain guard
+`alarmDisposition` (fresh iff the latest `arm` row still names the occurrence,
+is not retired by `at: null`, and no `delivered|exhausted` firing settled it);
+the per-purpose dispositions and `hasNewerAttempt` are deleted. The `alarm`
+declaration is tightened to `arm{purpose, at, supersedes, alarmId, sourceKey,
+payload} → effect{occurrenceId}` and `fired{occurrenceId, outcome:
+delivered|stale|exhausted}`; an unregistered purpose folds to a recorded
+`fired{stale}` fact with zero execution (`rpc-surface.test.ts`,
+`alarm-chain-guard.test.ts`). The armed set is an index, not a second
+truth: `armed_alarms(alarm_id PK, occurrence_id UNIQUE, fire_at)` lives in
+the session-file schema and its delta is derived from the appended `alarm` row
+inside the same `appendAction` transaction (an arm upserts, `at: null` and a
+settling `fired` delete; a schema-refused row rolls the index back with the
+row), read through the kernel ports `armedAlarms()`/`armedCount()`; the
+catalog gains `session_index.has_armed` at `CATALOG_SCHEMA_VERSION` 2 (a v1
+file upgrades in place in one immediate transaction; a newer file stays
+read-only with `markArmed` in the refused set); activation re-sends every
+armed row as its ORIGINAL occurrence id (the cluster dedupe key) and boot runs
+`rescanOccurrences` over `has_armed ∪ idle ≥ idleDays` (`full` ⇒ all) as
+`${sessionId}:rescan:${bootId}` (`alarm-recovery.test.ts`). The entity admits
+through one queue writer (`Entity.toLayerQueue` + `Replier`): the revision CAS
+is bounded at 3 attempts then fails typed `AdmissionFailure{code: revision}`,
+queue close fails every queued envelope `AdmissionFailure{code: shutdown}`,
+`Entity.keepAlive` holds the entity while a turn is open and `maxIdleTime` is
+D3's `idleMs`, passivation with unconsumed input arms a `resume` alarm, the
+fence is compared inside the session commit, and the four reserved purposes
+are consumed by the loop (`retry`/`resume` wake the drain, `deadline` expires
+its request iff still open, `step_watchdog` is reserved with no step budget —
+nothing arms it; `admission-writer-fiber.test.ts`, `rpc-surface.test.ts`). The
+removable capability `packages/agent/src/plugins/alarm/` imports only
+`core/api.ts` (`AlarmCapability{purposes, wake → delivered|exhausted}`,
+`AlarmWakeContext`, `ArmVerb`,
+`ArmRefused{alarm_budget|unknown_purpose|reserved_purpose}`, `AlarmFired`,
+`AlarmWakeOutcome`, `RESERVED_PURPOSES`) and owns the purpose registry
+(`Core.composeAlarmPurposes` refuses the reserved four, the entity-internal
+`rescan`, and duplicates with a typed `AlarmComposeError`), wake dispatch, the
+`alarm.fired` point, the `watch(command|path)` handlers with budget and
+exhaustion (a watch is an armed alarm `alarmId = watchId`, `sourceKey:
+"monitor"`; re-arm = `supersedes`, cancel = `at: null`; timeout = a second
+arm), and the `arm`/`watch` verbs. The app composes the capability in
+`apps/openomni/src/composition/alarm-plane.ts` (chain fold, chain-guard reads,
+fence-riding arm commit with bounded race retry, typed prompt port) behind two
+bundles `composition/bundles/{monitor,cron}.ts` (each documents its
+`requires: alarm` edge; the manifest/compose mechanics that enforce the
+capability-off cascade land with #1255); `composition/monitor-ports.ts` and
+`tools/core/monitor-ports.ts` are deleted, `composition/watch-sources.ts` is
+the native source adapter and `tools/core/watch.ts` is epoch-free; the
+hibernation e2e pins a native hit landing as a recorded chain fact.
+`Protocol.Cron.next(expr, fromMs, tz)` / `Cron.occurrences(expr, afterMs,
+untilMs, tz, limit)` is a dependency-free Vixie grid over `Intl.DateTimeFormat`
+zone math (DST gap skipped, overlap fires once, 366-day `unreachable` bound,
+typed `CronParseError{code}`; `packages/protocol/test/cron-next.test.ts`), and
+`monitor({kind: "cron", expr, tz})` is the entry (derived tool snapshot
+regenerated: one added source variant, one description line). Assumed (Owner
+ruling D3): loop consumption defaults — alarms before prompt 4, armed-alarm cap
+64, passivation idle 60 s, `sweep{full: false, idleDays: 7}` — typed once as
+`Core.AlarmDrainConfig`, values from `apps/openomni/src/config.ts`. Lead fixes
+after the lane merge: `Protocol.canonicalJson` is the one canonical byte owner
+for persisted text payloads (alarm payloads, message origins), so the stored
+bytes and the digest minted from them agree; the live-wait fold `openAlarmIds`
+(`core/run.ts`) folds by `alarmId` (latest arm wins, `at: null` retires, a
+`fired` for the armed occurrence settles) and excludes the reserved purposes,
+so a settled chain or a request deadline is not live-wait evidence;
+`SessionHistory.Cause` drops its `{kind: "alarm", alarmId, epoch}` variant
+(no producer after the per-purpose scheme left; a read-model DTO, never
+persisted, so no ledger-fold upcast exists) and
+`script/conformance/schema-snapshot.json` is regenerated — one removal
+(`SessionHistory.Cause#alarm`) plus the additive drift main accumulated since
+#1247, this PR being the `--update` review moment. Deviations: the timer
+module keeps its file name `core/alarm.ts` (it is the kind's declared writer;
+the issue's `core/timer.ts` would rename the writer for no behavior); cron
+enters through the sealed 12-tool catalog as `monitor({kind: "cron", expr,
+tz})` instead of a new tool; only the `monitor` and `cron` bundles exist (the
+issue's `reminder`/`compaction-timing` bundles have no consumer and would be
+dead code; the seed `bundles/alarm.ts` was deleted as an unconsumed export);
+the `armed_alarms` delta is derived inside the append transaction from the
+appended row rather than supplied by the caller; the `alarm` declaration stays
+`version: 1` (no deployed journals exist, a v2 with no v1 reader is dead
+code); `step_watchdog` is reserved-and-refused only (no step budget exists in
+the loop). Pre-existing flakes met and recorded: in a combined
+`bun test packages/agent packages/protocol` process Bun 1.4.1 intermittently
+materializes `new Error().stack` as `undefined` with `Error.stackTraceLimit`
+intact, so `Failure.pretty` now renders `name: message` whenever `stack` is
+not a string (`failure-of.test.ts` reproduces it with `Error.stackTraceLimit =
+0`); the `watch-sources` native path-create signal timed out once (15 s)
+inside a full app run and passes alone — test and `pathSource` logic are
+identical on main (an `fs.watch` create race, not changed here); the
+`durable-reconstruction` fresh-process tests fail with `Cannot find module
+'@openomni/protocol'` when root `check-types` emits `protocol/dist`
+concurrently — gates run serially. Sweeps at HEAD: `hasNewerAttempt` 0,
+alarm-scoped `epoch` 0, `Bun\.cron\(|alarm\.cancel` 0,
+`monitor-ports|watchOccurrenceKey|watchTimeoutKey|:occ:` 0; one writer for
+`alarm` (`script/check-journal-writers.ts`). Deferrals: capability manifest /
+`requires` cascade mechanics with recorded reason and the `action` writer land
+with #1255. Correction carried in the same PR: the #1253 squash left one stray
+diff3 marker line (`||||||| parent of fb19bf2c`) in this file; it is deleted
+here.
 
 ## #1253 four session entity RPCs (epic #1260, merged as `4ecb41f3`, PR #1279)
 
@@ -117,7 +210,7 @@ and model rendering stay in the app. `script/topology.ts` carries the
 `codemode` row (own CI test + coverage lane, knip workspace, tsconfig
 verification); the app allowlist gained `@openomni/codemode`.
 
-## #1252 twelve journal kinds (epic #1260, draft PR #1278)
+## #1252 twelve journal kinds (epic #1260, merged as `58b7f18d`, PR #1278)
 
 On `epic1260/1252-journal-kinds-12` (2026-10-04, base `6a9063d7`). The journal
 kind set is closed at 12 — nine core (`prompt`, `signal`, `turn`, `llm`,
@@ -171,7 +264,7 @@ still converts those historical rows; policy point ids (e.g. the
 `alarm.fired` hook point) are point names, not journal kinds, and stay
 unchanged.
 
-## #1276 one core, five plugins (epic #1260, draft PR #1277)
+## #1276 one core, five plugins (epic #1260, merged as `6a9063d7`, PR #1277)
 
 On `epic1260/1276-core-plugins-move` (2026-10-03, base `66d56edb`).
 `packages/agent/src/{kernel,session,store}/` merged into one `src/core/` by
@@ -466,7 +559,7 @@ permissive defaults become explicit typed outcomes.
   holds the issue body, lane briefs and the eight lane reports with
   per-lane searches and test counts.
 
-## #1244 package-owned typed failures (epic #1260 P2, ⏳ pending merge)
+## #1244 package-owned typed failures (epic #1260 P2, merged as `a4478b0e`, PR #1262)
 
 On `epic1260/1244-typed-failures` (2026-10-01, base `fb709568`). The shared
 `ForeignFailure` tag is gone; every runtime package owns its failure
@@ -515,7 +608,7 @@ identity, and no production module throws a bare `Error`.
   issue's four searches), `patch-coverage-1244.txt`, `dod-1244.txt`,
   `checks-1244.txt`, the lane briefs/reports and review rounds.
 
-## #1243 shared JSON/failure/interrupt helpers (epic #1260 P1, ⏳ pending merge)
+## #1243 shared JSON/failure/interrupt helpers (epic #1260 P1, merged as `fb709568`, PR #1261)
 
 On `epic1260/1243-shared-helpers` (2026-10-01, base `5641cff8`). Three
 behaviours that were repeated across packages now have one owner each;
@@ -585,7 +678,7 @@ every consumer keeps its drop/warn/default and abort-once semantics.
   or undersized JSON, When parsed, Then the default" (desktopApp lane 443 pass / 0
   fail). A native Electron run was not performed.
 
-## W5.3 #1113 closure receipt (2026-09-29, ⏳ pending merge)
+## W5.3 #1113 closure receipt (2026-09-29, merged as `f7e36984`, PR #1240)
 
 W5.3 on `kernel/1113-w5-closure-20260929` (draft PR #1240, HEAD `03f70089` plus this docs commit,
 base `8390912c`) closes the W5 absolute-quality lanes. Lane receipts live

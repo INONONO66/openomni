@@ -37,7 +37,7 @@ test("alarmCapability composes the monitor and cron purposes under their owning 
 });
 
 const cronFired = (payload: unknown, fireAt: number): Bundle.AlarmFired => ({
-  occurrenceId: "grid:occ:1",
+  occurrenceId: "grid:tick:1",
   purpose: CRON_TICK,
   alarmId: "grid",
   armSeq: 1,
@@ -91,7 +91,7 @@ test("cron.tick prompts once and re-arms the chain at the next grid time", async
       purpose: CRON_TICK,
       at: 600_000,
       alarmId: "grid",
-      supersedes: "grid:occ:1",
+      supersedes: "grid:tick:1",
       sourceKey: "cron",
       payload,
     },
