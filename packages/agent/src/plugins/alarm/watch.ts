@@ -237,6 +237,35 @@ export type WatchVerb = (input: {
   ArmRefused | WatchRefused
 >;
 
+/**
+ * Create-compensation retire (#1254 r2 H2): best effort, never masking — a
+ * refused compensating retire is logged and the original refusal still
+ * reaches the caller (the armed row stands for the boot sweep of last resort).
+ */
+function retireCommitted(
+  arm: ArmVerb,
+  chain: {
+    readonly purpose: string;
+    readonly alarmId: string;
+    readonly supersedes: string;
+    readonly payload: Parameters<ArmVerb>[0]["payload"];
+  },
+): Effect.Effect<void> {
+  return arm({
+    purpose: chain.purpose,
+    at: null,
+    alarmId: chain.alarmId,
+    supersedes: chain.supersedes,
+    sourceKey: MONITOR_SOURCE,
+    payload: chain.payload,
+  }).pipe(
+    Effect.asVoid,
+    Effect.catch((refused) =>
+      Effect.logWarning(`watch create compensation retire refused: ${chain.alarmId} (${refused.code})`),
+    ),
+  );
+}
+
 export function createWatchVerb(
   armFor: (sessionId: string) => ArmVerb,
   deps: WatchInstallDeps,
@@ -250,6 +279,7 @@ export function createWatchVerb(
         });
       const spec = parsed.data;
       const arm = armFor(input.sessionId);
+      // The first commit: before it succeeds nothing needs compensation.
       const main = yield* arm({
         purpose: MONITOR_HIT,
         at: input.now,
@@ -257,45 +287,53 @@ export function createWatchVerb(
         sourceKey: MONITOR_SOURCE,
         payload: { spec, notifications: 0 },
       });
-      const timeout =
-        spec.watch.timeout_ms === undefined
-          ? undefined
-          : yield* arm({
-              purpose: MONITOR_TIMEOUT,
-              at: input.now + spec.watch.timeout_ms,
-              alarmId: `${input.watchId}:timeout`,
-              sourceKey: MONITOR_SOURCE,
-              payload: { watchId: input.watchId },
+      // #1254 r2 H2: EVERY step after the first successful arm runs inside one
+      // compensating path. A refusal anywhere past that point — the timeout
+      // arm (e.g. `alarm_budget` at the last free slot) or the awaited native
+      // install — retires exactly the chains that committed, so a partially
+      // created watch never stays armed, and the caller receives the ORIGINAL
+      // typed refusal. The retiring arm's post-commit notice closes any
+      // native handle the entity's concurrent fresh-arm forward installed.
+      const committed: { timeout?: { alarmId: string; occurrenceId: string } } = {};
+      const remainder = Effect.gen(function* () {
+        if (spec.watch.timeout_ms !== undefined)
+          committed.timeout = yield* arm({
+            purpose: MONITOR_TIMEOUT,
+            at: input.now + spec.watch.timeout_ms,
+            alarmId: `${input.watchId}:timeout`,
+            sourceKey: MONITOR_SOURCE,
+            payload: { watchId: input.watchId },
+          });
+        // A chain whose native source never subscribed is retired, not left
+        // armed: the refusal reaches the caller and no row waits for a hit
+        // that cannot arrive.
+        yield* deps.install({
+          sessionId: input.sessionId,
+          watchId: input.watchId,
+          spec,
+          occurrence: main,
+        });
+      });
+      yield* remainder.pipe(
+        Effect.catch((refused) =>
+          Effect.gen(function* () {
+            yield* retireCommitted(arm, {
+              purpose: MONITOR_HIT,
+              alarmId: input.watchId,
+              supersedes: main.occurrenceId,
+              payload: { reason: refused instanceof WatchRefused ? "install" : "create" },
             });
-      // A chain whose native source never subscribed is retired, not left
-      // armed: the refusal reaches the caller and no row waits for a hit that
-      // cannot arrive.
-      yield* deps
-        .install({ sessionId: input.sessionId, watchId: input.watchId, spec, occurrence: main })
-        .pipe(
-          Effect.catch((refused) =>
-            Effect.gen(function* () {
-              yield* arm({
-                purpose: MONITOR_HIT,
-                at: null,
-                alarmId: input.watchId,
-                supersedes: main.occurrenceId,
-                sourceKey: MONITOR_SOURCE,
-                payload: { reason: "install" },
+            if (committed.timeout !== undefined)
+              yield* retireCommitted(arm, {
+                purpose: MONITOR_TIMEOUT,
+                alarmId: committed.timeout.alarmId,
+                supersedes: committed.timeout.occurrenceId,
+                payload: { watchId: input.watchId },
               });
-              if (timeout !== undefined)
-                yield* arm({
-                  purpose: MONITOR_TIMEOUT,
-                  at: null,
-                  alarmId: timeout.alarmId,
-                  supersedes: timeout.occurrenceId,
-                  sourceKey: MONITOR_SOURCE,
-                  payload: { watchId: input.watchId },
-                });
-              return yield* Effect.fail(refused);
-            }),
-          ),
-        );
+            return yield* Effect.fail(refused);
+          }),
+        ),
+      );
       return main;
     });
 }

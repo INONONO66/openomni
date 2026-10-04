@@ -198,9 +198,12 @@ function commitIn(
  * `AlarmSendRefused` is permanent: on the activation RESEND walk nobody else
  * can answer it, so the chain retires with `reason: "send_refused"` (the
  * post-commit notice closes any native handle). On the fresh-arm FORWARD the
- * committing wave's verb awaits the install itself and owns the refusal (the
- * watch verb retires its chains on a failed create) — retiring here too
- * would double-retire the chain, so the forward drops it. Any other failure
+ * committing wave's verb OWNS the refusal (#1254 r2 H2): the watch verb
+ * awaits its own install and, on any refusal after its first committed arm
+ * (a refused timeout arm, a refused install), retires exactly the chains it
+ * committed — and the retiring arm's post-commit notice closes any native
+ * handle this forward's install created in the meantime. Retiring here too
+ * would double-retire the chain, so the forward drops the refusal. Any other failure
  * is logged and the armed row stands: the durable index plus the boot sweep
  * is the recovery of last resort. A refused RETIRE is a wiring defect and dies.
  */

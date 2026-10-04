@@ -196,6 +196,8 @@ export function createLiveArmRegistry(): LiveArmRegistry {
 const RETIRED_STATUS: Record<string, WatchState["status"]> = {
   cancel: "cancelled",
   install: "cancelled",
+  /** #1254 r2 H2: create-compensation retire after a refused companion arm. */
+  create: "cancelled",
   exhausted: "exhausted",
   fired: "fired",
   timeout: "fired",

@@ -12,8 +12,9 @@
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Effect, Result } from "effect";
+import type { Alarm } from "@openomni/protocol";
 import { armAction, composeAlarmPurposes, type AlarmCapability, type ArmRefused, type ArmVerb } from "../../src/core/alarm";
-import { alarmCapability } from "../../src/plugins/alarm";
+import { alarmCapability, watchPurposes, WatchRefused, type WatchInstallDeps } from "../../src/plugins/alarm";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
@@ -333,4 +334,96 @@ test("the app capability path arms through the live activation's budgeted entity
     }),
   );
   expect(after).toBe(MAX_ARMED);
+});
+
+test("r2 H2: a refusal after the first committed arm retires exactly the committed chains through the real entity verb", async () => {
+  const sessionId = "h2-compensation-session";
+  const liveVerbs = new Map<string, ArmVerb>();
+  const installs: string[] = [];
+  const timedSpec: Alarm.WatchSpec = {
+    watch: { command: "true", description: "timed", timeout_ms: 60_000 },
+    policyGeneration: 1,
+    notificationLimit: 2,
+  };
+  const makeCapability = (install: WatchInstallDeps["install"]) =>
+    alarmCapability({
+      bundles: [
+        { bundle: "monitor", purposes: watchPurposes({ close: () => undefined }) },
+      ],
+      compose: composeAlarmPurposes,
+      arm: (id) => (input) =>
+        Effect.suspend(() => {
+          const verb = liveVerbs.get(id);
+          return verb === undefined
+            ? Effect.die(new Error(`no live activation for ${id}`))
+            : verb(input);
+        }),
+      watch: { install },
+    });
+  const outcome = await runCluster(
+    {
+      sessionsDir,
+      catalogFile,
+      onLive: (id, verbs) => {
+        liveVerbs.set(id, verbs.arm);
+        return () => {
+          liveVerbs.delete(id);
+        };
+      },
+    },
+    Effect.gen(function* () {
+      yield* sendPrompt(sessionId, `${sessionId}:m-1`, "hello");
+      // Install refused under a committed timeout chain: BOTH chains retire.
+      const refusing = yield* makeCapability(() =>
+        Effect.fail(new WatchRefused({ reason: "no machines plane" })),
+      );
+      const installRefused = yield* Effect.flip(
+        refusing.verbs.watch({ sessionId, watchId: "h2-install", spec: timedSpec, now: FAR_FUTURE }),
+      );
+      // Fill the budget to maxArmed - 1 so the timed watch's main arm takes
+      // the LAST slot and its timeout arm is the typed boundary refusal.
+      const working = yield* makeCapability(({ watchId }) =>
+        Effect.sync(() => {
+          installs.push(watchId);
+        }),
+      );
+      const armDirect = working.verbs.arm(sessionId);
+      for (let index = 0; index < MAX_ARMED - 1; index += 1)
+        yield* armDirect({
+          purpose: "monitor.hit",
+          at: FAR_FUTURE + index,
+          alarmId: `h2-fill-${index}`,
+          sourceKey: "monitor",
+          payload: {},
+        });
+      const budgetRefused = yield* Effect.flip(
+        working.verbs.watch({ sessionId, watchId: "h2-watch", spec: timedSpec, now: FAR_FUTURE }),
+      );
+      return { installRefused, budgetRefused };
+    }),
+  );
+  // The caller receives the ORIGINAL typed refusals, not a compensation error.
+  expect(outcome.installRefused).toBeInstanceOf(WatchRefused);
+  expect((outcome.installRefused as WatchRefused).reason).toBe("no machines plane");
+  expect(outcome.budgetRefused).toMatchObject({ _tag: "ArmRefused", code: "alarm_budget" });
+  // The refused watch's native source was never installed.
+  expect(installs).toEqual([]);
+  // Durable index: exactly the fillers — no partially created watch survives
+  // (main retired after the timeout refusal; install-refused chains retired).
+  const armed = await runAgent(
+    Effect.sync(() => {
+      const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+      const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
+      try {
+        return SessionHandleStore.createSessionKernel(store, catalog).armedAlarms();
+      } finally {
+        store.close();
+        catalog.close();
+      }
+    }),
+  );
+  expect(armed).toHaveLength(MAX_ARMED - 1);
+  expect(
+    armed.filter((row) => row.alarmId.startsWith("h2-watch") || row.alarmId.startsWith("h2-install")),
+  ).toEqual([]);
 });

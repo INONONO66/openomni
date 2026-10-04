@@ -482,6 +482,44 @@ describe("verbs", () => {
     expect(installs).toEqual(["watch-9"]);
   });
 
+  test("a refused timeout arm retires the already-committed main chain and surfaces the original refusal (r2 H2)", () => {
+    const calls: ArmCall[] = [];
+    const installs: string[] = [];
+    let armSeq = 0;
+    // The main arm takes the last budget slot; the timeout arm is the refusal.
+    const boundaryArm: ArmVerb = (input) => {
+      if (input.purpose === MONITOR_TIMEOUT && input.at !== null)
+        return Effect.fail(new ArmRefused({ code: "alarm_budget" }));
+      calls.push(input);
+      armSeq += 1;
+      return Effect.succeed({
+        alarmId: input.alarmId ?? "minted-alarm",
+        occurrenceId: `occ-${armSeq}`,
+        armSeq,
+      });
+    };
+    const definition = capability({ arm: boundaryArm, installs });
+    const timed: Alarm.WatchSpec = {
+      ...spec,
+      watch: { command: "make build", description: "build watch", timeout_ms: 60_000 },
+    };
+    const error = runTestSync(
+      Effect.flip(
+        definition.verbs.watch({ sessionId: "session-1", watchId: "watch-9", spec: timed, now: 1_000 }),
+      ),
+    );
+    expect(error).toBeInstanceOf(ArmRefused);
+    expect((error as ArmRefused).code).toBe("alarm_budget");
+    // The committed main chain retired superseding its own occurrence; the
+    // never-committed timeout chain got no retire and the install never ran.
+    expect(calls.map((call) => [call.purpose, call.at, call.alarmId, call.supersedes])).toEqual([
+      [MONITOR_HIT, 1_000, "watch-9", undefined],
+      [MONITOR_HIT, null, "watch-9", "occ-1"],
+    ]);
+    expect(calls[1]?.payload).toEqual({ reason: "create" });
+    expect(installs).toEqual([]);
+  });
+
   test("a refused native install retires the armed chain and its timeout, then surfaces the refusal", () => {
     const calls: ArmCall[] = [];
     const definition = capability({ arm: stubArm(calls), refuseInstall: "no machines plane" });
