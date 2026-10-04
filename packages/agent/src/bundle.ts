@@ -4,7 +4,7 @@
  * files are the one legal meeting point of core and plugin bands (#1276);
  * neither side imports the other directly.
  */
-export * from "./core/bundle";
+export * from "./core/compose";
 export * from "./plugins/alarm";
 
 // #1255 S1: the three declaration contracts, surfaced for the app manifest.

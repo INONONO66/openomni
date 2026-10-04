@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { appendFileSync, writeSync } from "node:fs";
 import { Cause, Effect, Exit, Layer } from "effect";
 import { KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
-import { NamedPolicyRegistry } from "../../src/core/bundle";
+import { NamedPolicyRegistry } from "../../src/core/compose";
 import { AgentGenerationLive } from "./generation-layer";
 import { makeSessionGenerations } from "../../src/core/run";
 import * as SessionHandleStore from "../../src/core/store/fence";

@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import type { PlainValue, PolicyRow } from "@openomni/protocol";
 import { Context, Effect, Exit, Layer } from "effect";
 import { z } from "zod";
-import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, compose, NamedPolicyRegistry } from "../src/core/bundle";
+import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, composeBundleLayers, NamedPolicyRegistry } from "../src/core/compose";
 import { BundleError } from "../src/core/failure";
 import { testBus } from "./helpers/bus";
 import { Entropy, ObservationSink, ToolCatalog } from "../src/core/ports";
@@ -29,7 +29,7 @@ test("ordered acquisition supplies earlier outputs and releases observers before
   const second = bundle({ name: "text", provides: [TextService], requires: [NumberService], layer: TextLive });
   const ObserverLive = Layer.effectDiscard(Effect.gen(function* () { const value = yield* TextService; yield* Effect.acquireRelease(Effect.sync(() => { events.push(value); }), () => Effect.sync(() => { events.push("observer-"); })); }));
   const observer = bundle({ name: "observer", provides: [], requires: [TextService], layer: ObserverLive });
-  const result = await isolated(Effect.gen(function* () { return [yield* NumberService, yield* TextService]; }).pipe(Effect.provide(compose(seed, [first, second, observer]))));
+  const result = await isolated(Effect.gen(function* () { return [yield* NumberService, yield* TextService]; }).pipe(Effect.provide(composeBundleLayers(seed, [first, second, observer]))));
   expect(result).toEqual([7, "7x"]);
   expect(events).toEqual(["number+", "text+", "7x", "observer-", "text-", "number-"]);
 });
@@ -73,7 +73,7 @@ test("seed missing output fails without starting a dependent observer", async ()
   const MissingSeed = Layer.effectContext(Effect.sync(missingNumberContext));
   const ObserverLive = Layer.effectDiscard(Effect.flatMap(NumberService, (value) => Effect.sync(() => { observed.push(value); })));
   const observer = bundle({ name: "observer", requires: [NumberService], provides: [], layer: ObserverLive });
-  const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose({ requires: [], provides: [NumberService], layer: MissingSeed }, [observer])))));
+  const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(composeBundleLayers({ requires: [], provides: [NumberService], layer: MissingSeed }, [observer])))));
   expect(Exit.isFailure(exit)).toBe(true);
   if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("missing_output");
   expect(observed).toEqual([]);
@@ -84,7 +84,7 @@ test("defects and interruption remain causes rather than acquisition failures", 
   const InterruptLive = Layer.effectDiscard(Effect.interrupt);
   for (const layer of [DefectLive, InterruptLive]) {
     const definition = bundle({ name: "broken", requires: [], provides: [], layer });
-    const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [definition])))));
+    const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(composeBundleLayers(seed, [definition])))));
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(String(exit.cause)).not.toContain("acquisition");
   }
@@ -98,7 +98,7 @@ test("policy contributions reject wrong namespaces duplicates and malformed serv
   ]) {
     const PolicyLive = Layer.succeed(Policy, policy);
     const definition = bundle({ name: "policy", requires: [], provides: [Policy], layer: PolicyLive });
-    const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [definition])))));
+    const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(composeBundleLayers(seed, [definition])))));
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("policy");
   }
@@ -149,22 +149,22 @@ test("validates tools rows events and duplicate identities", () => {
   expect(() => bundle({ ...base, rows: [malformed] })).toThrow(BundleError);
 });
 
-test("compose rechecks forged metadata and mutable Tag keys", () => {
+test("composeBundleLayers rechecks forged metadata and mutable Tag keys", () => {
   const definition = numberBundle();
-  expect(() => compose(seed, [{ ...definition, name: "other" }])).toThrow(BundleError);
-  expect(() => compose(seed, [definition, definition])).toThrow(BundleError);
+  expect(() => composeBundleLayers(seed, [{ ...definition, name: "other" }])).toThrow(BundleError);
+  expect(() => composeBundleLayers(seed, [definition, definition])).toThrow(BundleError);
   const tag = Context.Service<{ readonly mutable: true }, number>("@openomni/bundle/mutable/Value");
   const live = Layer.succeed(tag, 1);
   const mutable = bundle({ name: "mutable", requires: [], provides: [tag], layer: live });
   Object.assign(tag, { key: "@openomni/bundle/mutable/Other" });
-  expect(() => compose(seed, [mutable])).toThrow(BundleError);
+  expect(() => composeBundleLayers(seed, [mutable])).toThrow(BundleError);
 });
 
-test("compose snapshots the seed before caller mutation", async () => {
+test("composeBundleLayers snapshots the seed before caller mutation", async () => {
   const input = { provides: [NumberService], requires: [], layer: NumberLive };
   const TextLive = Layer.effect(TextService, Effect.map(NumberService, String));
   const text = bundle({ name: "text", requires: [NumberService], provides: [TextService], layer: TextLive });
-  const live = compose(input, [text]);
+  const live = composeBundleLayers(input, [text]);
   input.provides.length = 0;
   Object.assign(input, { layer: Layer.empty });
   expect(await isolated(TextService.pipe(Effect.provide(live)))).toBe("7");
@@ -175,7 +175,7 @@ test("acquisition rejects Tag mutation after composition before any resources op
   const tag = Context.Service<{ readonly changed: true }, number>("@openomni/bundle/changed/Value");
   const live = Layer.effect(tag, Effect.acquireRelease(Effect.sync(() => { events.push("open"); return 1; }), () => Effect.sync(() => { events.push("close"); })));
   const definition = bundle({ name: "changed", requires: [], provides: [tag], layer: live });
-  const composed = compose(seed, [definition]);
+  const composed = composeBundleLayers(seed, [definition]);
   Object.assign(tag, { key: "@openomni/bundle/changed/Other" });
   const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(composed))));
   expect(Exit.isFailure(exit)).toBe(true);
@@ -183,23 +183,23 @@ test("acquisition rejects Tag mutation after composition before any resources op
   expect(events).toEqual([]);
 });
 
-test("runtime compose refuses missing later-only and seed-colliding providers", () => {
+test("runtime composeBundleLayers refuses missing later-only and seed-colliding providers", () => {
   const TextLive = Layer.effect(TextService, Effect.map(NumberService, String));
   const second = bundle({ name: "text", provides: [TextService], requires: [NumberService], layer: TextLive });
   expect(() => {
-    Reflect.apply(compose, undefined, [seed, [second]]);
+    Reflect.apply(composeBundleLayers, undefined, [seed, [second]]);
   }).toThrow(BundleError);
   expect(() => {
-    Reflect.apply(compose, undefined, [seed, [second, numberBundle()]]);
+    Reflect.apply(composeBundleLayers, undefined, [seed, [second, numberBundle()]]);
   }).toThrow(BundleError);
-  expect(() => compose({ provides: [NumberService], requires: [], layer: NumberLive }, [numberBundle()])).toThrow(BundleError);
+  expect(() => composeBundleLayers({ provides: [NumberService], requires: [], layer: NumberLive }, [numberBundle()])).toThrow(BundleError);
 });
 
 test("missing runtime outputs fail typed and release resources", async () => {
   const released: string[] = [];
   const MissingLive = Layer.effectContext(Effect.acquireRelease(Effect.sync(missingNumberContext), () => Effect.sync(() => { released.push("closed"); })));
   const missing = bundle({ name: "number", provides: [NumberService], requires: [], layer: MissingLive });
-  const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [missing])))));
+  const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(composeBundleLayers(seed, [missing])))));
   expect(Exit.isFailure(exit)).toBe(true);
   if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("missing_output");
   expect(released).toEqual(["closed"]);
@@ -211,7 +211,7 @@ test("failed later acquisition unwinds once", async () => {
   const first = bundle({ name: "number", requires: [], provides: [NumberService], layer: FirstLive });
   const FailureLive = Layer.effectDiscard(Effect.andThen(NumberService, Effect.fail("refused")));
   const failed = bundle({ name: "failed", requires: [NumberService], provides: [], layer: FailureLive });
-  const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(compose(seed, [first, failed])))));
+  const exit = await isolated(Effect.exit(Effect.scoped(Layer.build(composeBundleLayers(seed, [first, failed])))));
   expect(Exit.isFailure(exit)).toBe(true);
   if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("acquisition");
   expect(released).toEqual(["number"]);

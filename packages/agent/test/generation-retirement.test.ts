@@ -7,7 +7,7 @@ import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } fro
 import { Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { makeSessionGenerations, GenerationRawSlots } from "../src/core/run";
 import { SessionLayer, ToolCatalog, ObservationSink } from "../src/core/ports";
-import { NamedPolicyRegistry } from "../src/core/bundle";
+import { NamedPolicyRegistry } from "../src/core/compose";
 
 function generation(number: number, close: () => void) {
   const snapshot = SessionHandleStore.generationSnapshot({ generation: number, revertTo: number - 1,
