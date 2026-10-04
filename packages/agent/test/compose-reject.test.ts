@@ -210,3 +210,104 @@ test("a valid manifest composes one generation with merged tables and a stable h
   const again = await Effect.runPromise(compose(manifest));
   expect(again.hash).toBe(generation.hash);
 });
+
+// ─── deleted bundle.test.ts behaviors, re-proven on the compose path (#1255) ──
+
+const bundleTool = (name: string) => ({
+  name,
+  description: name,
+  category: "query" as const,
+  input: z.object({}),
+  output: z.string(),
+  visibility: { model: ["resident" as const], cell: [] },
+  execute: async () => name,
+  render: (_input: PlainValue, output: PlainValue) => String(output),
+});
+
+test("requires_cycle: a self-requiring capability and a self-providing bundle reject", async () => {
+  const selfCapability = await rejectionOf(
+    Manifest.define({ capabilities: [capability("a", SeamA, { requires: ["a"] })], bundles: [] }),
+  );
+  expect(selfCapability.code).toBe("requires_cycle");
+  const selfBundle = await rejectionOf(
+    Manifest.define({
+      capabilities: [],
+      bundles: [defineBundle({ name: "m", requires: [SeamA], provides: [SeamA] })],
+    }),
+  );
+  expect(selfBundle.code).toBe("requires_cycle");
+});
+
+test("duplicate: a tool name colliding across bundles rejects", async () => {
+  const refused = await rejectionOf(
+    Manifest.define({
+      capabilities: [],
+      bundles: [
+        defineBundle({ name: "m", requires: [], tools: [bundleTool("probe__read")] }),
+        defineBundle({ name: "n", requires: [], tools: [bundleTool("probe__read")] }),
+      ],
+    }),
+  );
+  expect(refused.code).toBe("duplicate");
+  expect(refused.name).toBe("n");
+  expect(refused.detail).toBe("tool probe__read");
+});
+
+test("duplicate: purposes and handlers collide across declarations — capability vs capability and bundle vs capability", async () => {
+  const purposeHandler = { handler: true };
+  const capabilityPurposes = await rejectionOf(
+    Manifest.define({
+      capabilities: [
+        Capability.define({ name: "a", requires: [], purposes: { "probe.hit": purposeHandler }, verbs: {}, seam: SeamA }),
+        Capability.define({ name: "b", requires: [], purposes: { "probe.hit": purposeHandler }, verbs: {}, seam: SeamB }),
+      ],
+      bundles: [],
+    }),
+  );
+  expect(capabilityPurposes.code).toBe("duplicate");
+  expect(capabilityPurposes.detail).toBe("purpose probe.hit");
+  const bundlePurpose = await rejectionOf(
+    Manifest.define({
+      capabilities: [
+        Capability.define({ name: "a", requires: [], purposes: { "probe.hit": purposeHandler }, verbs: {}, seam: SeamA }),
+      ],
+      bundles: [defineBundle({ name: "m", requires: [SeamA], purposes: { "probe.hit": purposeHandler } })],
+    }),
+  );
+  expect(bundlePurpose.code).toBe("duplicate");
+  expect(bundlePurpose.name).toBe("m");
+  const handlerCollision = await rejectionOf(
+    Manifest.define({
+      capabilities: [capability("a", SeamA, { handlers: { "a/guard": {} } })],
+      bundles: [defineBundle({ name: "m", requires: [SeamA], handlers: { "a/guard": {} } })],
+    }),
+  );
+  expect(handlerCollision.code).toBe("duplicate");
+  expect(handlerCollision.detail).toBe("handler a/guard");
+});
+
+test("composition preserves install order across bundles: tools and rows merge in manifest order", async () => {
+  const manifest = Manifest.define({
+    capabilities: [capability("a", SeamA, { points: ["alarm.fired"] })],
+    bundles: [
+      defineBundle({
+        name: "zeta",
+        requires: [SeamA],
+        tools: [bundleTool("zeta__one")],
+        rows: [row("zeta/x#1", "alarm.fired")],
+      }),
+      defineBundle({
+        name: "alpha",
+        requires: [SeamA],
+        tools: [bundleTool("alpha__one")],
+        rows: [row("alpha/x#1", "alarm.fired")],
+      }),
+    ],
+  });
+  const generation = await Effect.runPromise(compose(manifest));
+  // Install order, not lexical order: the manifest's declaration sequence IS
+  // the composition order for bundles, their tool faces and their gate rows.
+  expect(generation.bundles).toEqual(["zeta", "alpha"]);
+  expect(generation.tools.map((tool) => tool.name)).toEqual(["zeta__one", "alpha__one"]);
+  expect(generation.rows.map((entry) => entry.id)).toEqual(["zeta/x#1", "alpha/x#1"]);
+});
