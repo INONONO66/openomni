@@ -99,7 +99,7 @@ for (const scenario of [
     if (scenario.authority === "evidence_only") {
       const refusal = refuseEvidenceOnly({ id: "forced", tool: "provision", input: {} });
       expect(refusal).toMatchObject({ errorKind: "precondition_failed", isError: true, settlement: "settled" });
-      expect(execution).toMatchObject({ isError: true, output: refusal.output });
+      expect(execution).toMatchObject({ isError: true, content: refusal.content });
     } else {
       expect(execution).toBeDefined();
       expect(execution?.isError).toBeUndefined();
