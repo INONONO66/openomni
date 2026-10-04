@@ -84,11 +84,11 @@ export interface CapabilityStep {
 }
 
 export interface CapabilityInput<
-  Name extends string,
-  Seam extends SeamTag,
-  Verbs,
-  Purpose,
-  Handler,
+  Name extends string = string,
+  Seam extends SeamTag = SeamTag,
+  Verbs = object,
+  Purpose = object,
+  Handler = object,
 > {
   readonly name: Name;
   /** Other capabilities' seam NAMES — resolution is by name, never by import. */

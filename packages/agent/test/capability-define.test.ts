@@ -33,7 +33,7 @@ const kind = {
   reduce: (state: PlainValue, _row: PlainValue) => state,
 };
 
-function defineTestCapability(overrides: Partial<CapabilityInput<string, SeamTag, object>> = {}) {
+function defineTestCapability(overrides: Partial<CapabilityInput> = {}) {
   return Capability.define({
     name: "probe",
     requires: ["alarm"],
@@ -42,7 +42,7 @@ function defineTestCapability(overrides: Partial<CapabilityInput<string, SeamTag
     points: ["action.pre"],
     purposes: { "probe.hit": () => Effect.void },
     handlers: { "probe/guard": () => Effect.void },
-    verbs: { ping: () => "pong" },
+    verbs: { ping: () => "pong" } as object,
     seam: TestSeam,
     ...overrides,
   });
