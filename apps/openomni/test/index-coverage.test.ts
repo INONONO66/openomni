@@ -689,12 +689,16 @@ test("an activation's armed monitor.hit resend reinstalls the native source acro
   }));
   await app1.stop();
 
-  // The wake's prompt commit is the barrier: it exists only if the reboot's
-  // armed resend actually reinstalled the native source and its hit resent
-  // the LIVE occurrence through the entity door.
+  // #1254 r2 M3: the barrier is the LAST fact of the wake path — the
+  // fired{delivered} commit for the seeded occurrence (production order:
+  // prompt commit -> re-arm -> handler returns -> fired append). Resolving on
+  // the prompt commit raced the producer: the delivered/chain assertions ran
+  // against state the wake fiber had not committed yet. Subscribed before boot.
   const woke = Promise.withResolvers<void>();
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.sessionId === sessionId && event.kind === "prompt") woke.resolve();
+    if (event.sessionId === sessionId && event.id === `${hit.occurrenceId}:delivered`) {
+      woke.resolve();
+    }
   });
   suite.defer(unsubscribe);
   const app2 = await suite.boot({ config: { ...config, machines: testMachinesPlane() }, llm: stopLlm });
