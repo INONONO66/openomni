@@ -5,7 +5,7 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
 import { createIpcServer } from "../src/ipc/server";
 import { acquire, run } from "./ipc/helpers/effects";
-import { captureError, deferred, within } from "./ipc/helpers/signal";
+import { awaitGone, captureError, deferred, within } from "./ipc/helpers/signal";
 import { socketPath } from "./ipc/helpers/socket-path";
 import { attachMachineDaemon } from "../src/daemon";
 import { execute } from "../src/exec";
@@ -50,15 +50,6 @@ function observeProcess() {
   };
 }
 
-function expectGone(pids: readonly number[]) {
-  for (const pid of pids) {
-    let code = "alive";
-    try { process.kill(pid, 0); }
-    catch (error) { code = z.object({ code: z.string() }).parse(error).code; }
-    expect(code).toBe("ESRCH");
-  }
-}
-
 test("interrupting native exec kills the real shell and sleeping grandchild and closes pipes", async () => {
   const observed = observeProcess();
   try {
@@ -70,7 +61,7 @@ test("interrupting native exec kills the real shell and sleeping grandchild and 
       expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
       yield* Effect.promise(() => within(observed.closed, "real child close"));
       observed.assertClosed();
-      expectGone(pids);
+      yield* Effect.promise(() => awaitGone(pids));
     }))), "interrupted exec lifecycle");
   } finally {
     observed.restore();
@@ -94,7 +85,7 @@ test("closing the attached daemon scope terminates a host-dispatched process gro
     await within(observed.closed, "remote process close");
     expect(await within(result, "disconnected host RPC")).toMatchObject({ _tag: "MachineRefusalError", reason: "disconnected" });
     observed.assertClosed();
-    expectGone(pids);
+    await awaitGone(pids);
     await within(detached.promise, "host detach event");
     expect(host.value.list()).toHaveLength(0);
   } finally {
