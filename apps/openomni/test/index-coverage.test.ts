@@ -560,3 +560,110 @@ test("boot rescan wakes armed idle sessions and skips ghost catalog rows and nat
   expect(kernel2.actionById(`${native.occurrenceId}:stale`)).toBeUndefined();
   expect(kernel2.actionById(`${native.occurrenceId}:delivered`)).toBeUndefined();
 });
+
+/** An idle-armed seed session: one scheduled `note.due` chain, fence rotated once. */
+async function seedArmedSession(plane: Awaited<ReturnType<typeof planeOf>>, sessionId: string) {
+  const kernel = plane.openKernel(sessionId);
+  await runEffect(
+    kernel.materialize({
+      id: sessionId,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: kernel.currentPolicyGeneration(),
+      actionId: `${sessionId}:materialize`,
+      at: 1,
+    }),
+  );
+  plane.catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: 1 });
+  const fence = await runEffect(adoptTestFence(kernel, sessionId, "fault-seeder"));
+  const due = Core.armAction({
+    parentId: `${sessionId}:materialize`,
+    sessionId,
+    purpose: "note.due",
+    at: 1_000,
+    supersedes: null,
+    alarmId: `${sessionId}-due`,
+    sourceKey: "note",
+    payload: {},
+    armSeq: 1,
+    ts: 2,
+  });
+  await runEffect(
+    kernel.commit({
+      sessionId,
+      owner: "fault-seeder",
+      fence,
+      now: 3,
+      expectedRevision: kernel.row(sessionId).revision,
+      actions: [due.action],
+      state: "idle",
+    }),
+  );
+  return due;
+}
+
+const stopLlm = {
+  resolveModel: fakeProviderModel,
+  run: () => Effect.succeed({ type: "stop" as const }),
+};
+
+test("refused alarm sends (sqlite trigger fault) fail one session's rescan and another's activation resend without touching their armed rows", async () => {
+  const config = suite.config("index-resend-fault-db-", { wsToken: "index-fault-token" });
+  if (config.catalogPath === undefined) throw new Error("missing test catalog");
+  const app1 = await suite.boot({ config, llm: stopLlm });
+  const plane1 = await planeOf(app1.runtime);
+  const ok = await seedArmedSession(plane1, "fault-ok");
+  const rescanDue = await seedArmedSession(plane1, "fault-rescan");
+  const resendDue = await seedArmedSession(plane1, "fault-resend");
+  await app1.stop();
+
+  // Fault injection at the cluster mailbox: the boot `rescan` envelope for one
+  // session and the activation's armed `note.due` resend for another are
+  // refused at the insert, so each awaited send fails with a real error.
+  const catalog = new Database(config.catalogPath);
+  catalog.exec(
+    "CREATE TRIGGER refuse_rescan_send BEFORE INSERT ON cluster_messages WHEN NEW.tag = 'Alarm' AND NEW.entity_id = 'fault-rescan' BEGIN SELECT RAISE(ABORT, 'injected rescan send refusal'); END",
+  );
+  catalog.exec(
+    "CREATE TRIGGER refuse_resend BEFORE INSERT ON cluster_messages WHEN NEW.tag = 'Alarm' AND NEW.entity_id = 'fault-resend' AND NEW.payload LIKE '%\"purpose\":\"note.due\"%' BEGIN SELECT RAISE(ABORT, 'injected resend refusal'); END",
+  );
+  catalog.close();
+
+  const okStale = Promise.withResolvers<void>();
+  const rescanLogged = Promise.withResolvers<void>();
+  const resendLogged = Promise.withResolvers<void>();
+  const errors = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    const line = args.map(String).join(" ");
+    if (line.includes("fault-rescan")) rescanLogged.resolve();
+    if (line.includes("fault-resend")) resendLogged.resolve();
+  });
+  suite.defer(() => errors.mockRestore());
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.sessionId === "fault-ok" && event.kind === "alarm") okStale.resolve();
+  });
+  suite.defer(unsubscribe);
+  const app2 = await suite.boot({ config: { ...config, machines: testMachinesPlane() }, llm: stopLlm });
+  const plane2 = await planeOf(app2.runtime);
+  await bounded(Promise.all([okStale.promise, rescanLogged.promise, resendLogged.promise]));
+
+  // The healthy session folded its due chain stale as usual.
+  expect(plane2.openKernel("fault-ok").actionById(`${ok.occurrenceId}:stale`)?.kind).toBe("alarm");
+  // Refused rescan send: boot completed, the session was never activated and
+  // its armed row stands with no fired fact.
+  const rescanKernel = plane2.openKernel("fault-rescan");
+  expect(rescanKernel.actionById(rescanDue.action.id)).toBeDefined();
+  expect(rescanKernel.actionById(`${rescanDue.occurrenceId}:stale`)).toBeUndefined();
+  expect(rescanKernel.actionById(`${rescanDue.occurrenceId}:delivered`)).toBeUndefined();
+  // Refused activation resend: the entity came up, the resend failed, nothing
+  // was retired and no fired fact was recorded — the chain stays armed.
+  const resendKernel = plane2.openKernel("fault-resend");
+  expect(resendKernel.actionById(resendDue.action.id)).toBeDefined();
+  expect(resendKernel.actionById(`${resendDue.occurrenceId}:stale`)).toBeUndefined();
+  expect(resendKernel.actionById(`${resendDue.occurrenceId}:delivered`)).toBeUndefined();
+  // Secondary: each injected fault surfaced exactly one failure report.
+  const lines = errors.mock.calls.map((call) => call.map(String).join(" "));
+  expect(lines.filter((line) => line.includes("fault-rescan"))).toHaveLength(1);
+  expect(lines.filter((line) => line.includes("fault-resend"))).toHaveLength(1);
+});

@@ -857,11 +857,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       const bootNow = services.now();
       const lastActivityAt = (id: string): number => {
         if (config.sessionsDir === undefined) return bootNow;
-        try {
-          return statSync(sessionFilePath(config.sessionsDir, id)).mtimeMs;
-        } catch {
-          return bootNow;
-        }
+        // Idleness is the session file's mtime; a missing file counts as
+        // activity-now. Any other fs failure still fails the boot closed.
+        return statSync(sessionFilePath(config.sessionsDir, id), { throwIfNoEntry: false })?.mtimeMs ?? bootNow;
       };
       const rescans = rescanOccurrences({
         armedSessionIds: plane.catalog.armedSessionIds(),
