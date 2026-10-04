@@ -6,6 +6,7 @@ import {
   clusterTempDir,
   runCluster,
   sendPrompt,
+  waitUntil,
 } from "../../../../packages/agent/test/helpers/cluster-runtime";
 import { createAlarmMonitorPorts, createLiveArmRegistry } from "../../src/composition/alarm-plane";
 import { cronPurposes } from "../../src/composition/bundles/cron";
@@ -253,15 +254,12 @@ export async function withEntityAlarmPorts<A>(
  * cluster mailbox until an Alarm envelope with `deliver_at` lands (the commit
  * is sync, the schedule send is a fork — this is the only async edge).
  */
-export async function awaitScheduled(catalogFile: string, deliverAt: number): Promise<void> {
-  const deadline = Date.now() + 5_000;
-  for (;;) {
-    const rows = clusterMessages(catalogFile, "Session");
-    if (rows.some((row) => row.tag === "Alarm" && row.deliver_at === deliverAt)) return;
-    if (Date.now() > deadline)
-      throw new Error(`no scheduled Alarm envelope with deliver_at ${deliverAt}`);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+export function awaitScheduled(catalogFile: string, deliverAt: number): Promise<void> {
+  return waitUntil(
+    `scheduled Alarm envelope with deliver_at ${deliverAt}`,
+    () => scheduledAt(catalogFile, deliverAt),
+    5_000,
+  );
 }
 
 /** True when some Alarm envelope carries the given deliver_at (deny-path zero checks). */

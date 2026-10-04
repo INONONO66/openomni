@@ -18,7 +18,7 @@ import { alarmCapability, watchPurposes, WatchRefused, type WatchInstallDeps } f
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
-import { clusterMessages, clusterTempDir, runCluster, sendAlarm, sendPrompt, sessionFileFor } from "../helpers/cluster-runtime";
+import { clusterMessages, clusterTempDir, runCluster, sendAlarm, sendPrompt, sessionFileFor, waitUntil } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-alarm-budget-");
@@ -679,18 +679,17 @@ test("r2 M2 (H5): a settled watch wakes exactly once — the exhausted hit retir
       });
       // Bounded wait on the exact event: the parked timeout envelope delivers
       // at its DeliverAt deadline and the entity acknowledges (processed).
-      yield* Effect.promise(async () => {
-        const deadline = Date.now() + 20_000;
-        for (;;) {
-          const processed = clusterMessages(catalogFile, "Session").some(
-            (row) =>
-              row.tag === "Alarm" && row.deliver_at === timeoutRow.fireAt && row.processed === 1,
-          );
-          if (processed) return;
-          if (Date.now() > deadline) throw new Error("timeout envelope never processed");
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-      });
+      yield* Effect.promise(() =>
+        waitUntil(
+          "timeout envelope processed",
+          () =>
+            clusterMessages(catalogFile, "Session").some(
+              (row) =>
+                row.tag === "Alarm" && row.deliver_at === timeoutRow.fireAt && row.processed === 1,
+            ),
+          20_000,
+        ),
+      );
       return { main, timeoutRow, hit };
     }),
   );
