@@ -1,4 +1,4 @@
-import { Core } from "@openomni/agent";
+import type { Core } from "@openomni/agent";
 import {
   canonicalDigest,
   Inbox,
@@ -15,7 +15,8 @@ export function parentReply(
   result: Core.SessionRunnerResult,
 ): SessionTransition.OutboundMessage | undefined {
   if (row.parentId === null || result.kind === "waiting") return undefined;
-  const original = kernel.inputMessages(row.id)
+  const original = kernel
+    .inputMessages(row.id)
     .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
     .find((origin) => origin.success && origin.data.senderSessionId === row.parentId);
   if (original === undefined || !original.success) return undefined;

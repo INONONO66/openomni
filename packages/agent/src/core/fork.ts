@@ -178,55 +178,77 @@ function readParentPrefix(
  * `session_index.parent_id` row is written last (its separate connection
  * cannot transact with the session file).
  */
+interface ForkPlan {
+  readonly parentRow: ReturnType<SessionKernel["row"]>;
+  readonly copies: readonly LedgerAction.Append[];
+  readonly forkedFrom: SessionGeneration.ForkAncestry;
+}
+
+/** Parent-side fork checks and copy planning; refuses before any child write. */
+function planFork(ports: ForkPorts, input: ForkInput): ForkPlan | ForkRefused {
+  const refuse = (reason: ForkRefusalReason, detail: string) =>
+    new ForkRefused({ sessionId: input.from, reason, detail });
+  if (ports.parentSchemaVersion !== SESSION_FILE_SCHEMA_VERSION)
+    return refuse(
+      "schema_version",
+      `parent file schemaVersion ${ports.parentSchemaVersion} is not ${SESSION_FILE_SCHEMA_VERSION}`,
+    );
+  let parentRow: ReturnType<SessionKernel["row"]>;
+  try {
+    parentRow = ports.parent.row(input.from);
+  } catch {
+    return refuse("parent_not_found", "parent session row is missing");
+  }
+  const verdict = ports.parent.verifyChain(input.from);
+  if (verdict.kind === "broken")
+    return refuse("parent_chain_broken", `parent chain breaks at ordinal ${verdict.ordinal}`);
+  if (verdict.head === null) return refuse("anchor_not_found", "parent chain is empty");
+  const { anchor, prefix } = readParentPrefix(ports.parent, input.from, input.at);
+  if (anchor === undefined) return refuse("anchor_not_found", `no parent action has hash ${input.at}`);
+  if (!isForkBoundary(anchor))
+    return refuse(
+      "anchor_not_boundary",
+      `anchor ${anchor.id} is a mid-turn ${anchor.kind} row, not a turn{terminal}, prompt or compaction boundary`,
+    );
+  const eligible = prefix.filter((node) => node.kind !== "fold.checkpoint" && !isArmRow(node));
+  const cap = input.byteCap ?? DEFAULT_FORK_COPY_BYTE_CAP;
+  const bytes = eligible.reduce((total, node) => total + copiedBytes(node), 0);
+  if (bytes > cap) return refuse("byte_cap", `copied bytes ${bytes} exceed the cap ${cap}`);
+  const renames = new Map<string, string>();
+  for (const node of eligible) {
+    if (isInputRow(node)) renames.set(node.id, `fork:${input.from}:${node.id}`);
+  }
+  const ids = new Map<string, string>();
+  for (const node of eligible) ids.set(node.id, renames.get(node.id) ?? node.id);
+  return {
+    parentRow,
+    copies: eligible.map((node) => copyAction(node, input.childId, ids, renames)),
+    forkedFrom: {
+      session: input.from,
+      anchor: anchor.actionHash,
+      parentSeq: anchor.ordinal,
+      parentHead: verdict.head,
+      copied: eligible.length,
+    },
+  };
+}
+
 export function forkSession(
   ports: ForkPorts,
   input: ForkInput,
 ): Effect.Effect<ForkReceipt, ForkRefused | LedgerError> {
   return Effect.gen(function* () {
-    const refuse = (reason: ForkRefusalReason, detail: string) =>
-      new ForkRefused({ sessionId: input.from, reason, detail });
-    if (ports.parentSchemaVersion !== SESSION_FILE_SCHEMA_VERSION)
-      return yield* refuse(
-        "schema_version",
-        `parent file schemaVersion ${ports.parentSchemaVersion} is not ${SESSION_FILE_SCHEMA_VERSION}`,
-      );
-    const parentRow = yield* Effect.try({
-      try: () => ports.parent.row(input.from),
-      catch: () => refuse("parent_not_found", "parent session row is missing"),
-    });
-    const verdict = ports.parent.verifyChain(input.from);
-    if (verdict.kind === "broken")
-      return yield* refuse("parent_chain_broken", `parent chain breaks at ordinal ${verdict.ordinal}`);
-    if (verdict.head === null) return yield* refuse("anchor_not_found", "parent chain is empty");
-    const { anchor, prefix } = readParentPrefix(ports.parent, input.from, input.at);
-    if (anchor === undefined) return yield* refuse("anchor_not_found", `no parent action has hash ${input.at}`);
-    if (!isForkBoundary(anchor))
-      return yield* refuse(
-        "anchor_not_boundary",
-        `anchor ${anchor.id} is a mid-turn ${anchor.kind} row, not a turn{terminal}, prompt or compaction boundary`,
-      );
-    const eligible = prefix.filter((node) => node.kind !== "fold.checkpoint" && !isArmRow(node));
-    const cap = input.byteCap ?? DEFAULT_FORK_COPY_BYTE_CAP;
-    const bytes = eligible.reduce((total, node) => total + copiedBytes(node), 0);
-    if (bytes > cap) return yield* refuse("byte_cap", `copied bytes ${bytes} exceed the cap ${cap}`);
-    const renames = new Map<string, string>();
-    for (const node of eligible) {
-      if (isInputRow(node)) renames.set(node.id, `fork:${input.from}:${node.id}`);
-    }
-    const ids = new Map<string, string>();
-    for (const node of eligible) ids.set(node.id, renames.get(node.id) ?? node.id);
-    const copies = eligible.map((node) => copyAction(node, input.childId, ids, renames));
-    const forkedFrom: SessionGeneration.ForkAncestry = {
-      session: input.from,
-      anchor: anchor.actionHash,
-      parentSeq: anchor.ordinal,
-      parentHead: verdict.head,
-      copied: copies.length,
-    };
+    const plan = planFork(ports, input);
+    if (plan instanceof ForkRefused) return yield* plan;
+    const { parentRow, copies, forkedFrom } = plan;
     const snapshot = ports.parent.latestGenerationFor(input.from);
     const child = ports.openChild();
     if (child.sessions.get(input.childId) !== undefined)
-      return yield* refuse("child_exists", `child session ${input.childId} already exists`);
+      return yield* new ForkRefused({
+        sessionId: input.from,
+        reason: "child_exists",
+        detail: `child session ${input.childId} already exists`,
+      });
     const receipt: SessionForkReceipt = yield* child.fork({
       materialize: {
         row: {

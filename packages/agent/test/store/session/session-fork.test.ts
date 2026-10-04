@@ -1,4 +1,3 @@
-import { Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { LedgerAction } from "@openomni/protocol";
 import { useMemoryStores, testNow } from "../helpers/storage";
