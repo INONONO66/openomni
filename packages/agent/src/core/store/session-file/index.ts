@@ -5,6 +5,7 @@ import {
   canonicalJson,
   Journal,
   LedgerAction,
+  LedgerSession,
   PlainObjectSchema,
   SessionTransition,
   type ObservationSink,
@@ -12,13 +13,15 @@ import {
   type Storage as ProtocolStorage,
 } from "@openomni/protocol";
 import { z } from "zod";
-import { LedgerInvariant } from "../errors";
+import { CorruptRecord, LedgerInvariant, MaterializeRefused, type LedgerError } from "../errors";
 import { computeActionHash, GENESIS_PREV_HASH } from "../action-hash.js";
 import type { SessionWriteAdapter } from "../services";
 import { createSqliteDecisionFacts } from "../decision.js";
 import { ActionSqlRow, ActionSqlRowSafeIntegers, decodeAction } from "../storage/sqlite-l0-rows.js";
 import { appendAction, commitSession, insertSession, selectSession } from "../storage/sqlite-l0-write.js";
-import { createSessions } from "../storage/sqlite-l0-sessions.js";
+import { createSessions, materializeSession } from "../storage/sqlite-l0-sessions.js";
+import { writeEffect, type RefuseWrite } from "../storage/write-effect.js";
+import type { Effect } from "effect";
 import { reportCommitted, type ObservationFailurePort } from "../storage/sqlite-l0-observation.js";
 
 
@@ -690,6 +693,34 @@ function verifyChain(db: Database, sessionId: string): LedgerAction.ChainVerdict
 }
 
 
+/**
+ * Session-file schemaVersion (#1257): stamped into `PRAGMA user_version` when
+ * this build opens the file. There is no migration plane — a session file is
+ * either on this schema (and carries this marker after its first open by this
+ * build) or it is a legacy file this code never reads; `Session.fork` refuses
+ * a parent whose marker differs without touching the file.
+ */
+export const SESSION_FILE_SCHEMA_VERSION = 1;
+
+const SessionUserVersion = z.object({ user_version: z.number().int().nonnegative() });
+
+/**
+ * Read-only schemaVersion probe (#1257): opens the file `readonly` and reads
+ * only `PRAGMA user_version`, so a legacy parent file is never modified (and
+ * its tables are never read). A missing file probes as 0 — not this schema.
+ */
+export function readSessionFileSchemaVersion(path: string): number {
+  let db: Database | undefined;
+  try {
+    db = new Database(path, { readonly: true });
+    return SessionUserVersion.parse(db.query("PRAGMA user_version").get()).user_version;
+  } catch {
+    return 0;
+  } finally {
+    db?.close();
+  }
+}
+
 // busy_timeout comes FIRST: the pragma is connection-local (it never touches
 // the database file), so applying it before any file-touching statement makes
 // a concurrent multi-process open wait for a busy writer instead of failing
@@ -792,6 +823,48 @@ export class SessionStore extends StoreHandle {
     this.armedAlarms = () => armed.armedAlarms();
     this.armedCount = () => armed.armedCount();
   }
+
+  /**
+   * One atomic fork write (#1257): the child genesis materialization plus the
+   * copied, rehashed pre-anchor rows land in a single transaction — a crashed
+   * fork leaves either a complete child chain or no child session row at all
+   * (session-file recovery needs no partial-fork repair path).
+   */
+  fork(input: SessionForkWrite): Effect.Effect<SessionForkReceipt, LedgerError> {
+    return writeEffect("session.fork", (refuse: RefuseWrite) =>
+      this.transaction(() => {
+        const materialize = LedgerSession.Materialize.parse(input.materialize);
+        const created = materializeSession(this.db, materialize, refuse);
+        if (!created.created)
+          return refuse(new MaterializeRefused({ sessionId: materialize.row.id, reason: "state" }));
+        let receipt = created.receipt;
+        for (const copy of input.copies) {
+          const appended = appendAction(this.db, LedgerAction.Append.parse(copy), receipt.revision, refuse);
+          if (appended === undefined)
+            return refuse(new CorruptRecord({ operation: "session.fork", id: copy.id }));
+          receipt = appended;
+        }
+        const row = selectSession(this.db, materialize.row.id);
+        if (row === undefined)
+          return refuse(new CorruptRecord({ operation: "session.fork", id: materialize.row.id }));
+        return { row, head: receipt.action.actionHash, copied: input.copies.length };
+      }),
+    );
+  }
+}
+
+/** The atomic child write `Session.fork` hands the child store (#1257). */
+export interface SessionForkWrite {
+  readonly materialize: LedgerSession.Materialize;
+  /** Eligible pre-anchor parent rows, already remapped for the child chain. */
+  readonly copies: readonly LedgerAction.Append[];
+}
+
+export interface SessionForkReceipt {
+  readonly row: LedgerSession.Row;
+  /** The child chain head hash after genesis plus every copy. */
+  readonly head: string;
+  readonly copied: number;
 }
 
 /**
@@ -810,11 +883,20 @@ export interface OpenSessionStoreOptions {
 
 export function openSessionStore(path: string, options: OpenSessionStoreOptions): SessionStore {
   return new SessionStore(
-    openStoreDatabase(path, SESSION_FILE_SCHEMA),
+    openStampedSessionDatabase(path),
     options.observationSink ?? SILENT_OBSERVATION_SINK,
     options.now,
     options.onObservationFailure ?? DROP_OBSERVATION_FAILURES,
   );
+}
+
+/** Opens the session file and stamps its schemaVersion marker (#1257). */
+function openStampedSessionDatabase(path: string): Database {
+  const db = openStoreDatabase(path, SESSION_FILE_SCHEMA);
+  const version = SessionUserVersion.parse(db.query("PRAGMA user_version").get()).user_version;
+  if (version < SESSION_FILE_SCHEMA_VERSION)
+    db.run(`PRAGMA user_version = ${SESSION_FILE_SCHEMA_VERSION}`);
+  return db;
 }
 
 /** Narrow l0 write-kernel surface (W5.2 review F6): fenced chain commits plus

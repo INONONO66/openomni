@@ -37,10 +37,12 @@ export { receivedMessageAction, receivedMessages } from "./commit";
 export { armAction, firedAction, alarmDisposition, composeAlarmPurposes, AlarmComposeError, AlarmSendRefused, ArmRefused, AlarmWakeError, type AlarmCapability, type AlarmArmNotice, type AlarmChainReads, type AlarmDisposition, type AlarmDrainConfig, type AlarmFired, type AlarmPurposeRegistry, type AlarmSweepConfig, type AlarmWakeContext, type AlarmWakeOutcome, type ArmVerb } from "./alarm";
 export { SessionEntity, SessionEntityContext, createSessionEntityLayer, createSessionEntityRunTurn, type SessionKernel } from "./entity";
 export { makeObservationBus, observationBusLayer, scopeObservation } from "./bus";
+export { forkSession, ForkRefused, isForkBoundary, DEFAULT_FORK_COPY_BYTE_CAP, type ForkInput, type ForkPorts, type ForkReceipt, type ForkRefusalReason } from "./fork";
 
 // ─── journal/store surface (formerly the Journal namespace, #1276) ───
 export {
   openCatalogStore, CATALOG_SCHEMA, bootstrapStoreDatabase, openSessionStore,
+  readSessionFileSchemaVersion, SESSION_FILE_SCHEMA_VERSION,
   createDecisionFactPort, SessionHandleStore, createSurfaceKeyStore,
   CommitRefused, CorruptRecord, requireSubAdapter, withStoreTimestamps,
   StoredEndpoint, StoredIdentity,

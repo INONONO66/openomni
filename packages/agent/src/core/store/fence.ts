@@ -463,6 +463,8 @@ export function configureAction(input: {
   readonly snapshot: SessionGeneration.Snapshot;
   /** `all|one` consumption widths (#1253); present only when the configure pins them. */
   readonly settings?: ConsumptionSettings;
+  /** Fork ancestry (#1257); present only on a forked child's genesis configure. */
+  readonly forkedFrom?: SessionGeneration.ForkAncestry;
   readonly at: number;
 }): LedgerAction.Append {
   return {
@@ -475,6 +477,7 @@ export function configureAction(input: {
       value: {
         operation: input.operation,
         ...(input.settings === undefined ? {} : { settings: input.settings }),
+        ...(input.forkedFrom === undefined ? {} : { forkedFrom: input.forkedFrom }),
       },
     },
     effect: {
