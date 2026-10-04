@@ -16,7 +16,7 @@ import {
 } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
-import { FenceRefused, LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
+import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
 import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "./services";
 import type { CatalogStore } from "./catalog.js";
 import type { ArmedAlarmRow, SessionStore } from "./session-file/index.js";
@@ -45,7 +45,6 @@ export function claimWithinCountedWindow<State>(operations: {
     return "claimed";
   });
 }
-
 
 export const RESUME_BUDGET = 10;
 
@@ -170,23 +169,17 @@ function commitIn(
     return delta === undefined ? [] : [delta];
   });
   return Effect.suspend(() => {
-    // #1254 S4 rotate/adopt window: a writer whose fence is already behind the
-    // catalog's rotation lost the activation race — refuse BEFORE the session
-    // file write, so an old executor can never interleave a commit between a
-    // new activation's rotate and adopt.
-    const catalogFence = context.catalogFence?.(input.sessionId);
-    if (catalogFence !== undefined && catalogFence > input.fence)
-      return Effect.fail(new FenceRefused({
-        sessionId: input.sessionId,
-        reason: "stale",
-        holder: null,
-        fence: catalogFence,
-        expiresAt: null,
-      }));
-    if (deltas.some((delta) => delta.op === "upsert"))
-      context.markArmed?.(input.sessionId, true);
+    // #1254 S4/H4 rotate/adopt window: the authoritative catalog fence is
+    // checked INSIDE the session commit transaction (sessions.commit guard),
+    // so a rotation is either observed there and refused, or it serializes
+    // behind this commit's write lock and adopts strictly after it.
+    if (deltas.some((delta) => delta.op === "upsert")) context.markArmed?.(input.sessionId, true);
     return sessionWritesIn(context).pipe(
-      Effect.flatMap((sessions) => sessions.commit(input)),
+      Effect.flatMap((sessions) =>
+        sessions.commit(input, {
+          catalogFence: () => context.catalogFence?.(input.sessionId),
+        }),
+      ),
       Effect.tap(() =>
         Effect.sync(() => {
           if (deltas.length === 0) return;
@@ -373,7 +366,11 @@ function outboundRowsIn(
 }
 
 /** The chain effect one received message committed; the pending fold reads it back. */
-const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
+const ReceivedEffect = z.object({
+  inboxKind: Inbox.Kind,
+  content: z.string(),
+  delivery: z.enum(["steer", "followUp"]).optional(),
+});
 
 /**
  * Pending-message projection (W5.2): `prompt` actions carrying an inbox
@@ -620,7 +617,10 @@ function getSnapshotIn(
   turns = 1,
 ): SessionTurn.Snapshot {
   if (!Number.isInteger(turns) || turns < 0)
-    throw new LedgerInvariant({ operation: "session.snapshot", message: "turn count must be non-negative" });
+    throw new LedgerInvariant({
+      operation: "session.snapshot",
+      message: "turn count must be non-negative",
+    });
   return context.stores().transaction(() => snapshotFor(context, rowIn(context, sessionId), turns));
 }
 
@@ -696,7 +696,10 @@ function watchSnapshotIn(
       snapshot,
       subscribe(handler: (observation: SessionTurn.Observation) => void) {
         if (closed)
-          throw new LedgerInvariant({ operation: "session.watch", message: "session watch is unsubscribed" });
+          throw new LedgerInvariant({
+            operation: "session.watch",
+            message: "session watch is unsubscribed",
+          });
         handlers.add(handler);
         return () => handlers.delete(handler);
       },
@@ -939,8 +942,11 @@ function makeSessionKernel(context: SessionKernelContext) {
     },
     row: (sessionId: string): LedgerSession.Row => rowIn(context, sessionId),
     listRows: (): LedgerSession.Row[] => requiredSessionsIn(context).list(),
-    childSessionsPage: (sessionId: string, afterId: string, limit: number): { readonly id: string }[] =>
-      context.childSessionsPage(sessionId, afterId, limit),
+    childSessionsPage: (
+      sessionId: string,
+      afterId: string,
+      limit: number,
+    ): { readonly id: string }[] => context.childSessionsPage(sessionId, afterId, limit),
     policyRows: (generation?: number): PolicyRow.Row[] => policyRowsIn(context, generation),
     currentPolicyGeneration: (): number =>
       policyRowsIn(context).reduce((latest, policy) => Math.max(latest, policy.generation), 0),
@@ -976,7 +982,8 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
       armed: { armedAlarms: session.armedAlarms, armedCount: session.armedCount },
     }),
     writable: () => true,
-    childSessionsPage: (parentId, afterId, limit) => catalog.childSessionsPage(parentId, afterId, limit),
+    childSessionsPage: (parentId, afterId, limit) =>
+      catalog.childSessionsPage(parentId, afterId, limit),
     markArmed: (sessionId, armed) => catalog.markArmed(sessionId, armed),
     catalogFence: (sessionId) => catalog.sessionIndex(sessionId)?.fence,
   });

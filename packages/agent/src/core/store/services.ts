@@ -14,7 +14,13 @@ export interface SessionWriteAdapter
     input: LedgerSession.Materialize,
   ): Effect.Effect<LedgerSession.MaterializeResult, LedgerError>;
   adoptFence(input: LedgerSession.AdoptFence): Effect.Effect<AdoptReceipt, LedgerError>;
-  commit(input: LedgerSession.Commit): Effect.Effect<CommitReceipt, LedgerError>;
+  commit(
+    input: LedgerSession.Commit,
+    guard?: {
+      /** Authoritative catalog fence, read inside the session commit transaction (#1254 H4). */
+      readonly catalogFence: () => number | undefined;
+    },
+  ): Effect.Effect<CommitReceipt, LedgerError>;
 }
 
 /**
@@ -26,4 +32,3 @@ export interface LedgerHandles {
   readonly catalog: CatalogStore;
   readonly openSession: (sessionId: string) => SessionStore;
 }
-

@@ -16,10 +16,7 @@ import {
   appendAction,
   commitSession,
 } from "./sqlite-l0-write.js";
-import {
-  reportCommitted,
-  type ObservationFailurePort,
-} from "./sqlite-l0-observation.js";
+import { reportCommitted, type ObservationFailurePort } from "./sqlite-l0-observation.js";
 import { writeEffect, type RefuseWrite } from "./write-effect";
 
 function materializeSession(
@@ -97,7 +94,8 @@ export function createSessions(
         const result = transaction(() =>
           materializeSession(db, LedgerSession.Materialize.parse(input), refuse),
         );
-        if (result.created) reportCommitted(db, observationSink, onObservationFailure, result.receipt);
+        if (result.created)
+          reportCommitted(db, observationSink, onObservationFailure, result.receipt);
         return result;
       }),
     get(id) {
@@ -114,10 +112,24 @@ export function createSessions(
       writeEffect("session.adoptFence", (refuse) =>
         transaction(() => adoptFence(db, LedgerSession.AdoptFence.parse(input), refuse)),
       ),
-    commit: (input) =>
+    commit: (input, guard) =>
       writeEffect("session.commit", (refuse) => {
         const outcome = transaction(() => {
           const request = LedgerSession.Commit.parse(input);
+          // #1254 H4: the catalog fence is read here, after BEGIN IMMEDIATE
+          // holds the session write lock — a rotation observed now refuses
+          // the commit; one landing later serializes behind it.
+          const catalogFence = guard?.catalogFence();
+          if (catalogFence !== undefined && catalogFence > request.fence)
+            return refuse(
+              new FenceRefused({
+                sessionId: request.sessionId,
+                reason: "stale",
+                holder: null,
+                fence: catalogFence,
+                expiresAt: null,
+              }),
+            );
           const result = commitSession(db, request, refuse);
           if (result === undefined)
             return refuse(new SessionNotFound({ sessionId: request.sessionId }));
