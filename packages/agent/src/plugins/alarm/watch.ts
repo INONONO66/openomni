@@ -79,14 +79,23 @@ export interface WatchWakeDeps {
   readonly close: (watchId: string) => void;
 }
 
-/** Install seam for the native source adapter (PTY command / fs path). */
+/**
+ * Install seam for the native source adapter (PTY command / fs path / machine
+ * terminal). It settles only once the source has subscribed, so the watch verb
+ * — and the tool `create` above it — returns after subscription (#1273): no
+ * line emitted between the tool's return and the subscribe can be lost.
+ */
 export interface WatchInstallDeps {
   readonly install: (input: {
     readonly sessionId: string;
     readonly watchId: string;
     readonly spec: Alarm.WatchSpec;
     /** The armed occurrence a native hit resends (the cluster dedupes on it). */
-    readonly occurrence: { readonly occurrenceId: string; readonly alarmId: string };
+    readonly occurrence: {
+      readonly occurrenceId: string;
+      readonly alarmId: string;
+      readonly armSeq: number;
+    };
   }) => Effect.Effect<void, WatchRefused>;
 }
 
@@ -194,7 +203,7 @@ export type WatchVerb = (input: {
   readonly spec: Alarm.WatchSpec;
   readonly now: number;
 }) => Effect.Effect<
-  { readonly alarmId: string; readonly occurrenceId: string },
+  { readonly alarmId: string; readonly occurrenceId: string; readonly armSeq: number },
   ArmRefused | WatchRefused
 >;
 
@@ -218,20 +227,45 @@ export function createWatchVerb(
         sourceKey: MONITOR_SOURCE,
         payload: { spec, notifications: 0 },
       });
-      if (spec.watch.timeout_ms !== undefined)
-        yield* arm({
-          purpose: MONITOR_TIMEOUT,
-          at: input.now + spec.watch.timeout_ms,
-          alarmId: `${input.watchId}:timeout`,
-          sourceKey: MONITOR_SOURCE,
-          payload: { watchId: input.watchId },
-        });
-      yield* deps.install({
-        sessionId: input.sessionId,
-        watchId: input.watchId,
-        spec,
-        occurrence: main,
-      });
+      const timeout =
+        spec.watch.timeout_ms === undefined
+          ? undefined
+          : yield* arm({
+              purpose: MONITOR_TIMEOUT,
+              at: input.now + spec.watch.timeout_ms,
+              alarmId: `${input.watchId}:timeout`,
+              sourceKey: MONITOR_SOURCE,
+              payload: { watchId: input.watchId },
+            });
+      // A chain whose native source never subscribed is retired, not left
+      // armed: the refusal reaches the caller and no row waits for a hit that
+      // cannot arrive.
+      yield* deps
+        .install({ sessionId: input.sessionId, watchId: input.watchId, spec, occurrence: main })
+        .pipe(
+          Effect.catch((refused) =>
+            Effect.gen(function* () {
+              yield* arm({
+                purpose: MONITOR_HIT,
+                at: null,
+                alarmId: input.watchId,
+                supersedes: main.occurrenceId,
+                sourceKey: MONITOR_SOURCE,
+                payload: { reason: "install" },
+              });
+              if (timeout !== undefined)
+                yield* arm({
+                  purpose: MONITOR_TIMEOUT,
+                  at: null,
+                  alarmId: timeout.alarmId,
+                  supersedes: timeout.occurrenceId,
+                  sourceKey: MONITOR_SOURCE,
+                  payload: { watchId: input.watchId },
+                });
+              return yield* Effect.fail(refused);
+            }),
+          ),
+        );
       return main;
     });
 }

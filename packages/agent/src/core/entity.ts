@@ -627,6 +627,7 @@ function entityArmVerb(handle: ActivationHandle): ArmVerb {
         return yield* new ArmRefused({ code: "alarm_budget" });
       const row = kernel.row(authority.sessionId);
       const alarmId = input.alarmId ?? `${authority.sessionId}:${input.purpose}`;
+      const armSeq = row.revision + 1;
       const { action, occurrenceId } = armAction({
         parentId: kernel.latestAction(authority.sessionId)?.id ?? null,
         sessionId: authority.sessionId,
@@ -636,7 +637,7 @@ function entityArmVerb(handle: ActivationHandle): ArmVerb {
         alarmId,
         sourceKey: input.sourceKey,
         payload: input.payload,
-        armSeq: row.revision + 1,
+        armSeq,
         ts: env.clock(),
       });
       yield* commitIn(handle, {
@@ -648,7 +649,7 @@ function entityArmVerb(handle: ActivationHandle): ArmVerb {
         actions: [action],
         state: row.state,
       });
-      return { alarmId, occurrenceId };
+      return { alarmId, occurrenceId, armSeq };
     })).pipe(Effect.catchIf(
       (error): error is Exclude<LedgerError | AdmissionFailure, never> => !(error instanceof ArmRefused),
       (error) => Effect.die(error),

@@ -2,19 +2,18 @@ import { Core } from "@openomni/agent";
 const defineTool = Core.defineTool;
 import { z } from "zod";
 import { fileOperation, walker, type FilePorts } from "./core/filesystem";
-import { parseLocus } from "./locus";
 
 export function createFindTool(ports: FilePorts) {
   const walk = walker(ports);
   return defineTool({
     name: "find",
     description:
-      "Find files and directories whose path relative to the search root matches a glob (e.g. **/*.ts). path defaults to the current directory; machineId:/absolute/path searches a machine. Symlinks are not followed.",
+      "Find files and directories whose path relative to the search root matches a glob (e.g. **/*.ts). path is /absolute (searched on the default machine) or machineId:/absolute/path. Symlinks are not followed.",
     category: "query",
     input: z
       .object({
         pattern: z.string().min(1),
-        path: z.string().min(1).default("."),
+        path: z.string().min(1),
         limit: z.number().int().positive().optional(),
       })
       .strict(),
@@ -23,11 +22,10 @@ export function createFindTool(ports: FilePorts) {
     execute: (args, ctx) =>
       fileOperation("find", async () => {
         const glob = new Bun.Glob(args.pattern);
-        const machine = parseLocus(args.path).kind === "machine";
         const paths: string[] = [];
         let truncated = false;
         await walk(args.path, ctx.signal, async (path) => {
-          const relative = relativeTo(args.path, path, machine);
+          const relative = relativeTo(args.path, path);
           if (relative === "" || !glob.match(relative)) return true;
           truncated = !admit(paths, path, args.limit);
           return !truncated;
@@ -51,10 +49,8 @@ function admit(paths: string[], path: string, limit: number | undefined): boolea
 }
 
 /** The walked path minus the search root, so globs read like `**\/*.ts` from the root. */
-function relativeTo(root: string, path: string, machine: boolean): string {
-  const base = machine ? root : root.replace(/^\.\//, "");
-  const target = machine ? path : path.replace(/^\.\//, "");
-  if (target === base) return "";
-  const prefix = base.endsWith("/") ? base : `${base}/`;
-  return target.startsWith(prefix) ? target.slice(prefix.length) : target;
+function relativeTo(root: string, path: string): string {
+  if (path === root) return "";
+  const prefix = root.endsWith("/") ? root : `${root}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }

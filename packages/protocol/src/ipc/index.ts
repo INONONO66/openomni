@@ -91,6 +91,20 @@ const methods = {
     params: Machine.InputWriteRequest,
     result: Machine.InputWriteResult,
   },
+  /**
+   * Machine host → machine daemon (#1273): persistent named terminals over
+   * tmux. `pty_read` is the authoritative pull; `machine.pty_output` is a
+   * notification (no reply), so it has no entry in this request table.
+   */
+  [Machine.WireMethod.PtyOpen]: { params: Machine.PtyOpenRequest, result: Machine.PtyOpenResult },
+  [Machine.WireMethod.PtyWrite]: { params: Machine.PtyWriteRequest, result: Machine.PtyWriteResult },
+  [Machine.WireMethod.PtyRead]: { params: Machine.PtyReadRequest, result: Machine.PtyReadResult },
+  [Machine.WireMethod.PtyResize]: {
+    params: Machine.PtyResizeRequest,
+    result: Machine.PtyResizeResult,
+  },
+  [Machine.WireMethod.PtyClose]: { params: Machine.PtyCloseRequest, result: Machine.PtyCloseResult },
+  [Machine.WireMethod.PtyList]: { params: Machine.PtyListRequest, result: Machine.PtyListResult },
 };
 
 export namespace Ipc {

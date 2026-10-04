@@ -13,12 +13,14 @@ import { runEffect, runRuntimeEffect, runRuntimeExit } from "./helpers/effect";
 import { testIds } from "./helpers/test-entropy";
 import { testEntropy } from "./helpers/test-entropy";
 import { Bus } from "./helpers/bus";
+import { testMachinesPlane } from "./helpers/self-machine";
 
 const config = {
   host: "127.0.0.1",
   wsPort: 0,
   kek: { kind: "locked", reason: "no vault key in this fixture" },
   model: { provider: "fake", id: "fixture", apiKey: "fixture" },
+  machines: testMachinesPlane(),
 } as const;
 
 
@@ -39,7 +41,7 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
     exec: (): Effect.Effect<typeof exec> => Effect.succeed(exec),
   };
   const ports = toolPorts(runtime, {
-    machines: { get: (): typeof machine => machine } as never,
+    machines: { host: { get: (): typeof machine => machine }, defaultMachine: "self" } as never,
     completion: (() => Effect.succeed({})) as never,
     messages: { ingest: () => Effect.succeed({}) } as never,
     now: () => 0,

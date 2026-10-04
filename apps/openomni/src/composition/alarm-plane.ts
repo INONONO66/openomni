@@ -235,7 +235,7 @@ export function createAlarmArmVerb(deps: AlarmArmDeps): (sessionId: string) => B
         supersedes: input.supersedes ?? null,
         payload: input.payload,
       });
-      return { alarmId, occurrenceId: committed.occurrenceId };
+      return { alarmId, occurrenceId: committed.occurrenceId, armSeq: committed.armSeq };
     });
 }
 
@@ -293,6 +293,7 @@ function commitArm(
 
 const RETIRED_STATUS: Record<string, WatchState["status"]> = {
   cancel: "cancelled",
+  install: "cancelled",
   exhausted: "exhausted",
   fired: "fired",
   timeout: "fired",

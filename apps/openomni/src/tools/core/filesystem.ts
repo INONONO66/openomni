@@ -1,6 +1,4 @@
-import type { Dirent } from "node:fs";
-import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { Core } from "@openomni/agent";
 const ToolRefused = Core.ToolRefused;
 import { MachineRefusalError } from "@openomni/machines";
@@ -16,10 +14,25 @@ interface ToolMachine {
     stat(path: string): Promise<FsValue<"stat">>;
   };
   exec(cmd: string, cwd: string): Promise<Exclude<Machine.ExecResult, { status: "completed" }> | (Omit<Extract<Machine.ExecResult, { status: "completed" }>, "stdout" | "stderr"> & { readonly stdout: Uint8Array; readonly stderr: Uint8Array })>;
+  /** Persistent terminals (#1273): the subset bash{session} drives. */
+  readonly pty: {
+    open(name: string, cwd: string): Promise<Machine.PtyOpenResult>;
+    write(name: string, data: Uint8Array): Promise<Machine.PtyWriteResult>;
+    read(name: string, options?: { cursor?: string; waitMs?: number }): Promise<Exclude<Machine.PtyReadResult, { status: "ok" }> | (Omit<Extract<Machine.PtyReadResult, { status: "ok" }>, "data"> & { readonly data: Uint8Array })>;
+  };
 }
 
 export interface FilePorts {
-  readonly machines?: { readonly get: (id: string) => ToolMachine };
+  readonly machines?: {
+    /** The configured default machine a prefix-less path resolves to (#1271). */
+    readonly defaultMachine: string;
+    readonly get: (id: string) => ToolMachine;
+  };
+}
+
+/** The configured prefix-less target; an unconfigured plane still parses and then refuses at lookup. */
+export function defaultMachineOf(ports: FilePorts): string {
+  return ports.machines?.defaultMachine ?? "self";
 }
 
 /** Translate endpoint failures once; authority remains at tool.pre and the daemon. */
@@ -29,45 +42,30 @@ export function fileOperation<T>(name: string, operation: () => Promise<T>): Pro
   });
 }
 
-/** Refusals pass through; coded I/O errors and daemon refusals become this tool's refusal. */
+/** Refusals pass through; daemon refusals become this tool's refusal. */
 function fileRefusal(name: string, error: Error): Error {
   if (error instanceof ToolRefused) return error;
-  const { code } = error as NodeJS.ErrnoException;
-  if (code !== undefined) return new ToolRefused(name, `${code}: ${error.message}`);
   if (error instanceof MachineRefusalError) return new ToolRefused(name, error.message);
   return error;
 }
 
+/** Every operation resolves a machine handle (#1271); there is no local filesystem path. */
 export function filesystem(path: string, ports: FilePorts) {
-  const locus = parseLocus(path);
-  const remote = remoteHost(locus, ports);
+  const locus = parseLocus(path, { defaultMachine: defaultMachineOf(ports) });
+  const remote = machineHost(locus, ports);
   return {
     locus,
-    read: () => (remote === undefined ? readFile(locus.path) : remoteRead(remote, locus.path)),
-    async write(data: Uint8Array) {
-      if (remote !== undefined) return (await remote.fs.write(locus.path, data)).bytesWritten;
-      await writeFile(locus.path, data);
-      return data.byteLength;
-    },
-    async list() {
-      if (remote !== undefined) return remoteList(remote, locus.path);
-      const entries = await readdir(locus.path, { withFileTypes: true });
-      return entries
-        .map((entry) => ({ name: entry.name, kind: nodeKind(entry) }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-    },
-    async kind() {
-      if (remote !== undefined) return (await remote.fs.stat(locus.path)).kind;
-      return nodeKind(await lstat(locus.path));
-    },
+    read: () => remoteRead(remote, locus.path),
+    write: async (data: Uint8Array) => (await remote.fs.write(locus.path, data)).bytesWritten,
+    list: () => remoteList(remote, locus.path),
+    kind: async () => (await remote.fs.stat(locus.path)).kind,
   };
 }
 
 type Remote = NonNullable<ReturnType<NonNullable<FilePorts["machines"]>["get"]>>;
 
-/** The attached machine a machine locus names; a local locus has none. */
-function remoteHost(locus: Locus, ports: FilePorts): Remote | undefined {
-  if (locus.kind !== "machine") return undefined;
+/** The attached machine every locus names (#1271). */
+function machineHost(locus: Locus, ports: FilePorts): Remote {
   const remote = ports.machines?.get(locus.machine);
   if (remote === undefined) throw new ToolRefused("locus", "machine host is not configured");
   return remote;
@@ -92,13 +90,6 @@ async function remoteList(remote: Remote, path: string) {
   return value.entries.map(({ name, kind }) => ({ name, kind }));
 }
 
-/** One classification for directory entries and lstat results. */
-function nodeKind(entry: Pick<Dirent, "isFile" | "isDirectory" | "isSymbolicLink">) {
-  if (entry.isFile()) return "file" as const;
-  if (entry.isDirectory()) return "dir" as const;
-  return entry.isSymbolicLink() ? ("symlink" as const) : ("other" as const);
-}
-
 type Endpoint = ReturnType<typeof filesystem>;
 type EntryKind = "file" | "dir";
 /** Called once per visited path; false stops the walk. Readers open the path themselves. */
@@ -115,12 +106,17 @@ export function walker(ports: FilePorts) {
     const endpoint = filesystem(path, ports);
     const kind = await entryKind(endpoint);
     if (!(await visit(path, kind))) return false;
-    return kind === "file" || descend(endpoint, signal, visit);
+    return kind === "file" || descend(path, endpoint, signal, visit);
   }
-  async function descend(endpoint: Endpoint, signal: AbortSignal, visit: Visit): Promise<boolean> {
+  async function descend(
+    parent: string,
+    endpoint: Endpoint,
+    signal: AbortSignal,
+    visit: Visit,
+  ): Promise<boolean> {
     const entries = await endpoint.list();
     for (const entry of entries.filter((entry) => entry.kind === "file" || entry.kind === "dir"))
-      if (!(await step(childPath(endpoint.locus, entry.name), signal, visit))) return false;
+      if (!(await step(childPath(parent, endpoint.locus, entry.name), signal, visit))) return false;
     return true;
   }
   return step;
@@ -132,11 +128,14 @@ async function entryKind(endpoint: Endpoint): Promise<EntryKind> {
   throw new ToolRefused("walk", "expected a regular file or directory");
 }
 
-function childPath(locus: Locus, name: string): string {
+/**
+ * Children keep the textual prefix of their parent: a prefix-less parent
+ * yields prefix-less children (the default machine re-applies on parse), an
+ * explicit `machine:` parent yields explicit children.
+ */
+function childPath(parent: string, locus: Locus, name: string): string {
   const path = join(locus.path, name);
-  if (locus.kind === "machine") return `${locus.machine}:${path}`;
-  // join removes './'; restore the local escape before a child is parsed again.
-  return isAbsolute(path) ? path : `./${path}`;
+  return parent === locus.path ? path : `${locus.machine}:${path}`;
 }
 
 export function text(bytes: Uint8Array): string {

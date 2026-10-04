@@ -116,7 +116,7 @@ export async function runAppBoot<A, E>(
 export function toolPorts(
   runtime: AppRuntime,
   ports: {
-    readonly machines?: MachineHost;
+    readonly machines?: { readonly host: MachineHost; readonly defaultMachine: string };
     readonly cells?: ComposedCodemode;
     readonly completion: ReturnType<typeof createCompletionPort>;
     readonly messages: GatewayRouter;
@@ -136,8 +136,9 @@ export function toolPorts(
       machines === undefined
         ? undefined
         : {
+            defaultMachine: machines.defaultMachine,
             get: (id) => {
-              const handle = machines.get(id);
+              const handle = machines.host.get(id);
               return {
                 fs: {
                   read: (path, window) => runAppEffect(runtime, handle.fs.read(path, window)),
@@ -146,6 +147,11 @@ export function toolPorts(
                   stat: (path) => runAppEffect(runtime, handle.fs.stat(path)),
                 },
                 exec: (cmd, cwd) => runAppEffect(runtime, handle.exec(cmd, cwd)),
+                pty: {
+                  open: (name, cwd) => runAppEffect(runtime, handle.pty.open(name, cwd)),
+                  write: (name, data) => runAppEffect(runtime, handle.pty.write(name, data)),
+                  read: (name, options) => runAppEffect(runtime, handle.pty.read(name, options)),
+                },
               };
             },
           },

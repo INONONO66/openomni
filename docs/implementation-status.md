@@ -103,9 +103,59 @@ alarm-scoped `epoch` 0, `Bun\.cron\(|alarm\.cancel` 0,
 `monitor-ports|watchOccurrenceKey|watchTimeoutKey|:occ:` 0; one writer for
 `alarm` (`script/check-journal-writers.ts`). Deferrals: capability manifest /
 `requires` cascade mechanics with recorded reason and the `action` writer land
-with #1255. Correction carried in the same PR: the #1253 squash left one stray
-diff3 marker line (`||||||| parent of fb19bf2c`) in this file; it is deleted
-here.
+with #1255.
+
+## #1053 machine plane epic landed (six children, 2026-10-03/04)
+
+The machine plane moved from a localhost Unix-socket endpoint frozen at 2026-08-24 to a network-attachable WHERE with persistent terminals, computer use and browser use, all reached through the existing twelve-tool catalog and code-mode handles; no new model tool was added. Children, in merge order: #1272 code mode extracted into `packages/codemode` (`3e36a657`, PR #1280); #1274 `screen.read`/`input.write` via macOS shell-out (`a004bdb0`, PR #1282); #1270 TCP transport with host-certificate chain validation + SPKI pin and automatic reattach (`76598609`, PR #1281); #1271 brain host attaches as machine `self`, local execution path removed from the tools (`a66dc3a7`, PR #1284); #1273 persistent `pty.session` terminals over tmux with `bash{session}` (`a1a3de0f`, PR #1283); #1275 `browser()` over CDP inside a `pty.session` (`05bb44dd`, PR #1286). Each child merged after CI all-green and an independent line-level review with zero High/Medium findings; real-surface evidence (attach transcripts, restart/reattach logs, typed refusals, screenshot bytes) is attached to each child's closing comment. Not claimed: native computer use (#887), media streaming, sandbox/egress hardening (#950), cli contact (#1180), embedded desktop browser (#1023). Open design decision recorded on the epic: host-side chain validation of daemon certificates (today the listener judges the daemon key against enrollment at handshake).
+
+## #1275 browser automation recipe: browser() over CDP in a pty.session
+
+On `machines/1275-browser-recipe` (2026-10-03, draft PR #1286). The codemode
+Python prelude gains `browser(machine_id, *, headless=True, profile_dir=None,
+executable_path=None)` returning a thin `BrowserClient` around Playwright's
+`connect_over_cdp`; Chromium runs persistently in a cell-owned tmux
+`pty.session` (name `openomni-browser-<sha256(profile)[:12]>`), with the CDP
+port probe-bound from 9222 and port + pid retained in the session output.
+Profile dirs are export-confined via the existing `openCwd` rule
+(`path_escapes_export` before launch); loss at any client accessor raises the
+typed `browser_lost` refusal with the captured tmux output; a missing
+executable refuses typed naming the path and install command and tears the
+launch session down. No new capability id, wire method, or model tool.
+`PythonKernel.close()` is EOF-first (bounded grace before hard discard) so the
+driver's cleanup stops each client's browser process. Recipe documented in
+`docs/machines-and-delegation.md` section 2.7; end-to-end tests in
+`packages/codemode/test/codemode/browser.test.ts` run real tmux + Chromium.
+
+## #1273 persistent terminals: pty.session over tmux
+
+On `machines/1273-pty-session` (2026-10-03, base `a004bdb0`, draft PR #1283).
+The machine protocol gains the `pty.session` capability and six wire methods
+`machine.pty_open/pty_write/pty_read/pty_resize/pty_close/pty_list` with
+strict bounds (`PTY_READ_MAX_BYTES` 256 KiB, `PTY_WRITE_MAX_BYTES` 16 KiB,
+`PTY_LIST_MAX_SESSIONS` 1000, cols/rows <= 1000, read `waitMs` <= 30 s long
+poll) and typed refusals `pty_not_found`/`pty_not_available`/
+`path_escapes_export`; `machine.pty_output` is a reserved wake-up
+notification, never output authority. The daemon adapter
+(`packages/machines/src/pty.ts` + `pty-control`/`pty-decode`/`pty-registry`)
+runs one `tmux -C` control client, decodes octal-escaped `%output` into
+per-session cursor streams (opaque `p1:<generation>:<offset>` tokens, replay
+= `capture-pane -S -` snapshot then live bytes, no duplicates, over-cap reads
+return the bounded suffix with `truncated: true` and advance past all
+observed output, 1 MiB live retention), confines `pty_open` cwd under the
+exec `openCwd` rule before any session exists, reattaches same-name opens,
+links session windows into the reserved `omo-pty-control` session, and
+rediscovers sessions by name after a daemon restart (the tmux server owns
+session lifetime). Server death marks sessions `lost`, settles pending reads
+`pty_not_available`, and withdraws the capability until the next attach
+probe. Host handles gain `pty` (`src/pty-host.ts`, one routed-call seam);
+code mode exposes `m.pty(name).open/write/read/resize/close` and
+`m.ptyList()`; the sealed `bash` tool gains optional `session` (per-session
+cursor state inside the tool, empty command = read-only drain) and `monitor`
+watches a named terminal without closing it. Tests: protocol machine suite,
+real-tmux adapter suite on a private socket (`packages/machines/test/pty.test.ts`),
+attach offer gating + enrollment withhold + export refusals, and app-door
+e2e including a daemon restart over a live tmux server.
 
 ## #1253 four session entity RPCs (epic #1260, merged as `4ecb41f3`, PR #1279)
 
@@ -986,7 +1036,7 @@ WebSocket/path wake still commits one fired pair and reaches revision 59.
 | LLM | Canonical model/auth resolution, provider classification, retry-after/backoff, and corrected additive token accounting. The processor performs one attempt; session execution owns retry and re-admission. The unused public fact tap is removed (#976); ephemeral transcript folding and message/tool callbacks remain. | `packages/agent/src/model/`, `packages/agent/src/core/gate/decide.ts` |
 | Compaction | App-configured summarization and agent-owned speculative/synchronous compaction, with durable projection/range/hash/revert evidence and reconstruction from canonical actions. The summarizer is wired, not dormant. | `apps/openomni/src/compaction/`, `packages/agent/src/plugins/compaction/`, `packages/agent/src/inspect/history.ts` |
 | Observation | Scoped agent bus/component observations are projections, not durable authority. Ledger facts commit before observation. The old telemetry package and bus-persistence writer are absent. | `packages/agent/src/core/bus.ts`, `apps/openomni/src/observation/` |
-| Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; the injected interpreter runner lives in `packages/codemode` since #1272. Old app filesystem/list-machines tools remain absent. #1270: the host binds a listener set (unix always; TCP+TLS only with the full `OPENOMNI_MACHINES_TCP_*`/`OPENOMNI_MACHINES_TLS_*` tuple) into one registry; network trust is chain-verified on the daemon side (the configured `hostCertificate` PEM is the trust anchor and its key fingerprint the pin) and key-pinned on the host side (`Enrollment.publicKey`, sha256 over SPKI DER), refusing `peer_key_mismatch` before admission; a known machine's dropped/in-window calls fail once typed `disconnected`; the daemon's opt-in reconnect redials with full-jitter backoff (250ms base, 30s cap, injected scheduler), reattaches the same identity to the existing handles, and closes terminally on a refused reattach; the `machine attach` CLI config gains the pinned-TLS tcp shape (see `docs/key-generation.md`). | `packages/machines/`, `packages/protocol/src/machine/`, `packages/machines/src/ipc/`, `packages/machines/src/reconnect.ts` |
+| Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; the injected interpreter runner lives in `packages/codemode` since #1272. Old app filesystem/list-machines tools remain absent. #1270: the host binds a listener set (unix always; TCP+TLS only with the full `OPENOMNI_MACHINES_TCP_*`/`OPENOMNI_MACHINES_TLS_*` tuple) into one registry; network trust is chain-verified on the daemon side (the configured `hostCertificate` PEM is the trust anchor and its key fingerprint the pin) and key-pinned on the host side (`Enrollment.publicKey`, sha256 over SPKI DER), refusing `peer_key_mismatch` before admission; a known machine's dropped/in-window calls fail once typed `disconnected`; the daemon's opt-in reconnect redials with full-jitter backoff (250ms base, 30s cap, injected scheduler), reattaches the same identity to the existing handles, and closes terminally on a refused reattach; the `machine attach` CLI config gains the pinned-TLS tcp shape (see `docs/key-generation.md`). #1271: the brain host attaches as machine `self` — `machines.self {id?="self", capabilities, exports}` + `machines.default?="self"` (`OPENOMNI_MACHINES_SELF`/`OPENOMNI_MACHINES_DEFAULT`), boot validates the plane, starts the listener, attaches an in-process daemon over the unix loopback and completes `machine.attach` before tool ports publish; every failure in that chain is the typed startup refusal `self_attach_failed {cause}`; `apps/openomni/src/tools/` has no local execution path (`node:fs`, `Bun.spawn`, `localBash`, `kind: "local"` all grep 0) — prefix-less paths resolve to the configured default machine via `parseLocus(input, {defaultMachine})`, relative paths refuse, bash runs on the daemon (absolute `cwd`, daemon-bounded execution), and `openomni machine attach` still attaches a remote daemon alongside self. | `packages/machines/`, `packages/protocol/src/machine/`, `packages/machines/src/ipc/`, `packages/machines/src/reconnect.ts` |
 | Code mode | Public factory supplies machine object handles named after the tools (`read/write/ls/bash/eval`) and `cell.run/peek/stop`. The injected daemon runner owns lazy per-tenant Python processes, parallel/completion helpers and callback routing. The brain facade never spawns Python. Cancellation and close propagate across the attachment and await process cleanup. App VFS, cell registry and old machine methods are deleted; the single `eval` tool delegates to codemode: `run` waits `timeout` seconds then answers `running` with a `cell_id`, `peek` reads the streamed partial output (`machine.peek_code`), `stop` interrupts and settles the cell as `cancelled` with its output, never re-running it; a ten-minute ceiling bounds background cells. Cell-only `completion({prompt, model?, system?, schema?})` has a 32-call per-catalog budget; a `schema` answer is validated host-side and returned as canonical JSON; batching is the cell's `parallel()`. | `packages/codemode/src/`, `apps/openomni/src/composition/codemode.ts`, `apps/openomni/src/tools/eval.ts`, `apps/openomni/src/tools/completion.ts` |
 | Tool catalog and prompts | The catalog is sealed (#949): eleven model-door tools `read`, `write`, `edit`, `ls`, `find`, `grep`, `bash`, `eval`, `monitor`, `send_message`, `provision` plus the cell-only `completion`; snake_case names, one `op` discriminator under `operation` for eval/monitor/provision, flat `tools/<name>.ts` (`_` written `-` in file names; `lint:tools` `[tool-file-name]` pins the correspondence). There is no `approval` tool: `provision.contact_promote`/`contact_merge` carry `require_approval` policy rows resolved through the kernel request path. `lint:tools` and the catalog test pin the exact set and refuse retired names. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Dispatcher-only model truncation caps at 32,000 UTF-16 code units on a Unicode code-point boundary, with exact dropped/original UTF-8 byte counts; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/core/tool.ts` |
 | CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |

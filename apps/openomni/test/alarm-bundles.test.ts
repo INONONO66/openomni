@@ -59,7 +59,7 @@ function cronWake() {
         reads: { latestArm: () => undefined, settled: () => false },
         arm: (input) => {
           arms.push(input);
-          return Effect.succeed({ alarmId: input.alarmId ?? "grid", occurrenceId: "occ-next" });
+          return Effect.succeed({ alarmId: input.alarmId ?? "grid", occurrenceId: "occ-next", armSeq: arms.length });
         },
         now,
         prompt,

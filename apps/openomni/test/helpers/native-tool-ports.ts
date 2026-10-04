@@ -8,8 +8,11 @@ async function runTyped<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
   return Result.getOrThrowWith(await runEffect(Effect.result(effect)), (error) => error);
 }
 
-export function testMachinePorts(host: MachineHost): NonNullable<ToolPorts["machines"]> {
-  return { get: (id) => {
+export function testMachinePorts(
+  host: MachineHost,
+  defaultMachine = "self",
+): NonNullable<ToolPorts["machines"]> {
+  return { defaultMachine, get: (id) => {
     const handle = host.get(id);
     return {
       fs: {
@@ -19,6 +22,11 @@ export function testMachinePorts(host: MachineHost): NonNullable<ToolPorts["mach
         stat: (path) => runTyped(handle.fs.stat(path)),
       },
       exec: (command, cwd) => runTyped(handle.exec(command, cwd)),
+      pty: {
+        open: (name, cwd) => runTyped(handle.pty.open(name, cwd)),
+        write: (name, data) => runTyped(handle.pty.write(name, data)),
+        read: (name, options) => runTyped(handle.pty.read(name, options)),
+      },
     };
   } };
 }

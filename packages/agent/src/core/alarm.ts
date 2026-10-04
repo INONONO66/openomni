@@ -199,7 +199,10 @@ export type ArmVerb = (input: {
   readonly alarmId?: string;
   readonly supersedes?: string;
   readonly sourceKey: string;
-}) => Effect.Effect<{ readonly alarmId: string; readonly occurrenceId: string }, ArmRefused>;
+}) => Effect.Effect<
+  { readonly alarmId: string; readonly occurrenceId: string; readonly armSeq: number },
+  ArmRefused
+>;
 
 /**
  * The accepted outcome a capability's wake returns (#1254): the core records

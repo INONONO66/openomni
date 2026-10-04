@@ -29,7 +29,8 @@ The protocol contracts for both belong together because they meet in the tool ca
   intersection, sorted; mismatched machine ids refuse (`machine_mismatch`).
   Neither side can grant itself a capability the other never named.
 - `Machine.CapabilityId` — dot-namespaced lowercase grammar (`fs.read`,
-  `shell.exec`, `kernel.py`, `screen.read`, `input.write`). Open vocabulary,
+  `shell.exec`, `kernel.py`, `screen.read`, `input.write`, `pty.session`).
+  Open vocabulary,
   owned grammar: enrollment writer, daemon offer, and tool `requires` all
   parse the same shape.
 - Events: `machine.attached` (carries the effective set in force),
@@ -172,7 +173,84 @@ connection. A REFUSED reattach is terminal: the refusal surfaces, nothing is
 rescheduled, and the daemon closes (the CLI exits nonzero) until restart or
 config change.
 
-### 2.4 Code-mode ownership and lifecycle
+### 2.4 Self machine (#1271)
+
+The brain host is an ordinary attached machine. `machines.self` enrolls the
+application host itself: `{id?: "self", capabilities, exports[{name, path}]}`
+via `OPENOMNI_MACHINES_SELF` (JSON), with `OPENOMNI_MACHINES_DEFAULT` naming
+the machine a prefix-less path resolves to (default `self`). Self exports are
+mandatory and absolute — the Owner names the host roots the in-process daemon
+may expose; no host path outside them is readable, writable, listable,
+stat-able, or usable as a shell cwd. Duplicate self/enrolled ids, a default
+absent from effective enrollments, and empty or relative exports are typed
+configuration refusals BEFORE the listener starts.
+
+Boot order is fixed: validate the plane, start the listener set, start an
+in-process daemon with the self exports/capabilities, dial the host's own
+unix listener and complete `machine.attach`, and only then publish tool
+ports. Every failure in that chain is the one typed startup refusal
+`self_attach_failed { cause }`; there is no local execution fallback — ever.
+`apps/openomni/src/tools/` contains no `node:fs`, no `Bun.spawn`, and no
+local locus: `parseLocus(input, { defaultMachine })` maps `/absolute/path`
+to the configured default machine and preserves explicit
+`machineId:/absolute/path`; relative paths refuse (no process cwd exists).
+A self daemon that disconnects after boot keeps the tools published but
+every call refuses with the typed `disconnected` reason; the lifecycle
+surface is the typed `machine.detached` event plus a logged
+`self_attach_failed` cause. `openomni machine
+attach` is unchanged: a remote daemon attaches alongside `self` over the
+same protocol and negotiates capabilities through the same
+enrollment/offer intersection.
+
+### 2.5 Persistent terminals (`pty.session` over tmux, #1273)
+
+- Capability `pty.session` is offered only when `tmux` resolves on PATH at
+  attach time (probe via the same `CommandRunner` port); enrollment ∩ offer
+  stays authoritative, so an installed binary alone grants nothing. Wire
+  methods: `machine.pty_open/pty_write/pty_read/pty_resize/pty_close/pty_list`
+  with protocol-owned bounds (`PTY_READ_MAX_BYTES` 256 KiB,
+  `PTY_WRITE_MAX_BYTES` 16 KiB, list 1000, cols/rows 1000, `waitMs` <= 30 s)
+  and typed refusals `pty_not_found` / `pty_not_available` /
+  `path_escapes_export`.
+- The daemon runs ONE tmux control-mode client (`tmux -C`, module split
+  `pty-control` / `pty-decode` / `pty-registry` / `pty.ts`); each `pty_open`
+  is `new-session -d` with cwd confined by the SAME `openCwd` rule as exec
+  (refused before any session exists, symlink escapes included). Same-name
+  open reattaches, never creates a second session; each session's window is
+  linked into the reserved control session `omo-pty-control` because
+  `%output` only flows for the attached session's panes.
+- The daemon shares the user's DEFAULT tmux server (the private `-L` socket
+  is test-only): granting `pty.session` exposes every grammar-conforming
+  session on that server — reattach-by-name reaches sessions the user created
+  (cwd confinement applies at open, not reattach) and `pty_close` can kill
+  them. This is the accepted #1273 design (restart rediscovery makes a prior
+  generation's sessions indistinguishable from the user's); names outside the
+  `PtySessionName` grammar stay invisible to list/discovery and refuse typed.
+- `pty_read` is the authoritative pull: one cursor sequence replays the
+  `capture-pane -S -` scrollback snapshot taken at attach, then live decoded
+  `%output` bytes, with no duplicate bytes across the transition. Cursors are
+  opaque monotonically advancing tokens (`p1:<generation>:<offset>`); callers
+  persist only the returned token. Over-cap reads return the bounded suffix
+  with `truncated: true` and a cursor past ALL observed output; a
+  foreign-generation cursor resumes after the current snapshot. The optional
+  `machine.pty_output` notification is a wake-up only, never output state.
+- The tmux server, not the daemon, owns session lifetime: a daemon restart
+  rediscovers sessions by name (`list-sessions`) with scrollback and cursor
+  continuity. tmux server death marks every session `lost`, settles pending
+  reads as `pty_not_available`, and withdraws the capability until the next
+  attach probe. A malformed control record fails exactly the affected pane's
+  next read, then streaming resumes.
+- Model doors (the 12-tool catalog stays sealed): `bash` gains optional
+  `session` — with `machine`+`session` the command is typed into the named
+  terminal (`send-keys` literal hex chunks) and stdout carries output since
+  the tool's own per-session cursor; an empty command just reads. `monitor`
+  watches a named terminal through the same cursor door (subscribe at the
+  current cursor, drain `pty_read` beyond it: each retained byte at most
+  once, so screen repaints can never re-fire a line) and its completion never
+  closes the terminal. Code mode: `m.pty(name)` handles with
+  `open/write/read/resize/close` plus `m.ptyList()`.
+
+### 2.6 Code-mode ownership and lifecycle
 
 `createCodemode({machines,completion,tools})` is a reusable facade over a
 structural machines port. It supplies
@@ -232,6 +310,74 @@ from `openomni daemon`, which still manages the Resident service. Example:
     "offeredAt": 1
   }
 }
+```
+
+### 2.7 Browser automation recipe (`browser()`, #1275)
+
+Code cells drive a Chromium on an attached machine through the prelude helper
+`browser(machine_id, *, headless=True, profile_dir=None, executable_path=None)`.
+It adds no capability id, wire method, or model tool: Chromium runs
+persistently inside a cell-owned `pty.session` tmux session and the returned
+`BrowserClient` is a thin wrapper around Playwright's
+`chromium.connect_over_cdp(endpoint)` — `client.browser` is the raw Playwright
+browser, `client.context`/`client.pages` expose the default persistent
+context, and raw page operations raise Playwright's own errors. The embedded
+desktop browser tracked in #1023 has separate ownership and is not changed
+here.
+
+Prerequisites on the machine: `pty.session` + `kernel.py` capabilities,
+`tmux`, and Python Playwright with a Chromium download
+(`pip install playwright && python -m playwright install chromium`). A missing
+executable refuses typed as `browser_lost` naming the resolved path and that
+install command, and the launch session is torn down. Cells execute on the
+machine itself, so the CDP endpoint is `http://127.0.0.1:<port>` and the
+helper may address the browser process directly during cleanup.
+
+- Profile confinement: `profile_dir` must sit inside an effective export;
+  omitted, it defaults to `<cell cwd>/.openomni/browser-profile`. The session
+  opens with that directory as cwd, so the existing `openCwd` export rule
+  refuses `path_escapes_export` before Chromium starts. The profile persists
+  across close and reconnect (`--user-data-dir`), pairing the documented
+  requirement that `--remote-debugging-port` never runs on the default
+  profile.
+- Port selection: the launch probe-binds on the machine starting at the
+  documented default 9222 and advances past occupied ports; the chosen port
+  and the browser pid are printed as `[openomni-browser] cdp-port <port>` /
+  `chromium-pid <pid>` lines and retained in the session output, which is the
+  source of truth for reconnection and diagnostics. Readiness is the exact
+  `DevTools listening on ws://` line from Chromium, never elapsed time.
+- Display mode is explicit: `headless=True` (default) for unattended
+  machines, `headless=False` for a usable display. Both share profile,
+  connection, and lifecycle. Switching modes on a live client is a typed
+  error: `close()` first.
+- Reuse and loss: repeated `browser()` calls for the same machine and profile
+  return the live client; a stale connection reconnects over the retained
+  endpoint. Liveness is a bounded probe of the CDP http endpoint at every
+  client accessor; a browser that exited or lost CDP raises the typed
+  `browser_lost` refusal carrying the captured tmux output. The helper never
+  silently launches a replacement — that would hide profile, process, or
+  display failures.
+- Session lifetime: the launch line ends the tmux session on a clean exit or
+  a signal-range status, and keeps it alive on a real error status so the
+  failure output stays readable (`codemode.getMachine(id).pty(session)` or
+  `tmux attach -t <session>` inspects it; the session name is
+  `openomni-browser-<sha256(profile_dir)[:12]>`). `client.close()` ends
+  Chromium and the session but keeps the profile. Interpreter close stops
+  each client's browser process directly as best-effort cleanup.
+
+```python
+client = browser("laptop")                      # headless, default profile
+page = client.context.new_page()
+page.goto("https://example.com")
+print(page.title())
+
+# later cell, same interpreter: the live client is reused
+client = browser("laptop")
+
+# headed variant on a machine with a display, explicit profile
+headed = browser("laptop", headless=False,
+                 profile_dir="/home/owner/work/.openomni/browser-profile")
+headed.close()                                  # ends Chromium + session, keeps profile
 ```
 
 ## 3. Session messaging contracts

@@ -24,7 +24,7 @@ export function createReadTool(ports: FilePorts) {
   return defineTool({
     name: "read",
     description:
-      "Read a local path or machineId:/absolute/path. UTF-8 text by default with an optional line window (offset, limit); base64 preserves binary bytes.",
+      "Read an /absolute path (on the default machine) or machineId:/absolute/path. UTF-8 text by default with an optional line window (offset, limit); base64 preserves binary bytes.",
     category: "query",
     input: Input,
     output: z.object({ content: z.string(), bytes: z.number().int().nonnegative() }),

@@ -6,10 +6,12 @@ import { Crypto, Effect } from "effect";
 import { BunCrypto } from "../src/composition/cluster-crypto";
 import {
   assertWsExposure,
+  ConfigurationError,
   loadConfig,
   parseWsPort,
   resolveAlarmSweep,
   resolveClusterStorage,
+  validateMachinePlane,
 } from "../src/config";
 import { startOpenOmni } from "../src";
 import { runEffect } from "./helpers/effect";
@@ -35,7 +37,9 @@ const ENV_KEYS = [
   "OPENOMNI_MODEL_FALLBACKS",
   "OPENOMNI_COMPACTION_SUMMARIZER",
   "OPENOMNI_SOCIAL_BUDGETS",
+  "OPENOMNI_MACHINES_DEFAULT",
   "OPENOMNI_MACHINES_ENROLLED",
+  "OPENOMNI_MACHINES_SELF",
   "OPENOMNI_MACHINES_SOCKET",
   "OPENOMNI_MACHINES_TCP_HOST",
   "OPENOMNI_MACHINES_TCP_PORT",
@@ -68,6 +72,11 @@ afterEach(() => {
 });
 
 
+const selfEnv = JSON.stringify({
+  capabilities: ["fs.read", "fs.write", "shell.exec"],
+  exports: [{ name: "workspace", path: "/tmp/self-root" }],
+});
+
 describe("machines network listener config", () => {
   const enrolled = JSON.stringify([
     {
@@ -89,6 +98,7 @@ describe("machines network listener config", () => {
 
   /** The complete, valid four-field tuple plus enrollment; tests then poke one field. */
   function setTcpTuple(cert: string, key: string, port = "7643"): void {
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
     process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
     process.env.OPENOMNI_MACHINES_TCP_HOST = "0.0.0.0";
     process.env.OPENOMNI_MACHINES_TCP_PORT = port;
@@ -98,6 +108,7 @@ describe("machines network listener config", () => {
 
   it("absent tcp env keeps a unix-only listener set", () => {
     process.env.OPENOMNI_MACHINES_SOCKET = "/tmp/machines-config-test.sock";
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
     process.env.OPENOMNI_MACHINES_ENROLLED = enrolled;
     const machines = loadConfig().machines;
     expect(machines?.listen).toEqual({ unix: "/tmp/machines-config-test.sock" });
@@ -466,6 +477,7 @@ describe("ws exposure enforcement", () => {
 
   it("reads the Owner's export allowlist off the enrollment", () => {
     process.env.OPENOMNI_MACHINES_SOCKET = "/tmp/machines-config-test.sock";
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
     process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
       {
         machineId: "alpha",
@@ -481,6 +493,7 @@ describe("ws exposure enforcement", () => {
   });
 
   it("leaves the allowlist absent when the Owner named no export — no config, no reach", () => {
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
     process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
       { machineId: "alpha", name: "the laptop", allowedCapabilities: ["fs.read"], publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", enrolledAt: 0 },
     ]);
@@ -489,6 +502,7 @@ describe("ws exposure enforcement", () => {
   });
 
   it("refuses an enrollment whose export names collide or break the grammar", () => {
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
     process.env.OPENOMNI_MACHINES_ENROLLED = JSON.stringify([
       {
         machineId: "alpha",
@@ -546,5 +560,94 @@ describe("ws exposure enforcement", () => {
     expect(loadConfig().channelAllowedSenders).toEqual({ telegram: ["111"] });
     process.env.OPENOMNI_CHANNEL_ALLOWED_SENDERS = "not-json";
     expect(() => loadConfig()).toThrow("OPENOMNI_CHANNEL_ALLOWED_SENDERS is invalid JSON");
+  });
+});
+
+describe("machines self enrollment config (#1271)", () => {
+  const selfExports = [{ name: "workspace", path: "/tmp/self-root" }];
+  const enrolledAlpha = JSON.stringify([
+    {
+      machineId: "alpha",
+      name: "the laptop",
+      allowedCapabilities: ["fs.read"],
+      publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      enrolledAt: 0,
+    },
+  ]);
+
+  it("defaults the self id and the default machine to self", () => {
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
+    const machines = loadConfig().machines;
+    expect(machines?.self).toEqual({
+      id: "self",
+      capabilities: ["fs.read", "fs.write", "shell.exec"],
+      exports: selfExports,
+    });
+    expect(machines?.default).toBeUndefined();
+    expect(machines?.enrolled).toEqual([]);
+    if (machines === undefined) throw new Error("machines plane expected");
+    expect(validateMachinePlane(machines).defaultMachine).toBe("self");
+  });
+
+  it("the default machine follows an explicit self id", () => {
+    process.env.OPENOMNI_MACHINES_SELF = JSON.stringify({
+      id: "brain",
+      capabilities: ["fs.read"],
+      exports: selfExports,
+    });
+    const machines = loadConfig().machines;
+    if (machines === undefined) throw new Error("machines plane expected");
+    expect(validateMachinePlane(machines)).toEqual({
+      self: { id: "brain", capabilities: ["fs.read"], exports: selfExports },
+      defaultMachine: "brain",
+    });
+  });
+
+  it("a configured plane without self is a typed refusal", () => {
+    process.env.OPENOMNI_MACHINES_ENROLLED = enrolledAlpha;
+    expect(loadConfig).toThrow(ConfigurationError);
+    expect(loadConfig).toThrow(
+      "OPENOMNI_MACHINES_SELF is required when the machine plane is configured",
+    );
+  });
+
+  it.each([
+    ["empty exports", { capabilities: ["fs.read"], exports: [] }],
+    ["a relative export", { capabilities: ["fs.read"], exports: [{ name: "workspace", path: "relative/root" }] }],
+    ["a duplicate export name", { capabilities: ["fs.read"], exports: [{ name: "workspace", path: "/a" }, { name: "workspace", path: "/b" }] }],
+    ["duplicate capabilities", { capabilities: ["fs.read", "fs.read"], exports: [{ name: "workspace", path: "/a" }] }],
+    ["no capabilities", { capabilities: [], exports: [{ name: "workspace", path: "/a" }] }],
+  ])("refuses self with %s before boot", (_name, self) => {
+    process.env.OPENOMNI_MACHINES_SELF = JSON.stringify(self);
+    expect(loadConfig).toThrow(ConfigurationError);
+    expect(loadConfig).toThrow("OPENOMNI_MACHINES_SELF is invalid");
+  });
+
+  it("rejects a self id colliding with an enrolled machine", () => {
+    process.env.OPENOMNI_MACHINES_SELF = JSON.stringify({
+      id: "alpha",
+      capabilities: ["fs.read"],
+      exports: selfExports,
+    });
+    process.env.OPENOMNI_MACHINES_ENROLLED = enrolledAlpha;
+    expect(loadConfig).toThrow(ConfigurationError);
+    expect(loadConfig).toThrow("machines ids must be unique: alpha");
+  });
+
+  it("rejects a default machine absent from the effective enrollments", () => {
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
+    process.env.OPENOMNI_MACHINES_DEFAULT = "ghost";
+    expect(loadConfig).toThrow(ConfigurationError);
+    expect(loadConfig).toThrow("machines.default is not an enrolled machine: ghost");
+  });
+
+  it("accepts an enrolled machine as the default target", () => {
+    process.env.OPENOMNI_MACHINES_SELF = selfEnv;
+    process.env.OPENOMNI_MACHINES_ENROLLED = enrolledAlpha;
+    process.env.OPENOMNI_MACHINES_DEFAULT = "alpha";
+    const machines = loadConfig().machines;
+    if (machines === undefined) throw new Error("machines plane expected");
+    expect(machines.default).toBe("alpha");
+    expect(validateMachinePlane(machines).defaultMachine).toBe("alpha");
   });
 });

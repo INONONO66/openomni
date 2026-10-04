@@ -636,6 +636,15 @@ export namespace Alarm {
           ...Lifetime,
         })
         .strict(),
+      z
+        .object({
+          machine: z.string().min(1),
+          session: z.string().min(1),
+          filter: z.string().optional(),
+          description: z.string().min(1),
+          ...Lifetime,
+        })
+        .strict(),
     ])
     .refine((spec) => (spec.persistent === true) !== (spec.timeout_ms !== undefined), {
       message: "exactly one of persistent and timeout_ms is required",

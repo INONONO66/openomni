@@ -101,7 +101,7 @@ export async function alarmPortsFixture(input: {
         },
         base: { spec: payload.data.spec, notifications: payload.data.notifications },
       };
-      if (!state.sources.refresh(armedWatch)) void state.sources.install(armedWatch);
+      state.sources.refresh(armedWatch);
     },
   });
   const capability = await runEffect(
@@ -112,7 +112,22 @@ export async function alarmPortsFixture(input: {
       ],
       compose: Core.composeAlarmPurposes,
       arm,
-      watch: { install: () => Effect.void },
+      watch: {
+        install: ({ sessionId, watchId, spec, occurrence }) =>
+          Effect.tryPromise({
+            try: () =>
+              state.sources.install({
+                sessionId,
+                id: watchId,
+                occurrence,
+                base: { spec, notifications: 0 },
+              }),
+            catch: (error) =>
+              new Bundle.WatchRefused({
+                reason: error instanceof Error ? error.message : String(error),
+              }),
+          }),
+      },
     }),
   );
   const ports = createAlarmMonitorPorts({

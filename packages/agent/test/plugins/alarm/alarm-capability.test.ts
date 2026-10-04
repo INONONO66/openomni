@@ -35,6 +35,7 @@ function stubArm(calls: ArmCall[], refuse?: ArmRefused): ArmVerb {
     return Effect.succeed({
       alarmId: input.alarmId ?? "minted-alarm",
       occurrenceId: `occ-${calls.length}`,
+      armSeq: calls.length,
     });
   };
 }
@@ -88,6 +89,8 @@ function capability(input: {
   readonly arm: ArmVerb;
   readonly closed?: string[];
   readonly installs?: string[];
+  /** When set, every native install refuses with this reason. */
+  readonly refuseInstall?: string;
   readonly extra?: readonly { readonly bundle: string; readonly purposes: readonly string[] }[];
 }): AlarmCapabilityDefinition {
   const deps = wakeDeps(input.closed ?? []);
@@ -107,9 +110,11 @@ function capability(input: {
       arm: () => input.arm,
       watch: {
         install: ({ watchId }) =>
-          Effect.sync(() => {
-            (input.installs ?? []).push(watchId);
-          }),
+          input.refuseInstall === undefined
+            ? Effect.sync(() => {
+                (input.installs ?? []).push(watchId);
+              })
+            : Effect.fail(new WatchRefused({ reason: input.refuseInstall })),
       },
     }),
   );
@@ -389,7 +394,7 @@ describe("verbs", () => {
     const result = runTestSync(
       definition.verbs.watch({ sessionId: "session-1", watchId: "watch-9", spec: timed, now: 1_000 }),
     );
-    expect(result).toEqual({ alarmId: "watch-9", occurrenceId: "occ-1" });
+    expect(result).toEqual({ alarmId: "watch-9", occurrenceId: "occ-1", armSeq: 1 });
     expect(calls).toHaveLength(2);
     expect(calls[0]).toMatchObject({
       purpose: MONITOR_HIT,
@@ -405,6 +410,30 @@ describe("verbs", () => {
       payload: { watchId: "watch-9" },
     });
     expect(installs).toEqual(["watch-9"]);
+  });
+
+  test("a refused native install retires the armed chain and its timeout, then surfaces the refusal", () => {
+    const calls: ArmCall[] = [];
+    const definition = capability({ arm: stubArm(calls), refuseInstall: "no machines plane" });
+    const timed: Alarm.WatchSpec = {
+      ...spec,
+      watch: { command: "make build", description: "build watch", timeout_ms: 60_000 },
+    };
+    const error = runTestSync(
+      Effect.flip(
+        definition.verbs.watch({ sessionId: "session-1", watchId: "watch-9", spec: timed, now: 1_000 }),
+      ),
+    );
+    expect(error).toBeInstanceOf(WatchRefused);
+    expect((error as WatchRefused).reason).toBe("no machines plane");
+    // arm hit, arm timeout, retire hit (superseding the armed occurrence), retire timeout.
+    expect(calls.map((call) => [call.purpose, call.at, call.alarmId, call.supersedes])).toEqual([
+      [MONITOR_HIT, 1_000, "watch-9", undefined],
+      [MONITOR_TIMEOUT, 61_000, "watch-9:timeout", undefined],
+      [MONITOR_HIT, null, "watch-9", "occ-1"],
+      [MONITOR_TIMEOUT, null, "watch-9:timeout", "occ-2"],
+    ]);
+    expect(calls[2]?.payload).toEqual({ reason: "install" });
   });
 
   test("an invalid watch spec is a typed refusal with zero arms", () => {

@@ -7,6 +7,7 @@ import { Effect, Fiber, type Scope } from "effect";
 import { MachinesFailure, MachineCellError, MachineRefusalError, TransportFailure, type MachineError } from "./errors";
 import { decodeMachineFailure } from "./failure";
 import { onAbort } from "./interrupt-on";
+import { createPtyHandle, type PtyHandle } from "./pty-host";
 
 interface MachineHostOptions {
   /**
@@ -25,6 +26,14 @@ interface MachineHostOptions {
   readonly events: BusEvent.Sink;
   readonly now: () => number;
   readonly callTool?: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
+  /**
+   * Machine ids whose live attachment is never superseded (#1271): while such
+   * an id is attached, a second offer for it from another connection is
+   * refused `already_attached` instead of detaching the incumbent. The app
+   * passes the self machine id so no same-uid process can hijack the brain's
+   * own fs/shell plane through the reattach-supersede path.
+   */
+  readonly neverSupersede?: readonly Machine.MachineId[];
 }
 type Value<O extends Machine.FsValue["op"]> = Extract<Machine.FsValue, { op: O }>;
 type ReadValue = Omit<Value<"read">, "data"> & { readonly data: Uint8Array };
@@ -41,6 +50,8 @@ export interface MachineHandle {
   /** Computer use (#1274): bounded capture and guarded input over the same attachment. */
   screen(request: Machine.ScreenReadRequest): Effect.Effect<ScreenValue | Exclude<Machine.ScreenReadResult, { status: "ok" }>, MachineError>;
   input(request: Machine.InputWriteRequest): Effect.Effect<Machine.InputWriteResult, MachineError>;
+  /** Persistent terminals (#1273): named tmux sessions behind one routed call seam. */
+  readonly pty: PtyHandle;
   runCode(cell: Machine.CellRequest, signal?: AbortSignal): Effect.Effect<Machine.CellResult, MachineError>;
   peekCode(cellId: string): Effect.Effect<Machine.PeekResult, MachineError>;
 }
@@ -95,6 +106,18 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
       if (connectionByMachine.get(attachment.offer.machineId) === key) connectionByMachine.delete(attachment.offer.machineId);
       options.events.publish(Machine.Events.Detached, { machineId: attachment.offer.machineId, time: options.now(), reason });
     }
+    /**
+     * A live attachment on another connection is detached in favor of the new
+     * offer — unless the id is in `neverSupersede` (#1271): then the incumbent
+     * stays authoritative and the caller must refuse `already_attached`.
+     */
+    function supersedeIncumbent(machineId: string, sourceKey: string): boolean {
+      const stale = connectionByMachine.get(machineId);
+      if (stale === undefined || stale === sourceKey) return true;
+      if (options.neverSupersede?.includes(machineId) === true) return false;
+      detach(stale, "superseded_by_reattach");
+      return true;
+    }
     function callTool(call: Machine.ToolCall, key: string): Effect.Effect<Machine.ToolCallResult, MachineError> {
       return Effect.suspend(() => {
         if (!attachments.has(key) || !inFlight.get(key)?.has(call.cellId)) return new MachineCellError({ code: "unknown_cell_id", cellId: call.cellId, message: `no cell in flight: ${call.cellId}` });
@@ -114,8 +137,10 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
         const outcome = Machine.effectiveCapabilities(enrollment, offer);
         const exports = Machine.effectiveExports(enrollment, offer);
         if (outcome.kind === "machine_mismatch" || exports.kind === "machine_mismatch") { respond({ status: "refused", reason: "machine_mismatch" } satisfies Machine.AttachResult); return; }
-        const stale = connectionByMachine.get(offer.machineId);
-        if (stale !== undefined && stale !== source.key) detach(stale, "superseded_by_reattach");
+        if (!supersedeIncumbent(offer.machineId, source.key)) {
+          respond({ status: "refused", reason: "already_attached" } satisfies Machine.AttachResult);
+          return;
+        }
         detach(source.key, "superseded_by_reattach");
         attachments.set(source.key, { enrollment, offer, capabilities: outcome.capabilities, ...source });
         connectionByMachine.set(offer.machineId, source.key);
@@ -243,6 +268,13 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
           const raw = yield* typedCall(peer.server, Machine.WireMethod.InputWrite, parsed, Machine.EXEC_TIMEOUT_MS + 1000).pipe(Effect.mapError(transportFailure("input.call")));
           return yield* Effect.try({ try: () => Machine.InputWriteResult.parse(raw), catch: decodeMachineFailure("input.response") });
         }),
+        // Additive #1273 seam: pty-host owns schemas/codecs; only routing lives here.
+        pty: createPtyHandle((method, params, timeoutMs) => Effect.gen(function* () {
+          const peer = yield* Effect.try({ try: () => connection(id), catch: decodeMachineFailure("pty.connection") });
+          peer.server.useConnection(peer.rawId);
+          // Safe: pty-host validated params against this method's wire schema.
+          return yield* peer.server.call(method, params as Ipc.Request["params"], timeoutMs).pipe(Effect.mapError(transportFailure("pty.call")));
+        })),
         runCode: (cell, signal) => Effect.scoped(Effect.gen(function* () {
           const request = yield* Effect.try({ try: () => Machine.CellRequest.parse(cell), catch: decodeMachineFailure("cell.request") });
           if (signal?.aborted) return yield* Effect.interrupt;
