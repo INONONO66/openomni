@@ -122,9 +122,56 @@ export function createSessionAdmission(
     });
   }
 
+  /**
+   * Turn-start manifest adoption (#1255): when the product's composed
+   * generation differs from the session's adopted `manifestHash`, append one
+   * `session.configure{operation: "compose", disabled}` through the single
+   * writer, then capture. The in-flight turn never sees this — it finishes on
+   * the generation it captured; rotation happens strictly between turns.
+   */
+  function adoptComposedManifest(): Effect.Effect<void, AdmissionError> {
+    return Effect.gen(function* () {
+      const composed = runtime.composed?.current();
+      if (composed === undefined) return;
+      const previous = kernel.latestGenerationFor(sessionId);
+      if (previous.manifestHash === composed.hash) return;
+      const generation = previous.generation + 1;
+      const snapshot = SessionHandleStore.generationSnapshot({
+        generation,
+        revertTo: previous.generation,
+        tools: composed.tools,
+        system: { preset: previous.systemPreset, blocks: previous.systemBlocks },
+        policyGeneration: previous.policyGeneration,
+        bundles: composed.bundles,
+        manifestHash: composed.hash,
+      });
+      const configured = SessionHandleStore.configureAction({
+        id: entropy(),
+        sessionId,
+        parentId: kernel.latestAction(sessionId)?.id ?? null,
+        operation: "compose",
+        snapshot,
+        disabled: composed.disabled,
+        at: clock(),
+      });
+      const commit = commitSession({
+        expectedRevision: kernel.row(sessionId).revision,
+        actions: [configured],
+        state: kernel.row(sessionId).state,
+        generation: {
+          toolsGeneration: snapshot.generation,
+          systemHash: snapshot.systemHash,
+          policyGeneration: snapshot.policyGeneration,
+        },
+      }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      yield* runtime.generations.configure({ sessionId, generation }, snapshot, commit);
+    });
+  }
+
   function startTurn(): Effect.Effect<SessionRunnerResult | undefined, AdmissionError> {
     return Effect.scoped(Effect.gen(function* () {
       yield* awaitRetainedRunner();
+      yield* adoptComposedManifest();
       const generation = kernel.latestGenerationFor(sessionId);
       const captured = yield* runtime.generations.capture({ sessionId, generation: generation.generation });
       const observations = yield* captured.provide(ObservationSink);

@@ -30,6 +30,7 @@ export {
   type SessionCreateOptions, type SessionRunnerInput, type SessionRunnerResult,
   type SessionEntityPorts, type SessionEntityTurnInput,
   type SessionSystem, type ResolvedSessionRuntime,
+  composedManifest, type ComposedManifest,
 } from "./run";
 export { decideSessionAdmission, requestAuthorityKernel, commitSessionRequest } from "./mailbox";
 export { createSessionRequests, decideRequestTransition, requestBindingDigest } from "./request";
