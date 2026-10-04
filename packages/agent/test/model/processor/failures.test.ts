@@ -147,7 +147,7 @@ describe("Processor failures", () => {
     await expect(processor.process({ system: "", promptText: "" })).rejects.toBe(error);
     expect(statusStates(events)).toEqual(["busy", "idle"]);
     expect(capture.toolResults).toMatchObject([
-      { toolCallId: "call-1", output: "Processing was interrupted", isError: true },
+      { toolCallId: "call-1", content: "Processing was interrupted", isError: true },
     ]);
     expect(capture.finalParts()).toMatchObject([{ type: "tool", state: { status: "error" } }]);
   });

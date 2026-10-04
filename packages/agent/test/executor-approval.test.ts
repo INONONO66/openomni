@@ -282,7 +282,7 @@ it("the captured table retains approval binding through catalog copying and late
   const pending = executor.approvals?.pending()[0];
   if (pending === undefined || executor.approvals === undefined) return yield* Effect.die("missing copied approval");
   yield* executor.approvals.answer({ request: pending, credential: "owner-token", decision: "approve" });
-  expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "copied-call", output: "done" });
+  expect(yield* Fiber.join(running)).toMatchObject({ toolCallId: "copied-call", content: "done" });
   expect(bodies).toBe(1);
 }))));
 

@@ -52,7 +52,7 @@ describe("Processor fold emission", () => {
       { type: "step-finish", tokens: { input: 11, output: 13 } },
     ]);
     expect(capture.toolCalls).toEqual([{ id: "paired", tool: "lookup", input: {} }]);
-    expect(capture.toolResults).toMatchObject([{ toolCallId: "paired", output: "42" }]);
+    expect(capture.toolResults).toMatchObject([{ toolCallId: "paired", content: "42" }]);
     expect(failed.usageTotals).toMatchObject({ input: 5, output: 7 });
     expect(processor.usageTotals).toEqual({
       input: 11,

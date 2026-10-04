@@ -127,7 +127,7 @@ for (const door of ["model", "cell", "wave"] as const) {
         : door === "cell" ? dispatcher.executeCell(call, context) : dispatcher.execute(call, context));
       expect(executed).toEqual(replacement === null ? [] : [replacement]);
       expect(rendered).toEqual(replacement === null || door === "cell" ? [] : [replacement]);
-      expect(result).toMatchObject(replacement === null ? { isError: true, errorKind: "invalid_input" } : { output: replacement });
+      expect(result).toMatchObject(replacement === null ? { isError: true, errorKind: "invalid_input" } : door === "cell" ? { output: replacement } : { content: replacement });
       const actions = sessionTree(kernel, id);
       const intent = actions.find((action) => action.kind === "tool" && PlainObjectSchema.parse(action.intent.value).phase === "intent");
       expect(intent?.intent.value).toMatchObject({ value: { text: replacement }, originalArgs: { text: "original" } });

@@ -2,7 +2,7 @@ import { z } from "zod";
 import * as SessionHandleStore from "../core/store/fence";
 import type { SessionKernel } from "../core/entity";
 import { AgentInvariantViolation } from "../core/failure";
-import { canonicalDigest, FoldCheckpoint, NamedError, Message, PlainValueSchema, Tool, type LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
+import { canonicalDigest, FoldCheckpoint, NamedError, Message, PlainValueSchema, Tool, toolResultText, type LedgerAction, type PlainObject, type PlainValue, } from "@openomni/protocol";
 
 /**
  * Canonical model-context fold over committed actions: delivered prompts,
@@ -326,11 +326,11 @@ function openToolPart(part: Message.Part): OpenToolPart | undefined {
 function settledState(part: OpenToolPart, result: Tool.Result, at: number): Tool.State {
   const time = { start: at, end: at };
   return result.isError
-    ? { status: "error", input: part.state.input, error: result.output, time }
+    ? { status: "error", input: part.state.input, error: toolResultText(result), time }
     : {
         status: "completed",
         input: part.state.input,
-        output: result.output,
+        output: toolResultText(result),
         title: part.tool,
         metadata: {},
         time,

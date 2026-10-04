@@ -57,7 +57,7 @@ describe("tool dispatcher public contract", () => {
           expect(recording.committed[0]?.kind).toBe("policy.decision");
           expect(bodies).toBe(0);
           released.resolve();
-          expect(yield* Fiber.join(running)).toMatchObject({ output: "result" });
+          expect(yield* Fiber.join(running)).toMatchObject({ content: "result" });
           expect(bodies).toBe(1);
         }),
       ),
@@ -199,10 +199,10 @@ describe("tool dispatcher public contract", () => {
           const model = yield* dispatch.execute(call, context);
 
           expect(cell.output).toBe(output);
-          expect(typeof model.output).toBe("string");
-          expect(model.output).toHaveLength(32_000);
+          expect(typeof model.content).toBe("string");
+          expect(model.content).toHaveLength(32_000);
           const marker = "\n[truncated: 8054 bytes dropped; 40000 bytes original]";
-          expect(model.output).toBe(`${output.slice(0, 32_000 - marker.length)}${marker}`);
+          expect(model.content).toBe(`${output.slice(0, 32_000 - marker.length)}${marker}`);
         }),
       ),
     ));
@@ -221,14 +221,14 @@ describe("tool dispatcher public contract", () => {
           const model = yield* dispatch.execute(call, context);
           expect(cell.output).toBe(output);
           expect(model.isError).toBeUndefined();
-          expect(model.output.length).toBeLessThanOrEqual(32_000);
-          expect(Buffer.from(model.output, "utf8").toString("utf8")).toBe(model.output);
+          expect(model.content.length).toBeLessThanOrEqual(32_000);
+          expect(Buffer.from(model.content, "utf8").toString("utf8")).toBe(model.content);
           const receipt = /\n\[truncated: (\d+) bytes dropped; (\d+) bytes original\]$/.exec(
-            model.output,
+            model.content,
           );
           expect(receipt).not.toBeNull();
           if (receipt === null) throw new Error("missing byte receipt");
-          const prefix = model.output.slice(0, receipt.index);
+          const prefix = model.content.slice(0, receipt.index);
           expect(output.startsWith(prefix)).toBe(true);
           const dropped = output.slice(prefix.length);
           expect(Number(receipt[1])).toBe(Buffer.byteLength(dropped, "utf8"));
@@ -236,7 +236,7 @@ describe("tool dispatcher public contract", () => {
           expect(Buffer.byteLength(prefix) + Number(receipt[1])).toBe(Number(receipt[2]));
           const nextCodePoint = [...dropped][0];
           expect(nextCodePoint).toBeDefined();
-          expect(model.output.length + (nextCodePoint?.length ?? 0)).toBeGreaterThan(32_000);
+          expect(model.content.length + (nextCodePoint?.length ?? 0)).toBeGreaterThan(32_000);
         }),
       ),
     ));
@@ -248,7 +248,7 @@ describe("tool dispatcher public contract", () => {
           const output = `a${"\u{1F600}".repeat(25_000)}`;
           const dispatch = dispatcher([definition({ execute: async () => output })]);
           const model = yield* dispatch.execute(call, context);
-          expect(model.output).toBe(
+          expect(model.content).toBe(
             `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
           );
           expect((yield* dispatch.executeCell(call, context)).output).toBe(output);

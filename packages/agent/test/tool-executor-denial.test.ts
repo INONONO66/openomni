@@ -58,7 +58,7 @@ describe("cell-door executor propagation", () => {
     })]))));
     const result = yield* outer.execute({ id: "call-outer", tool: "outer", input: {} }, context);
     expect(result.isError).toBeUndefined();
-    expect(result.output).toBe("nested");
+    expect(result.content).toBe("nested");
     expect(committed.filter((action) => action.kind === "tool").map(opPhaseOf).sort()).toEqual(["echo:intent", "echo:result", "outer:intent", "outer:result"]);
   })));
   it("refuses a cell tool that has no enclosing executor at all", async () => isolated(Effect.gen(function* () {
