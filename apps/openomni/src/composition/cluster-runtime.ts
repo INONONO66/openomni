@@ -269,6 +269,14 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
           }),
       },
       onKeepAlive: (enabled) => bound?.onKeepAlive?.(enabled),
+      // #1255 P3: the composed generation's deliver registrations and
+      // capability journal kinds, read per call so a recompose propagates.
+      get inputRegistrations(): readonly string[] | undefined {
+        return bound?.inputRegistrations;
+      },
+      get capabilityKinds(): readonly string[] | undefined {
+        return bound?.capabilityKinds;
+      },
     },
   };
 }

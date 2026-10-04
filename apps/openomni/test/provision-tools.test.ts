@@ -75,6 +75,7 @@ function portWith(overrides: Partial<ProvisionPort> = {}): {
       supervisor.calls.push(`removeIdentity:${id}`);
       return true;
     },
+    bundles: { names: () => [], off: () => [], set: async () => undefined },
     ...overrides,
   };
   return { port, supervisor };

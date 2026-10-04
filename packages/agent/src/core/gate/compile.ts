@@ -13,7 +13,7 @@ import { createNamedPolicyRegistry, wrapTransformer, type NamedPolicyRegistry } 
 import { projectGeneration, type ProjectedGeneration } from "./project";
 import { evaluateProjected, failedSnapshot, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
 
-export { createNamedPolicyRegistry, NamedPolicyRegistryError, KERNEL_POLICY_REGISTRY, type NamedPolicyRegistry } from "./registry";
+export { createNamedPolicyRegistry, NamedPolicyRegistryError, KERNEL_POLICY_REGISTRY, type NamedPolicyRegistry, type NamedTransformer } from "./registry";
 export { PolicyCompileError } from "./legacy-rows";
 export type { CompiledPolicySnapshot, PolicyEvaluation, PolicyEvaluationInput } from "./evaluate";
 

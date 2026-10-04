@@ -12,11 +12,11 @@ import { createExecutor } from "../src/core/gate/decide";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { makeSessionGenerations, type GenerationBundle } from "../src/core/run";
 import { type GenerationServices, ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
-import { NamedPolicyRegistry } from "../src/core/bundle";
+import { NamedPolicyRegistry } from "../src/core/compose";
 import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import { executeToolBody } from "../src/core/tool";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
-import { createTurnDispatcher, sessionTool } from "../src/core/tool";
+import { createTurnDispatcher, projectTools } from "../src/core/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 
 /** Chain oracle over the active isolation's kernel. */
@@ -31,7 +31,7 @@ function bundle(generation: number, name: string, finalized: () => void,
   };
   const snapshot = SessionHandleStore.generationSnapshot({
     generation, revertTo: generation - 1,
-    tools: [sessionTool(definition)],
+    tools: projectTools([definition]).session,
     system: { preset: name, blocks: [] }, policyGeneration: 1,
   });
   return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void, layer: Layer.mergeAll(

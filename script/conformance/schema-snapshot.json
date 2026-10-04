@@ -969,6 +969,7 @@
   "SessionGeneration.Snapshot": [
     "bundles",
     "generation",
+    "manifestHash",
     "policyGeneration",
     "revertTo",
     "systemBlocks",
@@ -979,7 +980,13 @@
     "toolsHash"
   ],
   "SessionGeneration.SystemBlock": ["content", "id", "source"],
-  "SessionGeneration.Tool": ["category", "inputSchema", "name", "sequential"],
+  "SessionGeneration.Tool": [
+    "category",
+    "idempotent",
+    "inputSchema",
+    "name",
+    "sequential"
+  ],
   "SessionHistory.Cause#action": ["actionId", "kind"],
   "SessionHistory.Cause#inbox": ["inboxIds", "kind"],
   "SessionHistory.Cause#root": ["kind"],

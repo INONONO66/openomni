@@ -120,6 +120,12 @@ export interface OpenOmniConfig {
   /** Owner-declared allowances for cold proactive sends; absent denies all. */
   readonly socialBudgets?: readonly Gateway.SocialBudget[];
   /**
+   * Bundle names the Owner turns off (#1255): the manifest's `off` list.
+   * Compose owns the cascade semantics; absent means every declared bundle
+   * is on.
+   */
+  readonly bundlesOff?: readonly string[];
+  /**
    * Per-surface sender allowlists for the trusted-channel grant (external
    * ids on that surface, e.g. Telegram user ids). A surface listed here
    * serves only the listed senders; everyone else finds no grant and the
@@ -511,6 +517,21 @@ export function assertDeclaredChannelConfig(
   }
 }
 
+/**
+ * `OPENOMNI_BUNDLES_OFF` — JSON array of bundle names the Owner turns off:
+ *
+ *     OPENOMNI_BUNDLES_OFF='["monitor"]'
+ *
+ * Unset or empty means everything the manifest declares is on. Validation is
+ * fail-closed: a non-array or an empty name rejects the boot rather than
+ * silently keeping a bundle the Owner meant to turn off.
+ */
+const BundlesOff = z.array(z.string().min(1));
+
+function bundlesOffFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["bundlesOff"] {
+  return parseEnvJson("OPENOMNI_BUNDLES_OFF", BundlesOff, env);
+}
+
 function socialBudgetsFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["socialBudgets"] {
   return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets, env);
 }
@@ -622,6 +643,7 @@ export function loadConfig(
   const socialBudgets = socialBudgetsFromEnv(env);
   const alarmSweep = alarmSweepFromEnv(env);
   const channelAllowedSenders = channelAllowedSendersFromEnv(env);
+  const bundlesOff = bundlesOffFromEnv(env);
   return {
     ...resolveClusterStorage(
       {
@@ -642,5 +664,6 @@ export function loadConfig(
     ...(actors === undefined ? {} : { actors }),
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
     ...(channelAllowedSenders === undefined ? {} : { channelAllowedSenders }),
+    ...(bundlesOff === undefined ? {} : { bundlesOff }),
   };
 }

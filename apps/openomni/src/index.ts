@@ -13,10 +13,9 @@ import {
 import { timingSafeEqual } from "node:crypto";
 import { statSync } from "node:fs";
 import { configuredCompaction } from "./compaction/strategy";
-import { seedKernelPolicyRows } from "./policy-seed";
+import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { Core, Bundle } from "@openomni/agent";
-const BundleDefinitions = Bundle.BundleDefinitions;
 const Entropy = Core.Entropy;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -44,7 +43,7 @@ import {
   type MachineError,
   type MachineHost,
 } from "@openomni/machines";
-import { Alarm, parseJson, traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
+import { Alarm, traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
 import {
   attachSelfMachine,
   selfAttachFailure,
@@ -81,9 +80,9 @@ import {
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
-import { createLiveArmRegistry } from "./composition/alarm-plane";
-import { monitorPurposes } from "./composition/bundles/monitor";
-import { cronPurposes } from "./composition/bundles/cron";
+import { alarmCapabilityView, createWatchPlane } from "./composition/watch-plane";
+import { ComposedGeneration, composedHolderOf } from "./composition/composed";
+import { appManifest } from "./manifest";
 import {
   acquireAppResource,
   channelRequests,
@@ -279,14 +278,30 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // One resolution of the operator's endpoint and headers, shared by every
   // model caller this composition builds.
   const transport = modelTransport(config.model);
-  const runtime =
-    options.runtime ??
-    gatewayRuntime({
+  // The native-source alarm plane exists before the manifest: its purpose-free
+  // capability CONTRACT is what the manifest lists, while the live wake router
+  // below is rebuilt per composed on-set.
+  const watchPlane = await createWatchPlane();
+  // Boot is config -> manifest -> compose -> runtime (#1255): a ComposeRefused
+  // here is the typed boot failure, thrown before any listener exists. An
+  // injected runtime carries its own composed holder (tests).
+  const composedRuntime = async (): Promise<AppRuntime> => {
+    const manifest = appManifest({
+      alarm: watchPlane.contract,
+      wake: watchPlane.wake,
+      ...(config.bundlesOff === undefined ? {} : { off: config.bundlesOff }),
+    });
+    const generation = await Effect.runPromise(Bundle.compose(manifest));
+    const holder = composedHolderOf({ manifest, generation });
+    return gatewayRuntime({
       // Cluster storage rides only on configs that resolved it (loadConfig
       // always does); injected literal test configs stay on the in-memory
       // host so no path outside their fixture directory is ever touched.
       ...(config.catalogPath === undefined ? {} : resolveClusterStorage(config)),
+      composed: holder,
     });
+  };
+  const runtime = options.runtime ?? (await composedRuntime());
   const boot = async () => {
     const services = await runAppBoot(
       runtime,
@@ -298,7 +313,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           now: yield* captureNow,
           entropy: yield* Entropy,
           observations: yield* ObservationSink,
-          bundles: yield* BundleDefinitions,
+          composed: yield* ComposedGeneration,
           generations: yield* GenerationLayers,
           pointTable: yield* AppPointTable,
           // Late-bound entity ports: the runtime mounts the entity layer over
@@ -312,9 +327,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       release: (value: A) => Effect.Effect<void, E2>,
     ) => runAppBoot(runtime, bootResource(resource, release));
     const plane = services.plane;
+    // #1255 P3: compose owns the generation row tables — the composed
+    // generation's gate rows seed the live policy plane, bundle-neutrally.
     seedKernelPolicyRows(
       plane.catalog.policies,
-      services.bundles.select(services.bundles.names).rows,
+      gateRowPolicySeeds(services.composed.current().generation.rows),
       services.pointTable,
     );
     // The Session entity client: THE delivery path for message and timer
@@ -360,9 +377,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
           catch: () => new ExecutionApprovalError({ code: "unauthenticated" }),
         }),
       authorizeConfigure: configureAuthority(services.generations, plane.openKernel),
+      // #1255 S3: the product's composed manifest, adopted at each session's
+      // next turn start. Late-bound: the resident below owns the tool faces.
+      composed: { current: () => residentAdoption?.() },
       // #1276: product choice injected into the core seam (#1258 replaces it).
       parentReply,
     };
+    let residentAdoption: (() => Core.ComposedManifest | undefined) | undefined;
     // Request transitions never steal a live activation's fence: the borrowed
     // kernel view commits under the running turn's authority (idle sessions
     // keep the documented takeover adoption).
@@ -451,6 +472,26 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
       materialize: materializeDeclaredPersons,
       removeIdentity: plane.stores.actors.removeIdentity,
+      // #1255 P4: bundle_enable/bundle_disable edit the off-list and re-run
+      // compose. The swap is atomic — a ComposeRefused leaves the previous
+      // composition current (rollback = nothing happened). In-flight turns
+      // keep their captured generation; sessions adopt at next turn start.
+      bundles: {
+        names: () => services.composed.current().manifest.bundles.map((bundle) => bundle.name),
+        off: () => services.composed.current().manifest.off,
+        set: async (off) => {
+          const manifest = appManifest({ alarm: watchPlane.contract, wake: watchPlane.wake, off });
+          const generation = await Effect.runPromise(Bundle.compose(manifest));
+          services.composed.swap({ manifest, generation });
+          // The recomposed gate rows seed a fresh policy generation alongside
+          // the swap, so adopted turns evaluate the matching row tables.
+          seedKernelPolicyRows(
+            plane.catalog.policies,
+            gateRowPolicySeeds(generation.rows),
+            services.pointTable,
+          );
+        },
+      },
     };
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.
@@ -527,77 +568,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
         catch: lifecycleFailure("watches.close"),
       }),
     );
-    const closeWatch = (watchId: string) => void watchSources.close(watchId);
-    // #1254 H2: a `monitor.hit` send (activation resend or fresh-arm forward)
-    // is the native-source plane's (re)install, never a time delivery: a live
-    // holder just adopts the occurrence; a missing one is installed from the
-    // committed arm payload. An uninstallable or unparseable spec is the
-    // typed PERMANENT refusal the entity answers by retiring the chain.
-    const installFromOccurrence = (
-      sessionId: string,
-      occurrence: Parameters<typeof sendAlarm>[1],
-    ): Effect.Effect<void, Core.AlarmSendRefused> =>
-      Effect.suspend(() => {
-        const payload = parseJson(Bundle.WatchHitPayload, occurrence.payload);
-        if (payload === undefined)
-          return Effect.fail(
-            new Core.AlarmSendRefused({ reason: "monitor.hit arm payload carries no watch spec" }),
-          );
-        const armed = {
-          sessionId,
-          id: occurrence.alarmId,
-          occurrence: {
-            occurrenceId: occurrence.occurrenceId,
-            alarmId: occurrence.alarmId,
-            armSeq: occurrence.armSeq,
-          },
-          base: { spec: payload.spec, notifications: payload.notifications },
-        };
-        if (watchSources.refresh(armed)) return Effect.void;
-        return Effect.tryPromise({
-          try: () => watchSources.install(armed),
-          catch: (error) =>
-            new Core.AlarmSendRefused({
-              reason: error instanceof Error ? error.message : String(error),
-            }),
-        });
-      });
-    // #1254 H3: ONE committing arm path. Every app-side arm (monitor tool,
-    // watch verb, cron create) delegates to the live activation's budgeted
-    // entity verb through this registry; no app code commits an arm row.
-    const liveArms = createLiveArmRegistry();
-    const alarmPlane = await runAppBoot(
-      runtime,
-      Bundle.alarmCapability({
-        bundles: [
-          monitorPurposes({ close: closeWatch }),
-          cronPurposes(),
-        ],
-        compose: Core.composeAlarmPurposes,
-        watch: {
-          install: ({ sessionId, watchId, spec, occurrence }) =>
-            Effect.tryPromise({
-              try: () =>
-                watchSources.install({
-                  sessionId,
-                  id: watchId,
-                  occurrence,
-                  base: { spec, notifications: 0 },
-                }),
-              catch: (error) =>
-                new Bundle.WatchRefused({
-                  reason: error instanceof Error ? error.message : String(error),
-                }),
-            }),
-        },
-        arm: liveArms.arm,
-      }),
-    );
+    watchPlane.bind(watchSources);
+    // #1254 H3: ONE committing arm path — the watch plane's live-arm registry.
+    // The LIVE capability registers exactly the composed on-set's purposes and
+    // is rebuilt on recompose behind the stable view the ports below hold.
+    const liveAlarm = {
+      current: await runAppBoot(
+        runtime,
+        watchPlane.capabilityFor(services.composed.current().generation.bundles),
+      ),
+    };
+    const alarmPlane = alarmCapabilityView(liveAlarm);
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, { now: services.now, id: services.entropy.id }),
-      bundles: services.bundles.names,
+      composed: { current: services.composed.current },
       tools: {
         ...tools,
         alarms: await createMonitorPorts(runtime, alarmPlane),
@@ -608,6 +594,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         plane.openKernel(GATEWAY_INGRESS_SESSION).currentPolicyGeneration(),
     });
 
+    residentAdoption = () => resident.adoption();
     await runAppBoot(runtime, services.generations.initialize(resident.definitions));
 
     const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
@@ -836,51 +823,37 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // on the still-open request: the entity rings the live approval gate
       // after its commit, the same doorbell the direct answer path rings.
       onRequestReady: notifyLiveApprovals,
-      // #1254 S4: the composed monitor/cron capability the entity dispatches a
+      // #1254 S4: the composed alarm capability the entity dispatches a
       // delivered non-reserved occurrence to; unbound it would fold every
-      // watch hit and cron tick to a recorded stale fact with zero execution.
+      // native hit and timer tick to a recorded stale fact with zero execution.
       alarmCapability: alarmPlane,
       // #1254 H3: each activation registers its budgeted arm verb here — the
       // app-side capability path above delegates to it (one committing door).
-      onLive: liveArms.onLive,
-      // #1254 H1: native handles follow committed arm rows — a re-arm after a
-      // hit moves the live source onto the new occurrence at the commit (so
-      // the next hit resends the LIVE occurrence, not the settled one), and a
-      // retiring arm closes the handle. The first install stays the watch
-      // verb's awaited install seam.
-      onArmed: (notice) => {
-        if (notice.purpose !== Bundle.MONITOR_HIT) return;
-        if (notice.at === null) {
-          closeWatch(notice.alarmId);
-          return;
-        }
-        const payload = Bundle.WatchHitPayload.safeParse(notice.payload);
-        if (!payload.success) return;
-        watchSources.refresh({
-          sessionId: notice.sessionId,
-          id: notice.alarmId,
-          occurrence: {
-            occurrenceId: notice.occurrenceId,
-            alarmId: notice.alarmId,
-            armSeq: notice.armSeq,
-          },
-          base: { spec: payload.data.spec, notifications: payload.data.notifications },
-        });
+      onLive: watchPlane.arms.onLive,
+      // #1255 P3: the composed generation's deliver registrations and journal
+      // kinds, read per call so a recompose (#1255 P4) propagates live.
+      get inputRegistrations(): readonly string[] {
+        return ["prompt", "signal", ...services.composed.current().generation.inputs];
       },
+      get capabilityKinds(): readonly string[] {
+        return Object.keys(services.composed.current().generation.kinds);
+      },
+      // #1254 H1: native handles follow committed arm rows — the watch plane
+      // moves or closes the live source on each post-commit arm notice.
+      onArmed: watchPlane.onArmed,
       // #1254 S3: an activation resends its armed occurrences through the
       // entity's own persisted Alarm door (occurrence id = cluster dedupe).
       // Persist-and-return (M3): a DeliverAt envelope only replies at
       // `fireAt`, so the resend walk must complete at the durable insert —
       // a reply-awaiting send would park the walk on the first future row.
-      // Native-source chains (`monitor.hit`) are never time-delivered: their
+      // Native-source chains are never time-delivered: their
       // send is the source (re)install (#1254 H2), whose permanent failures
       // are the typed refusal the entity retires on. Everything else is a
       // defect — the entity logs it and the armed row stands for the next
       // activation (recovery of last resort).
-      sendAlarm: (sessionId, occurrence) =>
-        occurrence.purpose === Bundle.MONITOR_HIT
-          ? installFromOccurrence(sessionId, occurrence)
-          : scheduleAlarm(sessionId, occurrence).pipe(Effect.orDie),
+      sendAlarm: watchPlane.sendOccurrence((sessionId, occurrence) =>
+        scheduleAlarm(sessionId, occurrence).pipe(Effect.orDie, Effect.asVoid),
+      ),
     });
 
     // Boot alarm rescan (#1254 S3): wake every session that may hold armed
@@ -1071,6 +1044,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 system: { preset: before.systemPreset, blocks: before.systemBlocks },
                 policyGeneration: before.policyGeneration,
                 bundles: before.bundles,
+                // #1255: configure keeps the adopted manifest hash — dropping it
+                // would force a spurious compose adoption at next turn start.
+                ...(before.manifestHash === undefined ? {} : { manifestHash: before.manifestHash }),
               });
               const configured = Core.SessionHandleStore.configureAction({
                 id: services.entropy.id(), sessionId: id,

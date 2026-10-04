@@ -24,7 +24,7 @@ import { closeSessions } from "../../../src/core/run";
 import { session } from "../../../src/testing/registry";
 import { createSessionChatRunner } from "../../../src/core/run";
 import {
-  sessionTool,
+  projectTools,
   defineTool,
   eraseTool,
 } from "../../../src/core/tool";
@@ -93,7 +93,7 @@ test("reopened SQLite hydrates exact tool-bearing assistant identities and rende
             id: "history",
             role: "resident" as const,
             runner,
-            tools: definitions.map(sessionTool),
+            tools: projectTools(definitions).session,
           };
           const first = yield* Effect.gen(function* () {
             const fixture: SessionFixture = runtime;

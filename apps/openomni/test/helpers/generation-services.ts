@@ -1,5 +1,4 @@
-import { Core, Bundle, Model } from "@openomni/agent";
-const BundlesLive = Bundle.BundlesLive;
+import { Core, Model } from "@openomni/agent";
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
 type SessionRuntime = Core.SessionRuntime;
@@ -10,10 +9,13 @@ const LlmLive = Model.LlmLive;
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
 import { AppLedger, createAppLedger, type AppLedgerPlane } from "../../src/composition/cluster-runtime";
+import { ComposedGeneration, composedHolderOf, emptyComposition, type ComposedContext } from "../../src/composition/composed";
 import { GenerationLayersLive } from "../../src/composition/generation-layers";
 import { AppPointTable, composedPointTable } from "../../src/composition/point-table";
 import { wallClockLayer } from "../../src/composition/platform";
 import { testClock, testEntropy } from "./test-entropy";
+
+const composedEmpty = emptyComposition();
 
 /** Tests grant configure EXPLICITLY; the app composition wires the real pinned pre-policy. */
 export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
@@ -27,6 +29,8 @@ export function generationServices(options: {
   readonly llm?: Context.Service.Shape<typeof Llm>;
   /** The app ledger plane the generation manager reads; absent builds a scoped in-memory one. */
   readonly plane?: AppLedgerPlane;
+  /** The composed generation the layers read; absent composes empty. */
+  readonly composed?: { readonly current: () => ComposedContext };
 } = {}) {
   return Effect.gen(function* () {
     const scope = yield* Scope.Scope;
@@ -39,7 +43,7 @@ export function generationServices(options: {
       : options.plane;
     const process = Layer.mergeAll(
       AgentProcessLive(options.observations ?? Bus, testEntropy(options.entropy)),
-      BundlesLive([]),
+      Layer.succeed(ComposedGeneration, composedHolderOf(options.composed?.current() ?? composedEmpty)),
       Layer.succeed(AppLedger, plane),
       Layer.succeed(AppPointTable, composedPointTable()),
       wallClockLayer(now),

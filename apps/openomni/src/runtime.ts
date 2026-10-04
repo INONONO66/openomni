@@ -1,7 +1,5 @@
 import { AppInvariantError } from "./invariant";
-import { Core, Bundle, Model } from "@openomni/agent";
-type BundleDefinitions = Bundle.BundleDefinitions;
-const BundlesLive = Bundle.BundlesLive;
+import { Core, Model } from "@openomni/agent";
 type Entropy = Core.Entropy;
 type EntropySource = Core.EntropySource;
 const ObservationSink = Core.ObservationSink;
@@ -24,6 +22,7 @@ import {
   type ClusterServices,
 } from "./composition/cluster-runtime";
 import { resolveAlarmDrain } from "./config";
+import { ComposedGeneration, composedHolderOf, emptyComposition } from "./composition/composed";
 import { GenerationLayersLive } from "./composition/generation-layers";
 import { AppPointTable, composedPointTable } from "./composition/point-table";
 import { captureNow, platformEntropy, wallClockLayer } from "./composition/platform";
@@ -83,17 +82,19 @@ export interface AppRuntimeOptions {
   readonly entropy?: EntropySource;
   readonly observations?: Context.Service.Shape<typeof ObservationSink>;
   readonly llm?: Layer.Layer<Llm>;
-  readonly bundles?: Layer.Layer<BundleDefinitions>;
+  /** The composed-generation holder (#1255 P3): boot composes the manifest and injects it; absent = the empty composition. */
+  readonly composed?: Context.Service.Shape<typeof ComposedGeneration>;
   /** The capability registrations this composition selects (#1251); absent = every built-in this app ships. */
   readonly capabilities?: readonly Core.CapabilityPointRegistration[];
 }
 
-export function AppLive(options: AppRuntimeOptions, bundles = options.bundles ?? BundlesLive([])) {
+export function AppLive(options: AppRuntimeOptions) {
   const now = options.now === undefined ? captureNow : Effect.succeed(options.now);
-  return Layer.unwrap(Effect.map(now, (captured) => appLayer(options, bundles, captured)));
+  const composed = options.composed ?? composedHolderOf(emptyComposition());
+  return Layer.unwrap(Effect.map(now, (captured) => appLayer(options, Layer.succeed(ComposedGeneration, composed), captured)));
 }
 
-function appLayer(options: AppRuntimeOptions, bundles: Layer.Layer<BundleDefinitions>, now: () => number) {
+function appLayer(options: AppRuntimeOptions, composed: Layer.Layer<ComposedGeneration>, now: () => number) {
   const entropy = options.entropy ?? platformEntropy();
   // The root observation bus is app-owned (#1249): a Layer whose Scope is the
   // runtime's lifetime. Injected fixture sinks mount as plain values.
@@ -103,13 +104,13 @@ function appLayer(options: AppRuntimeOptions, bundles: Layer.Layer<BundleDefinit
       : Layer.succeed(ObservationSink, options.observations);
   return Layer.unwrap(Effect.gen(function* () {
     const observations = yield* ObservationSink;
-    return wiredLayer(options, bundles, now, entropy, observations);
+    return wiredLayer(options, composed, now, entropy, observations);
   })).pipe(Layer.provideMerge(sinkLayer));
 }
 
 function wiredLayer(
   options: AppRuntimeOptions,
-  bundles: Layer.Layer<BundleDefinitions>,
+  composed: Layer.Layer<ComposedGeneration>,
   now: () => number,
   entropy: EntropySource,
   observations: Context.Service.Shape<typeof ObservationSink>,
@@ -123,7 +124,7 @@ function wiredLayer(
   const process = AgentProcessLive(observations, entropy);
   const pointTable = Layer.succeed(AppPointTable, composedPointTable(options.capabilities));
   const generations = GenerationLayersLive.pipe(
-    Layer.provideMerge(Layer.mergeAll(process, bundles, plane, pointTable)),
+    Layer.provideMerge(Layer.mergeAll(process, composed, plane, pointTable)),
   );
   const host = clusterHostLayer({
     catalogPath: options.clusterStoragePath ?? options.catalogPath ?? ":memory:",
@@ -170,7 +171,7 @@ export type AppServices =
   | AppPointTable
   | AppScope
   | Llm
-  | BundleDefinitions
+  | ComposedGeneration
   | GenerationLayers
   | SessionEntityBinding
   | ClusterServices;

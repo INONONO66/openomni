@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { PolicyRow } from "@openomni/protocol";
 import { closeSessions } from "../../../src/core/run";
 import { session } from "../../../src/testing/registry";
-import { defineTool, eraseTool, sessionTool, } from "../../../src/core/tool";
+import { defineTool, eraseTool, projectTools, } from "../../../src/core/tool";
 import { createSessionChatRunner } from "../../../src/core/run";
 import { assistantStep } from "../../helpers/dispatching-runner";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
@@ -160,7 +160,7 @@ function scenario(mode: "repeat" | "stall" | "blocked" | "wait" | "progress" | "
           const fixture: SessionFixture = runtime;
           return yield* withSessionServices(
             session(
-              { id: "stop", role: "resident", runner, tools: definitions.map(sessionTool) },
+              { id: "stop", role: "resident", runner, tools: projectTools(definitions).session },
               fixture,
             ),
             fixture,

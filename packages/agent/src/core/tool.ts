@@ -491,10 +491,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
    */
   const resolveExecutor = (): Executor | undefined =>
     options?.executor ?? activeInvocation.getStore()?.executor;
-  const toolsGeneration = new Map(definitions.map((definition) => [
-    definition.name,
-    Object.freeze({ definition, approval: definition.approval }),
-  ]));
+  const { specs, dispatch: dispatchTable } = projectTools(definitions);
   type Prepared =
     | { readonly kind: "refused"; readonly result: ToolDispatchResult }
     | {
@@ -514,7 +511,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
     originalAction?: LedgerAction.Node,
   ): Prepared {
     const context = executionContext(call, providedContext);
-    const entry = toolsGeneration.get(call.tool);
+    const entry = dispatchTable.get(call.tool);
     if (entry === undefined) {
       return {
         kind: "refused",
@@ -644,7 +641,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
 
   return {
     ...(options?.executor === undefined ? {} : { executor: options.executor }),
-    specs: definitions.filter((definition) => definition.visibility.model.length > 0).map(toolSpec),
+    specs,
     executeWave,
     recover(actions, context) {
       return Effect.gen(function* () {
@@ -781,12 +778,10 @@ export function createTurnDispatcher(
   const { definitions } = yield* ToolCatalog;
   const generation = yield* GenerationOwnership;
   const { policy } = yield* SessionLayer;
+  const projected = new Map(projectTools(definitions).session.map((tool) => [tool.name, tool]));
   for (const captured of input.tools ?? []) {
-    const definition = definitions.find((candidate) => candidate.name === captured.name);
-    if (
-      definition === undefined ||
-      canonicalDigest(sessionTool(definition)) !== canonicalDigest(captured)
-    ) {
+    const current = projected.get(captured.name);
+    if (current === undefined || canonicalDigest(current) !== canonicalDigest(captured)) {
       return yield* new AgentFailure({ operation: "dispatcher.acquire", cause: `captured catalog mismatch: ${captured.name}` });
     }
   }
@@ -841,23 +836,51 @@ export function createTurnDispatcher(
   });
 }
 
-export function sessionTool(definition: AnyToolDefinition): SessionGeneration.Tool {
-  return SessionGeneration.Tool.parse({
-    name: definition.name,
-    inputSchema: toolInputSchema(definition),
-    category: definition.category,
-    ...(definition.sequential ? { sequential: true } : {}),
-  });
+/** A composable tool definition: dispatchable, with the bundle's replay declaration. */
+export type ProjectableTool = ToolDispatchDefinition & { readonly idempotent?: boolean };
+
+/**
+ * The three tool projections (#1255), derived ONCE from one definition list —
+ * the composed generation's tools or the catalog. `session` is the journaled
+ * `SessionGeneration.Tool` shape (`idempotent` preserved; the run loop alone
+ * decides replay), `specs` the model-visible `Tool.Spec` faces, `dispatch` the
+ * execution Map. No caller re-projects.
+ */
+export interface ToolProjections {
+  readonly session: readonly SessionGeneration.Tool[];
+  readonly specs: readonly Tool.Spec[];
+  readonly dispatch: ReadonlyMap<
+    string,
+    { readonly definition: ProjectableTool; readonly approval?: ToolDispatchDefinition["approval"] }
+  >;
 }
 
-export function toolSpec(definition: AnyToolDefinition): Tool.Spec {
-  return {
-    name: definition.name,
-    description: definition.description,
-    inputSchema: toolInputSchema(definition),
-    safe: toolIsSafe(definition.category),
-    ...(definition.sequential ? { sequential: true } : {}),
-  };
+export function projectTools(definitions: readonly ProjectableTool[]): ToolProjections {
+  const session = definitions.map((definition) =>
+    SessionGeneration.Tool.parse({
+      name: definition.name,
+      inputSchema: toolInputSchema(definition),
+      category: definition.category,
+      ...(definition.sequential ? { sequential: true } : {}),
+      ...(definition.idempotent === true ? { idempotent: true } : {}),
+    }),
+  );
+  const specs = definitions
+    .filter((definition) => definition.visibility.model.length > 0)
+    .map((definition): Tool.Spec => ({
+      name: definition.name,
+      description: definition.description,
+      inputSchema: toolInputSchema(definition),
+      safe: toolIsSafe(definition.category),
+      ...(definition.sequential ? { sequential: true } : {}),
+    }));
+  const dispatch = new Map(
+    definitions.map((definition) => [
+      definition.name,
+      Object.freeze({ definition, approval: definition.approval }),
+    ]),
+  );
+  return { session: Object.freeze(session), specs: Object.freeze(specs), dispatch };
 }
 
 function executionContext(call: Tool.Call, context: DispatchContext): ToolExecutionContext {

@@ -1,7 +1,19 @@
 import { describe, expect, it } from "bun:test";
 import { Core } from "@openomni/agent";
 const toolInputSchema = Core.toolInputSchema;
-const toolSpec = Core.toolSpec;
+/**
+ * The catalog's full spec surface (#1255 S3): `projectTools(...).specs` drops
+ * model-invisible tools, so the cell-only `completion` is widened for the
+ * projection alone — `Tool.Spec` carries no visibility.
+ */
+const toolSpec = (tool: AnyToolDefinition) => {
+  const widened = tool.visibility.model.length > 0
+    ? tool
+    : { ...tool, visibility: { ...tool.visibility, model: ["resident" as const] } };
+  const spec = Core.projectTools([widened]).specs[0];
+  if (spec === undefined) throw new Error(`no spec projected for ${tool.name}`);
+  return spec;
+};
 import type { AnyToolDefinition, PlainValue } from "@openomni/protocol";
 import { catalogDefinitions, type ToolPorts } from "../src/tools/core/catalog";
 import type { LlmCall } from "../src/tools/completion";

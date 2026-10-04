@@ -6,6 +6,7 @@ import { validateProviderCredential, validateProviderSettings } from "../channel
 import type { ChannelRuntimeStatus, ChannelSupervisor } from "./supervisor";
 import type { KekResolution } from "./vault-key";
 import { refusal, storeRefusal } from "./contacts";
+import type { BundlePort } from "./bundles";
 import { Statuses } from "./status";
 
 export const CHANNEL_DECLARE_INPUT = z
@@ -82,6 +83,8 @@ export interface ProvisionPort {
   readonly supervisor: Pick<ChannelSupervisor, "reconcile" | "resume" | "status" | "source">;
   /** Replays Person manifests into actor identity/endpoint facts (boot's materializer). */
   readonly materialize: () => void;
+  /** The composition recompose seam (#1255 P4): bundle_enable/bundle_disable run here. */
+  readonly bundles: BundlePort;
   readonly removeIdentity: (id: string) => boolean;
 }
 

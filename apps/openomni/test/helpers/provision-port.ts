@@ -20,5 +20,6 @@ export function provisionPort(plane: AppLedgerPlane = testPlane()): ProvisionPor
     },
     materialize: () => undefined,
     removeIdentity: () => true,
+    bundles: { names: () => [], off: () => [], set: async () => undefined },
   };
 }

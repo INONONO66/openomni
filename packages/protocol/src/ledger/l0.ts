@@ -237,6 +237,8 @@ export namespace SessionGeneration {
       inputSchema: PlainValueSchema,
       category: ToolCategory,
       sequential: z.literal(true).optional(),
+      /** Declared replay safety (#1255); the run loop alone decides replay. */
+      idempotent: z.literal(true).optional(),
     })
     .strict();
   export type Tool = z.infer<typeof Tool>;
@@ -269,13 +271,15 @@ export namespace SessionGeneration {
       systemValue: z.string(),
       systemHash: z.string().min(1),
       policyGeneration: z.number().int().nonnegative(),
+      /** The composed manifest's `Generation.hash` this snapshot adopted (#1255). */
+      manifestHash: z.string().min(1).optional(),
     })
     .strict();
   export type Snapshot = z.infer<typeof Snapshot>;
 
   export const ConfigureIntent = z
     .object({
-      operation: z.enum(["create", "tools.add", "tools.remove", "system.blocks.set", "revert"]),
+      operation: z.enum(["create", "tools.add", "tools.remove", "system.blocks.set", "revert", "compose"]),
       /** `all|one` consumption widths (#1253); present only when this configure pins them. */
       settings: ConsumptionSettings.optional(),
     })

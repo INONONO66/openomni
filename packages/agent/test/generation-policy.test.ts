@@ -1,27 +1,33 @@
 import { testBus } from "./helpers/bus";
 import { expect, test } from "bun:test";
 import * as SessionHandleStore from "../src/core/store/fence";
-import { createNamedPolicyRegistry, createPolicyCompiler, SEEDED_POLICY_ROWS } from "../src/core/gate/compile";
-import type { LedgerAction, PlainValue } from "@openomni/protocol";
+import { createNamedPolicyRegistry, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../src/core/gate/compile";
+import type { LedgerAction, PlainValue, PolicyRow } from "@openomni/protocol";
 import { Clock, Effect, Layer } from "effect";
 import { z } from "zod";
-import { bundle, BundleDefinitions, bundlePolicyTag, BundlesLive, NamedPolicyRegistry, type BundleRow } from "../src/core/bundle";
+import { NamedPolicyRegistry } from "../src/core/compose";
 import { makeSessionGenerations } from "../src/core/run";
 import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
-import { createTurnDispatcher, defineTool, sessionTool } from "../src/core/tool";
+import { createTurnDispatcher, defineTool, projectTools } from "../src/core/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
 import { sessionTree } from "./helpers/session-tree";
 
-function policyRow(name: string, verdict: PlainValue, priority = 100): BundleRow {
+type SeedRow = Omit<PolicyRow.Row, "generation">;
+
+function policyRow(name: string, verdict: PlainValue, priority = 100): SeedRow {
   return { name, kind: "tool", phase: "pre", priority,
     match: { encodingVersion: 1, value: { op: "demo__echo" } },
     verdict: { encodingVersion: 1, value: verdict } };
 }
 
-function generationFixture(rows: readonly BundleRow[], bodies: PlainValue[]) {
+/**
+ * The composed `NamedPolicyRegistry` carries product transformers/obligations
+ * alongside the kernel refs (#1255: the registry is a generation service, the
+ * deleted runtime bundle plane no longer provides it).
+ */
+function generationFixture(rows: readonly SeedRow[], bodies: PlainValue[]) {
   return Effect.gen(function* () {
-    const Policy = bundlePolicyTag("demo");
     const Input = z.object({ value: z.string(), secret: z.string().optional() });
     const tool = defineTool({
       name: "demo__echo", description: "echo", category: "query", input: Input, output: z.string(),
@@ -29,34 +35,33 @@ function generationFixture(rows: readonly BundleRow[], bodies: PlainValue[]) {
       execute: async (input: z.infer<typeof Input>) => { bodies.push(input); return input.value; },
       render: (_input: z.infer<typeof Input>, value: string) => value,
     });
-    const PolicyLive = Layer.succeed(Policy, createNamedPolicyRegistry({
-      transformers: [{ name: "demo/replace", apply: (_input: PlainValue, config: PlainValue) => config }],
-      obligations: [{ name: "demo/cap" }],
-    }));
-    const demo = bundle({ name: "demo", provides: [Policy], requires: [], tools: [tool], rows, layer: PolicyLive });
-    const definitions = yield* BundleDefinitions.pipe(Effect.provide(BundlesLive([demo])));
-    const selected = definitions.select(["demo"]);
+    const registry = createNamedPolicyRegistry({
+      transformers: [...KERNEL_POLICY_REGISTRY.transformers, { name: "demo/replace", apply: (_input: PlainValue, config: PlainValue) => config }],
+      obligations: [...KERNEL_POLICY_REGISTRY.obligations, { name: "demo/cap" }],
+    });
+    const tools = [tool];
     const source = isolatedLedger().catalog.policies;
-    const policyGeneration = source.appendGeneration(() => [...SEEDED_POLICY_ROWS, ...selected.rows]);
+    const policyGeneration = source.appendGeneration(() => [...SEEDED_POLICY_ROWS, ...rows]);
     const snapshot = SessionHandleStore.generationSnapshot({
-      generation: 1, revertTo: 0, policyGeneration, bundles: selected.names,
-      tools: selected.tools.map(sessionTool), system: { preset: "", blocks: [] },
+      generation: 1, revertTo: 0, policyGeneration, bundles: ["demo"],
+      tools: projectTools(tools).session, system: { preset: "", blocks: [] },
     });
     const seed = Layer.mergeAll(
       Layer.succeed(Clock.Clock, yield* Clock.clockWith(Effect.succeed)), Layer.succeed(Entropy, yield* Entropy),
-      Layer.succeed(ToolCatalog, { definitions: selected.tools }),
+      Layer.succeed(ToolCatalog, { definitions: tools }),
       Layer.succeed(ObservationSink, testBus()),
+      Layer.succeed(NamedPolicyRegistry, registry),
     );
     const layer = Layer.effect(SessionLayer, Effect.gen(function* () {
-      const registry = yield* NamedPolicyRegistry;
-      return { snapshot, policy: createPolicyCompiler({ registry, source }).pin(policyGeneration) };
-    })).pipe(Layer.provideMerge(selected.layer.pipe(Layer.provideMerge(seed))));
+      const composed = yield* NamedPolicyRegistry;
+      return { snapshot, policy: createPolicyCompiler({ registry: composed, source }).pin(policyGeneration) };
+    })).pipe(Layer.provideMerge(seed));
     const owner = yield* makeSessionGenerations({ id: { sessionId: fiberSessionId, generation: 1 }, snapshot, layer, activate: Effect.void });
     return yield* owner.capture();
   });
 }
 
-function dispatch(rows: readonly BundleRow[], bodies: PlainValue[]) {
+function dispatch(rows: readonly SeedRow[], bodies: PlainValue[]) {
   return Effect.gen(function* () {
     const options = yield* nativeExecutorOptions();
     const captured = yield* generationFixture(rows, bodies);
@@ -74,7 +79,7 @@ function dispatch(rows: readonly BundleRow[], bodies: PlainValue[]) {
   });
 }
 
-test("captured bundle data resolves custom transforms and obligations alongside kernel refs", () => isolated(Effect.scoped(Effect.gen(function* () {
+test("captured registry data resolves custom transforms and obligations alongside kernel refs", () => isolated(Effect.scoped(Effect.gen(function* () {
   const bodies: PlainValue[] = [];
   const { result, policy } = yield* dispatch([
     policyRow("demo/replace-row", { type: "transform", ref: "demo/replace", config: { fields: ["value", "secret"], value: "bundle", secret: "hidden" } }, 300),
@@ -99,7 +104,7 @@ test("a transform's non-string declared field entry is skipped at projection; th
 }))));
 
 for (const type of ["transform", "obligation"] as const) {
-  test(`unresolved bundle ${type} ref denies at pinned pre before a tool body runs`, () => isolated(Effect.scoped(Effect.gen(function* () {
+  test(`unresolved ${type} ref denies at pinned pre before a tool body runs`, () => isolated(Effect.scoped(Effect.gen(function* () {
     const bodies: PlainValue[] = [];
     const verdict: PlainValue = type === "transform" ? { type, ref: "demo/missing" }
       : { type, ref: "demo/missing", metric: "fanout", limit: 2 };

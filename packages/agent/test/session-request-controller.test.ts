@@ -9,7 +9,7 @@ import { seedPolicy } from "./helpers/seed-policy";
 import { L0Observation, type SessionTransition } from "@openomni/protocol";
 import { closeSessions } from "../src/core/run";
 import { session } from "../src/testing/registry";
-import { createTurnDispatcher, eraseTool, sessionTool } from "../src/core/tool";
+import { createTurnDispatcher, eraseTool, projectTools } from "../src/core/tool";
 import { valueTool } from "./helpers/query-tool";
 import { createSessionRequests } from "../src/core/request";
 import { suspendedRequest, } from "./helpers/effect-g2";
@@ -53,7 +53,7 @@ function setup() {
     const handle = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
         id: "controller",
         role: "resident",
-        tools: [sessionTool(tool)],
+        tools: projectTools([tool]).session,
         runner: (input: import("../src/core/run").SessionRunnerInput) =>
           Effect.gen(function* () {
             const dispatcher = (yield* Effect.gen(function* () { const turnInput: Parameters<typeof createTurnDispatcher>[0] & { readonly policy?: ResolvedExecutorOptions["policy"] } = input; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = runtime; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([tool])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));

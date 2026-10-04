@@ -5,7 +5,15 @@ import { runEffect } from "./helpers/effect";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { catalogDefinitions } from "../src/tools/core/catalog";
 import { Core, Model as AgentModel } from "@openomni/agent";
-const toolSpec = Core.toolSpec;
+/** The lint's full spec surface (#1255 S3): widen the cell-only door for projection alone. */
+const toolSpec = (tool: import("@openomni/protocol").AnyToolDefinition) => {
+  const widened = tool.visibility.model.length > 0
+    ? tool
+    : { ...tool, visibility: { ...tool.visibility, model: ["resident" as const] } };
+  const spec = Core.projectTools([widened]).specs[0];
+  if (spec === undefined) throw new Error(`no spec projected for ${tool.name}`);
+  return spec;
+};
 type Executor = Core.Executor;
 import { completionFixture as completionPort } from "./helpers/completion-fixture";
 type RunInput = AgentModel.RunInput;

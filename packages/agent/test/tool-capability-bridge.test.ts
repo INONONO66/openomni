@@ -6,13 +6,13 @@ import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import type { AnyToolDefinition, LedgerAction, PlainValue, ToolExecutionContext } from "@openomni/protocol";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { z } from "zod";
-import { NamedPolicyRegistry } from "../src/core/bundle";
+import { NamedPolicyRegistry } from "../src/core/compose";
 import { CommitFailed, InvocationClosed, ToolBodyFailed, type ExecutionError } from "../src/core/failure";
 import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocation, type InvocationFrame } from "../src/core/gate/decide";
 import type { ExecutionResult } from "../src/core/gate/decide";
 import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/core/run";
 import { ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
-import { createTurnDispatcher, sessionTool } from "../src/core/tool";
+import { createTurnDispatcher, projectTools } from "../src/core/tool";
 import { runAgent } from "./helpers/executor";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
@@ -42,7 +42,7 @@ function tool(name: string, execute: (input: PlainValue, context: ToolExecutionC
 }
 function bundle(generation: number, definitions: readonly AnyToolDefinition[], bus: TestObservationBus): GenerationBundle {
   const snapshot = SessionHandleStore.generationSnapshot({ generation, revertTo: generation - 1,
-    tools: definitions.map((definition: AnyToolDefinition) => sessionTool(definition)),
+    tools: projectTools(definitions).session,
     system: { preset: "bridge", blocks: [] }, policyGeneration: 1 });
   return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void,
     layer: Layer.mergeAll(Layer.succeed(ObservationSink, bus), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),

@@ -91,5 +91,7 @@ export function renderProvision(value: z.output<typeof ProvisionOutput>): string
   if (value.op === "contact_merge") return `endpoint ${value.id} merged into ${value.actorId}`;
   if (value.op === "channel_add" || value.op === "channel_enable" || value.op === "channel_disable")
     return `channel ${value.id} ${value.action}\n${statusLines(value.statuses)}`;
+  if (value.op === "bundle_enable" || value.op === "bundle_disable")
+    return `bundle ${value.name} ${value.action} (off: ${value.off.length === 0 ? "none" : value.off.join(", ")})`;
   return `secret ${value.id} rotated (kek ${value.kekId})\n${statusLines(value.statuses)}`;
 }

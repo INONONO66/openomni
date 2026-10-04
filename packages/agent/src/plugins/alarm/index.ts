@@ -1,10 +1,13 @@
 import { Effect } from "effect";
 import {
+  AlarmSeam,
   AlarmWakeError,
   ArmRefused,
+  Capability,
   RESERVED_PURPOSES,
   type AlarmCapability,
   type ArmVerb,
+  type CapabilityDefinition,
 } from "../../core/api";
 import {
   createWatchVerb,
@@ -78,8 +81,10 @@ export interface AlarmCapabilityOptions<E> {
   readonly watch: WatchInstallDeps;
 }
 
-/** What the app composes: the #1255 capability shape as it exists today. */
+/** What the app composes: the #1255 `Capability.define` result plus the composed verbs. */
 export interface AlarmCapabilityDefinition extends AlarmCapability {
+  /** The frozen `Capability.define` contract (#1255 S1). */
+  readonly definition: CapabilityDefinition<"alarm">;
   readonly name: "alarm";
   readonly points: readonly ["alarm.fired"];
   /** purpose -> owning bundle; the core's reserved purposes map to "core". */
@@ -136,13 +141,23 @@ export function alarmCapability<E>(
         };
         const arm = (sessionId: string, turnId: string) =>
           guardArm(registry, options.arm(sessionId, turnId));
+        const verbs = { arm, watch: createWatchVerb(arm, options.watch) };
+        const definition = Capability.define({
+          name: "alarm",
+          requires: [],
+          points: ["alarm.fired"],
+          purposes: Object.fromEntries(handlers),
+          verbs,
+          seam: AlarmSeam,
+        });
         return {
-          name: "alarm" as const,
-          points: ["alarm.fired"] as const,
-          purposes: [...handlers.keys()],
+          definition,
+          name: definition.name,
+          points: definition.points as readonly ["alarm.fired"],
+          purposes: Object.keys(definition.purposes),
           registry,
           wake,
-          verbs: { arm, watch: createWatchVerb(arm, options.watch) },
+          verbs,
         };
       }),
     );

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Effect } from "effect";
 import { recordingLedger } from "./helpers/effect-g3-recording";
 import { createTurnDispatcher } from "../src/core/tool";
-import { defineTool, sessionTool } from "../src/core/tool";
+import { defineTool, projectTools } from "../src/core/tool";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { isolated } from "./helpers/isolated";
 
@@ -34,7 +34,7 @@ test("recovery refuses a missing or changed captured definition instead of execu
     toolsHash: "captured-hash",
     policy: compiledPolicy(),
     ledger: record.ledger,
-    tools: [sessionTool(original)],
+    tools: projectTools([original]).session,
   };
   for (const definitions of [[], [definition(z.object({ value: z.string().min(2) }))]]) {
     const refused = yield* Effect.flip(createTurnDispatcher(input, {}).pipe(Effect.provide(catalogLayer(definitions))));
@@ -53,7 +53,7 @@ test("a recovered tool and its policy decisions remain children of the captured 
           role: "resident",
           actionId: "resume-action",
           turnId: "original-turn",
-          tools: [sessionTool(tool)],
+          tools: projectTools([tool]).session,
           policy: compiledPolicy(),
           ledger: record.ledger,
         }; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = { observations: { publish: () => undefined }, entropy: record.entropy }; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([tool])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
