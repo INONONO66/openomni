@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791124515915,
+  "lastUpdate": 1791130328063,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -77893,6 +77893,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 184333,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de785b2ee79a528eb09171d4de630be3cc520022",
+          "message": "test(machines): native-lifecycle awaits descendant exit instead of asserting at child close (#1288)\n\nThe child's close event proves the direct child exited and its stdio pipes\nhit EOF; it does not prove every descendant was reaped. A SIGKILLed\ngrandchild reparented to init remains a zombie until init reaps it, and\nkill(pid, 0) succeeds on a zombie, so expectGone raced init's reap on CI\n(ubuntu-latest) and flaked with 'expected ESRCH, received alive'.\n\nReplace the instantaneous expectGone with awaitGone: a bounded observation\npoll across the process-table boundary (the one sanctioned wait pattern)\nthat observes kill(pid, 0) until ESRCH for every pid, guarded by within;\non guard expiry it rejects with a typed ProcessStillPresentError naming the\nstill-present pid and its ps state. No synchronizing sleeps; all other\nassertions (assertClosed, SIGKILL signalCode, pipe destroyed, host detach)\nunchanged.",
+          "timestamp": "2026-10-04T16:09:27Z",
+          "tree_id": "82978ac494bc0503e984c7646ea32027dc22ad80",
+          "url": "https://github.com/INONONO66/openomni/commit/de785b2ee79a528eb09171d4de630be3cc520022"
+        },
+        "date": 1791130327427,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1142,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1129890,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 336253,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5392982,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 125,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 889,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 590,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 131043,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 652031,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 365305,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2666,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9410697,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1083998,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15229,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 135693,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 676789,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 178710,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 12914059,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 71,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 136103,
             "unit": "ns/op"
           }
         ]
