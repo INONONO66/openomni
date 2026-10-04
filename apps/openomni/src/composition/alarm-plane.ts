@@ -13,10 +13,6 @@ import type { SessionKernel } from "./cluster-runtime";
  * registry below hands `Bundle.alarmCapability` each activation's budgeted
  * entity arm verb — the ONE committing arm path — and refuses `not_live`
  * when no activation is registered.
- *
- * Interim at this sha: scheduled occurrences are sent through the entity's
- * `alarm` door where unregistered purposes fold to recorded stale facts —
- * Lane 4 wires the wake dispatch that consumes them (S4).
  */
 
 const ArmIntent = z.object({
