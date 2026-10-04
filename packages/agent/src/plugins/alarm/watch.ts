@@ -229,6 +229,8 @@ export function watchPurposes(deps: WatchWakeDeps): readonly AlarmPurposeDeclara
 /** The `watch` verb: validate the sealed spec, arm the chain(s), install the native source. */
 export type WatchVerb = (input: {
   readonly sessionId: string;
+  /** #1254 r2 H3: the calling turn's token — the arm authority check rides it. */
+  readonly turnId: string;
   readonly watchId: string;
   readonly spec: Alarm.WatchSpec;
   readonly now: number;
@@ -267,7 +269,7 @@ function retireCommitted(
 }
 
 export function createWatchVerb(
-  armFor: (sessionId: string) => ArmVerb,
+  armFor: (sessionId: string, turnId: string) => ArmVerb,
   deps: WatchInstallDeps,
 ): WatchVerb {
   return (input) =>
@@ -278,7 +280,7 @@ export function createWatchVerb(
           reason: parsed.error.issues[0]?.message ?? "invalid watch spec",
         });
       const spec = parsed.data;
-      const arm = armFor(input.sessionId);
+      const arm = armFor(input.sessionId, input.turnId);
       // The first commit: before it succeeds nothing needs compensation.
       const main = yield* arm({
         purpose: MONITOR_HIT,

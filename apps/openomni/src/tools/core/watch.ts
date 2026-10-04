@@ -35,12 +35,15 @@ export type WatchState = z.infer<typeof WatchState>;
 type WatchCreate =
   | {
       readonly sessionId: string;
+      /** #1254 r2 H3: the calling turn's token — the live-arm authority check rides it. */
+      readonly turnId: string;
       readonly id: string;
       readonly kind: "watch";
       readonly spec: Alarm.WatchSpec;
     }
   | {
       readonly sessionId: string;
+      readonly turnId: string;
       readonly id: string;
       readonly kind: "cron";
       readonly expr: string;
@@ -53,12 +56,14 @@ export interface MonitorPorts {
   readonly cancel: (
     id: string,
     sessionId: string,
+    turnId: string,
     at: number,
     signal: AbortSignal,
   ) => Promise<WatchState>;
   readonly rearm: (
     id: string,
     sessionId: string,
+    turnId: string,
     at: number,
     signal: AbortSignal,
   ) => Promise<WatchState>;
@@ -114,6 +119,7 @@ export async function armWatch(
   return ports.create(
     {
       sessionId: context.sessionId,
+      turnId: context.turnId,
       id: ports.entropy(),
       kind: "watch",
       spec: {
@@ -146,6 +152,7 @@ export async function armCron(
   return ports.create(
     {
       sessionId: context.sessionId,
+      turnId: context.turnId,
       id: ports.entropy(),
       kind: "cron",
       expr: source.expr,

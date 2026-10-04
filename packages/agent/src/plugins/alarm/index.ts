@@ -69,8 +69,12 @@ export type ComposePurposesVerb<E> = (input: {
 export interface AlarmCapabilityOptions<E> {
   readonly bundles: readonly AlarmBundlePurposes[];
   readonly compose: ComposePurposesVerb<E>;
-  /** The app's committing arm verb, session-scoped; the capability only guards and delegates. */
-  readonly arm: (sessionId: string) => ArmVerb;
+  /**
+   * The app's committing arm verb, scoped to the session AND the calling
+   * turn (#1254 r2 H3): tool-facing arms carry the turn token the live
+   * activation checks; the capability only guards and delegates.
+   */
+  readonly arm: (sessionId: string, turnId: string) => ArmVerb;
   readonly watch: WatchInstallDeps;
 }
 
@@ -81,7 +85,7 @@ export interface AlarmCapabilityDefinition extends AlarmCapability {
   /** purpose -> owning bundle; the core's reserved purposes map to "core". */
   readonly registry: ReadonlyMap<string, string>;
   readonly verbs: {
-    readonly arm: (sessionId: string) => ArmVerb;
+    readonly arm: (sessionId: string, turnId: string) => ArmVerb;
     readonly watch: WatchVerb;
   };
 }
@@ -130,7 +134,8 @@ export function alarmCapability<E>(
               )
             : handler({ fired, ctx });
         };
-        const arm = (sessionId: string) => guardArm(registry, options.arm(sessionId));
+        const arm = (sessionId: string, turnId: string) =>
+          guardArm(registry, options.arm(sessionId, turnId));
         return {
           name: "alarm" as const,
           points: ["alarm.fired"] as const,

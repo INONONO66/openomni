@@ -167,28 +167,42 @@ export function alarmChainReads(kernel: SessionKernel, sessionId: string): Core.
  * session with no live activation refuses `not_live` — the app never commits
  * an arm row of its own.
  */
+/** One activation's registered verbs: the committing arm plus its turn-token check. */
+export interface LiveActivationArm {
+  readonly arm: Core.ArmVerb;
+  /** #1254 r2 H3: true iff the live activation owns the caller's turn token. */
+  readonly ownsTurn: (turnId: string) => boolean;
+}
+
 export interface LiveArmRegistry {
   /** Bound as `SessionEntityPorts.onLive`; returns the passivation release. */
-  readonly onLive: (sessionId: string, verbs: { readonly arm: Core.ArmVerb }) => () => void;
-  /** The arm verb `Bundle.alarmCapability` composes: delegates to the live activation. */
-  readonly arm: (sessionId: string) => Bundle.ArmVerb;
+  readonly onLive: (sessionId: string, verbs: LiveActivationArm) => () => void;
+  /**
+   * The arm verb `Bundle.alarmCapability` composes: delegates to the live
+   * activation, carrying the calling turn's token (#1254 r2 H3). A session
+   * with no live activation refuses `not_live`; a live activation that does
+   * not own the token refuses `stale_turn` — a continuation authorized under
+   * one activation is NEVER re-resolved to a successor.
+   */
+  readonly arm: (sessionId: string, turnId: string) => Bundle.ArmVerb;
 }
 
 export function createLiveArmRegistry(): LiveArmRegistry {
-  const live = new Map<string, Core.ArmVerb>();
+  const live = new Map<string, LiveActivationArm>();
   return {
     onLive: (sessionId, verbs) => {
-      live.set(sessionId, verbs.arm);
+      live.set(sessionId, verbs);
       return () => {
-        if (live.get(sessionId) === verbs.arm) live.delete(sessionId);
+        if (live.get(sessionId) === verbs) live.delete(sessionId);
       };
     },
-    arm: (sessionId) => (input) =>
+    arm: (sessionId, turnId) => (input) =>
       Effect.suspend(() => {
-        const verb = live.get(sessionId);
-        return verb === undefined
-          ? Effect.fail(new Core.ArmRefused({ code: "not_live" }))
-          : verb(input);
+        const entry = live.get(sessionId);
+        if (entry === undefined) return Effect.fail(new Core.ArmRefused({ code: "not_live" }));
+        if (!entry.ownsTurn(turnId))
+          return Effect.fail(new Core.ArmRefused({ code: "stale_turn" }));
+        return entry.arm(input);
       }),
   };
 }
@@ -266,13 +280,14 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
     watchStateOf(requireChain(deps, sessionId, id), sessionId);
   const retire = (
     sessionId: string,
+    turnId: string,
     chain: AlarmChainView,
     reason: "cancel",
     signal: AbortSignal,
   ) =>
     deps.run(
       deps
-        .capability.verbs.arm(sessionId)({
+        .capability.verbs.arm(sessionId, turnId)({
           purpose: chain.latest.purpose,
           at: null,
           alarmId: chain.alarmId,
@@ -293,7 +308,7 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
         const at = Cron.next(expr, deps.clock(), tz);
         await deps.run(
           deps
-            .capability.verbs.arm(input.sessionId)({
+            .capability.verbs.arm(input.sessionId, input.turnId)({
               purpose: CRON_TICK,
               at,
               alarmId: input.id,
@@ -309,6 +324,7 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
         deps.capability.verbs
           .watch({
             sessionId: input.sessionId,
+            turnId: input.turnId,
             watchId: input.id,
             spec: input.spec,
             now: deps.clock(),
@@ -318,16 +334,16 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
       );
       return state(input.sessionId, input.id);
     },
-    async cancel(id, sessionId, _at, signal) {
+    async cancel(id, sessionId, turnId, _at, signal) {
       const chain = requireChain(deps, sessionId, id);
-      if (chain.latest.at !== null) await retire(sessionId, chain, "cancel", signal);
+      if (chain.latest.at !== null) await retire(sessionId, turnId, chain, "cancel", signal);
       const chains = foldAlarmChains(deps.openKernel(sessionId), sessionId);
       const timeout = chains.get(`${id}:timeout`);
       if (timeout !== undefined && timeout.latest.at !== null)
-        await retire(sessionId, timeout, "cancel", signal);
+        await retire(sessionId, turnId, timeout, "cancel", signal);
       return state(sessionId, id);
     },
-    async rearm(id, sessionId, at, signal) {
+    async rearm(id, sessionId, turnId, at, signal) {
       const chain = requireChain(deps, sessionId, id);
       if (chain.latest.at !== null) return watchStateOf(chain, sessionId);
       const payload = chainSpec(deps, sessionId, id);
@@ -337,7 +353,7 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
           throw new MonitorRefused(new Error(`cron chain without an expression: ${id}`));
         await deps.run(
           deps
-            .capability.verbs.arm(sessionId)({
+            .capability.verbs.arm(sessionId, turnId)({
               purpose: CRON_TICK,
               at: Cron.next(cron.data.expr, at, cron.data.tz),
               alarmId: id,
@@ -355,7 +371,7 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
         throw new MonitorRefused(new Error(`watch chain without a spec: ${id}`));
       await deps.run(
         deps.capability.verbs
-          .watch({ sessionId, watchId: id, spec: spec.data, now: at })
+          .watch({ sessionId, turnId, watchId: id, spec: spec.data, now: at })
           .pipe(Effect.asVoid, Effect.mapError((error) => new Error(error.message))),
         signal,
       );

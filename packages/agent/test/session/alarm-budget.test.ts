@@ -13,7 +13,7 @@ import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Effect, Result } from "effect";
 import type { Alarm } from "@openomni/protocol";
-import { armAction, composeAlarmPurposes, type AlarmCapability, type ArmRefused, type ArmVerb } from "../../src/core/alarm";
+import { armAction, composeAlarmPurposes, firedAction, type AlarmCapability, type ArmRefused, type ArmVerb } from "../../src/core/alarm";
 import { alarmCapability, watchPurposes, WatchRefused, type WatchInstallDeps } from "../../src/plugins/alarm";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
@@ -298,7 +298,7 @@ test("the app capability path arms through the live activation's budgeted entity
       let refusal: ArmRefused | undefined;
       for (let index = 0; index <= MAX_ARMED; index += 1) {
         const attempt = yield* Effect.result(
-          capability.verbs.arm(sessionId)({
+          capability.verbs.arm(sessionId, "turn-1")({
             purpose: "test.tick",
             at: FAR_FUTURE + index,
             alarmId: `app-${index}`,
@@ -378,7 +378,13 @@ test("r2 H2: a refusal after the first committed arm retires exactly the committ
         Effect.fail(new WatchRefused({ reason: "no machines plane" })),
       );
       const installRefused = yield* Effect.flip(
-        refusing.verbs.watch({ sessionId, watchId: "h2-install", spec: timedSpec, now: FAR_FUTURE }),
+        refusing.verbs.watch({
+          sessionId,
+          turnId: "turn-1",
+          watchId: "h2-install",
+          spec: timedSpec,
+          now: FAR_FUTURE,
+        }),
       );
       // Fill the budget to maxArmed - 1 so the timed watch's main arm takes
       // the LAST slot and its timeout arm is the typed boundary refusal.
@@ -387,7 +393,7 @@ test("r2 H2: a refusal after the first committed arm retires exactly the committ
           installs.push(watchId);
         }),
       );
-      const armDirect = working.verbs.arm(sessionId);
+      const armDirect = working.verbs.arm(sessionId, "turn-1");
       for (let index = 0; index < MAX_ARMED - 1; index += 1)
         yield* armDirect({
           purpose: "monitor.hit",
@@ -397,7 +403,13 @@ test("r2 H2: a refusal after the first committed arm retires exactly the committ
           payload: {},
         });
       const budgetRefused = yield* Effect.flip(
-        working.verbs.watch({ sessionId, watchId: "h2-watch", spec: timedSpec, now: FAR_FUTURE }),
+        working.verbs.watch({
+          sessionId,
+          turnId: "turn-1",
+          watchId: "h2-watch",
+          spec: timedSpec,
+          now: FAR_FUTURE,
+        }),
       );
       return { installRefused, budgetRefused };
     }),
@@ -426,4 +438,150 @@ test("r2 H2: a refusal after the first committed arm retires exactly the committ
   expect(
     armed.filter((row) => row.alarmId.startsWith("h2-watch") || row.alarmId.startsWith("h2-install")),
   ).toEqual([]);
+});
+
+test("r2 H3: a fence-stale commit from a zombie activation is the typed ArmRefused stale_activation", async () => {
+  const sessionId = "h3-stale-activation-session";
+  const liveVerbs = new Map<string, ArmVerb>();
+  const refused = await runCluster(
+    {
+      sessionsDir,
+      catalogFile,
+      onLive: (id, verbs) => {
+        liveVerbs.set(id, verbs.arm);
+        return () => {
+          liveVerbs.delete(id);
+        };
+      },
+    },
+    Effect.gen(function* () {
+      yield* sendPrompt(sessionId, `${sessionId}:m-1`, "hello");
+      const verb = liveVerbs.get(sessionId);
+      if (verb === undefined) return yield* Effect.die(new Error("no live activation"));
+      // Sanity: the live activation commits under its pinned fence.
+      yield* verb({ purpose: "h3.tick", at: FAR_FUTURE, alarmId: "h3-live", sourceKey: "t", payload: {} });
+      // A successor elsewhere takes the session over: rotate + adopt the fence.
+      yield* Effect.promise(() =>
+        runAgent(
+          Effect.gen(function* () {
+            const catalog = openCatalogStore(catalogFile, { now: () => Date.now() });
+            const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), {
+              now: () => Date.now(),
+            });
+            try {
+              const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+              const fence = catalog.rotateFence(sessionId);
+              yield* kernel.adoptFence({ sessionId, owner: "usurper", fence });
+            } finally {
+              store.close();
+              catalog.close();
+            }
+          }),
+        ),
+      );
+      // The zombie's next commit is a typed refusal, not a defect.
+      return yield* Effect.flip(
+        verb({ purpose: "h3.tick", at: FAR_FUTURE, alarmId: "h3-zombie", sourceKey: "t", payload: {} }),
+      );
+    }),
+  );
+  expect(refused).toMatchObject({ _tag: "ArmRefused", code: "stale_activation" });
+  // The zombie appended nothing: only the sane pre-usurp arm is indexed.
+  const armed = await runAgent(
+    Effect.sync(() => {
+      const catalog = openCatalogStore(catalogFile, { now: () => 1 });
+      const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
+      try {
+        return SessionHandleStore.createSessionKernel(store, catalog).armedAlarms();
+      } finally {
+        store.close();
+        catalog.close();
+      }
+    }),
+  );
+  expect(armed.map((row) => row.alarmId)).toEqual(["h3-live"]);
+});
+
+test("r2 H3: three exhausted CAS attempts on the arm commit surface the typed ArmRefused revision", async () => {
+  const sessionId = "h3-revision-session";
+  const liveVerbs = new Map<string, ArmVerb>();
+  const contend = { active: false, bumps: 0 };
+  // One REAL competing row lands through a second kernel right before each of
+  // the entity's commit attempts, so every bounded attempt sees a moved
+  // revision — deterministic contention, no sleeps.
+  const competingBump = Effect.gen(function* () {
+    const catalog = openCatalogStore(catalogFile, { now: () => Date.now() });
+    const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), {
+      now: () => Date.now(),
+    });
+    try {
+      const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+      const row = kernel.row(sessionId);
+      contend.bumps += 1;
+      yield* kernel.commit({
+        sessionId,
+        owner: row.fenceOwner ?? "competitor",
+        fence: row.fence,
+        now: Date.now(),
+        expectedRevision: row.revision,
+        actions: [
+          firedAction({
+            parentId: null,
+            sessionId,
+            purpose: "h3.tick",
+            alarmId: "h3-competitor",
+            occurrenceId: `h3-competitor-${contend.bumps}`,
+            outcome: "stale",
+            ts: Date.now(),
+          }),
+        ],
+        state: row.state,
+      });
+    } finally {
+      store.close();
+      catalog.close();
+    }
+  });
+  const refused = await runCluster(
+    {
+      sessionsDir,
+      catalogFile,
+      onLive: (id, verbs) => {
+        liveVerbs.set(id, verbs.arm);
+        return () => {
+          liveVerbs.delete(id);
+        };
+      },
+      wrapStore: (id, store) => {
+        if (id !== sessionId) return store;
+        const sessions = store.sessions;
+        const wrapped: typeof sessions = {
+          ...sessions,
+          commit: (input, guard) =>
+            contend.active && input.actions.some((action) => action.id.startsWith("h3-cas:arm:"))
+              ? competingBump.pipe(
+                  Effect.orDie,
+                  Effect.flatMap(() => sessions.commit(input, guard)),
+                )
+              : sessions.commit(input, guard),
+        };
+        Object.defineProperty(store, "sessions", { value: wrapped });
+        return store;
+      },
+    },
+    Effect.gen(function* () {
+      yield* sendPrompt(sessionId, `${sessionId}:m-1`, "hello");
+      const verb = liveVerbs.get(sessionId);
+      if (verb === undefined) return yield* Effect.die(new Error("no live activation"));
+      contend.active = true;
+      const refusal = yield* Effect.flip(
+        verb({ purpose: "h3.tick", at: FAR_FUTURE, alarmId: "h3-cas", sourceKey: "t", payload: {} }),
+      );
+      contend.active = false;
+      return refusal;
+    }),
+  );
+  expect(refused).toMatchObject({ _tag: "ArmRefused", code: "revision" });
+  // Exactly the bounded three attempts hit the contended commit.
+  expect(contend.bumps).toBe(3);
 });

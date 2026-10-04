@@ -51,7 +51,11 @@ exhaustion (a watch is an armed alarm `alarmId = watchId`, `sourceKey:
 "monitor"`; re-arm = `supersedes`, cancel = `at: null`; timeout = a second
 arm), and the `arm`/`watch` verbs. The app composes the capability in
 `apps/openomni/src/composition/alarm-plane.ts` (chain fold, chain-guard reads,
-fence-riding arm commit with bounded race retry, typed prompt port) behind two
+typed prompt port; the app never commits an arm row itself — tool-facing arms
+delegate through the live-activation registry to the entity's one committing
+verb, carrying the calling turn's token, with typed refusals: `not_live`,
+`stale_turn`, `stale_activation` for a fence-stale zombie commit, and
+`revision` when the entity's bounded commit retry exhausts) behind two
 bundles `composition/bundles/{monitor,cron}.ts` (each documents its
 `requires: alarm` edge; the manifest/compose mechanics that enforce the
 capability-off cascade land with #1255); `composition/monitor-ports.ts` and

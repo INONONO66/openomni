@@ -111,7 +111,7 @@ test("the fixture entity verb commits one chain row, schedules non-monitor purpo
   }
 });
 
-test("the live arm registry delegates to the registered activation verb and refuses not_live otherwise (H3)", async () => {
+test("the live arm registry binds continuations to the authorizing activation's turn (H3)", async () => {
   const registry = createLiveArmRegistry();
   const armInput = {
     purpose: "monitor.hit",
@@ -121,24 +121,39 @@ test("the live arm registry delegates to the registered activation verb and refu
     payload: {},
   };
   // No live activation: the app path commits nothing and refuses typed.
-  const refused = await runEffect(Effect.flip(registry.arm(SESSION)(armInput)));
+  const refused = await runEffect(Effect.flip(registry.arm(SESSION, "t1")(armInput)));
   expect(refused.code).toBe("not_live");
-  // A registered activation's verb is the one committing path.
-  const verbOf = (occurrenceId: string): Core.ArmVerb => (input) =>
-    Effect.succeed({ alarmId: input.alarmId ?? "minted", occurrenceId, armSeq: 1 });
-  const release = registry.onLive(SESSION, { arm: verbOf("occ-1") });
-  expect((await runEffect(registry.arm(SESSION)(armInput))).occurrenceId).toBe("occ-1");
-  // Another session stays not_live.
-  const other = await runEffect(Effect.flip(registry.arm("other-session")(armInput)));
-  expect(other.code).toBe("not_live");
-  // Passivation releases the verb.
-  release();
-  expect((await runEffect(Effect.flip(registry.arm(SESSION)(armInput)))).code).toBe("not_live");
+  // A registered activation's verb commits only for the turn it owns.
+  const calls: string[] = [];
+  const verbOf =
+    (occurrenceId: string): Core.ArmVerb =>
+    (input) =>
+      Effect.sync(() => {
+        calls.push(occurrenceId);
+        return { alarmId: input.alarmId ?? "minted", occurrenceId, armSeq: 1 };
+      });
+  const release = registry.onLive(SESSION, {
+    arm: verbOf("occ-old"),
+    ownsTurn: (turnId) => turnId === "t1",
+  });
+  // A continuation minted under the old activation's turn t1 — NOT yet executed.
+  const continuation = registry.arm(SESSION, "t1")(armInput);
+  // The successor activation registers; it owns t2, never t1.
+  registry.onLive(SESSION, { arm: verbOf("occ-new"), ownsTurn: (turnId) => turnId === "t2" });
+  // Executing the stale continuation refuses stale_turn: it is never
+  // re-resolved to the successor and NEITHER verb commits anything.
+  expect((await runEffect(Effect.flip(continuation))).code).toBe("stale_turn");
+  expect(calls).toEqual([]);
+  // The successor's own turn commits through the successor's verb.
+  expect((await runEffect(registry.arm(SESSION, "t2")(armInput))).occurrenceId).toBe("occ-new");
+  expect(calls).toEqual(["occ-new"]);
   // A stale release (prior activation) never evicts the newer registration.
-  const first = registry.onLive(SESSION, { arm: verbOf("occ-old") });
-  registry.onLive(SESSION, { arm: verbOf("occ-new") });
-  first();
-  expect((await runEffect(registry.arm(SESSION)(armInput))).occurrenceId).toBe("occ-new");
+  release();
+  expect((await runEffect(registry.arm(SESSION, "t2")(armInput))).occurrenceId).toBe("occ-new");
+  // Another session stays not_live.
+  expect((await runEffect(Effect.flip(registry.arm("other-session", "t2")(armInput)))).code).toBe(
+    "not_live",
+  );
 });
 
 test("the chain fold pages full history and feeds the chain-guard reads", async () => {
@@ -270,6 +285,7 @@ test("monitor ports drive the watch lifecycle as chain facts plus native handles
     const created = await ports.create(
       {
         sessionId: SESSION,
+        turnId: "turn",
         id: "lifecycle",
         kind: "watch",
         spec: {
@@ -293,21 +309,21 @@ test("monitor ports drive the watch lifecycle as chain facts plus native handles
       { purpose: "monitor.timeout", alarmId: "lifecycle:timeout", fireAt: 1500 },
     ]);
     // Rearm of a live watch is a no-op: the armed chain stands.
-    expect(await ports.rearm("lifecycle", SESSION, 1000, signal)).toMatchObject({
+    expect(await ports.rearm("lifecycle", SESSION, "turn", 1000, signal)).toMatchObject({
       status: "armed",
     });
     // A chain the session never armed is refused, not cancelled.
-    await expect(ports.cancel("ghost", SESSION, 1000, signal)).rejects.toMatchObject({
+    await expect(ports.cancel("ghost", SESSION, "turn", 1000, signal)).rejects.toMatchObject({
       _tag: "MonitorRefused",
     });
-    const cancelled = await ports.cancel("lifecycle", SESSION, 1000, signal);
+    const cancelled = await ports.cancel("lifecycle", SESSION, "turn", 1000, signal);
     expect(cancelled).toMatchObject({ status: "cancelled", fireAt: null });
     expect(state.closed).toEqual(["lifecycle"]);
     // The timeout chain retired with its watch.
     const timeout = foldAlarmChains(state.kernel, SESSION).get("lifecycle:timeout");
     expect(timeout?.latest).toMatchObject({ at: null, payload: { reason: "cancel" } });
     // Rearm revives the retired chain from its last sealed spec and reinstalls.
-    const revived = await ports.rearm("lifecycle", SESSION, 1000, signal);
+    const revived = await ports.rearm("lifecycle", SESSION, "turn", 1000, signal);
     expect(revived).toMatchObject({ status: "armed", notifications: 0 });
     expect(state.installed.map((spec) => spec.id)).toEqual(["lifecycle", "lifecycle"]);
   } finally {
@@ -320,7 +336,7 @@ test("monitor ports arm and revive a cron chain on its grid", async () => {
   const signal = new AbortController().signal;
   try {
     const created = await ports.create(
-      { sessionId: SESSION, id: "grid", kind: "cron", expr: "*/5 * * * *", tz: "UTC", description: "five" },
+      { sessionId: SESSION, turnId: "turn", id: "grid", kind: "cron", expr: "*/5 * * * *", tz: "UTC", description: "five" },
       signal,
     );
     expect(created).toMatchObject({ id: "grid", kind: "cron", status: "armed", fireAt: 300_000 });
@@ -329,9 +345,9 @@ test("monitor ports arm and revive a cron chain on its grid", async () => {
     ]);
     // Native sources never track cron chains.
     expect(state.installed).toEqual([]);
-    const cancelled = await ports.cancel("grid", SESSION, 1000, signal);
+    const cancelled = await ports.cancel("grid", SESSION, "turn", 1000, signal);
     expect(cancelled).toMatchObject({ status: "cancelled", fireAt: null });
-    const revived = await ports.rearm("grid", SESSION, 400_000, signal);
+    const revived = await ports.rearm("grid", SESSION, "turn", 400_000, signal);
     expect(revived).toMatchObject({ status: "armed", fireAt: 600_000 });
     expect(scheduled).toHaveLength(2);
   } finally {

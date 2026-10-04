@@ -710,7 +710,20 @@ function entityArmVerb(handle: ActivationHandle): ArmVerb {
       return { alarmId, occurrenceId, armSeq };
     })).pipe(Effect.catchIf(
       (error): error is Exclude<LedgerError | AdmissionFailure, never> => !(error instanceof ArmRefused),
-      (error) => Effect.die(error),
+      (error) => {
+        // #1254 r2 H3: the bounded revision CAS exhausting and a fence-stale
+        // commit (a successor took the session over — this activation is no
+        // longer the writer) are typed refusals the caller must see. Schema
+        // refusals and unknown ledger errors stay invariants and die.
+        if (error instanceof AdmissionFailure && error.code === "revision")
+          return Effect.fail(new ArmRefused({ code: "revision" }));
+        if (
+          error instanceof FenceRefused ||
+          (error instanceof CommitRefused && error.reason === "fence")
+        )
+          return Effect.fail(new ArmRefused({ code: "stale_activation" }));
+        return Effect.die(error);
+      },
     ));
 }
 
@@ -1122,7 +1135,14 @@ export function createSessionEntityLayer(drainConfig: AlarmDrainConfig) {
       // root — the ONE committing arm path the app's capability verbs
       // delegate to. Registered before the armed resend so a send-refusal
       // retire never races the registration window; released at passivation.
-      const releaseLive = env.ports.onLive?.(sessionId, { arm: entityArmVerb(handle) });
+      // The turn token (#1254 r2 H3): a turn belongs to exactly one
+      // activation, and the activation's journal is what it knows — it owns
+      // exactly the turn currently open under its pinned fence (started or
+      // recovered by it; the single-writer fence makes that activation-unique).
+      const releaseLive = env.ports.onLive?.(sessionId, {
+        arm: entityArmVerb(handle),
+        ownsTurn: (turnId) => kernel.latestOpenTurn(sessionId)?.turnId === turnId,
+      });
       if (releaseLive !== undefined) yield* Effect.addFinalizer(() => Effect.sync(releaseLive));
       // #1254 S3: restore scheduling — resend every armed occurrence (forked,
       // exactly once per activation).

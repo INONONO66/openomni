@@ -353,7 +353,16 @@ export interface SessionEntityPorts {
    */
   readonly onLive?: (
     sessionId: string,
-    verbs: { readonly arm: import("./alarm").ArmVerb },
+    verbs: {
+      readonly arm: import("./alarm").ArmVerb;
+      /**
+       * #1254 r2 H3: the turn token. True iff this activation is running (or
+       * recovered) the named turn — the registry refuses `stale_turn` for a
+       * continuation whose turn this activation does not own, so an effect
+       * authorized under one activation never commits through a successor.
+       */
+      readonly ownsTurn: (turnId: string) => boolean;
+    },
   ) => () => void;
   /**
    * #1254 H1: fired synchronously after every arm the entity's arm verb

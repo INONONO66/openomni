@@ -184,11 +184,26 @@ export interface AlarmFired {
   readonly fireAt: number;
 }
 
-/** Typed `arm` refusal (#1254): the body's `deny{reason: alarm_budget}` is `code: "alarm_budget"`. */
+/**
+ * Typed `arm` refusal (#1254): the body's `deny{reason: alarm_budget}` is
+ * `code: "alarm_budget"`. r2 H3 adds the app-path authority codes:
+ * `not_live` (no registered activation), `stale_turn` (the live activation
+ * does not own the caller's turn token), `stale_activation` (the committing
+ * activation lost the fence to a successor — it is no longer the writer) and
+ * `revision` (the bounded three-attempt revision CAS exhausted).
+ */
 export class ArmRefused extends Schema.TaggedError<ArmRefused>(
   "@openomni/agent/core/ArmRefused",
 )("ArmRefused", {
-  code: Schema.Literals(["alarm_budget", "unknown_purpose", "reserved_purpose", "not_live"]),
+  code: Schema.Literals([
+    "alarm_budget",
+    "unknown_purpose",
+    "reserved_purpose",
+    "not_live",
+    "stale_turn",
+    "stale_activation",
+    "revision",
+  ]),
 }) {}
 
 /** The arm verb a capability schedules through; never a direct journal append. */

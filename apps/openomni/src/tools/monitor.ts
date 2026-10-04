@@ -89,7 +89,13 @@ export function createMonitorTool(ports?: MonitorPorts) {
       if (ports === undefined) throw new ToolRefused("monitor", "alarm port unavailable");
       context.signal.throwIfAborted();
       if (args.op !== "create") {
-        return ports[args.op](args.id, context.sessionId, ports.clock(), context.signal);
+        return ports[args.op](
+          args.id,
+          context.sessionId,
+          context.turnId,
+          ports.clock(),
+          context.signal,
+        );
       }
       if (args.source.kind === "cron") {
         const { kind, ...fields } = args.source;

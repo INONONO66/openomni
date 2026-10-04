@@ -129,7 +129,7 @@ test("monitor controls fold create/rearm/cancel as chain facts scoped to the arm
     );
     const monitorTool = createMonitorTool(ports);
     const armed = await ports.create(
-      { id: "control", sessionId: SESSION, kind: "watch", spec: watchSpec(8) },
+      { id: "control", sessionId: SESSION, turnId: "turn", kind: "watch", spec: watchSpec(8) },
       new AbortController().signal,
     );
     expect(armed).toMatchObject({ id: "control", kind: "watch", status: "armed", fireAt: 1000 });
@@ -207,7 +207,7 @@ test("capability wakes spend the chain budget: prompt, re-arm, then exhaustion r
   };
   try {
     await fixture.ports.create(
-      { id: "budget", sessionId: SESSION, kind: "watch", spec: watchSpec(2) },
+      { id: "budget", sessionId: SESSION, turnId: "turn", kind: "watch", spec: watchSpec(2) },
       new AbortController().signal,
     );
     expect(await wake("WAKE first")).toBe("delivered");

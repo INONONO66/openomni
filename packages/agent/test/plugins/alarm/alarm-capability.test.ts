@@ -462,7 +462,7 @@ describe("verbs", () => {
       watch: { command: "make build", description: "build watch", timeout_ms: 60_000 },
     };
     const result = runTestSync(
-      definition.verbs.watch({ sessionId: "session-1", watchId: "watch-9", spec: timed, now: 1_000 }),
+      definition.verbs.watch({ sessionId: "session-1", turnId: "turn-1", watchId: "watch-9", spec: timed, now: 1_000 }),
     );
     expect(result).toEqual({ alarmId: "watch-9", occurrenceId: "occ-1", armSeq: 1 });
     expect(calls).toHaveLength(2);
@@ -505,7 +505,7 @@ describe("verbs", () => {
     };
     const error = runTestSync(
       Effect.flip(
-        definition.verbs.watch({ sessionId: "session-1", watchId: "watch-9", spec: timed, now: 1_000 }),
+        definition.verbs.watch({ sessionId: "session-1", turnId: "turn-1", watchId: "watch-9", spec: timed, now: 1_000 }),
       ),
     );
     expect(error).toBeInstanceOf(ArmRefused);
@@ -529,7 +529,7 @@ describe("verbs", () => {
     };
     const error = runTestSync(
       Effect.flip(
-        definition.verbs.watch({ sessionId: "session-1", watchId: "watch-9", spec: timed, now: 1_000 }),
+        definition.verbs.watch({ sessionId: "session-1", turnId: "turn-1", watchId: "watch-9", spec: timed, now: 1_000 }),
       ),
     );
     expect(error).toBeInstanceOf(WatchRefused);
@@ -553,7 +553,7 @@ describe("verbs", () => {
     } as Alarm.WatchSpec;
     const error = runTestSync(
       Effect.flip(
-        definition.verbs.watch({ sessionId: "session-1", watchId: "w", spec: broken, now: 0 }),
+        definition.verbs.watch({ sessionId: "session-1", turnId: "turn-1", watchId: "w", spec: broken, now: 0 }),
       ),
     );
     expect(error).toBeInstanceOf(WatchRefused);
@@ -566,7 +566,7 @@ describe("verbs", () => {
     const refused = (purpose: string) =>
       runTestSync(
         Effect.flip(
-          definition.verbs.arm("session-1")({ purpose, at: 1, payload: {}, sourceKey: "monitor" }),
+          definition.verbs.arm("session-1", "turn-1")({ purpose, at: 1, payload: {}, sourceKey: "monitor" }),
         ),
       );
     expect(refused("retry").code).toBe("reserved_purpose");
@@ -574,7 +574,7 @@ describe("verbs", () => {
     expect(refused("reminder.due").code).toBe("unknown_purpose");
     expect(calls).toEqual([]);
     const accepted = runTestSync(
-      definition.verbs.arm("session-1")({
+      definition.verbs.arm("session-1", "turn-1")({
         purpose: MONITOR_HIT,
         at: 2,
         payload: {},
