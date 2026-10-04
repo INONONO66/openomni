@@ -3,8 +3,11 @@
  * a capability wake arming through `ctx.arm` succeeds until the durable armed
  * index holds `maxArmed` rows, then receives the typed
  * `ArmRefused{code: alarm_budget}` — and reserved purposes are refused with
- * `reserved_purpose` regardless of budget headroom. The same wake commits one
- * alarm-originated prompt through `ctx.prompt` (origin fixed by the core).
+ * `reserved_purpose` regardless of budget headroom. At a full budget a re-arm
+ * of an armed chain (upsert) and a retire (`at: null`, delete) still commit —
+ * only an arm that adds a chain consults the budget — and the retire frees one
+ * slot. The same wake commits one alarm-originated prompt through `ctx.prompt`
+ * (origin fixed by the core).
  */
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
@@ -30,7 +33,7 @@ const FAR_FUTURE = 4_102_444_800_000;
 // JSON bytes a capability can parse (`{}` would pass under any serializer).
 const BOOT_PAYLOAD = { reason: "boot", attempt: 1, tags: ["a", "b"] };
 
-test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reserved purposes always refuse", async () => {
+test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; re-arm/retire pass at full budget; reserved purposes always refuse", async () => {
   // Seed: one committed boot arm (purpose test.tick) whose resent occurrence
   // triggers the capability wake on activation.
   const boot = await runAgent(
@@ -84,6 +87,12 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
     readonly armed: number;
     readonly refusal: ArmRefused | undefined;
     readonly reserved: ArmRefused | undefined;
+    /** At the full budget: re-arm of tick-0, retire of tick-1, then one new chain. */
+    readonly atFull: {
+      readonly rearm: ArmRefused | { readonly alarmId: string; readonly armSeq: number };
+      readonly retire: ArmRefused | { readonly alarmId: string };
+      readonly freed: ArmRefused | { readonly alarmId: string };
+    };
     readonly prompt: { readonly seq: number };
     readonly fired: {
       readonly occurrenceId: string;
@@ -123,10 +132,28 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
           }
           armed += 1;
         }
+        const settle = <A>(outcome: Result.Result<A, ArmRefused>) =>
+          Result.isFailure(outcome) ? outcome.failure : outcome.success;
+        const rearm = settle(
+          yield* Effect.result(
+            ctx.arm({ purpose: "test.tick", at: FAR_FUTURE + 1_000, payload: {}, alarmId: "tick-0", sourceKey: "t" }),
+          ),
+        );
+        const retire = settle(
+          yield* Effect.result(
+            ctx.arm({ purpose: "test.tick", at: null, payload: {}, alarmId: "tick-1", sourceKey: "t" }),
+          ),
+        );
+        const freed = settle(
+          yield* Effect.result(
+            ctx.arm({ purpose: "test.tick", at: FAR_FUTURE, payload: {}, alarmId: "tick-freed", sourceKey: "t" }),
+          ),
+        );
         resolveReport({
           armed,
           refusal,
           reserved: Result.isFailure(reserved) ? reserved.failure : undefined,
+          atFull: { rearm, retire, freed },
           prompt,
           fired: {
             occurrenceId: fired.occurrenceId,
@@ -159,6 +186,11 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
   expect(outcome.reserved?.code).toBe("reserved_purpose");
   expect(outcome.armed).toBe(MAX_ARMED - 1);
   expect(outcome.refusal?.code).toBe("alarm_budget");
+  // Full budget: the upsert and the delete commit (neither adds a row); the
+  // retire frees exactly one slot for a new chain.
+  expect(outcome.atFull.rearm).toMatchObject({ alarmId: "tick-0" });
+  expect(outcome.atFull.retire).toMatchObject({ alarmId: "tick-1" });
+  expect(outcome.atFull.freed).toMatchObject({ alarmId: "tick-freed" });
 
   // Durable index after the wake: the boot row retired on `fired{delivered}`,
   // the 63 accepted arms remain; the wake's prompt is one `prompt` row keyed
@@ -182,7 +214,11 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
     }),
   );
   expect(after.armed.find((row) => row.occurrenceId === boot.occurrenceId)).toBeUndefined();
+  // 63 accepted arms − retired tick-1 + tick-freed; tick-0 moved to its re-arm.
   expect(after.armed).toHaveLength(MAX_ARMED - 1);
+  expect(after.armed.find((row) => row.alarmId === "tick-1")).toBeUndefined();
+  expect(after.armed.find((row) => row.alarmId === "tick-freed")).toBeDefined();
+  expect(after.armed.find((row) => row.alarmId === "tick-0")?.fireAt).toBe(FAR_FUTURE + 1_000);
   expect(outcome.fired.alarmId).toBe("boot");
   expect(JSON.parse(outcome.fired.payload)).toEqual(BOOT_PAYLOAD);
   expect(after.prompt?.kind).toBe("prompt");

@@ -623,17 +623,21 @@ function entityArmVerb(handle: ActivationHandle): ArmVerb {
     retryRevision(() => Effect.gen(function* () {
       if (isReservedAlarmPurpose(input.purpose) || input.purpose === "rescan")
         return yield* new ArmRefused({ code: "reserved_purpose" });
-      if (kernel.armedCount() >= config.maxArmed)
+      const alarmId = input.alarmId ?? `${authority.sessionId}:${input.purpose}`;
+      const latest = armedChainReads(handle).latestArm(alarmId);
+      // The budget bounds the index, so only an arm that ADDS a row consults
+      // it: a retire (`at: null`) deletes, a re-arm of an armed chain upserts.
+      // A full budget must never pin a chain that wants to retire or move.
+      if (input.at !== null && latest === undefined && kernel.armedCount() >= config.maxArmed)
         return yield* new ArmRefused({ code: "alarm_budget" });
       const row = kernel.row(authority.sessionId);
-      const alarmId = input.alarmId ?? `${authority.sessionId}:${input.purpose}`;
       const armSeq = row.revision + 1;
       const { action, occurrenceId } = armAction({
         parentId: kernel.latestAction(authority.sessionId)?.id ?? null,
         sessionId: authority.sessionId,
         purpose: input.purpose,
         at: input.at,
-        supersedes: input.supersedes ?? armedChainReads(handle).latestArm(alarmId)?.occurrenceId ?? null,
+        supersedes: input.supersedes ?? latest?.occurrenceId ?? null,
         alarmId,
         sourceKey: input.sourceKey,
         payload: input.payload,
