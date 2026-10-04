@@ -44,7 +44,7 @@ import {
   type MachineError,
   type MachineHost,
 } from "@openomni/machines";
-import { Alarm, traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
+import { Alarm, parseJson, traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
 import {
   attachSelfMachine,
   selfAttachFailure,
@@ -538,14 +538,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
       occurrence: Parameters<typeof sendAlarm>[1],
     ): Effect.Effect<void, Core.AlarmSendRefused> =>
       Effect.suspend(() => {
-        const parsed = (() => {
-          try {
-            return Bundle.WatchHitPayload.safeParse(JSON.parse(occurrence.payload));
-          } catch {
-            return undefined;
-          }
-        })();
-        if (parsed === undefined || !parsed.success)
+        const payload = parseJson(Bundle.WatchHitPayload, occurrence.payload);
+        if (payload === undefined)
           return Effect.fail(
             new Core.AlarmSendRefused({ reason: "monitor.hit arm payload carries no watch spec" }),
           );
@@ -557,7 +551,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
             alarmId: occurrence.alarmId,
             armSeq: occurrence.armSeq,
           },
-          base: { spec: parsed.data.spec, notifications: parsed.data.notifications },
+          base: { spec: payload.spec, notifications: payload.notifications },
         };
         if (watchSources.refresh(armed)) return Effect.void;
         return Effect.tryPromise({

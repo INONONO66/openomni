@@ -46,7 +46,7 @@ const cronFired = (payload: unknown, fireAt: number): Bundle.AlarmFired => ({
   fireAt,
 });
 
-function cronWake() {
+function cronWake(refuse?: Core.ArmRefused["code"]) {
   const { prompts, prompt } = recordingPrompt();
   const arms: Parameters<Bundle.ArmVerb>[0][] = [];
   const declaration = cronPurposes().purposes[0];
@@ -59,6 +59,7 @@ function cronWake() {
         reads: { latestArm: () => undefined, settled: () => false },
         arm: (input) => {
           arms.push(input);
+          if (refuse !== undefined) return Effect.fail(new Core.ArmRefused({ code: refuse }));
           return Effect.succeed({
             alarmId: input.alarmId ?? "grid",
             occurrenceId: "occ-next",
@@ -139,6 +140,15 @@ test("cron.tick counts every grid instant lost to downtime: */30 asleep 3h repor
       payload: half,
     },
   ]);
+});
+
+test("cron.tick surfaces a refused grid re-arm as a typed wake failure carrying the refusal code", async () => {
+  const { wake, prompts } = cronWake("alarm_budget");
+  const refused = await runEffect(Effect.flip(wake(cronFired(payload, 300_000), 300_000)));
+  expect(refused).toBeInstanceOf(Bundle.AlarmWakeError);
+  expect(refused.reason).toBe("alarm_budget");
+  // The prompt for the fired tick was still raised before the re-arm was refused.
+  expect(prompts).toHaveLength(1);
 });
 
 test("cron.tick reports payload and expression faults as typed wake failures", async () => {

@@ -7,7 +7,7 @@ type ExecutionApprovalRequest = Core.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
 const CommitRefused = Core.CommitRefused;
-import { type Alarm, canonicalDigest, L0Observation } from "@openomni/protocol";
+import { type Alarm, canonicalDigest, L0Observation, type PlainObject } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src";
 import {
   assistantMessage,
@@ -609,11 +609,17 @@ const stopLlm = {
   run: () => Effect.succeed({ type: "stop" as const }),
 };
 
-/** Seeds one armed MONITOR_HIT chain (given spec) plus its scheduled timeout companion. */
+/** The committed MONITOR_HIT arm payload for one watch spec. */
+const watchHit = (watch: Alarm.WatchSpec["watch"]): PlainObject => ({
+  spec: { watch, policyGeneration: 1, notificationLimit: 8 },
+  notifications: 0,
+});
+
+/** Seeds one armed MONITOR_HIT chain (given payload) plus its scheduled timeout companion. */
 async function seedNativeSession(
   plane: Awaited<ReturnType<typeof planeOf>>,
   sessionId: string,
-  watch: Alarm.WatchSpec["watch"],
+  payload: PlainObject,
 ) {
   const kernel = plane.openKernel(sessionId);
   await runEffect(
@@ -638,7 +644,7 @@ async function seedNativeSession(
     supersedes: null,
     alarmId: `${sessionId}-watch`,
     sourceKey: Bundle.MONITOR_SOURCE,
-    payload: { spec: { watch, policyGeneration: 1, notificationLimit: 8 }, notifications: 0 },
+    payload,
     armSeq: 1,
     ts: 2,
   });
@@ -675,12 +681,12 @@ test("an activation's armed monitor.hit resend reinstalls the native source acro
   const app1 = await suite.boot({ config, llm: stopLlm });
   const plane1 = await planeOf(app1.runtime);
   const sessionId = "native-resend";
-  const { hit, timeout } = await seedNativeSession(plane1, sessionId, {
+  const { hit, timeout } = await seedNativeSession(plane1, sessionId, watchHit({
     command: `cat '${fifo}'; read value`,
     filter: "^WAKE$",
     description: "native resend",
     persistent: true,
-  });
+  }));
   await app1.stop();
 
   // The wake's prompt commit is the barrier: it exists only if the reboot's
@@ -715,18 +721,21 @@ test("an activation's armed monitor.hit resend reinstalls the native source acro
   expect(timeoutChain.latest.at).toBe(4_102_444_800_000);
 });
 
-test("an uninstallable armed monitor.hit retires its chain with send_refused at reboot (#1254 H2)", async () => {
-  const config = suite.config("index-native-refused-db-", { wsToken: "index-refusal-token" });
+test.each<[string, PlainObject]>([
+  // A terminal watch whose machine does not exist: install can never succeed.
+  [
+    "ghost machine",
+    watchHit({ machine: "m-ghost", session: "qa", description: "ghost terminal", persistent: true }),
+  ],
+  // A payload that carries no watch spec at all: nothing to install.
+  ["no watch spec", { notifications: 0 }],
+])("an uninstallable armed monitor.hit (%s) retires its chain with send_refused at reboot (#1254 H2)", async (label, payload) => {
+  const slug = label.replace(/\s+/g, "-");
+  const config = suite.config(`index-native-refused-${slug}-db-`, { wsToken: "index-refusal-token" });
   const app1 = await suite.boot({ config, llm: stopLlm });
   const plane1 = await planeOf(app1.runtime);
-  const sessionId = "native-refused";
-  // A terminal watch whose machine does not exist: install can never succeed.
-  const { hit, timeout } = await seedNativeSession(plane1, sessionId, {
-    machine: "m-ghost",
-    session: "qa",
-    description: "ghost terminal",
-    persistent: true,
-  });
+  const sessionId = `native-refused-${slug}`;
+  const { hit, timeout } = await seedNativeSession(plane1, sessionId, payload);
   await app1.stop();
 
   // The ONLY alarm commit this reboot can produce for the session is the
