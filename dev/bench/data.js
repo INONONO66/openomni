@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791130328063,
+  "lastUpdate": 1791130925432,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -78027,6 +78027,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 136103,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3ccafed1dff5faf19989c1558a8ac9cc2346941e",
+          "message": "fix(openomni): observe a path create landing in the fs.watch startup window (G015) (#1290)\n\n* fix(openomni): reconcile a path watch once after fs.watch installs so a startup-window create is observed (G015)\n\n* fix(openomni): reconcile a path watch's stat identity on a cadence beside the native callback (G015)\n\nMeasured on Bun 1.4.1 (paired, alternating, same host state): the native\ncreate event is lost ~10% of the time under load 10-12 on main (5/52) and the\none-shot post-install stat from 306d19ab does not recover it (9/52), because\nBun's shared FSEvents stream rebuild outlives the fs.watch() return and a\ndropped event never arrives (oven-sh/bun#44385). The path source now runs\nobserve() on an injected 1 s unref'd cadence; the stat identity keeps the\nnative and cadence paths idempotent. Regression test models the real\nordering: write after install returns, native never fires, one tick observes\nit once, replay and next tick do not double, close cancels the cadence.\n\n* refactor(openomni): apply the path-watch seam defaults once in pathSource (review r2 L2)",
+          "timestamp": "2026-10-04T16:19:03Z",
+          "tree_id": "0904f0392d3711ecccbc7d31073f3ff4de6f9544",
+          "url": "https://github.com/INONONO66/openomni/commit/3ccafed1dff5faf19989c1558a8ac9cc2346941e"
+        },
+        "date": 1791130925001,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 996,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1806,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1340,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1417788,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 431514,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6633139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 131,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 714,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 200111,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 812317,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 488949,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3273,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11795724,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1474640,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19059,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 176363,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 928355,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 277387,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 16417784,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 191811,
             "unit": "ns/op"
           }
         ]
