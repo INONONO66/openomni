@@ -168,7 +168,7 @@ export function alarmChainReads(kernel: SessionKernel, sessionId: string): Core.
  * an arm row of its own.
  */
 /** One activation's registered verbs: the committing arm plus its turn-token check. */
-export interface LiveActivationArm {
+interface LiveActivationArm {
   readonly arm: Core.ArmVerb;
   /** #1254 r2 H3: true iff the live activation owns the caller's turn token. */
   readonly ownsTurn: (turnId: string) => boolean;

@@ -557,13 +557,13 @@ test("r2 H3: three exhausted CAS attempts on the arm commit surface the typed Ar
         const sessions = store.sessions;
         const wrapped: typeof sessions = {
           ...sessions,
-          commit: (input, guard) =>
+          commit: (input) =>
             contend.active && input.actions.some((action) => action.id.startsWith("h3-cas:arm:"))
               ? competingBump.pipe(
                   Effect.orDie,
-                  Effect.flatMap(() => sessions.commit(input, guard)),
+                  Effect.flatMap(() => sessions.commit(input)),
                 )
-              : sessions.commit(input, guard),
+              : sessions.commit(input),
         };
         Object.defineProperty(store, "sessions", { value: wrapped });
         return store;
