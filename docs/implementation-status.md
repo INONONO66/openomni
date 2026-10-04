@@ -1,5 +1,55 @@
 # Implementation Status
 
+## #1257 fork sessions into verifiable chains (epic #1260, draft PR #1291)
+
+On `epic1260/1257-fork-chains` (2026-10-05, base `3ccafed1`). `Core.forkSession`
+(`packages/agent/src/core/fork.ts`) forks a parent session at a verifiable
+boundary — a `turn{terminal}` row, a `prompt`/`signal` delivery row, or a
+`compaction` row; any other anchor refuses `anchor_not_boundary`, an unknown
+hash `anchor_not_found` — into a NEW session file with its own hash chain. The
+child genesis is `session.configure{operation: "fork", forkedFrom: {session,
+anchor, parentSeq, parentHead, copied}}` (schema in
+`packages/protocol/src/journal/core/session-configure.ts`), pinning the parent
+head hash at fork time so both chains verify independently forever; a later
+parent append never perturbs the child (`verifyChain` on both stays `intact`).
+Copied rows keep their original ids except input rows, which rename to
+`fork:<parentSessionId>:<id>` with `inboxId`/`turnId` payload references
+remapped: consumed inputs stay consumed, and replaying a pre-fork idempotency
+key against the child admits fresh. Exclusions: `alarm{arm}` rows and
+`fold.checkpoint` are never copied — the child re-registers zero alarms while
+the parent occurrence still runs, and a copied orphan `alarm{fired}` folds to
+#1254's `skip{unknown}` (occurrence ids are minted from the parent session id,
+so a child re-arm can never collide). The parent file's schema stamp
+(`SESSION_FILE_SCHEMA_VERSION` via `PRAGMA user_version`,
+`packages/agent/src/core/store/session-file/`) is probed read-only first; a
+mismatch refuses `schema_version` with zero child writes. The copy is bounded
+(`DEFAULT_FORK_COPY_BYTE_CAP` 4 MiB, `byteCap` override — an Owner-visible
+deviation: the issue named no cap) and `SessionStore.fork` appends genesis plus
+copies in one transaction; an existing child id refuses `child_exists` leaving
+the first chain intact.
+
+Ancestry and the aside are inspect projections only.
+`packages/agent/src/inspect/tree.ts` exposes `forkAncestryOf` (reads the child
+genesis pin), `forkAside` (the "Forked from session …" text), and `inspectTree`
+(depth-3/limit-64 bounded tree over catalog `parentId` edges with continuation
+cursors). `session_read` pages carry optional `ancestry {parentId, forkedFrom,
+aside}`, the `session_fork` gateway method + websocket frame land in
+`packages/protocol/src/gateway/session-read.ts` / `packages/channels` /
+`apps/openomni/src/composition/session-fork.ts`, and the desktop session header
+renders the aside. `foldSessionHistory` never reads `session.configure`
+intents, so the aside cannot reach model context or compaction; the only
+promotion path is `forkAsideRewrite`, an opt-in `prompt.pre` gate handler
+registered nowhere by default.
+
+`receivedMessages` and its fold state (`foldReceivedAction`, `ReceivedEntry`,
+`DeliverIntent`) are deleted — `rg -c 'receivedMessages' packages/agent/src`
+returns nothing. The kernel reads inputs by SQL (`inputMessages` on
+`Storage.ActionSubAdapter` and `SessionKernel`), and `run.ts` resolves a
+prompt's origin by `actionById` point read. No new journal kind exists:
+`rg -c 'kind: "session\.fork"' packages apps` returns nothing. Tests:
+`packages/agent/test/store/session/{session-fork,fork-exclusions,inspect-tree,inspect-aside}.test.ts`
+and the wire roundtrip `apps/openomni/test/session-fork.test.ts`.
+
 ## #1254 alarm split: core timer, removable alarm capability (epic #1260, PR #1285, ⏳ pending merge)
 
 On `epic1260/1254-alarm-split` (2026-10-04, base `4ecb41f3`, merged with main
