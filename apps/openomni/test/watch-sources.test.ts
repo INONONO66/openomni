@@ -242,6 +242,71 @@ test("path watch native callback observes a created target", async () => {
   }
 });
 
+test("a create whose native event is lost is observed by the reconcile cadence exactly once", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "watch-sources-race-"));
+  const path = join(directory, "target");
+  const sends: WatchHitSend[] = [];
+  const reconciled = eventSignal<WatchHitSend>("lost-create reconcile", SPAWNED_PTY_MS);
+  // Models the measured Bun 1.4.1 loss (oven-sh/bun#44385): the create lands
+  // after install() returned and the native stream never reports it. Only the
+  // injected cadence can observe it; the test drives the ticks.
+  let live: ((eventType: string, fileName: string | null) => void) | undefined;
+  let tick: (() => void) | undefined;
+  let cancelled = 0;
+  const sources = createWatchSources(
+    {
+      deliver: (send) => {
+        sends.push(send);
+        reconciled.resolve(send);
+        return Promise.resolve();
+      },
+    },
+    {
+      clock: () => 0,
+      failure: (_id, error) => reconciled.reject(error),
+      pathWatch: (_directory, listener) => {
+        live = listener;
+        return { on: () => undefined, close: () => undefined };
+      },
+      reconcile: (fn) => {
+        tick = fn;
+        return () => {
+          cancelled += 1;
+        };
+      },
+    },
+  );
+  try {
+    await sources.install(
+      armed({
+        id: "watch-race",
+        watch: { path, event: "create", description: "lost-create reconcile", persistent: true },
+      }),
+    );
+    writeFileSync(path, "created after install returned; the native event is lost");
+    expect(sends).toHaveLength(0);
+    tick?.();
+    const send = await reconciled.promise;
+    expect(send.alarmId).toBe("watch-race");
+    // A late native replay of the same create and the next tick both see an
+    // unchanged stat identity: no double-fire.
+    live?.("rename", "target");
+    tick?.();
+    await sources.close("watch-race");
+    expect(cancelled).toBe(1);
+    expect(sends).toHaveLength(1);
+    const entry = parseHit(sends[0] as WatchHitSend);
+    expect(entry.hit).toMatchObject({
+      terminal: false,
+      content: JSON.stringify({ path, event: "create" }),
+    });
+    expect(entry.hit.detail.startsWith("path:create:")).toBe(true);
+  } finally {
+    await sources.closeAll();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 /** The stderr each process tool fails with (exit 1); `/bin/kill` still kills the group so the held shell exits. */
 interface ProcessToolFailures {
   readonly kill: string;
