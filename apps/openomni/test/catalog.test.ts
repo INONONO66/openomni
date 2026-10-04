@@ -53,6 +53,8 @@ const OPS: Record<string, readonly string[]> = {
     "channel_enable",
     "channel_disable",
     "secret_rotate",
+    "bundle_enable",
+    "bundle_disable",
     "status",
   ],
 };
