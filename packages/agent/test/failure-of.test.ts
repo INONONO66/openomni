@@ -44,13 +44,22 @@ describe("Failure.pretty", () => {
   };
 
   it("renders byte-identically to Cause.pretty while stacks are captured", () => {
-    const cause = Cause.die(new Error("outer", { cause: new Error("inner") }));
+    // The premise is pinned, not hoped for: Bun materializes `stack` lazily and
+    // under load the getter yields undefined (the defect this renderer absorbs),
+    // so both errors carry an own stack string before either renderer reads it.
+    const inner = new Error("inner");
+    inner.stack = "Error: inner\n    at inner (test.ts:2:3)";
+    const outer = new Error("outer", { cause: inner });
+    outer.stack = "Error: outer\n    at outer (test.ts:1:1)";
+    const cause = Cause.die(outer);
     expect(Failure.pretty(cause)).toBe(Cause.pretty(cause));
-    // A non-Error defect makes each renderer synthesize its own Error, so the
-    // captured frames differ by call site; the rendered head line is the contract.
-    const head = (text: string) => text.split("\n")[0];
-    expect(head(Failure.pretty(Cause.die("bad")))).toBe("Error: bad");
-    expect(head(Cause.pretty(Cause.die("bad")))).toBe("Error: bad");
+    expect(Failure.pretty(cause)).toBe(
+      "Error: outer\n    at outer (test.ts:1:1) {\n  [cause]: Error: inner\n      at inner (test.ts:2:3)\n}",
+    );
+    // A non-Error defect makes the renderer synthesize its own Error; the head
+    // line is the contract (effect's renderer is not asserted here: its
+    // synthesized stack is exactly what the lazy getter can drop).
+    expect(Failure.pretty(Cause.die("bad")).split("\n")[0]).toBe("Error: bad");
   });
 
   it("falls back to name and message when an Error carries no stack string", () => {
