@@ -80,6 +80,10 @@ export interface TestClusterOptions {
   readonly onArmed?: SessionEntityPorts["onArmed"];
   /** Injected entity clock (byte-equality fixtures); default wall clock. */
   readonly clock?: () => number;
+  /** #1255: the composed generation's deliver registrations (default: core prompt/signal). */
+  readonly inputRegistrations?: readonly string[];
+  /** #1255: the composed generation's capability kinds for input admission. */
+  readonly capabilityKinds?: readonly string[];
   /**
    * #1254 r5 M1: post-commit observation sink injected into every session
    * store this cluster opens — the store publishes `ledger.action.committed`
@@ -329,6 +333,8 @@ function entityPorts(
     ...(options.alarmCapability === undefined
       ? {}
       : { alarmCapability: options.alarmCapability }),
+    ...(options.inputRegistrations === undefined ? {} : { inputRegistrations: options.inputRegistrations }),
+    ...(options.capabilityKinds === undefined ? {} : { capabilityKinds: options.capabilityKinds }),
     ...(options.onKeepAlive === undefined ? {} : { onKeepAlive: options.onKeepAlive }),
     ...(options.ready === undefined ? {} : { ready: options.ready }),
     ...(options.onRequestReady === undefined ? {} : { onRequestReady: options.onRequestReady }),

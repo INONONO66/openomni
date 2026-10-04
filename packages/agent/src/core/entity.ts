@@ -283,12 +283,17 @@ function armedOccurrenceOf(action: LedgerAction.Append): AlarmFired | undefined 
 }
 
 function admissionSnapshot(handle: ActivationHandle): SessionAdmissionSnapshot {
-  const { kernel, authority } = handle;
+  const { kernel, authority, env } = handle;
   const row = kernel.row(authority.sessionId);
   const pending = pendingBacklog(kernel, authority.sessionId);
   const open = kernel.latestOpenTurn(authority.sessionId);
   const terminal = kernel.latestTurnTerminal(authority.sessionId);
-  return { row, pending, ...(open === undefined ? {} : { open }), ...(terminal === undefined ? {} : { terminal }) };
+  return {
+    row, pending,
+    ...(open === undefined ? {} : { open }),
+    ...(terminal === undefined ? {} : { terminal }),
+    ...(env.ports.capabilityKinds === undefined ? {} : { capabilityKinds: env.ports.capabilityKinds }),
+  };
 }
 
 /** Commits `<id>:delivery` no-op records so consumed interrupts/resumes leave the fold. */

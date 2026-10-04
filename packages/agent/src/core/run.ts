@@ -357,6 +357,12 @@ export interface SessionEntityPorts {
    * Absent means exactly the core registrations.
    */
   readonly inputRegistrations?: readonly string[];
+  /**
+   * The capability journal kinds the composed generation registers (#1255):
+   * session admission refuses a pending input of an absent capability's kind
+   * with `unknown_kind`. Absent means exactly the built-ins.
+   */
+  readonly capabilityKinds?: readonly string[];
   /** Optional domain-revision capture for request bindings, as on `SessionRuntime`. */
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,
