@@ -303,10 +303,12 @@ export class CatalogStore extends StoreHandle {
   }
 
   /**
-   * Runner-generation fence CAS (W5.2 review F5): one atomic increment under
-   * BEGIN IMMEDIATE per entity activation. The winner writes the returned
-   * fence into the session file; any writer still on an older fence is
-   * refused "stale" by `commitSession`.
+   * Runner-generation fence allocator (W5.2 review F5): one atomic increment
+   * under BEGIN IMMEDIATE per entity activation. This only ALLOCATES the next
+   * fence number — authority transfers when the winner adopts it into the
+   * session file (`adoptFence`), whose lock serializes against every fenced
+   * commit; a writer still on an older fence is refused "stale" there by
+   * `commitSession`.
    */
   rotateFence(sessionId: string): number {
     this.refuseNewerSchema("rotateFence");

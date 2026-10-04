@@ -1,55 +1,97 @@
-// #1254 H4 (issue line 77 "Fencing is atomic or checked against catalog at
-// commit"): the authoritative catalog fence is checked INSIDE the session
-// commit transaction, so a rotation that lands after the writer was admitted
-// but before its session write refuses the commit instead of landing a stale
-// write.
+// #1254 r2 H1 (issue line 77 "Fencing is atomic or checked against catalog at
+// commit"): the session file is the ONE fence authority. The catalog only
+// allocates fence numbers; authority transfers when the winner's `adoptFence`
+// CAS lands in the session file, serialized in the same file lock as every
+// fenced commit. Proven here with the real catalog + session stores: an
+// old-fence commit before adoption is accepted AND visible to the successor,
+// one after adoption is refused typed-stale with nothing appended, and one
+// alarm occurrence is consumed exactly once across rotate/adopt in either
+// order (the losing attempt refused by fence or folded away by the chain
+// guard).
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { CatalogStore } from "../../src/core/store/catalog";
-import { openCatalogStore } from "../../src/core/store/catalog";
+import {
+  alarmDisposition,
+  armAction,
+  firedAction,
+  type AlarmChainReads,
+} from "../../src/core/alarm";
 import { createSessionKernel, type SessionKernel } from "../../src/core/store/fence";
+import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import { runLedgerSync } from "./helpers/effect";
 import { TEST_NOW, testNow } from "./helpers/storage";
 
-const SESSION_ID = "h4";
-const OWNER = "runner:h4";
+const SESSION_ID = "h1";
+const OLD_WRITER = "runner:old";
+const SUCCESSOR = "runner:new";
 
-function armAction(id: string): LedgerAction.Append {
-  return {
-    id,
-    parentId: null,
+function armedOccurrence(parentId: string | null) {
+  return armAction({
+    parentId,
     sessionId: SESSION_ID,
-    kind: "alarm",
-    intent: { encodingVersion: 1, value: { op: "arm", alarmId: "a", at: TEST_NOW + 60_000 } },
-    effect: { encodingVersion: 1, value: { occurrenceId: `${id}:occ` } },
-    irreversible: true,
+    purpose: "qa",
+    at: TEST_NOW + 60_000,
+    supersedes: null,
+    alarmId: "a",
+    sourceKey: "qa",
+    payload: {},
+    armSeq: 1,
     ts: TEST_NOW,
-  };
+  });
 }
 
-function commitWith(kernel: SessionKernel, fence: number, action: LedgerAction.Append) {
+function deliveredFiring(occurrenceId: string) {
+  return firedAction({
+    parentId: null,
+    sessionId: SESSION_ID,
+    purpose: "qa",
+    alarmId: "a",
+    occurrenceId,
+    outcome: "delivered",
+    ts: TEST_NOW,
+  });
+}
+
+function commitWith(
+  kernel: SessionKernel,
+  owner: string,
+  fence: number,
+  actions: Parameters<SessionKernel["commit"]>[0]["actions"],
+) {
   const row = kernel.row(SESSION_ID);
   return kernel.commit({
     sessionId: SESSION_ID,
-    owner: OWNER,
+    owner,
     fence,
     now: TEST_NOW,
     expectedRevision: row.revision,
-    actions: [action],
+    actions,
     state: row.state,
   });
 }
 
-function setup(catalogOf: (catalog: CatalogStore) => CatalogStore = (catalog) => catalog) {
+/** The chain guard's reads, exactly as the entity wires them (entity.ts `armedChainReads`). */
+function chainReads(kernel: SessionKernel): AlarmChainReads {
+  return {
+    latestArm: (alarmId) => {
+      const row = kernel.armedAlarms().find((armed) => armed.alarmId === alarmId);
+      return row === undefined ? undefined : { occurrenceId: row.occurrenceId, at: row.fireAt };
+    },
+    settled: (occurrenceId) =>
+      kernel.actionById(`${occurrenceId}:delivered`) !== undefined ||
+      kernel.actionById(`${occurrenceId}:exhausted`) !== undefined,
+  };
+}
+
+function setup() {
   const directory = mkdtempSync(join(tmpdir(), "fence-catalog-commit-"));
   const catalog = openCatalogStore(join(directory, "catalog.sqlite"), { now: testNow });
   const session = openSessionStore(join(directory, `${SESSION_ID}.sqlite`), { now: testNow });
-  const kernel = createSessionKernel(session, catalogOf(catalog));
+  const kernel = createSessionKernel(session, catalog);
   runLedgerSync(
     kernel.materialize({
       id: SESSION_ID,
@@ -64,7 +106,7 @@ function setup(catalogOf: (catalog: CatalogStore) => CatalogStore = (catalog) =>
   );
   catalog.indexSession({ id: SESSION_ID, parentId: null, role: "resident", createdAt: 1 });
   expect(catalog.rotateFence(SESSION_ID)).toBe(1);
-  runLedgerSync(kernel.adoptFence({ sessionId: SESSION_ID, owner: OWNER, fence: 1 }));
+  runLedgerSync(kernel.adoptFence({ sessionId: SESSION_ID, owner: OLD_WRITER, fence: 1 }));
   const close = () => {
     session.close();
     catalog.close();
@@ -73,68 +115,99 @@ function setup(catalogOf: (catalog: CatalogStore) => CatalogStore = (catalog) =>
   return { catalog, kernel, close };
 }
 
-/** The reviewer's H4 seam: `markArmed` runs after admission and before the
- * session transaction, so a rotation injected there models a cross-process
- * takeover landing in exactly that window. */
-function rotateOnMarkArmed(catalog: CatalogStore): CatalogStore {
-  return new Proxy(catalog, {
-    get(target, property) {
-      if (property === "markArmed")
-        return (sessionId: string, armed: boolean) => {
-          target.rotateFence(sessionId);
-          target.markArmed(sessionId, armed);
-        };
-      const value = Reflect.get(target, property);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-}
-
-test("a rotation landing between admission and the session transaction refuses the stale commit", () => {
-  const world = setup(rotateOnMarkArmed);
+test("rotation allocated but not adopted: the old writer's commit lands and the successor reads it after adopting", () => {
+  const world = setup();
   try {
     const { catalog, kernel } = world;
+    // The successor has only ALLOCATED fence 2; authority is still the file's fence 1.
+    expect(catalog.rotateFence(SESSION_ID)).toBe(2);
     const before = kernel.row(SESSION_ID);
-    const refused = runLedgerSync(Effect.flip(commitWith(kernel, 1, armAction("h4-race"))));
-    expect(refused).toMatchObject({ _tag: "FenceRefused", reason: "stale", fence: 2 });
-    expect(catalog.sessionIndex(SESSION_ID)?.fence).toBe(2);
-    // Nothing of the stale writer survives: no action row, no revision bump,
-    // and the committed fence stays at the pre-rotation value.
-    expect(kernel.actionById("h4-race")).toBeUndefined();
+    const { action, occurrenceId } = armedOccurrence(null);
+    const receipt = runLedgerSync(commitWith(kernel, OLD_WRITER, 1, [action]));
+    expect(receipt.ok).toBe(true);
+    // Authority transfers only now, strictly after the accepted commit.
+    runLedgerSync(kernel.adoptFence({ sessionId: SESSION_ID, owner: SUCCESSOR, fence: 2 }));
+    // The successor READS the accepted row: chain row, revision, armed index.
+    const adopted = kernel.row(SESSION_ID);
+    expect(adopted).toMatchObject({ fence: 2, fenceOwner: SUCCESSOR, revision: before.revision + 1 });
+    expect(kernel.actionById(action.id)).toMatchObject({ id: action.id, kind: "alarm" });
+    expect(kernel.armedAlarms()).toMatchObject([{ alarmId: "a", occurrenceId }]);
+  } finally {
+    world.close();
+  }
+});
+
+test("rotation adopted: the old-fence commit is refused typed-stale and appends nothing", () => {
+  const world = setup();
+  try {
+    const { catalog, kernel } = world;
+    expect(catalog.rotateFence(SESSION_ID)).toBe(2);
+    runLedgerSync(kernel.adoptFence({ sessionId: SESSION_ID, owner: SUCCESSOR, fence: 2 }));
+    const before = kernel.row(SESSION_ID);
+    const { action } = armedOccurrence(null);
+    const refused = runLedgerSync(Effect.flip(commitWith(kernel, OLD_WRITER, 1, [action])));
+    expect(refused).toMatchObject({
+      _tag: "CommitRefused",
+      reason: "fence",
+      fence: 1,
+      currentFence: 2,
+    });
+    expect(kernel.actionById(action.id)).toBeUndefined();
     expect(kernel.row(SESSION_ID)).toMatchObject({
       revision: before.revision,
-      fence: 1,
-      fenceOwner: OWNER,
+      fence: 2,
+      fenceOwner: SUCCESSOR,
     });
   } finally {
     world.close();
   }
 });
 
-test("reviewer probe regression: catalog rotated to 2, commit with fence 1 is refused and appends nothing", () => {
+test("exactly-one consumption, old writer first: the successor's attempt folds to skip at the chain guard", () => {
   const world = setup();
   try {
     const { catalog, kernel } = world;
+    const { action, occurrenceId } = armedOccurrence(null);
+    runLedgerSync(commitWith(kernel, OLD_WRITER, 1, [action]));
+    // Old writer consumes while still the file's authority.
+    expect(alarmDisposition(chainReads(kernel), { alarmId: "a", occurrenceId })).toEqual({
+      op: "run",
+    });
+    runLedgerSync(commitWith(kernel, OLD_WRITER, 1, [deliveredFiring(occurrenceId)]));
+    const consumedAt = kernel.row(SESSION_ID).revision;
     expect(catalog.rotateFence(SESSION_ID)).toBe(2);
-    const before = kernel.row(SESSION_ID);
-    const refused = runLedgerSync(Effect.flip(commitWith(kernel, 1, armAction("h4-probe"))));
-    expect(refused).toMatchObject({ _tag: "FenceRefused", reason: "stale", fence: 2 });
-    expect(kernel.actionById("h4-probe")).toBeUndefined();
-    expect(kernel.row(SESSION_ID)).toMatchObject({ revision: before.revision, fence: 1 });
+    runLedgerSync(kernel.adoptFence({ sessionId: SESSION_ID, owner: SUCCESSOR, fence: 2 }));
+    // The successor sees the consumption and the guard refuses a second one.
+    expect(kernel.actionById(`${occurrenceId}:delivered`)).toBeDefined();
+    expect(
+      alarmDisposition(chainReads(kernel), { alarmId: "a", occurrenceId }).op,
+    ).toBe("skip");
+    expect(kernel.row(SESSION_ID).revision).toBe(consumedAt);
   } finally {
     world.close();
   }
 });
 
-test("catalog and writer agree: the commit lands", () => {
+test("exactly-one consumption, successor first: the old writer's attempt is refused by the file fence", () => {
   const world = setup();
   try {
-    const { kernel } = world;
-    const before = kernel.row(SESSION_ID);
-    const receipt = runLedgerSync(commitWith(kernel, 1, armAction("h4-ok")));
-    expect(receipt.ok).toBe(true);
-    expect(kernel.actionById("h4-ok")).toBeDefined();
-    expect(kernel.row(SESSION_ID).revision).toBe(before.revision + 1);
+    const { catalog, kernel } = world;
+    const { action, occurrenceId } = armedOccurrence(null);
+    runLedgerSync(commitWith(kernel, OLD_WRITER, 1, [action]));
+    expect(catalog.rotateFence(SESSION_ID)).toBe(2);
+    runLedgerSync(kernel.adoptFence({ sessionId: SESSION_ID, owner: SUCCESSOR, fence: 2 }));
+    expect(alarmDisposition(chainReads(kernel), { alarmId: "a", occurrenceId })).toEqual({
+      op: "run",
+    });
+    runLedgerSync(commitWith(kernel, SUCCESSOR, 2, [deliveredFiring(occurrenceId)]));
+    const consumedAt = kernel.row(SESSION_ID).revision;
+    // The fenced-out writer retries the same consumption; the file refuses it.
+    const refused = runLedgerSync(
+      Effect.flip(commitWith(kernel, OLD_WRITER, 1, [deliveredFiring(occurrenceId)])),
+    );
+    expect(refused).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: 2 });
+    expect(kernel.actionById(`${occurrenceId}:delivered`)).toBeDefined();
+    expect(kernel.row(SESSION_ID).revision).toBe(consumedAt);
   } finally {
     world.close();
   }

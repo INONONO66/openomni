@@ -188,10 +188,15 @@ export function appendAction(
 }
 
 /**
- * Fenced chain commit (W5.2): authority is owner + fence equality against the
- * single session row plus the expected revision — the catalog fence CAS
- * already decided which activation may hold this owner+fence pair, so no
- * lease-expiry clock enters the predicate.
+ * Fenced chain commit (W5.2): the session file is the single fence authority.
+ * Authority is owner + fence equality against the single session row plus the
+ * expected revision, inside this file's write lock — the same lock the
+ * successor's `adoptFence` CAS takes, so there are exactly two interleavings
+ * and both are correct: an old-fence commit landing before adoption is
+ * accepted, durable, and visible to the successor (adoption is strictly
+ * later in the same serialized file); one landing after adoption is refused
+ * "stale". The catalog only allocates fence numbers; no lease-expiry clock
+ * enters the predicate.
  */
 export function commitSession(
   db: Database,

@@ -73,8 +73,6 @@ export interface SessionKernelContext {
   readonly childSessionsPage: CatalogStore["childSessionsPage"];
   /** #1254 S3: the catalog `has_armed` flag write (ordering law in `commitIn`). */
   readonly markArmed?: (sessionId: string, armed: boolean) => void;
-  /** #1254 S4: the catalog's authoritative fence for the rotate/adopt window check. */
-  readonly catalogFence?: (sessionId: string) => number | undefined;
 }
 
 export interface MaterializeInput {
@@ -169,17 +167,9 @@ function commitIn(
     return delta === undefined ? [] : [delta];
   });
   return Effect.suspend(() => {
-    // #1254 S4/H4 rotate/adopt window: the authoritative catalog fence is
-    // checked INSIDE the session commit transaction (sessions.commit guard),
-    // so a rotation is either observed there and refused, or it serializes
-    // behind this commit's write lock and adopts strictly after it.
     if (deltas.some((delta) => delta.op === "upsert")) context.markArmed?.(input.sessionId, true);
     return sessionWritesIn(context).pipe(
-      Effect.flatMap((sessions) =>
-        sessions.commit(input, {
-          catalogFence: () => context.catalogFence?.(input.sessionId),
-        }),
-      ),
+      Effect.flatMap((sessions) => sessions.commit(input)),
       Effect.tap(() =>
         Effect.sync(() => {
           if (deltas.length === 0) return;
@@ -985,6 +975,5 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
     childSessionsPage: (parentId, afterId, limit) =>
       catalog.childSessionsPage(parentId, afterId, limit),
     markArmed: (sessionId, armed) => catalog.markArmed(sessionId, armed),
-    catalogFence: (sessionId) => catalog.sessionIndex(sessionId)?.fence,
   });
 }

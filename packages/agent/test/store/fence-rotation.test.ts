@@ -173,9 +173,9 @@ test("activation rotates and adopts the fence; every superseded writer is refuse
     expect(kernel.actionById("a-stale")).toBeUndefined();
     expect(kernel.row("s1").revision).toBe(revisionBefore);
 
-    // The adapter refuses the stale writer BEFORE the session file write
-    // (#1254 S4 rotate/adopt window): the catalog fence comparison wins, so
-    // the typed refusal is FenceRefused{stale} carrying the catalog fence.
+    // The adapter's typed refusal is the session file's own verdict (#1254 r2
+    // H1: the file is the one fence authority; the catalog never enters the
+    // commit path): CommitRefused{reason:"fence"} carrying the file's fence.
     const refused = runLedgerSync(
       Effect.flip(
         kernel.commit(
@@ -183,7 +183,7 @@ test("activation rotates and adopts the fence; every superseded writer is refuse
         ),
       ),
     );
-    expect(refused).toMatchObject({ _tag: "FenceRefused", reason: "stale", fence: 2 });
+    expect(refused).toMatchObject({ _tag: "CommitRefused", reason: "fence", currentFence: 2 });
     expect(kernel.actionById("a-stale-2")).toBeUndefined();
 
     // Restart rotates again and the previous holder is refused in turn.
@@ -287,11 +287,11 @@ test("concurrent activations from two processes: one winner, stale loser refused
     if (loser === undefined || winner === undefined) throw new Error("expected two child reports");
 
     // The higher fence always adopts and commits; the lower either committed
-    // before the takeover or was refused - never anything else. `stale` is the
-    // #1254 S4 catalog-fence pre-check refusing before the file write; `fence`
-    // is the file CAS losing the narrower read-write race.
+    // before the takeover or was refused - never anything else. `fence` is the
+    // session file's own CAS (the one fence authority, #1254 r2 H1);
+    // `activation_stale` is an adoption that lost the file CAS outright.
     expect(winner.committed).toBe(true);
-    if (!loser.committed) expect(loser.reason).toMatch(/^(fence|stale|activation_stale)$/);
+    if (!loser.committed) expect(loser.reason).toMatch(/^(fence|activation_stale)$/);
 
     const { kernel } = world;
     expect(kernel.row("s2")).toMatchObject({ fenceOwner: winner.owner, fence: 2 });

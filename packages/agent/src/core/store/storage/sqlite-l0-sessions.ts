@@ -57,9 +57,13 @@ function staleLeaseRefusal(current: LedgerSession.Row): FenceRefused {
 }
 
 /**
- * Fence adoption (W5.2 F5): writes the catalog-rotated fence into the session
- * file's single row. Idempotent for the current owner+fence pair; a file
- * fence at or beyond the target means a later activation already won.
+ * Fence adoption (W5.2 F5): the authority transfer. Writes the
+ * catalog-allocated fence into the session file's single row, under the same
+ * file lock every fenced commit serializes behind — so an old-fence commit
+ * either lands strictly before this CAS (accepted, durable, visible to the
+ * successor) or after it (refused "stale" by `commitSession`). Idempotent for
+ * the current owner+fence pair; a file fence at or beyond the target means a
+ * later activation already won.
  */
 function adoptFence(db: Database, request: LedgerSession.AdoptFence, refuse: RefuseWrite) {
   const current = selectSession(db, request.sessionId);
@@ -112,24 +116,10 @@ export function createSessions(
       writeEffect("session.adoptFence", (refuse) =>
         transaction(() => adoptFence(db, LedgerSession.AdoptFence.parse(input), refuse)),
       ),
-    commit: (input, guard) =>
+    commit: (input) =>
       writeEffect("session.commit", (refuse) => {
         const outcome = transaction(() => {
           const request = LedgerSession.Commit.parse(input);
-          // #1254 H4: the catalog fence is read here, after BEGIN IMMEDIATE
-          // holds the session write lock — a rotation observed now refuses
-          // the commit; one landing later serializes behind it.
-          const catalogFence = guard?.catalogFence();
-          if (catalogFence !== undefined && catalogFence > request.fence)
-            return refuse(
-              new FenceRefused({
-                sessionId: request.sessionId,
-                reason: "stale",
-                holder: null,
-                fence: catalogFence,
-                expiresAt: null,
-              }),
-            );
           const result = commitSession(db, request, refuse);
           if (result === undefined)
             return refuse(new SessionNotFound({ sessionId: request.sessionId }));
