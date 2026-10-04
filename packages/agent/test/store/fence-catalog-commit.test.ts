@@ -9,12 +9,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LedgerAction } from "@openomni/protocol";
 import { Effect } from "effect";
-import type { CatalogStore } from "../../../src/core/store/catalog";
-import { openCatalogStore } from "../../../src/core/store/catalog";
-import { createSessionKernel, type SessionKernel } from "../../../src/core/store/fence";
-import { openSessionStore } from "../../../src/core/store/session-file";
-import { runLedgerSync } from "../../store/helpers/effect";
-import { TEST_NOW, testNow } from "../../store/helpers/storage";
+import type { CatalogStore } from "../../src/core/store/catalog";
+import { openCatalogStore } from "../../src/core/store/catalog";
+import { createSessionKernel, type SessionKernel } from "../../src/core/store/fence";
+import { openSessionStore } from "../../src/core/store/session-file";
+import { runLedgerSync } from "./helpers/effect";
+import { TEST_NOW, testNow } from "./helpers/storage";
 
 const SESSION_ID = "h4";
 const OWNER = "runner:h4";
