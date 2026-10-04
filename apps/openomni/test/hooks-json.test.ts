@@ -1,0 +1,377 @@
+import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { Bundle, Core, Model } from "@openomni/agent";
+type RunInput = Model.RunInput;
+type Sink = Model.Sink;
+import { Context, Effect, Layer } from "effect";
+import {
+  hooksJsonBundle,
+  readHooksJson,
+  SECRETS_GUARD_REF,
+  secretsGuard,
+} from "../src/bundles/hooks-json";
+import { composedHolderOf } from "../src/composition/composed";
+import { createWatchPlane } from "../src/composition/watch-plane";
+import { gatewayRuntime } from "../src/gateway";
+import { appManifest } from "../src/manifest";
+import { gateRowPolicySeeds } from "../src/policy-seed";
+import { AppInvariantError } from "../src/invariant";
+import { assistantMessage } from "./helpers/assistant-message";
+import { planeOf } from "./helpers/ledger";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
+import { nextResidentTurn } from "./helpers/resident-turn";
+import { Bus } from "./helpers/bus";
+import { runEffect } from "./helpers/effect";
+import { testEntropy } from "./helpers/test-entropy";
+
+/**
+ * #1256 hooks-json: the product bundle compiling a hooks JSON file into gate
+ * rows over the hook capability, wired through the REAL `appManifest ->
+ * compose` boot (and `startOpenOmni` for the file path), fail-closed at every
+ * refusal edge.
+ */
+
+const suite = residentSuite();
+
+async function alarmDefinition(): Promise<Bundle.CapabilityDefinition<"alarm">> {
+  const capability = await runEffect(
+    Bundle.alarmCapability({
+      bundles: [],
+      compose: Core.composeAlarmPurposes,
+      arm: () => () => Effect.die(new Error("unused arm")),
+      watch: { install: () => Effect.void },
+    }),
+  );
+  return capability.definition;
+}
+
+function composed(input?: {
+  hooks?: Parameters<typeof hooksJsonBundle>[0];
+  off?: readonly string[];
+}) {
+  return alarmDefinition().then((alarm) =>
+    Bundle.composeSync(
+      appManifest({
+        alarm,
+        wake: { close: () => undefined },
+        ...(input?.hooks === undefined ? {} : { hooks: input.hooks }),
+        ...(input?.off === undefined ? {} : { off: input.off }),
+      }),
+    ),
+  );
+}
+
+test("the four mapped events compile to rows on their points over hook/process", async () => {
+  const generation = await composed({
+    hooks: {
+      PreToolUse: [{ command: ["./guard.sh"], timeoutMs: 1_000 }, { guard: "secrets-guard" }],
+      PostToolUse: [{ command: ["./audit.sh"], timeoutMs: 2_000 }],
+      UserPromptSubmit: [{ command: ["./prompt.sh"], timeoutMs: 3_000 }],
+      SessionStart: [{ command: ["./start.sh"], timeoutMs: 4_000 }],
+    },
+  });
+  const hooksRows = generation.rows.filter((row) => row.id.startsWith("hooks-json/"));
+  expect(hooksRows).toEqual([
+    {
+      id: "hooks-json/tool.pre#1",
+      on: "tool.pre",
+      when: {},
+      do: "gate",
+      how: {
+        ref: Bundle.HOOK_PROCESS_REF,
+        params: { event: "PreToolUse", command: ["./guard.sh"], timeoutMs: 1_000 },
+      },
+      order: 500,
+    },
+    {
+      id: "hooks-json/tool.pre#2",
+      on: "tool.pre",
+      when: {},
+      do: "rewrite",
+      how: { ref: SECRETS_GUARD_REF, params: { event: "PreToolUse" } },
+      order: 501,
+    },
+    {
+      id: "hooks-json/tool.post#1",
+      on: "tool.post",
+      when: {},
+      do: "gate",
+      how: {
+        ref: Bundle.HOOK_PROCESS_REF,
+        params: { event: "PostToolUse", command: ["./audit.sh"], timeoutMs: 2_000 },
+      },
+      order: 502,
+    },
+    {
+      id: "hooks-json/prompt.pre#1",
+      on: "prompt.pre",
+      when: {},
+      do: "gate",
+      how: {
+        ref: Bundle.HOOK_PROCESS_REF,
+        params: { event: "UserPromptSubmit", command: ["./prompt.sh"], timeoutMs: 3_000 },
+      },
+      order: 503,
+    },
+    {
+      id: "hooks-json/session.open#1",
+      on: "session.open",
+      when: {},
+      do: "gate",
+      how: {
+        ref: Bundle.HOOK_PROCESS_REF,
+        params: { event: "SessionStart", command: ["./start.sh"], timeoutMs: 4_000 },
+      },
+      order: 504,
+    },
+  ]);
+  // Both handler registrations are composed: the capability's process target
+  // and the bundle's in-process example transformer.
+  expect(generation.handlers.has(Bundle.HOOK_PROCESS_REF)).toBe(true);
+  expect(generation.handlers.has(SECRETS_GUARD_REF)).toBe(true);
+});
+
+test("no hooks config composes the bundle with zero rows and the action input admitted", async () => {
+  const generation = await composed();
+  expect(generation.bundles).toEqual(["monitor", "cron", "hooks-json"]);
+  expect(generation.rows.filter((row) => row.id.startsWith("hooks-json/"))).toEqual([]);
+  expect(generation.inputs).toEqual(["action"]);
+  expect(Object.keys(generation.kinds)).toEqual(["action"]);
+});
+
+test("readHooksJson refuses an unmapped event, non-JSON bytes and an unreadable path, each typed", () => {
+  const dir = suite.tempDir("hooks-json-read-");
+  const unmapped = join(dir, "unmapped.json");
+  writeFileSync(unmapped, JSON.stringify({ Notification: [{ command: ["./x"] }] }));
+  expect(() => readHooksJson(unmapped)).toThrow(AppInvariantError);
+  expect(() => readHooksJson(unmapped)).toThrow(/unmapped_event Notification/);
+  const invalid = join(dir, "invalid.json");
+  writeFileSync(invalid, "not json");
+  expect(() => readHooksJson(invalid)).toThrow(/is not JSON/);
+  expect(() => readHooksJson(join(dir, "absent.json"))).toThrow(/cannot read/);
+  const badShape = join(dir, "bad-shape.json");
+  writeFileSync(badShape, JSON.stringify({ PreToolUse: [{ command: [] }] }));
+  expect(() => readHooksJson(badShape)).toThrow(/invalid config/);
+  // The default call bound applies when the file omits timeoutMs.
+  const defaults = join(dir, "defaults.json");
+  writeFileSync(defaults, JSON.stringify({ PreToolUse: [{ command: ["./guard.sh"] }] }));
+  expect(readHooksJson(defaults)).toEqual({
+    PreToolUse: [{ command: ["./guard.sh"], timeoutMs: 5_000 }],
+  });
+});
+
+test("secretsGuard masks secret-shaped tokens recursively and leaves clean values byte-identical", () => {
+  const input = {
+    command: "curl -H 'x-key: sk-abcdef123456789' https://api",
+    nested: { aws: "AKIAABCDEFGHIJKLMNOP", note: "plain text stays" },
+    list: ["ghp_0123456789abcdefghij", 42, null, true],
+  };
+  expect(secretsGuard(input, null)).toEqual({
+    command: "curl -H 'x-key: [redacted]' https://api",
+    nested: { aws: "[redacted]", note: "plain text stays" },
+    list: ["[redacted]", 42, null, true],
+  });
+  expect(secretsGuard("no secrets here", null)).toBe("no secrets here");
+});
+
+test("off cascades: action roots hook and hooks-json off; hook roots hooks-json off", async () => {
+  const offAction = await composed({ off: ["action"] });
+  expect(offAction.disabled).toEqual([
+    { name: "action", because: "action" },
+    { name: "hook", because: "action" },
+    { name: "hooks-json", because: "action" },
+  ]);
+  expect(offAction.inputs).toEqual([]);
+  const offHook = await composed({ off: ["hook"] });
+  expect(offHook.disabled).toEqual([
+    { name: "hook", because: "hook" },
+    { name: "hooks-json", because: "hook" },
+  ]);
+  expect(offHook.bundles).toEqual(["monitor", "cron"]);
+});
+
+test("without the hook capability the bundle refuses at compose as seam_missing", () => {
+  expect(() =>
+    Bundle.composeSync(
+      Bundle.Manifest.define({ capabilities: [], bundles: [hooksJsonBundle()], off: [] }),
+    ),
+  ).toThrow(Bundle.ComposeRefused);
+  try {
+    Bundle.composeSync(
+      Bundle.Manifest.define({ capabilities: [], bundles: [hooksJsonBundle()], off: [] }),
+    );
+  } catch (error) {
+    expect(error).toBeInstanceOf(Bundle.ComposeRefused);
+    if (error instanceof Bundle.ComposeRefused) expect(error.code).toBe("seam_missing");
+  }
+});
+
+test("a guard rewrite row seeds the live transform; a command gate row refuses fail-closed (no consulted-gate channel yet)", async () => {
+  const guarded = await composed({ hooks: { PreToolUse: [{ guard: "secrets-guard" }] } });
+  const seeds = gateRowPolicySeeds(guarded.rows.filter((row) => row.id.startsWith("hooks-json/")));
+  expect(seeds).toEqual([
+    {
+      name: "hooks-json/tool.pre#1",
+      kind: "tool",
+      phase: "pre",
+      priority: 500,
+      match: { encodingVersion: 1, value: {} },
+      verdict: {
+        encodingVersion: 1,
+        value: { type: "transform", ref: SECRETS_GUARD_REF, config: { event: "PreToolUse" } },
+      },
+    },
+  ]);
+  const command = await composed({
+    hooks: { PreToolUse: [{ command: ["./guard.sh"], timeoutMs: 1_000 }] },
+  });
+  // Deliberate fail-closed deviation (D2): the live plane has no consulted-gate
+  // channel, so a configured command gate refuses the boot rather than seeding
+  // a row that would never consult the hook.
+  expect(() =>
+    gateRowPolicySeeds(command.rows.filter((row) => row.id.startsWith("hooks-json/"))),
+  ).toThrow(AppInvariantError);
+});
+
+test("startOpenOmni compiles the Owner's hooks file at boot and seeds its row into the catalog", async () => {
+  const dir = suite.tempDir("hooks-json-boot-");
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(hooksPath, JSON.stringify({ PreToolUse: [{ guard: "secrets-guard" }] }));
+  const config = suite.config("hooks-json-boot-state-", { hooksPath });
+  await suite.boot({ config, llm: { resolveModel: fakeProviderModel } });
+  if (config.catalogPath === undefined) throw new Error("suite config always sets catalogPath");
+  const database = new Database(config.catalogPath, { readonly: true });
+  try {
+    const names = database
+      .query<{ name: string }, []>(
+        "SELECT DISTINCT name FROM policy WHERE name LIKE 'hooks-json/%'",
+      )
+      .all()
+      .map((row) => row.name);
+    expect(names).toEqual(["hooks-json/tool.pre#1"]);
+  } finally {
+    database.close();
+  }
+});
+
+test("a hooks file with an unmapped event refuses the boot before any listener exists", async () => {
+  const dir = suite.tempDir("hooks-json-refuse-");
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(hooksPath, JSON.stringify({ Stop: [{ command: ["./x"] }] }));
+  const config = suite.config("hooks-json-refuse-state-", { hooksPath });
+  await expect(suite.boot({ config, llm: { resolveModel: fakeProviderModel } })).rejects.toThrow(
+    /unmapped_event Stop/,
+  );
+});
+
+/**
+ * One deterministic run through the REAL index.ts wiring: boot with every
+ * bundle on (pinned clock, counting entropy), run one turn, then swap the
+ * composed holder to the `off: ["hook"]` composition — exactly what
+ * `provision{bundle_disable}`'s recompose commit does — and run the next
+ * turn. Rotation is strictly between turns; the adoption journals the
+ * cascade. Returns the turn session's full journal chain.
+ */
+async function offCascadeConfigureRows(prefix: string) {
+  let counter = 0;
+  const config = suite.config(prefix);
+  const watch = createWatchPlane();
+  const onManifest = appManifest({ alarm: watch.contract, wake: watch.wake });
+  const offManifest = appManifest({ alarm: watch.contract, wake: watch.wake, off: ["hook"] });
+  const holder = composedHolderOf({
+    manifest: onManifest,
+    generation: Bundle.composeSync(onManifest),
+  });
+  let calls = 0;
+  const runtime = gatewayRuntime({
+    observations: Bus,
+    composed: holder,
+    ...(config.catalogPath === undefined ? {} : { catalogPath: config.catalogPath }),
+    ...(config.sessionsDir === undefined ? {} : { sessionsDir: config.sessionsDir }),
+    now: () => 1_700_000_000_000,
+    clusterClock: "injected",
+    entropy: testEntropy(() => `e-${++counter}`),
+    llm: Layer.unwrap(
+      Effect.map(Layer.build(Model.LlmLive), (live) =>
+        Layer.succeed(Model.Llm, {
+          ...Context.get(live, Model.Llm),
+          resolveModel: fakeProviderModel,
+          run: (input: RunInput, sink: Sink) =>
+            Effect.sync(() => {
+              calls += 1;
+              sink.onMessage(
+                assistantMessage(input, {
+                  id: `hook-reply-${calls}`,
+                  text: `ready ${calls}`,
+                  createdAt: 1_700_000_000_000,
+                }),
+              );
+              return { type: "stop" as const };
+            }),
+        }),
+      ),
+    ),
+  });
+  const app = await suite.boot({ config, runtime });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  const reply1 = nextResidentTurn(plane);
+  ws.send(JSON.stringify({ type: "message", eventId: "hooks-on-turn", text: "warm" }));
+  expect(await reply1).toMatchObject({ text: "ready 1" });
+  // The recompose commit: the Owner's off-list now cascades hook off.
+  holder.swap({ manifest: offManifest, generation: Bundle.composeSync(offManifest) });
+  const reply2 = nextResidentTurn(plane);
+  ws.send(JSON.stringify({ type: "message", eventId: "hooks-off-turn", text: "go" }));
+  expect(await reply2).toMatchObject({ text: "ready 2" });
+  const sessions = plane
+    .listSessions()
+    .filter((row) => row.role === "resident" && row.id !== "gateway-ingress");
+  expect(sessions).toHaveLength(1);
+  const sessionId = sessions[0]?.id ?? "";
+  // The adopted generation dropped the cascaded bundle.
+  const adopted = plane.openKernel(sessionId).latestGenerationFor(sessionId);
+  expect([...adopted.bundles].sort()).toEqual(["cron", "monitor"]);
+  if (config.sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
+  const database = new Database(join(config.sessionsDir, `${sessionId}.sqlite`), {
+    readonly: true,
+  });
+  try {
+    return database
+      .query<
+        {
+          id: string;
+          ts: number;
+          parent_id: string | null;
+          kind: string;
+          intent: string;
+          effect: string;
+          ordinal: number;
+          action_hash: string;
+        },
+        [string]
+      >(
+        "SELECT id, ts, parent_id, kind, intent, effect, ordinal, action_hash FROM action WHERE session_id = ? ORDER BY ordinal ASC",
+      )
+      .all(sessionId);
+  } finally {
+    database.close();
+  }
+}
+
+test("capability-removed one-turn gate: the cascade is journaled in session.configure and the bytes are golden-stable", async () => {
+  const first = await offCascadeConfigureRows("hooks-json-off-a-");
+  await suite.cleanup();
+  const second = await offCascadeConfigureRows("hooks-json-off-b-");
+  // The compose adoption row records the cascade with its root `because`.
+  const compose = first
+    .map((row) => JSON.parse(row.intent) as { operation?: string; disabled?: unknown })
+    .find((intent) => intent.operation === "compose");
+  expect(compose?.disabled).toEqual([
+    { name: "hook", because: "hook" },
+    { name: "hooks-json", because: "hook" },
+  ]);
+  // Golden-stable: two runs from pinned clock/entropy journal identical bytes.
+  expect(second).toEqual(first);
+});

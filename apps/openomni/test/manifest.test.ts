@@ -16,10 +16,18 @@ async function alarmDefinition(): Promise<Bundle.CapabilityDefinition<"alarm">> 
   return capability.definition;
 }
 
-test("the manifest is THE product list: alarm capability, monitor and cron bundles, empty off by default", async () => {
-  const manifest = appManifest({ alarm: await alarmDefinition(), wake: { close: () => undefined } });
-  expect(manifest.capabilities.map((capability) => capability.name)).toEqual(["tool", "alarm"]);
-  expect(manifest.bundles.map((bundle) => bundle.name)).toEqual(["monitor", "cron"]);
+test("the manifest is THE product list: tool/action/hook/alarm capabilities, monitor/cron/hooks-json bundles, empty off by default", async () => {
+  const manifest = appManifest({
+    alarm: await alarmDefinition(),
+    wake: { close: () => undefined },
+  });
+  expect(manifest.capabilities.map((capability) => capability.name)).toEqual([
+    "tool",
+    "action",
+    "hook",
+    "alarm",
+  ]);
+  expect(manifest.bundles.map((bundle) => bundle.name)).toEqual(["monitor", "cron", "hooks-json"]);
   expect(manifest.off).toEqual([]);
 });
 
@@ -34,7 +42,7 @@ test("the Owner's bundles-off tuple flows through as the manifest off list", asy
 
 test("a duplicate off name is refused as typed manifest data, not silently deduped", async () => {
   const alarm = await alarmDefinition();
-  expect(() => appManifest({ alarm, wake: { close: () => undefined }, off: ["cron", "cron"] })).toThrow(
-    Bundle.DefineRefused,
-  );
+  expect(() =>
+    appManifest({ alarm, wake: { close: () => undefined }, off: ["cron", "cron"] }),
+  ).toThrow(Bundle.DefineRefused);
 });

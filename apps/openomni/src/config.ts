@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Actor, Gateway, Machine, NamedError, type Model, type PlainValue } from "@openomni/protocol";
+import {
+  Actor,
+  Gateway,
+  Machine,
+  NamedError,
+  type Model,
+  type PlainValue,
+} from "@openomni/protocol";
 import { type KekResolution, resolveKek } from "./provisioning/vault-key";
 import { Result } from "effect";
 import { z } from "zod";
@@ -27,7 +34,9 @@ export const ConfigurationError = NamedError.create(
       "ws_token_required",
     ]),
     message: z.string(),
-    replacement: z.object({ tool: z.literal("provision"), op: z.literal("channel_add") }).optional(),
+    replacement: z
+      .object({ tool: z.literal("provision"), op: z.literal("channel_add") })
+      .optional(),
   }),
 );
 export type ConfigurationError = InstanceType<typeof ConfigurationError>;
@@ -125,6 +134,12 @@ export interface OpenOmniConfig {
    * is on.
    */
   readonly bundlesOff?: readonly string[];
+  /**
+   * Path of the Owner's hooks JSON file (#1256, `OPENOMNI_HOOKS_PATH`).
+   * Absent composes the hooks-json bundle with zero rows. The file is read
+   * and validated at compose time; any refusal fails the boot fail-closed.
+   */
+  readonly hooksPath?: string;
   /**
    * Per-surface sender allowlists for the trusted-channel grant (external
    * ids on that surface, e.g. Telegram user ids). A surface listed here
@@ -247,15 +262,14 @@ export function resolveAlarmDrain(
 }
 
 /** The one owner of the alarm sweep defaults, mirroring `resolveClusterStorage`. */
-export function resolveAlarmSweep(
-  config: Pick<OpenOmniConfig, "alarmSweep">,
-): { readonly full: boolean; readonly idleDays: number } {
+export function resolveAlarmSweep(config: Pick<OpenOmniConfig, "alarmSweep">): {
+  readonly full: boolean;
+  readonly idleDays: number;
+} {
   return config.alarmSweep ?? DEFAULT_ALARM_SWEEP;
 }
 
-function alarmSweepFromEnv(
-  env: Record<string, string | undefined>,
-): OpenOmniConfig["alarmSweep"] {
+function alarmSweepFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["alarmSweep"] {
   const full = env.OPENOMNI_ALARM_SWEEP_FULL?.trim();
   const idle = env.OPENOMNI_ALARM_SWEEP_IDLE_DAYS?.trim();
   if ((full === undefined || full.length === 0) && (idle === undefined || idle.length === 0)) {
@@ -267,7 +281,8 @@ function alarmSweepFromEnv(
       message: 'OPENOMNI_ALARM_SWEEP_FULL must be "on" or "off" when set',
     });
   }
-  const idleDays = idle === undefined || idle.length === 0 ? DEFAULT_ALARM_SWEEP.idleDays : Number(idle);
+  const idleDays =
+    idle === undefined || idle.length === 0 ? DEFAULT_ALARM_SWEEP.idleDays : Number(idle);
   if (!Number.isInteger(idleDays) || idleDays <= 0) {
     throw new ConfigurationError({
       code: "invalid_alarm_sweep",
@@ -347,7 +362,9 @@ const ModelHeaders = z.record(
 // failure until a live turn reaches it.
 const CATALOG_PROVIDER_IDS = new Set(["anthropic", "openai"]);
 
-function modelFallbacksFromEnv(env: Record<string, string | undefined>): readonly Model.Ref[] | undefined {
+function modelFallbacksFromEnv(
+  env: Record<string, string | undefined>,
+): readonly Model.Ref[] | undefined {
   const raw = env.OPENOMNI_MODEL_FALLBACKS?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
   return raw.split(",").map((entry) => {
@@ -477,11 +494,17 @@ function parseEnvJson<T>(
   if (raw === undefined || raw.length === 0) return undefined;
   const json = Result.try({ try: (): PlainValue => JSON.parse(raw), catch: String });
   if (Result.isFailure(json)) {
-    throw new ConfigurationError({ code: "invalid_env_json", message: `${name} is invalid JSON: ${json.failure}` });
+    throw new ConfigurationError({
+      code: "invalid_env_json",
+      message: `${name} is invalid JSON: ${json.failure}`,
+    });
   }
   const parsed = schema.safeParse(json.success);
   if (!parsed.success) {
-    throw new ConfigurationError({ code: "invalid_env_json", message: `${name} is invalid: ${parsed.error.issues[0]?.message}` });
+    throw new ConfigurationError({
+      code: "invalid_env_json",
+      message: `${name} is invalid: ${parsed.error.issues[0]?.message}`,
+    });
   }
   return parsed.data;
 }
@@ -506,8 +529,9 @@ function channelAllowedSendersFromEnv(
 export function assertDeclaredChannelConfig(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): void {
-  const legacy = ["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"]
-    .filter((key) => (env[key]?.trim().length ?? 0) > 0);
+  const legacy = ["DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "GITHUB_WEBHOOK_SECRET"].filter(
+    (key) => (env[key]?.trim().length ?? 0) > 0,
+  );
   if (legacy.length > 0) {
     throw new ConfigurationError({
       code: "legacy_channel_credentials",
@@ -532,7 +556,9 @@ function bundlesOffFromEnv(env: Record<string, string | undefined>): OpenOmniCon
   return parseEnvJson("OPENOMNI_BUNDLES_OFF", BundlesOff, env);
 }
 
-function socialBudgetsFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["socialBudgets"] {
+function socialBudgetsFromEnv(
+  env: Record<string, string | undefined>,
+): OpenOmniConfig["socialBudgets"] {
   return parseEnvJson("OPENOMNI_SOCIAL_BUDGETS", SocialBudgets, env);
 }
 
@@ -611,7 +637,8 @@ function machinesFromEnv(
   const self = parseEnvJson("OPENOMNI_MACHINES_SELF", SelfMachine, env);
   const enrolled = parseEnvJson("OPENOMNI_MACHINES_ENROLLED", Enrollments, env);
   const defaultMachine = env.OPENOMNI_MACHINES_DEFAULT?.trim() || undefined;
-  if (self === undefined && enrolled === undefined && defaultMachine === undefined) return undefined;
+  if (self === undefined && enrolled === undefined && defaultMachine === undefined)
+    return undefined;
   if (self === undefined) {
     throw new ConfigurationError({
       code: "invalid_machines_self",
@@ -644,6 +671,7 @@ export function loadConfig(
   const alarmSweep = alarmSweepFromEnv(env);
   const channelAllowedSenders = channelAllowedSendersFromEnv(env);
   const bundlesOff = bundlesOffFromEnv(env);
+  const hooksPath = env.OPENOMNI_HOOKS_PATH?.trim() || undefined;
   return {
     ...resolveClusterStorage(
       {
@@ -665,5 +693,6 @@ export function loadConfig(
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
     ...(channelAllowedSenders === undefined ? {} : { channelAllowedSenders }),
     ...(bundlesOff === undefined ? {} : { bundlesOff }),
+    ...(hooksPath === undefined ? {} : { hooksPath }),
   };
 }

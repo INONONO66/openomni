@@ -7,12 +7,14 @@ import { shutdownSessions } from "./shutdown";
 import {
   AppScope,
   SessionEntityBinding,
-  type AppRuntime, type AppServices,
+  type AppRuntime,
+  type AppServices,
   lifecycleFailure,
 } from "./runtime";
 import { timingSafeEqual } from "node:crypto";
 import { statSync } from "node:fs";
 import { configuredCompaction } from "./compaction/strategy";
+import { readHooksJson } from "./bundles/hooks-json";
 import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { Core, Bundle } from "@openomni/agent";
@@ -43,7 +45,13 @@ import {
   type MachineError,
   type MachineHost,
 } from "@openomni/machines";
-import { Alarm, traceIdFromUuid, type BusEvent, type Channel, type Machine } from "@openomni/protocol";
+import {
+  Alarm,
+  traceIdFromUuid,
+  type BusEvent,
+  type Channel,
+  type Machine,
+} from "@openomni/protocol";
 import {
   attachSelfMachine,
   selfAttachFailure,
@@ -112,11 +120,7 @@ interface StartOptions {
   readonly runtime?: AppRuntime;
   readonly sessionRuntime?: Pick<
     SessionRuntime,
-    | "closeGraceMs"
-    | "approvalTimeoutMs"
-    | "retryAlarm"
-    | "openIntent"
-    | "onHibernate"
+    "closeGraceMs" | "approvalTimeoutMs" | "retryAlarm" | "openIntent" | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
   readonly toolDefinitions?: readonly import("@openomni/protocol").AnyToolDefinition[];
@@ -160,9 +164,15 @@ async function composeMachinePlane(
     readonly events: BusEvent.Sink;
     readonly id: () => string;
     readonly now: () => number;
-    readonly callTool: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
+    readonly callTool: (
+      call: Machine.ToolCall,
+    ) => Effect.Effect<Machine.ToolCallResult, MachineError>;
   },
-): Promise<{ readonly host: MachineHost; readonly self: SelfMachine; readonly defaultMachine: string }> {
+): Promise<{
+  readonly host: MachineHost;
+  readonly self: SelfMachine;
+  readonly defaultMachine: string;
+}> {
   const plane = Result.getOrThrowWith(
     Result.try({
       try: () => validateMachinePlane(machines),
@@ -188,7 +198,9 @@ async function composeMachinePlane(
       callTool: deps.callTool,
       // r1 M3: the live self attachment is never superseded by a reattach.
       neverSupersede: [plane.self.id],
-    }).pipe(Effect.mapError((error) => selfAttachFailure(`host listener failed: ${String(error)}`))),
+    }).pipe(
+      Effect.mapError((error) => selfAttachFailure(`host listener failed: ${String(error)}`)),
+    ),
   );
   const self = await acquireAppResource(
     runtime,
@@ -282,6 +294,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // capability CONTRACT is what the manifest lists, while the live wake router
   // below is rebuilt per composed on-set.
   const watchPlane = createWatchPlane();
+  // #1256: the hooks file is config compiled once per boot; a bad file is a
+  // typed refusal thrown here, before any listener exists.
+  const hooks = config.hooksPath === undefined ? undefined : readHooksJson(config.hooksPath);
   // Boot is config -> manifest -> compose -> runtime (#1255): a ComposeRefused
   // here is the typed boot failure, thrown before any listener exists. An
   // injected runtime carries its own composed holder (tests).
@@ -289,6 +304,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const manifest = appManifest({
       alarm: watchPlane.contract,
       wake: watchPlane.wake,
+      ...(hooks === undefined ? {} : { hooks }),
       ...(config.bundlesOff === undefined ? {} : { off: config.bundlesOff }),
     });
     const generation = Bundle.composeSync(manifest);
@@ -407,7 +423,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...bootRequests,
       answer: (answer) =>
         Effect.suspend(() => {
-          if (liveTurns.get(answer.sessionId) !== undefined || sessionRunner(answer.sessionId) === "process")
+          if (
+            liveTurns.get(answer.sessionId) !== undefined ||
+            sessionRunner(answer.sessionId) === "process"
+          )
             return bootRequests.answer(answer);
           return entityClient(answer.sessionId)
             .Resolve({
@@ -425,7 +444,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
               Effect.catchTag("ResolveRefused", () =>
                 Effect.succeed("rejected" as SessionTransition.Resolution),
               ),
-              Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "request.answer")),
+              Effect.mapError(
+                foreignFailure((fields) => new AgentFailure(fields), "request.answer"),
+              ),
             );
         }),
     };
@@ -491,16 +512,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
         names: () => services.composed.current().manifest.bundles.map((bundle) => bundle.name),
         off: () => services.composed.current().manifest.off,
         set: async (off) => {
-          const manifest = appManifest({ alarm: watchPlane.contract, wake: watchPlane.wake, off });
+          const manifest = appManifest({
+            alarm: watchPlane.contract,
+            wake: watchPlane.wake,
+            ...(hooks === undefined ? {} : { hooks }),
+            off,
+          });
           const generation = await runAppEffect(runtime, Bundle.compose(manifest));
           // The live alarm capability is rebuilt from the new on-set BEFORE the
           // swap: a refusal leaves the composition AND the purpose registry on
           // the previous generation, so a disabled bundle's purposes stop
           // routing (its due fires fold `stale`) and an enabled one's resume.
-          const alarm = await runAppEffect(
-            runtime,
-            watchPlane.capabilityFor(generation.bundles),
-          );
+          const alarm = await runAppEffect(runtime, watchPlane.capabilityFor(generation.bundles));
           services.composed.swap({ manifest, generation });
           liveAlarm.current = alarm;
           // The recomposed gate rows seed a fresh policy generation alongside
@@ -523,12 +546,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
       callTool: (call) =>
         cells === undefined
           ? Effect.succeed({ status: "failed" as const, error: "codemode is not composed" })
-          : cells.callTool(call).pipe(
-              Effect.mapError(
-                (error) =>
-                  new MachinesFailure({ operation: "codemode.callTool", cause: String(error) }),
+          : cells
+              .callTool(call)
+              .pipe(
+                Effect.mapError(
+                  (error) =>
+                    new MachinesFailure({ operation: "codemode.callTool", cause: String(error) }),
+                ),
               ),
-            ),
     });
     const host: MachineHost = machinery.host;
 
@@ -544,8 +569,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
     await runAppEffect(runtime, machinery.self.ready);
     const tools = toolPorts(runtime, {
       machines: { host: machinery.host, defaultMachine: machinery.defaultMachine },
-      cells, completion: llmPort, messages,
-      now: services.now, id: services.entropy.id,
+      cells,
+      completion: llmPort,
+      messages,
+      now: services.now,
+      id: services.entropy.id,
     });
     // Watch plane (#1253/#1254): native sources resend the chain's ARMED
     // occurrence through the entity's one `alarm` door; the occurrence id is
@@ -566,10 +594,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     ) => entityClient(sessionId).Alarm(occurrence).pipe(Effect.asVoid);
     // Scheduled occurrences persist without awaiting the reply: a DeliverAt
     // send only answers at `fireAt`, and the arming turn must not block on it.
-    const scheduleAlarm = (
-      sessionId: string,
-      occurrence: Parameters<typeof sendAlarm>[1],
-    ) => entityClient(sessionId).Alarm(occurrence, { discard: true });
+    const scheduleAlarm = (sessionId: string, occurrence: Parameters<typeof sendAlarm>[1]) =>
+      entityClient(sessionId).Alarm(occurrence, { discard: true });
     // Terminal watches drain the same machines surface the bash door uses.
     const watchSources = createWatchSources(
       {
@@ -600,8 +626,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         provisioning: provisioningPort,
       },
       sessionRuntime,
-      policyGeneration: () =>
-        plane.openKernel(GATEWAY_INGRESS_SESSION).currentPolicyGeneration(),
+      policyGeneration: () => plane.openKernel(GATEWAY_INGRESS_SESSION).currentPolicyGeneration(),
     });
 
     residentAdoption = () => resident.adoption();
@@ -615,7 +640,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     };
     let wsHandler: WebSocketHandler | undefined;
     const wsRoute = async (externalId: string, body: string, idempotencyKey: string) => {
-      if (wsHandler === undefined) throw new AppInvariantError("ws delivery used before composition finished");
+      if (wsHandler === undefined)
+        throw new AppInvariantError("ws delivery used before composition finished");
       return wsHandler.push(externalId, body, idempotencyKey);
     };
     // Live table: channel components register and revoke their own outbound
@@ -653,10 +679,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     channelSupervisor = supervisor;
     const processSessions = createProcessSessionTransport({
       answer: (answer) =>
-        runAppEffect(
-          runtime,
-          requests.answer({ ...answer, receivedAt: services.now() }),
-        ),
+        runAppEffect(runtime, requests.answer({ ...answer, receivedAt: services.now() })),
       command: [process.execPath, processEntryPath(import.meta.url)],
       worker: {
         ...resolveClusterStorage(config),
@@ -734,14 +757,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   payload: JSON.stringify({ requestId: request.requestId }),
                   fireAt: request.deadline,
                 }).pipe(
-                    Effect.catch((error) =>
-                      Effect.sync(() => {
-                        console.error(`deadline arm failed: ${request.requestId}`, error);
-                      }),
-                    ),
-                    Effect.forkIn(appScope),
-                    Effect.asVoid,
+                  Effect.catch((error) =>
+                    Effect.sync(() => {
+                      console.error(`deadline arm failed: ${request.requestId}`, error);
+                    }),
                   ),
+                  Effect.forkIn(appScope),
+                  Effect.asVoid,
+                ),
           ),
         ),
     };
@@ -751,9 +774,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         {
           inbox: {
             commit: (input) =>
-              commitInbox(input).pipe(
-                Effect.mapError(decodeChannelFailure("message.commit")),
-              ),
+              commitInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))),
           },
           prepare: prepareMessage(plane, resident.materialize),
           requests: requestsWithDeadlines,
@@ -876,7 +897,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
         if (config.sessionsDir === undefined) return bootNow;
         // Idleness is the session file's mtime; a missing file counts as
         // activity-now. Any other fs failure still fails the boot closed.
-        return statSync(sessionFilePath(config.sessionsDir, id), { throwIfNoEntry: false })?.mtimeMs ?? bootNow;
+        return (
+          statSync(sessionFilePath(config.sessionsDir, id), { throwIfNoEntry: false })?.mtimeMs ??
+          bootNow
+        );
       };
       const rescans = rescanOccurrences({
         armedSessionIds: plane.catalog.armedSessionIds(),
@@ -936,7 +960,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     );
 
     const wsCallbacks = webSocketCallbacks(runtime, wsHandler, services.observations, (id) =>
-      plane.catalog.sessionIndex(id) === undefined ? undefined : plane.openKernel(id));
+      plane.catalog.sessionIndex(id) === undefined ? undefined : plane.openKernel(id),
+    );
     const server = Bun.serve({
       hostname: config.host,
       port: config.wsPort,
@@ -944,7 +969,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
       fetch: createHttpRoutes(wsHandler, () => webhookHandlers.get("github")),
     });
 
-    if (server.port === undefined) throw new AppInvariantError("OpenOmni ws server did not bind a TCP port");
+    if (server.port === undefined)
+      throw new AppInvariantError("OpenOmni ws server did not bind a TCP port");
     const boundServer = server;
     const boundPort: number = server.port;
     await acquire(Effect.succeed(boundServer), (resource) =>
@@ -963,7 +989,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const borrowedAuthority = (id: string) => {
       const kernel = plane.openKernel(id);
       const row = kernel.row(id);
-      if (row.fenceOwner === null) throw new AppInvariantError(`session has no activation authority: ${id}`);
+      if (row.fenceOwner === null)
+        throw new AppInvariantError(`session has no activation authority: ${id}`);
       return { kernel, row, owner: row.fenceOwner, fence: row.fence };
     };
     const sessionFacade = (id: string): AppSessionHandle | undefined => {
@@ -1007,32 +1034,39 @@ export async function startOpenOmni(options: StartOptions = {}) {
             if (entry === undefined) return;
             // The durable interrupt row first (cancellation is chain evidence),
             // then the turn's own boundary drain consumes it and aborts the wave.
-            const attempt = () => Effect.suspend(() => {
-              const { kernel, row, owner, fence } = borrowedAuthority(id);
-              // #1252: an interrupt admission is a control `signal` row built
-              // by the core received-message constructor, like every other
-              // control admission.
-              const received: LedgerAction.Append = Core.receivedMessageAction({
-                id: services.entropy.id(),
-                sessionId: id,
-                kind: "interrupt",
-                content: "",
-                origin: { encodingVersion: 1, value: { kind: "session", id } },
-                parentActionId: kernel.latestAction(id)?.id ?? null,
-                at: services.now(),
+            const attempt = () =>
+              Effect.suspend(() => {
+                const { kernel, row, owner, fence } = borrowedAuthority(id);
+                // #1252: an interrupt admission is a control `signal` row built
+                // by the core received-message constructor, like every other
+                // control admission.
+                const received: LedgerAction.Append = Core.receivedMessageAction({
+                  id: services.entropy.id(),
+                  sessionId: id,
+                  kind: "interrupt",
+                  content: "",
+                  origin: { encodingVersion: 1, value: { kind: "session", id } },
+                  parentActionId: kernel.latestAction(id)?.id ?? null,
+                  at: services.now(),
+                });
+                return kernel.commit({
+                  sessionId: id,
+                  owner,
+                  fence,
+                  now: services.now(),
+                  expectedRevision: row.revision,
+                  actions: [received],
+                  state: row.state === "running" ? "interrupted" : row.state,
+                });
               });
-              return kernel.commit({
-                sessionId: id, owner, fence, now: services.now(),
-                expectedRevision: row.revision, actions: [received],
-                state: row.state === "running" ? "interrupted" : row.state,
-              });
-            });
             yield* attempt().pipe(
               Effect.catchIf(
                 (error) => error instanceof CommitRefused && error.reason === "revision",
                 () => attempt(),
               ),
-              Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "session.interrupt")),
+              Effect.mapError(
+                foreignFailure((fields) => new AgentFailure(fields), "session.interrupt"),
+              ),
             );
             yield* entry.boundary("before_llm");
           }),
@@ -1043,14 +1077,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
               const before = kernel.latestGenerationFor(id);
               const generation = before.generation + 1;
               const accepted = yield* sessionRuntime.authorizeConfigure({
-                sessionId: id, role: row.role, operation: "tools.add", generation,
+                sessionId: id,
+                role: row.role,
+                operation: "tools.add",
+                generation,
               });
               if (!accepted)
-                return yield* Effect.fail(new AgentFailure({ operation: "session.configure", cause: "denied" }));
+                return yield* Effect.fail(
+                  new AgentFailure({ operation: "session.configure", cause: "denied" }),
+                );
               const snapshot = Core.SessionHandleStore.generationSnapshot({
                 generation,
                 revertTo: before.generation,
-                tools: [...before.tools, ...additions.map((tool) => SessionGeneration.Tool.parse(tool))],
+                tools: [
+                  ...before.tools,
+                  ...additions.map((tool) => SessionGeneration.Tool.parse(tool)),
+                ],
                 system: { preset: before.systemPreset, blocks: before.systemBlocks },
                 policyGeneration: before.policyGeneration,
                 bundles: before.bundles,
@@ -1059,22 +1101,38 @@ export async function startOpenOmni(options: StartOptions = {}) {
                 ...(before.manifestHash === undefined ? {} : { manifestHash: before.manifestHash }),
               });
               const configured = Core.SessionHandleStore.configureAction({
-                id: services.entropy.id(), sessionId: id,
+                id: services.entropy.id(),
+                sessionId: id,
                 parentId: kernel.latestAction(id)?.id ?? null,
-                operation: "tools.add", snapshot, at: services.now(),
+                operation: "tools.add",
+                snapshot,
+                at: services.now(),
               });
               const commit = kernel
                 .commit({
-                  sessionId: id, owner, fence, now: services.now(),
-                  expectedRevision: row.revision, actions: [configured], state: row.state,
+                  sessionId: id,
+                  owner,
+                  fence,
+                  now: services.now(),
+                  expectedRevision: row.revision,
+                  actions: [configured],
+                  state: row.state,
                   generation: {
                     toolsGeneration: snapshot.generation,
                     systemHash: snapshot.systemHash,
                     policyGeneration: snapshot.policyGeneration,
                   },
                 })
-                .pipe(Effect.mapError(foreignFailure((fields) => new AgentFailure(fields), "session.configure")));
-              yield* services.generations.configure({ sessionId: id, generation }, snapshot, commit);
+                .pipe(
+                  Effect.mapError(
+                    foreignFailure((fields) => new AgentFailure(fields), "session.configure"),
+                  ),
+                );
+              yield* services.generations.configure(
+                { sessionId: id, generation },
+                snapshot,
+                commit,
+              );
               return { generation: snapshot.generation, revertTo: snapshot.revertTo };
             }),
         },
@@ -1085,7 +1143,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await boundServer.stop(true);
       await supervisor.stopAll();
       await runAppEffect(runtime, shutdownSessions(sessionRuntime, recovery));
-      if (cells !== undefined) await runAppEffect(runtime, cells.close().pipe(Effect.mapError(lifecycleFailure("shutdown.cell_unsettled"))));
+      if (cells !== undefined)
+        await runAppEffect(
+          runtime,
+          cells.close().pipe(Effect.mapError(lifecycleFailure("shutdown.cell_unsettled"))),
+        );
       // Shutdown join contract (W5.2 S4): the delivering entity RPC acks at
       // the durable turn boundary and the turn's remainder runs detached
       // under the activation, so a turn suspended in a protected tool wave
@@ -1098,7 +1160,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await Promise.all(
         liveTurns.ids().map((id) => {
           const facade = sessionFacade(id);
-          return facade === undefined ? Promise.resolve() : runAppEffect(runtime, facade.interrupt());
+          return facade === undefined
+            ? Promise.resolve()
+            : runAppEffect(runtime, facade.interrupt());
         }),
       );
       // Every accepted ws frame's ingest holds a captured ingress generation
@@ -1106,7 +1170,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       await wsCallbacks.settled();
       // Join the interrupted detached turns: await every live generation
       // owner so dispose's fail-fast drain observes zero owners.
-      await runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.settle));
+      await runAppEffect(
+        runtime,
+        Effect.flatMap(GenerationLayers, (generations) => generations.settle),
+      );
       await runtime.dispose();
     };
     return {
@@ -1118,12 +1185,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
       channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },
       runtime,
       stop: () => {
-        stopping ??= stop().catch((error: Error) => { stopping = undefined; throw error; });
+        stopping ??= stop().catch((error: Error) => {
+          stopping = undefined;
+          throw error;
+        });
         return stopping;
       },
     };
   };
-  const outcome = await boot().then(Result.succeed, ThrownError.transform((cause) => Result.fail(cause)).parse);
+  const outcome = await boot().then(
+    Result.succeed,
+    ThrownError.transform((cause) => Result.fail(cause)).parse,
+  );
   if (Result.isFailure(outcome)) {
     await runtime.dispose().catch((disposal: Error) => {
       throw new AggregateError([outcome.failure, disposal], "app boot and disposal failed");
@@ -1168,10 +1241,7 @@ export interface AppSessionHandle {
   readonly id: string;
   readonly approvals: SessionHandle["approvals"];
   readonly requests: {
-    timeout(
-      requestId: string,
-      at: number,
-    ): Effect.Effect<void, Core.ExecutionError>;
+    timeout(requestId: string, at: number): Effect.Effect<void, Core.ExecutionError>;
   };
   interrupt(): Effect.Effect<void, Core.SessionError>;
   readonly tools: {
