@@ -8,7 +8,6 @@ import {
   DefineRefused,
   Manifest,
   type CapabilityInput,
-  type SeamTag,
 } from "../src/core/capability";
 import { AlarmSeam } from "../src/core/alarm";
 
