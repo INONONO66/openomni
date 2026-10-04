@@ -15,3 +15,13 @@ export {
   ArmRefused, AlarmWakeError, RESERVED_PURPOSES,
   type AlarmCapability, type AlarmWakeContext, type ArmVerb, type AlarmFired, type AlarmWakeOutcome,
 } from "./alarm";
+// #1255 S1 declaration contracts (frozen: later steps add, never rename):
+// `Capability.define` / `Bundle.define` (`defineBundle`) / `Manifest.define`.
+export {
+  Capability, defineBundle, Manifest, DefineRefused, CapabilityHookError,
+  type BundleContract, type BundleContractInput, type BundleGateRow, type BundleTool,
+  type CapabilityCore, type CapabilityDefinition, type CapabilityInput,
+  type CapabilityInputRow, type CapabilityKindDeclaration, type CapabilityStep,
+  type ManifestDefinition, type ManifestInput, type SeamTag,
+} from "./capability";
+export { AlarmSeam } from "./alarm";
