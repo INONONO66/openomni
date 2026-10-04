@@ -336,7 +336,8 @@ export async function checkNaming(baseline: Baseline): Promise<Violation[]> {
 // check 6 — earned check
 // ---------------------------------------------------------------------------
 
-const TOOL_SOURCE_GLOB = "apps/openomni/src/tools/**/*.ts";
+// #1255: bundle-owned tools live under `src/bundles/<bundle>/index.ts`.
+const TOOL_SOURCE_GLOBS = ["apps/openomni/src/tools/**/*.ts", "apps/openomni/src/bundles/**/*.ts"];
 const TOOL_CATEGORIES: readonly ToolCategory[] = ["query", "mutation", "authority", "execution"];
 
 function looksLikeToolDefinition(value: object): value is AnyToolDefinition {
@@ -358,8 +359,13 @@ async function locateExportedDefinitions(
   definitions: readonly AnyToolDefinition[],
 ): Promise<LocatedDefinition[]> {
   const located = new Map<AnyToolDefinition, string>();
-  const glob = new Bun.Glob(TOOL_SOURCE_GLOB);
-  for await (const filePath of glob.scan({ cwd: ROOT, onlyFiles: true })) {
+  const files = new Set<string>();
+  for (const pattern of TOOL_SOURCE_GLOBS) {
+    for await (const filePath of new Bun.Glob(pattern).scan({ cwd: ROOT, onlyFiles: true })) {
+      files.add(filePath);
+    }
+  }
+  for (const filePath of files) {
     if (TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix))) continue;
     const source = await Bun.file(join(ROOT, filePath)).text();
     const module = z.record(z.string(), z.union([
@@ -387,6 +393,14 @@ async function locateExportedDefinitions(
 /** KERNEL 3.5: `tools/<name>.ts`, with the repo's kebab-case file rule applied to snake_case names. */
 function toolFileName(toolName: string): string {
   return `${toolName.replaceAll("_", "-")}.ts`;
+}
+
+/** #1255: a bundle-owned tool lives in its bundle's `index.ts`, directory named after the tool. */
+function isToolSourcePath(toolName: string, filePath: string): boolean {
+  return (
+    filePath.endsWith(`/${toolFileName(toolName)}`) ||
+    filePath.endsWith(`src/bundles/${toolName.replaceAll("_", "-")}/index.ts`)
+  );
 }
 
 export function definitionInvariantViolations(
@@ -418,7 +432,7 @@ export function definitionInvariantViolations(
         subject: definition.name,
         message: "[tool-source-location] catalog definition has no verifiable source file",
       });
-    } else if (!filePath.endsWith(`/${toolFileName(definition.name)}`)) {
+    } else if (!isToolSourcePath(definition.name, filePath)) {
       violations.push({
         check: "tool-lint",
         subject: definition.name,

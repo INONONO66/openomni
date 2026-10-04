@@ -82,8 +82,8 @@ import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
 import { createLiveArmRegistry } from "./composition/alarm-plane";
-import { monitorPurposes } from "./composition/bundles/monitor";
-import { cronPurposes } from "./composition/bundles/cron";
+import { monitorPurposes, monitorSeedRows } from "./bundles/monitor";
+import { cronPurposes } from "./bundles/cron";
 import {
   acquireAppResource,
   channelRequests,
@@ -314,7 +314,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const plane = services.plane;
     seedKernelPolicyRows(
       plane.catalog.policies,
-      services.bundles.select(services.bundles.names).rows,
+      // #1255 P2: the monitor bundle owns its wake-budget row; the seed only
+      // carries it until compose (#1255 S2) owns the generation row tables.
+      [...services.bundles.select(services.bundles.names).rows, ...monitorSeedRows],
       services.pointTable,
     );
     // The Session entity client: THE delivery path for message and timer
