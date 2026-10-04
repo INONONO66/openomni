@@ -57,7 +57,7 @@ afterEach(() => {
   planeRef.current = undefined;
 });
 
-it("consent is a require_approval policy row on the two contact authority ops, nothing else", () => {
+it("consent is a require_approval policy row on the contact and bundle authority ops, nothing else", () => {
   expect(PROVISION_POLICY_ROWS.map((row) => [row.match.value, row.verdict.value])).toEqual([
     [
       { op: "provision", operation: "contact_promote" },
@@ -66,6 +66,14 @@ it("consent is a require_approval policy row on the two contact authority ops, n
     [
       { op: "provision", operation: "contact_merge" },
       { type: "require_approval", reason: "provision.contact_merge requires Owner consent" },
+    ],
+    [
+      { op: "provision", operation: "bundle_enable" },
+      { type: "require_approval", reason: "provision.bundle_enable requires Owner consent" },
+    ],
+    [
+      { op: "provision", operation: "bundle_disable" },
+      { type: "require_approval", reason: "provision.bundle_disable requires Owner consent" },
     ],
   ]);
   expect(PROVISION_POLICY_ROWS.every((row) => row.kind === "tool" && row.phase === "pre")).toBe(
