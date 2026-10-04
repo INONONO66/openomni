@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { ZodError } from "zod";
-import { Tool } from "../src/tool/index.js";
+import { Tool, toolResultText } from "../src/tool/index.js";
 import type { PlainValue } from "../src/json.js";
 
 function expectInvalidState<State>(state: State): void {
@@ -257,7 +257,7 @@ describe("Tool.Call", () => {
 });
 
 describe("Tool.Result", () => {
-  test("parses valid minimal result", () => {
+  test("parses a historical output-only result and reads it through toolResultText", () => {
     const result = Tool.Result.parse({
       id: "res-1",
       toolCallId: "call-1",
@@ -267,27 +267,75 @@ describe("Tool.Result", () => {
     expect(result.id).toBe("res-1");
     expect(result.toolCallId).toBe("call-1");
     expect(result.output).toBe("ok");
+    expect(result.content).toBeUndefined();
     expect(result.isError).toBeUndefined();
+    expect(toolResultText(result)).toBe("ok");
   });
 
-  test("parses valid full result", () => {
+  test("parses a D5 result with content, details and structuredContent", () => {
     const result = Tool.Result.parse({
       id: "res-1",
       toolCallId: "call-1",
-      output: "failed",
+      toolName: "demo",
+      content: "two rows",
+      details: { errorKind: "execution_failed" },
+      structuredContent: { rows: [1, 2] },
       isError: false,
     });
 
-    expect(result.isError).toBe(false);
+    expect(result.content).toBe("two rows");
+    expect(result.output).toBeUndefined();
+    expect(result.details).toEqual({ errorKind: "execution_failed" });
+    expect(result.structuredContent).toEqual({ rows: [1, 2] });
+    expect(toolResultText(result)).toBe("two rows");
   });
 
-  test("rejects missing output", () => {
+  test("content wins over output in toolResultText", () => {
+    expect(toolResultText({ content: "new", output: "old" })).toBe("new");
+  });
+
+  test("rejects a result with neither content nor output", () => {
     expect(() =>
       Tool.Result.parse({
         id: "res-1",
         toolCallId: "call-1",
       }),
     ).toThrow(ZodError);
+  });
+
+  test("refuses oversize details and structuredContent JSON typed", () => {
+    // One byte over the 262_144-byte JSON bound (two quote bytes + payload).
+    const oversize = "x".repeat(262_143);
+    for (const field of ["details", "structuredContent"]) {
+      const refused = Tool.Result.safeParse({
+        id: "res-1",
+        toolCallId: "call-1",
+        content: "ok",
+        [field]: oversize,
+      });
+      expect(refused.success).toBe(false);
+      if (refused.success) throw new Error("shape");
+      expect(refused.error).toBeInstanceOf(ZodError);
+      expect(refused.error.issues[0]?.message).toContain("exceeds");
+    }
+    const bounded = Tool.Result.safeParse({
+      id: "res-1",
+      toolCallId: "call-1",
+      content: "ok",
+      structuredContent: "x".repeat(262_142),
+    });
+    expect(bounded.success).toBe(true);
+  });
+
+  test("refuses non-plain JSON in the D5 data fields", () => {
+    expect(
+      Tool.Result.safeParse({
+        id: "res-1",
+        toolCallId: "call-1",
+        content: "ok",
+        structuredContent: { when: new Date() },
+      }).success,
+    ).toBe(false);
   });
 });
 
