@@ -12,7 +12,7 @@ import {
 import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
 import { Core, type Bundle, Inspect } from "@openomni/agent";
 import type { ChannelGrantStore } from "@openomni/channels";
-import type { Actor, Gateway } from "@openomni/protocol";
+import type { Actor, Gateway, LedgerAction } from "@openomni/protocol";
 const Entropy = Core.Entropy;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -25,7 +25,7 @@ const AgentFailure = Core.AgentFailure;
 const scopeObservation = Core.scopeObservation;
 const attemptUsage = Inspect.attemptUsage;
 const toolWallMs = Inspect.toolWallMs;
-import { Gateway as GatewayProtocol, L0Observation, SessionRead } from "@openomni/protocol";
+import { Gateway as GatewayProtocol, L0Observation, SessionGeneration, type SessionFork, SessionRead } from "@openomni/protocol";
 import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
@@ -272,6 +272,9 @@ export function readSessionCursor(
       at: action.ts,
     })),
     usage: attemptUsage(page.actions),
+    // Fork ancestry projection (#1257): read off the genesis configure this
+    // page already captured; inspect surface only, never model context.
+    ancestry: sessionAncestry(after.parentId, genesis),
     toolWallMs: toolWallMs(page.actions.flatMap((action) => {
       if (action.kind !== "tool" || action.parentId === null) return [];
       const effect = action.effect.value;
@@ -283,11 +286,24 @@ export function readSessionCursor(
   });
 }
 
+/** Fork ancestry projection for one page (#1257): genesis pin plus aside text. */
+function sessionAncestry(
+  parentId: string | null,
+  genesis: LedgerAction.Node | undefined,
+): NonNullable<SessionRead.Page["ancestry"]> {
+  const value = genesis?.kind === "session.configure" ? genesis.intent.value : undefined;
+  const holder = value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
+  const parsed = SessionGeneration.ForkAncestry.safeParse(holder?.forkedFrom);
+  const forkedFrom = parsed.success ? parsed.data : null;
+  return { parentId, forkedFrom, aside: forkedFrom === null ? null : Inspect.forkAside(forkedFrom) };
+}
+
 export function webSocketCallbacks(
   runtime: AppRuntime,
   handler: WebSocketHandler,
   sink: Context.Service.Shape<typeof ObservationSink>,
   openSession?: (sessionId: string) => Core.SessionHandleStore.SessionKernel | undefined,
+  fork?: (request: SessionFork.Request) => SessionFork.Response,
 ) {
   const inflight = new Set<Promise<void>>();
   const readers = new Map<WsConnection, Map<string, () => void>>();
@@ -336,7 +352,17 @@ export function webSocketCallbacks(
                 // A keyless frame is a perimeter refusal (#1245) — report it verbatim.
                 if ("admitted" in outcome) ws.send(JSON.stringify(outcome));
                 else if (outcome.type === "session_read") read(ws, outcome);
-                else ws.send(JSON.stringify(outcome));
+                else if (outcome.type === "session_fork") {
+                  // #1257: fork executes app-side; unavailability is a typed refusal.
+                  ws.send(JSON.stringify(
+                    fork?.(outcome) ?? {
+                      type: "session_fork_refused",
+                      sessionId: outcome.sessionId,
+                      reason: "storage",
+                      detail: "fork is not available on this gateway",
+                    } satisfies SessionFork.Refused,
+                  ));
+                } else ws.send(JSON.stringify(outcome));
               },
               onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
             }),

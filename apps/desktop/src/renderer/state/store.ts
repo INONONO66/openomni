@@ -37,6 +37,8 @@ export interface LocalSession {
 export interface Session extends LocalSession {
   readonly phase: SessionPhase | null;
   readonly phaseSince: number;
+  /** Fork aside (#1257): history-only ancestry text from the read page; never sent to the model. */
+  readonly forkAside?: string;
 }
 
 export type Route = "sessions" | "inbox" | "automations";

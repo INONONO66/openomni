@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LedgerAction, LedgerSession } from "../ledger/l0.js";
+import { LedgerAction, LedgerSession, SessionGeneration } from "../ledger/l0.js";
 import { Gateway } from "./schema.js";
 
 const Id = z.string().min(1);
@@ -44,6 +44,16 @@ export namespace SessionRead {
       outputTokens: z.number().nonnegative().nullable(),
     }).strict()).max(256),
     toolWallMs: z.number().nonnegative(),
+    /**
+     * Fork ancestry projection (#1257): the parent edge, the genesis fork pin
+     * and the history-only aside text. Inspect surface only — the reader
+     * renders it; nothing here enters model context or compaction.
+     */
+    ancestry: z.object({
+      parentId: Id.nullable(),
+      forkedFrom: SessionGeneration.ForkAncestry.nullable(),
+      aside: z.string().nullable(),
+    }).strict().optional(),
   }).strict();
   export type Page = z.infer<typeof Page>;
 
@@ -73,4 +83,49 @@ export namespace SessionRead {
     result: Gateway.IngestResult,
   }).strict();
   export type Bound = z.infer<typeof Bound>;
+}
+
+/**
+ * Fork wire surface (#1257): fork a session at a verifiable boundary anchor
+ * (`at` is the parent action hash of a turn terminal, prompt or compaction
+ * row) into a new session with its own chain. The response is the pinned
+ * ancestry or a typed refusal — never a silent success.
+ */
+export namespace SessionFork {
+  export const Request = z.object({
+    type: z.literal("session_fork"),
+    sessionId: Id,
+    /** The boundary anchor: a parent `actionHash`. */
+    at: z.string().min(1),
+    /** Caller-chosen child session id; the app mints one when absent. */
+    childId: Id.optional(),
+  }).strict();
+  export type Request = z.infer<typeof Request>;
+
+  export const Reason = z.enum([
+    "parent_not_found", "parent_chain_broken", "schema_version",
+    "anchor_not_found", "anchor_not_boundary", "byte_cap", "child_exists",
+    "storage",
+  ]);
+  export type Reason = z.infer<typeof Reason>;
+
+  export const Forked = z.object({
+    type: z.literal("session_forked"),
+    sessionId: Id,
+    parentId: Id,
+    forkedFrom: SessionGeneration.ForkAncestry,
+    head: z.string().min(1),
+  }).strict();
+  export type Forked = z.infer<typeof Forked>;
+
+  export const Refused = z.object({
+    type: z.literal("session_fork_refused"),
+    sessionId: Id,
+    reason: Reason,
+    detail: z.string(),
+  }).strict();
+  export type Refused = z.infer<typeof Refused>;
+
+  export const Response = z.union([Forked, Refused]);
+  export type Response = z.infer<typeof Response>;
 }

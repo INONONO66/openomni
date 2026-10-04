@@ -78,10 +78,16 @@ export function SessionContent({
   return (
     <ConsoleContent
       header={
-        <h1 className="flex items-center gap-2 px-section py-3 font-semibold text-label">
-          <StatusGlyph {...sessionGlyphProps(session.phase)} />
-          {session.title}
-        </h1>
+        <div className="px-section py-3">
+          <h1 className="flex items-center gap-2 font-semibold text-label">
+            <StatusGlyph {...sessionGlyphProps(session.phase)} />
+            {session.title}
+          </h1>
+          {session.forkAside === undefined ? null : (
+            // Fork ancestry aside (#1257): projection only; never part of the transcript sent back.
+            <p className="mt-1 text-xs opacity-60">{session.forkAside}</p>
+          )}
+        </div>
       }
       emptyLabel="No turns in this session yet."
       transcript={{

@@ -467,3 +467,6 @@ function text(value: PlainValue | undefined): string | undefined {
 
 // Inspect metrics surface (#1247).
 export { attemptUsage, toolWallMs } from "../core/metrics";
+
+// Fork ancestry projections (#1257).
+export { forkAncestryOf, forkAside, forkAsideRewrite, inspectTree, type InspectTreeRequest, type SessionTreeNode } from "./tree";

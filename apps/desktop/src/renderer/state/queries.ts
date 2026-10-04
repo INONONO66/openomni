@@ -67,6 +67,7 @@ export function sessionReadModel(session: LocalSession, page: SessionRead.Page |
     ...session,
     phase: authoritative?.phase ?? null,
     phaseSince: authoritative?.phaseSince ?? session.createdAt,
+    ...(authoritative?.ancestry?.aside == null ? {} : { forkAside: authoritative.ancestry.aside }),
     lastActivityAt: authoritative?.actions[authoritative.actions.length - 1]?.at ?? session.lastActivityAt,
   };
 }

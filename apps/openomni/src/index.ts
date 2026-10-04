@@ -82,6 +82,7 @@ import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
 import { createLiveArmRegistry } from "./composition/alarm-plane";
+import { createSessionForkExecutor } from "./composition/session-fork";
 import { monitorPurposes } from "./composition/bundles/monitor";
 import { cronPurposes } from "./composition/bundles/cron";
 import {
@@ -953,7 +954,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
     );
 
     const wsCallbacks = webSocketCallbacks(runtime, wsHandler, services.observations, (id) =>
-      plane.catalog.sessionIndex(id) === undefined ? undefined : plane.openKernel(id));
+      plane.catalog.sessionIndex(id) === undefined ? undefined : plane.openKernel(id),
+      createSessionForkExecutor(plane, {
+        sessionsDir: config.sessionsDir,
+        now: services.now,
+        id: services.entropy.id,
+      }));
     const server = Bun.serve({
       hostname: config.host,
       port: config.wsPort,
