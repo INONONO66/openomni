@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791061915192,
+  "lastUpdate": 1791073778100,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -77491,6 +77491,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 86136,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05bb44ddc91e0edb799cfd30263f2d7e3fb069a4",
+          "message": "feat(#1275): browser use recipe — Playwright over CDP inside a tmux pty.session (#1286)\n\n* chore(#1275): open browser-use recipe lane (Playwright over CDP inside tmux pty.session)\n\n* codemode(#1275): browser() prelude launches Chromium in a cell-owned pty.session and connects over CDP\n\nMust-do 1-3: BrowserClient wraps playwright.chromium.connect_over_cdp and\nexposes the raw default persistent context/pages; launch uses only the #1273\nterminal-session handle ops with export-confined profile_dir (outside exports\n-> path_escapes_export before Chromium starts); CDP port starts at 9222,\nprobe-binds on the machine, advances on collision and is printed+retained in\nthe tmux output; readiness waits on the exact 'DevTools listening on ws://'\nline via pty_read cursor; headless default, headless=False launches headed;\ninterpreter close runs an EOF-first driver cleanup that closes clients and\ntheir Chromiums without deleting profiles.\n\n* codemode(#1275): loss detection at every browser client op and reconnect attempt\n\nMust-do 4: client accessors go through _alive(); a dead Chromium or dropped\nCDP connection raises the typed browser_lost refusal with the retained tmux\ntranscript in details and drops the registry entry; a stale client found on\nreuse is discarded and re-attached over the retained endpoint, never replaced\nby a silent relaunch against the same profile. Also fixes the readiness wait\nto bound QUIET long-poll rounds instead of raw reads: terminal echo arrives\nas many tiny immediate events and must not exhaust the failure bound.\n\n* codemode(#1275): missing Chromium executable refuses typed and tears the owned session down\n\nMust-do 4b: the launch probes the resolved executable inside the session\n([ -x ]) before starting Chromium; a missing executable reuses the\nbrowser_lost refusal naming the missing path and the exact install command\n(python -m playwright install chromium), and any pre-readiness failure now\ncloses the cell-owned tmux session so tmux ls does not list a corpse. Loss\nafter readiness still keeps the session alive for diagnostics.\n\n* test(#1275): browser recipe end-to-end against real tmux and Chromium\n\nCovers launch+CDP connect+title, default-port collision advance with the\nselected port retained in session output, client reuse, typed browser_lost\nwith transcript after the browser is stopped behind the client's back, headed\nmode, path_escapes_export refusal before launch, missing-executable refusal\nwith session teardown (4b), and interpreter-close cleanup. Close-path fixes\nbaked in: liveness is a bounded http probe of the CDP endpoint (a protocol\nsend on a dead browser blocks forever in sync playwright), the launch line\nretains the browser pid and exits the session on clean or signal-range\nstatuses, and the EOF cleanup stops browser processes by pid first so it\nalways lands within the driver exit grace.\n\n* docs(#1275): browser automation recipe, status entry, and eval description\n\nMust-do 6/7: docs/machines-and-delegation.md section 2.7 documents the full\nrecipe (prerequisites, export-confined profile, headless/headed examples,\nport+pid retention in session output, inspecting the session, reconnecting\nfrom a later cell, loss semantics, cleanup, #1023 disclaimer); eval tool\ndescription advertises browser(machineId); implementation-status and codemode\nAGENTS note the prelude ownership. Also fixes a Bun.listen typing nit in the\nbrowser test.\n\n* test(#1275): satisfy lint rules in the browser test\n\nnoEmptyBlockStatements: the port-occupier socket handler documents why it is\nempty; useLiteralKeys: process.env.DISPLAY instead of the computed key.\n\n* chore(#1275): regenerate reviewed tool-schema snapshot\n\nThe only change is the eval tool description now mentioning browser(machineId)\nfor Chromium automation over CDP; no schema or tool shape changed.\n\n* ci(#1275): browser test prerequisites on the codemode lane and a sturdier harness\n\nThe codemode test lane installs Python playwright 1.63.0 with Chromium and\nruns under an Xvfb display so the headed branch executes on the runner; a\nlinux-gated test drives the no-display branch by clearing DISPLAY and\nWAYLAND_DISPLAY inside the pty.session through an executable wrapper, so both\ndisplay branches execute in CI. A failed beforeAll prerequisite now reports\none clear error: afterAll closes optionally and tests reach the harness\nthrough a narrowing accessor.\n\n* ci: relax unprivileged userns for the codemode browser lane\n\nUbuntu 24.04 runners restrict unprivileged user namespaces through AppArmor,\nso Chromium's zygote sandbox cannot start (\"No usable sandbox\", exit 133) and\nevery browser recipe test failed at launch. Set\nkernel.apparmor_restrict_unprivileged_userns=0 on the runner before the lane\nruns. The product launch line stays sandboxed: no --no-sandbox anywhere.\n\n* codemode: launch afresh when the daemon lists a browser session as lost\n\npty_list reports a session whose tmux side is gone as status \"lost\" (a launch\nwhose Chromium dies by signal exits the shell before the client's close() can\nrun). browser() treated any listed name as a reconnectable session, drained an\nempty transcript and refused with \"retains no cdp port line\" for every later\ncall on that profile. Only live sessions are reconnected now; a lost one is\nlaunched again.\n\nRegression test kills the owned tmux session behind the daemon's back, asserts\npty_list reports it lost, and proves the next browser() launches and\nconnects.\n\n* docs: #1275 stamp in AGENTS.md; #1273 stamp flipped to merged a1a3de0f",
+          "timestamp": "2026-10-04T09:26:48+09:00",
+          "tree_id": "e77d3316f76cf274bed4ea29d4a58117112f9ede",
+          "url": "https://github.com/INONONO66/openomni/commit/05bb44ddc91e0edb799cfd30263f2d7e3fb069a4"
+        },
+        "date": 1791073777360,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1068,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1918,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1465,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1584678,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 429386,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6722144,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 163,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1148,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 207241,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 844951,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 503189,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3437,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 12452157,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1486412,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19325,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 179108,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 964035,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 287722,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 17253301,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 197013,
             "unit": "ns/op"
           }
         ]
