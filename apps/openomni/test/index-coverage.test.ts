@@ -704,9 +704,10 @@ test("activation resend persists every armed envelope at the insert, never await
       armSeq,
       ts: 2,
     });
+  const FAR_FUTURE = 4_102_444_800_000; // 2100-01-01Z: undeliverable today, replies only then
   const marker = arm("due-past", 1_000, 1);
-  const futureA = arm("due-future-a", Date.now() + 7_200_000, 2);
-  const futureB = arm("due-future-b", Date.now() + 10_800_000, 3);
+  const futureA = arm("due-future-a", FAR_FUTURE, 2);
+  const futureB = arm("due-future-b", FAR_FUTURE + 3_600_000, 3);
   await runEffect(
     kernel.commit({
       sessionId,
