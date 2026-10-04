@@ -833,6 +833,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       alarmCapability: alarmPlane,
       // #1254 S3: an activation resends its armed occurrences through the
       // entity's own persisted Alarm door (occurrence id = cluster dedupe).
+      // Persist-and-return (M3): a DeliverAt envelope only replies at
+      // `fireAt`, so the resend walk must complete at the durable insert —
+      // a reply-awaiting send would park the walk on the first future row.
       // Native-source chains (`monitor.hit`) are never time-delivered — their
       // installed source resends the armed occurrence with the hit — so the
       // entity's arm forward and activation resend skip them here, the same
@@ -840,7 +843,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       sendAlarm: (sessionId, occurrence) =>
         occurrence.purpose === Bundle.MONITOR_HIT
           ? Effect.void
-          : sendAlarm(sessionId, occurrence).pipe(
+          : scheduleAlarm(sessionId, occurrence).pipe(
           Effect.catchCause((cause) =>
             Effect.sync(() => {
               console.error(`armed alarm resend failed: ${sessionId}`, cause);

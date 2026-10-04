@@ -332,7 +332,10 @@ export interface SessionEntityPorts {
   /**
    * #1254 S3: resends one armed occurrence through the cluster's persisted
    * DeliverAt door (the occurrence id is the dedupe key, so a live duplicate
-   * folds in the cluster). Absent means no resend plane is composed.
+   * folds in the cluster). Persist-and-return (M3): the effect completes when
+   * the envelope is durable — it never awaits the delivery reply, which for a
+   * future occurrence only arrives at `fireAt`. Absent means no resend plane
+   * is composed.
    */
   readonly sendAlarm?: (
     sessionId: string,

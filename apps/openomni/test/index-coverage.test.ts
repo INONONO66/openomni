@@ -667,3 +667,80 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
   expect(lines.filter((line) => line.includes("fault-rescan"))).toHaveLength(1);
   expect(lines.filter((line) => line.includes("fault-resend"))).toHaveLength(1);
 });
+
+test("activation resend persists every armed envelope at the insert, never awaiting a future occurrence's reply (M3)", async () => {
+  const config = suite.config("index-resend-future-db-", { wsToken: "index-future-token" });
+  if (config.catalogPath === undefined) throw new Error("missing test catalog");
+  const app1 = await suite.boot({ config, llm: stopLlm });
+  const plane1 = await planeOf(app1.runtime);
+  const sessionId = "future-resend";
+  const kernel = plane1.openKernel(sessionId);
+  await runEffect(
+    kernel.materialize({
+      id: sessionId,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: kernel.currentPolicyGeneration(),
+      actionId: `${sessionId}:materialize`,
+      at: 1,
+    }),
+  );
+  plane1.catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: 1 });
+  const fence = await runEffect(adoptTestFence(kernel, sessionId, "future-seeder"));
+  // One past-due marker (folds stale on delivery: the causal barrier) followed
+  // in fire order by two far-future chains that no reply will settle today.
+  const arm = (alarmId: string, at: number, armSeq: number) =>
+    Core.armAction({
+      parentId: `${sessionId}:materialize`,
+      sessionId,
+      purpose: "note.due",
+      at,
+      supersedes: null,
+      alarmId,
+      sourceKey: "note",
+      payload: {},
+      armSeq,
+      ts: 2,
+    });
+  const marker = arm("due-past", 1_000, 1);
+  const futureA = arm("due-future-a", Date.now() + 7_200_000, 2);
+  const futureB = arm("due-future-b", Date.now() + 10_800_000, 3);
+  await runEffect(
+    kernel.commit({
+      sessionId,
+      owner: "future-seeder",
+      fence,
+      now: 3,
+      expectedRevision: kernel.row(sessionId).revision,
+      actions: [marker.action, futureA.action, futureB.action],
+      state: "idle",
+    }),
+  );
+  await app1.stop();
+
+  const markerFolded = Promise.withResolvers<void>();
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.sessionId === sessionId && event.kind === "alarm") markerFolded.resolve();
+  });
+  suite.defer(unsubscribe);
+  const app2 = await suite.boot({ config: { ...config, machines: testMachinesPlane() }, llm: stopLlm });
+  await planeOf(app2.runtime);
+  // The marker sorts first in the armed index: its fold proves the resend
+  // walked the rows, and its delivery needed a full cluster round trip that
+  // started only after the two future inserts had already been issued.
+  await bounded(markerFolded.promise);
+
+  // Persist-and-return: both future envelopes are durable in the catalog
+  // mailbox now; a reply-awaiting send would still be parked on due-future-a.
+  const catalog = new Database(config.catalogPath, { readonly: true });
+  const rows = catalog
+    .query<{ payload: string }, [string]>(
+      "SELECT payload FROM cluster_messages WHERE tag = 'Alarm' AND entity_id = ?",
+    )
+    .all(sessionId);
+  catalog.close();
+  expect(rows.some((row) => row.payload.includes(futureA.occurrenceId))).toBe(true);
+  expect(rows.some((row) => row.payload.includes(futureB.occurrenceId))).toBe(true);
+});
