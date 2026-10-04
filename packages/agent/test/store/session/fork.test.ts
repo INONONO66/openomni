@@ -9,6 +9,8 @@ import { openSessionStore, SESSION_FILE_SCHEMA_VERSION } from "../../../src/core
 import { deliveryActions, receivedMessageAction, turnTerminalAction } from "../../../src/core/commit";
 import { armAction } from "../../../src/core/alarm";
 import { forkSession, type ForkPorts, ForkRefused, type ForkReceipt } from "../../../src/core/fork";
+import { forkAncestryOf, forkAside, forkAsideRewrite, inspectTree } from "../../../src/inspect/tree";
+import { foldSessionHistory } from "../../../src/inspect/history";
 import type { LedgerError } from "../../../src/core/store/errors";
 
 const PARENT = "parent";
@@ -89,7 +91,7 @@ function buildParent() {
   const [delivery] = deliveryActions(
     [inboxRow("msg-1", "first", 2)],
     { kind: "turn", turnId: "turn-1" },
-    { boundaryActionId: null, pendingTotal: 1, delivered: 1, remaining: 0 },
+    "before_llm",
     input.id,
   );
   if (delivery === undefined) throw new Error("delivery action missing");
@@ -283,6 +285,51 @@ describe("Session.fork", () => {
     expect(refusal.reason).toBe("schema_version");
     expect(child().sessions.get(CHILD)).toBeUndefined();
     expect(stores.catalog.sessionIndex(CHILD)).toBeUndefined();
+  });
+
+  test("projects ancestry and aside in inspect only, never into model context", () => {
+    const parent = buildParent();
+    const receipt = Result.getOrThrowWith(fork(parent.hashOf("turn-1:terminal")), (error) => error);
+    const childKernel = SessionHandleStore.createSessionKernel(child(), stores.catalog);
+
+    // Ancestry projection reads the genesis pin; the parent has none.
+    const ancestry = forkAncestryOf(childKernel, CHILD);
+    expect(ancestry).toEqual(receipt.forkedFrom);
+    expect(forkAncestryOf(stores.kernel, PARENT)).toBeNull();
+    if (ancestry === null) throw new Error("child ancestry missing");
+    const aside = forkAside(ancestry);
+    expect(aside).toContain(PARENT);
+    expect(aside).toContain(ancestry.anchor);
+
+    // The ancestry tree walks catalog parent_id edges from the parent down.
+    const tree = inspectTree(stores.kernel, PARENT, {}, (id) =>
+      id === CHILD ? childKernel : stores.kernel,
+    );
+    expect(tree.sessionId).toBe(PARENT);
+    expect(tree.forkedFrom).toBeNull();
+    expect(tree.children.map((node) => node.sessionId)).toEqual([CHILD]);
+    expect(tree.children[0]?.parentId).toBe(PARENT);
+    expect(tree.children[0]?.aside).toBe(aside);
+
+    // Model context: the canonical history fold over the child chain carries
+    // the copied conversation but never the aside text; compaction folds over
+    // this same history, so the aside cannot leak there either.
+    const actions = childKernel.historyPage(CHILD, { afterRevision: 0, limit: 50 }).actions;
+    const messages = foldSessionHistory(CHILD, actions);
+    const rendered = JSON.stringify(messages);
+    expect(rendered).toContain("first");
+    expect(rendered).not.toContain("Forked from session");
+    expect(rendered).not.toContain(ancestry.anchor);
+
+    // Opt-in promotion: only the registered prompt.pre rewrite moves the aside.
+    const handler = forkAsideRewrite(() => ancestry, CHILD);
+    const service = () => handler;
+    const promoted = handler({ value: "hello", params: null, service });
+    expect(promoted.value).toBe(`${aside}\n\nhello`);
+    expect(promoted.payload).toEqual({ promoted: true });
+    const skipped = handler({ value: { not: "text" }, params: null, service });
+    expect(skipped.value).toBeUndefined();
+    expect(skipped.payload).toEqual({ promoted: false });
   });
 
   test("refuses an existing child id and leaves the first chain intact", () => {
