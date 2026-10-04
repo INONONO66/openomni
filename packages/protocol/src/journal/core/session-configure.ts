@@ -22,7 +22,7 @@ export const DisabledEntry = z.object({ name: z.string().min(1), because: z.stri
 export type DisabledEntry = z.infer<typeof DisabledEntry>;
 
 /** The composed generation's full off cascade, journaled with the configure. */
-export const Disabled = z.array(DisabledEntry);
+export const Disabled = z.array(DisabledEntry).readonly();
 export type Disabled = z.infer<typeof Disabled>;
 
 export const sessionConfigure = declare(

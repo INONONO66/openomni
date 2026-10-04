@@ -80,10 +80,10 @@ test("session.configure journals the cascade as disabled {name, because}", async
     id: "cfg-1",
     sessionId: "s-1",
     parentId: null,
-    operation: "genesis",
+    operation: "create",
     snapshot: {
       generation: 1,
-      revertTo: null,
+      revertTo: 0,
       tools: [],
       toolsHash: "none",
       bundles: [],
@@ -96,14 +96,14 @@ test("session.configure journals the cascade as disabled {name, because}", async
     disabled: generation.disabled,
     at: 1,
   });
-  const intent = action.intent.value as { disabled: readonly { name: string; because: string }[] };
+  const intent = z.looseObject({ disabled: z.array(z.object({ name: z.string(), because: z.string() })) }).parse(action.intent.value);
   expect(intent.disabled).toEqual([...generation.disabled]);
   const declaration = Journal.CORE_DECLARATIONS.find((entry) => entry.kind === "session.configure");
   if (declaration === undefined) throw new Error("session.configure declaration missing");
   const parsed = declaration.schema.safeParse({ intent: action.intent, effect: action.effect });
   expect(parsed.success).toBe(true);
   const malformed = declaration.schema.safeParse({
-    intent: { encodingVersion: 1, value: { operation: "genesis", disabled: [{ name: "a" }] } },
+    intent: { encodingVersion: 1, value: { operation: "create", disabled: [{ name: "a" }] } },
     effect: action.effect,
   });
   expect(malformed.success).toBe(false);
