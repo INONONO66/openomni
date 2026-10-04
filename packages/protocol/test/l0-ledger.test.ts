@@ -8,6 +8,8 @@ import {
   LedgerAction,
   LedgerSession,
   PolicyRow,
+  RESERVED_ALARM_PURPOSES,
+  isReservedAlarmPurpose,
   type Tool,
   type PlainObject,
 } from "../src/index.js";
@@ -221,4 +223,13 @@ describe("L0 ledger protocol", () => {
       }),
     ).toMatchObject({ name: "tool-guard", generation: 1 });
   });
+});
+
+test("the loop-reserved alarm purpose set is closed and classifies exactly its members", () => {
+  expect([...RESERVED_ALARM_PURPOSES]).toEqual(["step_watchdog", "retry", "deadline", "resume"]);
+  for (const purpose of RESERVED_ALARM_PURPOSES) {
+    expect(isReservedAlarmPurpose(purpose)).toBe(true);
+  }
+  expect(isReservedAlarmPurpose("monitor.hit")).toBe(false);
+  expect(isReservedAlarmPurpose("cron.tick")).toBe(false);
 });

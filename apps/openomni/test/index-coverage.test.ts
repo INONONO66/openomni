@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Core } from "@openomni/agent";
+import { Bundle, Core } from "@openomni/agent";
 type ExecutionApprovalRequest = Core.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
@@ -13,7 +13,9 @@ import {
   assistantMessage,
   requestToolStep,
 } from "./helpers/assistant-message";
-import { planeOf } from "./helpers/ledger";
+import { adoptTestFence, planeOf } from "./helpers/ledger";
+import { foldAlarmChains, watchStateOf } from "../src/composition/alarm-plane";
+import { testMachinesPlane } from "./helpers/self-machine";
 import { bounded } from "./helpers/protected-dispatch";
 import { runEffect } from "./helpers/effect";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -417,4 +419,144 @@ test("a deadline-bearing external send opens and arms its live request", async (
       .requestRows(source.id)
       .some((request) => request.deadline !== null),
   ).toBe(true);
+});
+
+test("a terminal watch to an unknown machine is refused at create and its chains are retired", async () => {
+  let calls = 0;
+  const app = await suite.boot({
+    config: suite.config("index-watch-refused-db-", { wsToken: "index-refused-token" }),
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) =>
+        Effect.sync(() => {
+          calls += 1;
+          if (calls === 1)
+            requestToolStep(input, sink, {
+              id: "terminal-watch-refused",
+              tool: "monitor",
+              input: {
+                operation: {
+                  op: "create",
+                  description: "ghost terminal",
+                  source: { kind: "terminal", machine: "m-ghost", session: "qa", timeout_ms: 60_000 },
+                },
+              },
+            });
+          else sink.onMessage(assistantMessage(input, { text: "refused" }));
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const sealed = Promise.withResolvers<void>();
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind !== "turn") return;
+    const snapshot = plane.openKernel(event.sessionId).getSnapshot(event.sessionId);
+    if (snapshot.turns.at(-1)?.terminal?.kind === "result") sealed.resolve();
+  });
+  suite.defer(unsubscribe);
+  const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "index-refused-token"]);
+
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "watch the ghost terminal" }));
+
+  await bounded(sealed.promise);
+  expect(calls).toBe(2);
+  const session = plane.listSessions().find((row) => row.id !== "gateway-ingress");
+  if (session === undefined) throw new Error("no resident session");
+  // Both chains (main + timeout) were armed, failed to subscribe, and retired:
+  // every latest arm is `at: null` with the install-refusal reason.
+  const chains = [...foldAlarmChains(plane.openKernel(session.id), session.id).values()];
+  expect(chains).toHaveLength(2);
+  for (const chain of chains) {
+    expect(chain.latest.at).toBeNull();
+    expect(chain.armCount).toBe(2);
+  }
+  const main = chains.find((chain) => !chain.alarmId.endsWith(":timeout"));
+  if (main === undefined) throw new Error("no main watch chain");
+  expect(watchStateOf(main, session.id)).toMatchObject({ kind: "watch", status: "cancelled", fireAt: null });
+});
+
+test("boot rescan wakes armed idle sessions and skips ghost catalog rows and native chains", async () => {
+  const config = suite.config("index-rescan-db-", { wsToken: "index-rescan-token" });
+  const app1 = await suite.boot({
+    config,
+    llm: { resolveModel: fakeProviderModel, run: () => Effect.succeed({ type: "stop" as const }) },
+  });
+  const plane1 = await planeOf(app1.runtime);
+  const sessionId = "rescan-seed";
+  const kernel = plane1.openKernel(sessionId);
+  await runEffect(
+    kernel.materialize({
+      id: sessionId,
+      parentId: null,
+      role: "resident",
+      tools: [],
+      system: { preset: "", blocks: [] },
+      policyGeneration: kernel.currentPolicyGeneration(),
+      actionId: `${sessionId}:materialize`,
+      at: 1,
+    }),
+  );
+  plane1.catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: 1 });
+  const fence = await runEffect(adoptTestFence(kernel, sessionId, "rescan-seeder"));
+  // One scheduled chain with an unregistered purpose (folds to fired{stale})
+  // and one native monitor.hit chain (never resent by the boot rescan).
+  const due = Core.armAction({
+    parentId: `${sessionId}:materialize`,
+    sessionId,
+    purpose: "note.due",
+    at: 1_000,
+    supersedes: null,
+    alarmId: "due-1",
+    sourceKey: "note",
+    payload: {},
+    armSeq: 1,
+    ts: 2,
+  });
+  const native = Core.armAction({
+    parentId: due.action.id,
+    sessionId,
+    purpose: Bundle.MONITOR_HIT,
+    at: 2_000,
+    supersedes: null,
+    alarmId: "native-1",
+    sourceKey: Bundle.MONITOR_SOURCE,
+    payload: { spec: { watch: { command: "true", description: "native", persistent: true }, policyGeneration: 1, notificationLimit: 8 }, notifications: 0 },
+    armSeq: 2,
+    ts: 3,
+  });
+  await runEffect(
+    kernel.commit({
+      sessionId,
+      owner: "rescan-seeder",
+      fence,
+      now: 3,
+      expectedRevision: kernel.row(sessionId).revision,
+      actions: [due.action, native.action],
+      state: "idle",
+    }),
+  );
+  // A catalog row without a session file: the boot mtime probe must fall back.
+  plane1.catalog.indexSession({ id: "rescan-ghost", parentId: null, role: "resident", createdAt: 1 });
+  await app1.stop();
+
+  const staleFolded = Promise.withResolvers<void>();
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.sessionId === sessionId && event.kind === "alarm") staleFolded.resolve();
+  });
+  suite.defer(unsubscribe);
+  // Same catalog and sessions dir, fresh machine socket: a real reboot.
+  const app2 = await suite.boot({
+    config: { ...config, machines: testMachinesPlane() },
+    llm: { resolveModel: fakeProviderModel, run: () => Effect.succeed({ type: "stop" as const }) },
+  });
+  const plane2 = await planeOf(app2.runtime);
+  await bounded(staleFolded.promise);
+  const kernel2 = plane2.openKernel(sessionId);
+  // The resent occurrence folded to a recorded stale fact (purpose unregistered).
+  expect(kernel2.actionById(`${due.occurrenceId}:stale`)?.kind).toBe("alarm");
+  expect(kernel2.actionById(`${due.occurrenceId}:delivered`)).toBeUndefined();
+  // The native chain was never resent: no fired fact exists for its occurrence.
+  expect(kernel2.actionById(`${native.occurrenceId}:stale`)).toBeUndefined();
+  expect(kernel2.actionById(`${native.occurrenceId}:delivered`)).toBeUndefined();
 });

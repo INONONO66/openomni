@@ -13,6 +13,7 @@
  *  - a close with nothing pending arms nothing.
  */
 import { afterAll, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { Effect } from "effect";
 import { openCatalogStore } from "../../src/core/store/catalog";
@@ -20,6 +21,7 @@ import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
 import {
   blockingRunner,
+  clusterMessages,
   clusterTempDir,
   readChain,
   resolvedRunner,
@@ -118,4 +120,91 @@ test("passivation arms resume for unconsumed input; the resume wake continues th
     row.id.startsWith(`${sessionId}:resume:arm:`),
   );
   expect(armRowsAfter).toHaveLength(1);
+});
+
+/** A pending-backlog activation in its own throwaway world (fault-injection tests). */
+async function closeWithPendingBacklog(
+  world: ReturnType<typeof clusterTempDir>,
+  sessionId: string,
+  beforeClose: () => void,
+): Promise<void> {
+  const turnsEntered: string[] = [];
+  await runCluster(
+    {
+      sessionsDir: world.sessionsDir,
+      catalogFile: world.catalogFile,
+      detachTurns: true,
+      idleMs: 1_000,
+      runner: blockingRunner((turnId) => turnsEntered.push(turnId)),
+    },
+    Effect.gen(function* () {
+      yield* sendPrompt(sessionId, "p1", "start the long turn");
+      yield* Effect.promise(() => waitUntil("turn entered", () => turnsEntered.length === 1));
+      yield* sendPrompt(sessionId, "p2", "arrives during the live turn");
+      yield* Effect.sync(beforeClose);
+    }),
+  );
+}
+
+test("a refused resume-arm commit at passivation is a logged fact: the close completes, nothing is armed", async () => {
+  const world = clusterTempDir("w52-passivation-arm-fault-");
+  const sessionId = "passivation-arm-fault";
+  try {
+    // The injected fault: the session file itself refuses the resume arm row —
+    // the commit (and its same-transaction armed_alarms upsert) rolls back.
+    await closeWithPendingBacklog(world, sessionId, () => {
+      const db = new Database(sessionFileFor(world.sessionsDir, sessionId));
+      db.exec(
+        "CREATE TRIGGER refuse_resume_arm BEFORE INSERT ON action WHEN NEW.id LIKE '%:resume:arm:%' BEGIN SELECT RAISE(ABORT, 'injected resume arm refusal'); END",
+      );
+      db.close();
+    });
+    // The close completed (no thrown finalizer) and left no resume state behind.
+    const chain = readChain(sessionFileFor(world.sessionsDir, sessionId), sessionId);
+    expect(chain.filter((row) => row.id.includes(":resume:arm:"))).toHaveLength(0);
+    const catalog = openCatalogStore(world.catalogFile, { now: () => Date.now() });
+    const store = openSessionStore(sessionFileFor(world.sessionsDir, sessionId), { now: () => Date.now() });
+    try {
+      const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+      expect(kernel.armedAlarms()).toEqual([]);
+    } finally {
+      store.close();
+      catalog.close();
+    }
+  } finally {
+    rmSync(world.dir, { recursive: true, force: true });
+  }
+});
+
+test("a refused resume occurrence persist is a logged fact: the committed arm row still stands", async () => {
+  const world = clusterTempDir("w52-passivation-send-fault-");
+  const sessionId = "passivation-send-fault";
+  try {
+    // The injected fault: the cluster mailbox refuses the Alarm envelope —
+    // the discard-door send fails AFTER the arm row committed durably.
+    await closeWithPendingBacklog(world, sessionId, () => {
+      const db = new Database(world.catalogFile);
+      db.exec(
+        "CREATE TRIGGER refuse_resume_send BEFORE INSERT ON cluster_messages WHEN NEW.tag = 'Alarm' BEGIN SELECT RAISE(ABORT, 'injected resume send refusal'); END",
+      );
+      db.close();
+    });
+    // The arm row and its durable index entry survived the failed send: the
+    // boot sweep is the recovery of last resort for exactly this window.
+    const chain = readChain(sessionFileFor(world.sessionsDir, sessionId), sessionId);
+    expect(chain.filter((row) => row.id.startsWith(`${sessionId}:resume:arm:`))).toHaveLength(1);
+    const catalog = openCatalogStore(world.catalogFile, { now: () => Date.now() });
+    const store = openSessionStore(sessionFileFor(world.sessionsDir, sessionId), { now: () => Date.now() });
+    try {
+      const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+      expect(kernel.armedAlarms().map((row) => row.alarmId)).toEqual([`${sessionId}:resume`]);
+    } finally {
+      store.close();
+      catalog.close();
+    }
+    // No Alarm envelope was persisted: the refused send left no mailbox row.
+    expect(clusterMessages(world.catalogFile, "Session").filter((row) => row.tag === "Alarm")).toHaveLength(0);
+  } finally {
+    rmSync(world.dir, { recursive: true, force: true });
+  }
 });

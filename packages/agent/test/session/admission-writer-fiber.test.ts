@@ -21,6 +21,7 @@ import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
 import { CommitRefused } from "../../src/core/store/errors";
+import { armAction, AlarmWakeError, type AlarmCapability } from "../../src/core/alarm";
 import { writerLoop, type ActivationHandle, type SessionKernel } from "../../src/core/entity";
 import { AdmissionFailure, AlarmOccurrence, type AlarmRpc, type DeliverRpc, type ReadRpc, type ResolveRpc } from "../../src/core/messages";
 import type { SessionEntityPorts } from "../../src/core/run";
@@ -119,6 +120,7 @@ function makeWriterWorld(
     readonly alarmsBeforePrompt?: number;
     readonly wrapKernel?: (kernel: SessionKernel) => SessionKernel;
     readonly runTurn?: SessionEntityPorts["runTurn"];
+    readonly alarmCapability?: AlarmCapability;
   },
 ): Effect.Effect<WriterWorld, never, import("effect").Scope.Scope> {
   return Effect.gen(function* () {
@@ -153,7 +155,10 @@ function makeWriterWorld(
         clock: () => 1_000,
         catalog,
         openSession: () => store,
-        ports: { runTurn: options?.runTurn ?? makeTurnPort(resolvedRunner("ok"), false, () => 1_000) },
+        ports: {
+          runTurn: options?.runTurn ?? makeTurnPort(resolvedRunner("ok"), false, () => 1_000),
+          ...(options?.alarmCapability === undefined ? {} : { alarmCapability: options.alarmCapability }),
+        },
       },
       kernel,
       authority: { sessionId, owner: "unit-writer", fence },
@@ -186,6 +191,90 @@ function makeWriterWorld(
 
 const takeN = <A>(queue: Queue.Queue<A>, n: number): Effect.Effect<A[]> =>
   Effect.forEach(Array.from({ length: n }, (_, index) => index), () => Queue.take(queue).pipe(Effect.orDie));
+
+/** One committed capability arm row: the occurrence the chain guard admits. */
+function commitArmedRow(world: WriterWorld, sessionId: string, alarmId: string) {
+  const minted = armAction({
+    parentId: null,
+    sessionId,
+    purpose: "note.due",
+    at: 1,
+    supersedes: null,
+    alarmId,
+    sourceKey: "note",
+    payload: { note: alarmId },
+    armSeq: 1,
+    ts: 1,
+  });
+  return world.kernel
+    .commit({
+      sessionId,
+      owner: "unit-writer",
+      fence: world.handle.authority.fence,
+      now: 1,
+      expectedRevision: world.kernel.row(sessionId).revision,
+      actions: [minted.action],
+      state: "idle",
+    })
+    .pipe(Effect.orDie, Effect.as(minted));
+}
+
+const armedOccurrence = (sessionId: string, minted: ReturnType<typeof armAction>): SessionRequest =>
+  envelope(
+    sessionId,
+    "Alarm",
+    new AlarmOccurrence({
+      occurrenceId: minted.occurrenceId,
+      purpose: "note.due",
+      alarmId: minted.action.id.split(":arm:")[0] ?? "",
+      armSeq: 1,
+      sourceKey: "note",
+      payload: JSON.stringify({ note: "armed" }),
+      fireAt: 1,
+    }),
+  );
+
+test("an admitted occurrence with no capability composed folds to a recorded fired{stale}", () =>
+  runAgent(Effect.scoped(Effect.gen(function* () {
+    const sessionId = "writer-no-capability";
+    const world = yield* makeWriterWorld(sessionId);
+    const minted = yield* commitArmedRow(world, sessionId, "due-off");
+    yield* Queue.offer(world.queue, armedOccurrence(sessionId, minted));
+    const fiber = yield* Effect.forkIn(writerLoop(world.handle, world.queue, world.replier), world.handle.scope);
+    const [reply] = yield* takeN(world.replies, 1);
+    if (reply === undefined || !Exit.isSuccess(reply.exit)) throw new Error("expected a success exit");
+    expect(reply.exit.value).toEqual({ outcome: "stale" });
+    expect(world.kernel.actionById(`${minted.occurrenceId}:stale`)?.kind).toBe("alarm");
+    expect(world.kernel.actionById(`${minted.occurrenceId}:delivered`)).toBeUndefined();
+    yield* Fiber.interrupt(fiber);
+  }))));
+
+test("a typed AlarmWakeError from the capability folds the occurrence to fired{stale}", () =>
+  runAgent(Effect.scoped(Effect.gen(function* () {
+    const sessionId = "writer-wake-error";
+    const wakes: string[] = [];
+    const world = yield* makeWriterWorld(sessionId, {
+      alarmCapability: {
+        purposes: ["note.due"],
+        wake: (fired) =>
+          Effect.suspend(() => {
+            wakes.push(fired.occurrenceId);
+            return Effect.fail(new AlarmWakeError({ purpose: fired.purpose, reason: "injected" }));
+          }),
+      },
+    });
+    const minted = yield* commitArmedRow(world, sessionId, "due-fail");
+    yield* Queue.offer(world.queue, armedOccurrence(sessionId, minted));
+    const fiber = yield* Effect.forkIn(writerLoop(world.handle, world.queue, world.replier), world.handle.scope);
+    const [reply] = yield* takeN(world.replies, 1);
+    if (reply === undefined || !Exit.isSuccess(reply.exit)) throw new Error("expected a success exit");
+    // The handler ran exactly once; its typed failure is a recorded stale fact.
+    expect(wakes).toEqual([minted.occurrenceId]);
+    expect(reply.exit.value).toEqual({ outcome: "stale" });
+    expect(world.kernel.actionById(`${minted.occurrenceId}:stale`)?.kind).toBe("alarm");
+    expect(world.kernel.actionById(`${minted.occurrenceId}:delivered`)).toBeUndefined();
+    yield* Fiber.interrupt(fiber);
+  }))));
 
 test("one writer fiber serves envelopes strictly in arrival order", () =>
   runAgent(Effect.scoped(Effect.gen(function* () {
@@ -277,10 +366,17 @@ test("interruption fails every queued envelope with AdmissionFailure{shutdown}",
     yield* Queue.offerAll(world.queue, [
       promptEnvelope(sessionId, "p2"),
       staleAlarmEnvelope(sessionId, 9),
+      envelope(sessionId, "Resolve", {
+        requestId: "req-shutdown",
+        outcome: "cancelled",
+        payload: JSON.stringify({ actorId: "owner", kind: "human" }),
+        inputId: "req-shutdown:input",
+      }),
+      envelope(sessionId, "Read", { model: "history", cursor: 0 }),
     ]);
     yield* Fiber.interrupt(fiber);
-    const failed = yield* takeN(world.failures, 2);
-    expect(failed.map((entry) => entry.tag).sort()).toEqual(["Alarm", "Deliver"]);
+    const failed = yield* takeN(world.failures, 4);
+    expect(failed.map((entry) => entry.tag).sort()).toEqual(["Alarm", "Deliver", "Read", "Resolve"]);
     for (const entry of failed) {
       expect(entry.error).toBeInstanceOf(AdmissionFailure);
       if (entry.error instanceof AdmissionFailure) expect(entry.error.code).toBe("shutdown");
