@@ -1,8 +1,8 @@
 /*
  * ──────────────────────────────────────────────────────────────────────────
- * The former runtime bundle plane (`bundle()`, `BundlesLive`,
- * `BundleDefinitions`, `composeBundleLayers`) is deleted (#1255 P3): the one
- * loader path is `Manifest.define` -> `compose(manifest) -> Generation`
+ * The former runtime bundle plane (the imperative bundle loader and its
+ * definitions service) is deleted (#1255 P3): the one loader path is
+ * `Manifest.define` -> `compose(manifest) -> Generation`
  * below. Only the `NamedPolicyRegistry` Context tag survives — it is part of
  * the live `GenerationServices` contract the app's generation Layers provide.
  * ──────────────────────────────────────────────────────────────────────────

@@ -78,6 +78,13 @@ export interface AppRuntimeOptions {
   };
   /** Injected wall clock (#1245); absent = the bootstrap-captured Effect Clock. */
   readonly now?: () => number;
+  /**
+   * `"injected"` provides the injected `now` to the cluster host too (#1255
+   * P6), so persisted DeliverAt holds follow the test clock instead of the
+   * platform clock. Default keeps the host on the platform clock: fixtures
+   * that pin a small epoch rely on past-due envelopes delivering immediately.
+   */
+  readonly clusterClock?: "injected";
   /** Injected entropy source (#1245); absent = the platform CSPRNG. */
   readonly entropy?: EntropySource;
   readonly observations?: Context.Service.Shape<typeof ObservationSink>;
@@ -126,10 +133,14 @@ function wiredLayer(
   const generations = GenerationLayersLive.pipe(
     Layer.provideMerge(Layer.mergeAll(process, composed, plane, pointTable)),
   );
+  const hostClock =
+    options.clusterClock === "injected" && options.now !== undefined
+      ? wallClockLayer(now)
+      : Layer.empty;
   const host = clusterHostLayer({
     catalogPath: options.clusterStoragePath ?? options.catalogPath ?? ":memory:",
     entityIdleMs: options.entityIdleMs ?? 60_000,
-  }).pipe(Layer.orDie);
+  }).pipe(Layer.orDie, Layer.provide(hostClock));
   const seam =
     options.entity === undefined
       ? (() => {

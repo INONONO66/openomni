@@ -28,12 +28,14 @@ type Start = NonNullable<Parameters<typeof startOpenOmni>[0]>;
 export type AppFixtureOptions = Omit<Start, "sessionRuntime"> & {
   readonly llm?: Partial<FixtureLlm>;
   readonly sessionRuntime?: Start["sessionRuntime"] & { readonly clock?: () => number; readonly entropy?: () => string };
+  /** `"injected"` pins the cluster host's DeliverAt holds to the injected clock (#1255 P6). */
+  readonly clusterClock?: "injected";
 };
 
 /** Test composition supplies services through the actual AppLive runtime. */
 export async function appFixture(options: AppFixtureOptions) {
   if (options.config === undefined) throw new Error("fixture config required");
-  const { llm, sessionRuntime, ...app } = options;
+  const { llm, sessionRuntime, clusterClock, ...app } = options;
   const { clock, entropy, ...session } = sessionRuntime ?? {};
   const runtime = options.runtime ?? gatewayRuntime({ observations: Bus,
     composed: await productComposedHolder(options.config.bundlesOff),
@@ -41,6 +43,7 @@ export async function appFixture(options: AppFixtureOptions) {
     ...(options.config.sessionsDir === undefined ? {} : { sessionsDir: options.config.sessionsDir }),
     ...(options.config.entityIdleMs === undefined ? {} : { entityIdleMs: options.config.entityIdleMs }),
     now: clock,
+    ...(clusterClock === undefined ? {} : { clusterClock }),
     entropy: entropy === undefined ? undefined : testEntropy(entropy),
     llm: Layer.unwrap(Effect.map(Layer.build(LlmLive), (live) => Layer.succeed(Llm, { ...Context.get(live, Llm), ...llm }))),
   });

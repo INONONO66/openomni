@@ -696,3 +696,57 @@ test("#1247 S8 pin: validateAgentIndexPerimeter reads the pinned file and tolera
   const violations = await validateAgentIndexPerimeter(planted);
   expect(violations.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 });
+
+// ─── #1255: legacy-plane token searches ─────────────────────────────────────
+// The issue body's "tokens that must return no output": the deleted monitor
+// tool/ports files, the imperative session-tool constructors, bundle names in
+// boot, the legacy compose plane, and kernel-row @openomni/llm references.
+// These read the LIVE repository (via import.meta.dir), not a fixture.
+
+const repoRoot = join(import.meta.dir, "..");
+
+async function tokenMatches(pattern: RegExp, globs: readonly string[]): Promise<string[]> {
+  const hits: string[] = [];
+  for (const glob of globs) {
+    for await (const file of new Bun.Glob(glob).scan({ cwd: repoRoot })) {
+      const source = await Bun.file(join(repoRoot, file)).text();
+      if (pattern.test(source)) hits.push(file);
+    }
+  }
+  return hits.sort();
+}
+
+test("#1255 T1: the monitor tool and ports files are deleted", async () => {
+  expect(
+    await tokenMatches(/./, [
+      "apps/openomni/src/tools/monitor.ts",
+      "apps/openomni/src/composition/monitor-ports.ts",
+    ]),
+  ).toEqual([]);
+});
+
+test("#1255 T2: no imperative sessionTool(/toolSpec( constructors in the agent", async () => {
+  expect(await tokenMatches(/sessionTool\(|toolSpec\(/, ["packages/agent/src/**/*.ts"])).toEqual(
+    [],
+  );
+});
+
+test("#1255 T3: boot has zero bundle names — no 'monitor' in apps/openomni/src/index.ts", async () => {
+  expect(await tokenMatches(/monitor/, ["apps/openomni/src/index.ts"])).toEqual([]);
+});
+
+test("#1255 T4: the legacy compose plane is gone — no BundlesLive token anywhere", async () => {
+  expect(
+    await tokenMatches(/BundlesLive/, ["apps/*/src/**/*.ts", "packages/agent/src/**/*.ts"]),
+  ).toEqual([]);
+});
+
+test("#1255 T5: kernel rows never name @openomni/llm (was already 0 — stays 0)", async () => {
+  expect(await tokenMatches(/@openomni\/llm/, ["packages/agent/src/**/*.ts"])).toEqual([]);
+});
+
+test("#1255: Bun.cron( stays at 0 — the grid belongs to the cron bundle's pure next()", async () => {
+  expect(
+    await tokenMatches(/Bun\.cron\(/, ["apps/**/*.ts", "packages/**/*.ts"]),
+  ).toEqual([]);
+});
