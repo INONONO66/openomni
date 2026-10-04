@@ -544,7 +544,7 @@
   },
   {
     "name": "provision",
-    "description": "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|contact_merge|channel_add|channel_enable|channel_disable|secret_rotate|status. contact_promote and contact_merge suspend for Owner consent.",
+    "description": "Administer contacts, channels, credentials, and provisioning status. Use op=contact_add|contact_remove|contact_promote|contact_merge|channel_add|channel_enable|channel_disable|secret_rotate|bundle_enable|bundle_disable|status. contact_promote, contact_merge, bundle_enable and bundle_disable suspend for Owner consent.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -821,6 +821,52 @@
                     }
                   },
                   "required": ["secretId", "credential"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "bundle_enable"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The declared bundle name, e.g. monitor."
+                    }
+                  },
+                  "required": ["name"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["op", "args"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "bundle_disable"
+                },
+                "args": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "The declared bundle name, e.g. monitor."
+                    }
+                  },
+                  "required": ["name"],
                   "additionalProperties": false
                 }
               },

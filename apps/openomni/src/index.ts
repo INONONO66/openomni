@@ -81,7 +81,7 @@ import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
 import { alarmCapabilityView, createWatchPlane } from "./composition/watch-plane";
-import { ComposedGeneration, type ComposedContext } from "./composition/composed";
+import { ComposedGeneration, composedHolderOf } from "./composition/composed";
 import { appManifest } from "./manifest";
 import {
   acquireAppResource,
@@ -292,13 +292,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
       ...(config.bundlesOff === undefined ? {} : { off: config.bundlesOff }),
     });
     const generation = await Effect.runPromise(Bundle.compose(manifest));
-    const holder: { current: ComposedContext } = { current: { manifest, generation } };
+    const holder = composedHolderOf({ manifest, generation });
     return gatewayRuntime({
       // Cluster storage rides only on configs that resolved it (loadConfig
       // always does); injected literal test configs stay on the in-memory
       // host so no path outside their fixture directory is ever touched.
       ...(config.catalogPath === undefined ? {} : resolveClusterStorage(config)),
-      composed: { current: () => holder.current },
+      composed: holder,
     });
   };
   const runtime = options.runtime ?? (await composedRuntime());
@@ -472,6 +472,26 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
       materialize: materializeDeclaredPersons,
       removeIdentity: plane.stores.actors.removeIdentity,
+      // #1255 P4: bundle_enable/bundle_disable edit the off-list and re-run
+      // compose. The swap is atomic — a ComposeRefused leaves the previous
+      // composition current (rollback = nothing happened). In-flight turns
+      // keep their captured generation; sessions adopt at next turn start.
+      bundles: {
+        names: () => services.composed.current().manifest.bundles.map((bundle) => bundle.name),
+        off: () => services.composed.current().manifest.off,
+        set: async (off) => {
+          const manifest = appManifest({ alarm: watchPlane.contract, wake: watchPlane.wake, off });
+          const generation = await Effect.runPromise(Bundle.compose(manifest));
+          services.composed.swap({ manifest, generation });
+          // The recomposed gate rows seed a fresh policy generation alongside
+          // the swap, so adopted turns evaluate the matching row tables.
+          seedKernelPolicyRows(
+            plane.catalog.policies,
+            gateRowPolicySeeds(generation.rows),
+            services.pointTable,
+          );
+        },
+      },
     };
     // The cell door is bound per cell rather than globally, so a cell serves
     // exactly the tools its own dispatcher holds.

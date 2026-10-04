@@ -44,7 +44,9 @@ describe("benchmark run aggregation", () => {
     for (const value of ["5", "0", "-1", "5garbage", "1.5", "", "9007199254740992"]) {
       const result = await invoke(["--validate-input"], value);
       expect(result.code).toBe(value === "5" ? 0 : 1);
-      expect(result.stderr).toBe(value === "5" ? "" : "ERROR: BENCHMARK_RUNS must be a positive integer\n");
+      expect(result.stderr).toBe(
+        value === "5" ? "" : "ERROR: BENCHMARK_RUNS must be a positive integer\n",
+      );
     }
     expect(await invoke(["--reference", "--validate-input"], "2")).toEqual({ code: 0, stderr: "" });
   });
@@ -55,10 +57,24 @@ describe("benchmark run aggregation", () => {
       const results = await Promise.all(
         ["5", "0"].map(async (runs) => {
           const child = Bun.spawn(
-            [process.execPath, "run", join(import.meta.dir, "..", "summarize-benchmark-runs.ts"), "--validate-input"],
-            { cwd, env: { ...process.env, BENCHMARK_RUNS: runs }, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+            [
+              process.execPath,
+              "run",
+              join(import.meta.dir, "..", "summarize-benchmark-runs.ts"),
+              "--validate-input",
+            ],
+            {
+              cwd,
+              env: { ...process.env, BENCHMARK_RUNS: runs },
+              stdin: "ignore",
+              stdout: "pipe",
+              stderr: "pipe",
+            },
           );
-          const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+          const [code, stderr] = await Promise.all([
+            child.exited,
+            new Response(child.stderr).text(),
+          ]);
           return { code, stderr };
         }),
       );
@@ -72,7 +88,10 @@ describe("benchmark run aggregation", () => {
   });
 
   test("reference runs accept a consistent subset but head runs remain complete", () => {
-    const runs = [completeRun("1"), completeRun("2")].map((run) => ({ ...run, metrics: run.metrics.slice(0, 14) }));
+    const runs = [completeRun("1"), completeRun("2")].map((run) => ({
+      ...run,
+      metrics: run.metrics.slice(0, 14),
+    }));
     expect(validateBenchmarkRuns(runs, 2, "reference")).toHaveLength(28);
     expect(() => validateBenchmarkRuns(runs, 2)).toThrow(Error);
     expect(validateBenchmarkRuns([completeRun("1")], 1, "reference")).toHaveLength(22);
@@ -82,7 +101,10 @@ describe("benchmark run aggregation", () => {
     const run = completeRun("1");
     const subset = { ...run, metrics: run.metrics.slice(0, 14) };
     for (const name of ["foreign", EXPECTED_BENCHMARK_NAMES[0]]) {
-      const invalid = { ...subset, metrics: [...subset.metrics, { name, unit: "ns/op" as const, value: 1 }] };
+      const invalid = {
+        ...subset,
+        metrics: [...subset.metrics, { name, unit: "ns/op" as const, value: 1 }],
+      };
       expect(() => validateBenchmarkRuns([invalid], 1, "reference")).toThrow(Error);
     }
     expect(() => validateBenchmarkRuns([{ ...run, metrics: [] }], 1, "reference")).toThrow(Error);
@@ -100,16 +122,27 @@ describe("benchmark run aggregation", () => {
         await Bun.write(at(`runs/${run}/ledger/metrics.json`), JSON.stringify(subset));
         await Bun.write(at(`runs/${run}/ignored.txt`), "not benchmark data");
       }
-      const outputs = ["runs", "out/combined.json", "out/statistics.json", "out/summary.md"].map(at);
+      const outputs = ["runs", "out/combined.json", "out/statistics.json", "out/summary.md"].map(
+        at,
+      );
       const head = await invoke(outputs, "2");
-      expect({ code: head.code, incomplete: head.stderr.includes("incomplete metric set") }).toEqual({ code: 1, incomplete: true });
+      expect({
+        code: head.code,
+        incomplete: head.stderr.includes("incomplete metric set"),
+      }).toEqual({ code: 1, incomplete: true });
       expect(await invoke(["--reference", ...outputs], "2")).toEqual({ code: 0, stderr: "" });
       const Metric = z.object({ name: z.string(), unit: z.literal("ns/op"), value: z.number() });
       const combined = z.array(Metric).parse(await Bun.file(at("out/combined.json")).json());
-      expect(combined).toEqual([...subset].sort((left, right) => left.name.localeCompare(right.name)));
-      const stats = z.array(Metric.extend({ runs: z.number(), p50: z.number() })).parse(await Bun.file(at("out/statistics.json")).json());
+      expect(combined).toEqual(
+        [...subset].sort((left, right) => left.name.localeCompare(right.name)),
+      );
+      const stats = z
+        .array(Metric.extend({ runs: z.number(), p50: z.number() }))
+        .parse(await Bun.file(at("out/statistics.json")).json());
       expect(stats).toEqual(combined.map((metric) => ({ ...metric, runs: 2, p50: 1 })));
-      expect(await Bun.file(at("out/summary.md")).text()).toContain(`| ${combined[0]?.name} | 2 | 1 | 1 | 1 | 1 | 1 |`);
+      expect(await Bun.file(at("out/summary.md")).text()).toContain(
+        `| ${combined[0]?.name} | 2 | 1 | 1 | 1 | 1 | 1 |`,
+      );
       for (const invalid of [{}, [{ name: "invalid", unit: "ms/op", value: 1 }]]) {
         await Bun.write(at("runs/1/ledger/metrics.json"), JSON.stringify(invalid));
         expect((await invoke(["--reference", ...outputs], "2")).code).toBe(1);
@@ -117,7 +150,12 @@ describe("benchmark run aggregation", () => {
       mkdirSync(at("invalid-root"));
       await Bun.write(at("invalid-root/file.json"), "[]");
       const invalidRoot = await invoke([at("invalid-root"), ...outputs.slice(1)], "1");
-      expect({ code: invalidRoot.code, message: invalidRoot.stderr.startsWith("ERROR: Benchmark run root contains a non-directory entry") }).toEqual({ code: 1, message: true });
+      expect({
+        code: invalidRoot.code,
+        message: invalidRoot.stderr.startsWith(
+          "ERROR: Benchmark run root contains a non-directory entry",
+        ),
+      }).toEqual({ code: 1, message: true });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -129,7 +167,10 @@ describe("benchmark run aggregation", () => {
     process.chdir(root);
     try {
       for (const run of ["1", "2"]) {
-        await Bun.write(join(root, "bench-results/runs", run, "metrics.json"), JSON.stringify(completeRun(run).metrics));
+        await Bun.write(
+          join(root, "bench-results/runs", run, "metrics.json"),
+          JSON.stringify(completeRun(run).metrics),
+        );
       }
       expect(await invoke([], "2")).toEqual({ code: 0, stderr: "" });
       for (const output of ["combined.json", "statistics.json", "summary.md"]) {

@@ -4,7 +4,7 @@ const ObservationSink = Core.ObservationSink;
 import { Tool } from "@openomni/protocol";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
-import type { ComposedContext } from "../../src/composition/composed";
+import { composedHolderOf, type ComposedHolder } from "../../src/composition/composed";
 import { toolCapability } from "../../src/manifest";
 import { contentBlocks, messageEnd, messageStart, sseResponse } from "./anthropic-sse";
 
@@ -18,14 +18,14 @@ export function composedHolder(options: {
   readonly bundles?: readonly Bundle.BundleContract[];
   readonly capabilities?: readonly Bundle.CapabilityDefinition[];
   readonly off?: readonly string[];
-} = {}): { readonly current: () => ComposedContext } {
+} = {}): ComposedHolder {
   const manifest = Bundle.Manifest.define({
     capabilities: [toolCapability, ...(options.capabilities ?? [])],
     bundles: options.bundles ?? [],
     off: options.off ?? [],
   });
   const generation = Effect.runSync(Bundle.compose(manifest));
-  return { current: () => ({ manifest, generation }) };
+  return composedHolderOf({ manifest, generation });
 }
 
 export const ProviderRequest = z.object({

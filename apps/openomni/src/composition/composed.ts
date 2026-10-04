@@ -17,9 +17,25 @@ export interface ComposedContext {
   readonly generation: Bundle.Generation;
 }
 
+/** The swappable composition cell: `swap` is `provision{bundle_*}`'s recompose commit (#1255 P4). */
+export interface ComposedHolder {
+  readonly current: () => ComposedContext;
+  readonly swap: (next: ComposedContext) => void;
+}
+
+export function composedHolderOf(initial: ComposedContext): ComposedHolder {
+  let current = initial;
+  return {
+    current: () => current,
+    swap: (next) => {
+      current = next;
+    },
+  };
+}
+
 export class ComposedGeneration extends Context.Service<
   ComposedGeneration,
-  { readonly current: () => ComposedContext }
+  ComposedHolder
 >()("@openomni/openomni/ComposedGeneration") {}
 
 const EMPTY_MANIFEST = Bundle.Manifest.define({ capabilities: [], bundles: [], off: [] });

@@ -16,6 +16,7 @@ import {
   executeSecretRotate,
   type ProvisionPort,
 } from "./channels";
+import { executeBundleDisable, executeBundleEnable } from "./bundles";
 import { executeProvisionStatus } from "./status";
 function provisionExecutors(port: ProvisionPort, now: () => number) {
   return {
@@ -25,6 +26,8 @@ function provisionExecutors(port: ProvisionPort, now: () => number) {
     channel_enable: executeChannelEnable(port, now),
     channel_disable: executeChannelDisable(port, now),
     secret_rotate: executeSecretRotate(port, now),
+    bundle_enable: executeBundleEnable(port.bundles),
+    bundle_disable: executeBundleDisable(port.bundles),
     status: executeProvisionStatus(port),
   };
 }
@@ -62,6 +65,10 @@ export function executeProvision(port: ProvisionPort | undefined, now: () => num
         };
       case "secret_rotate":
         return { op: operation.op, ...(await run.secret_rotate(operation.args)) };
+      case "bundle_enable":
+        return { op: operation.op, ...(await run.bundle_enable(operation.args)) };
+      case "bundle_disable":
+        return { op: operation.op, ...(await run.bundle_disable(operation.args)) };
       case "status":
         return { op: operation.op, ...(await run.status(operation.args)) };
     }

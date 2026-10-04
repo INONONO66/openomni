@@ -2,7 +2,7 @@ import { Model, Bundle } from "@openomni/agent";
 const Llm = Model.Llm;
 const LlmLive = Model.LlmLive;
 import { Context, Effect, Layer } from "effect";
-import type { ComposedContext } from "../../src/composition/composed";
+import { composedHolderOf, type ComposedHolder } from "../../src/composition/composed";
 import { createWatchPlane } from "../../src/composition/watch-plane";
 import { gatewayRuntime } from "../../src/gateway";
 import { appManifest } from "../../src/manifest";
@@ -16,13 +16,11 @@ import { Bus } from "./bus";
  * composed tables (names, tools, rows, kinds) are what matter; the LIVE wake
  * router is always the booting process's own plane.
  */
-export async function productComposedHolder(
-  off?: readonly string[],
-): Promise<{ readonly current: () => ComposedContext }> {
+export async function productComposedHolder(off?: readonly string[]): Promise<ComposedHolder> {
   const plane = await createWatchPlane();
   const manifest = appManifest({ alarm: plane.contract, wake: plane.wake, ...(off === undefined ? {} : { off }) });
   const generation = await Effect.runPromise(Bundle.compose(manifest));
-  return { current: () => ({ manifest, generation }) };
+  return composedHolderOf({ manifest, generation });
 }
 
 export type FixtureLlm = Context.Service.Shape<typeof Llm>;
