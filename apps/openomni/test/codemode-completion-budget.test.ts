@@ -78,8 +78,8 @@ test("two cells in one turn each own a full completion budget", async () => {
     const result = await runEffect(dispatcher.execute({
       id: `cell-${index}`, tool: "eval", input: { operation: { op: "run", code, timeout: 15 } },
     }, { sessionId: "budget-session", turnId: "one-turn" }));
-    expect(result.isError, result.output).toBeUndefined();
-    expect(result.output).toBe("(32, True)");
+    expect(result.isError, result.content).toBeUndefined();
+    expect(result.content).toBe("(32, True)");
     expect(completions).toBe(index * 32);
   }
   expect([...cellCalls.values()]).toEqual([33, 33]);

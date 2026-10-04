@@ -184,48 +184,48 @@ for (const explicit of [false, true]) {
     test("all five filesystem verbs preserve values and route mutations", async () => {
       await fixture(explicit, async ({ root, path, cell, model }) => {
         const file = path("file");
-        expect((await cell("write", { path: file, content: "alpha\nbeta\n" })).output).toEqual({
+        expect((await cell("write", { path: file, content: "alpha\nbeta\n" })).structuredContent).toEqual({
           bytesWritten: 11,
         });
         expect(await readFile(join(root, "file"), "utf8")).toBe("alpha\nbeta\n");
-        expect((await cell("read", { path: file })).output).toEqual({
+        expect((await cell("read", { path: file })).structuredContent).toEqual({
           content: "alpha\nbeta\n",
           bytes: 11,
         });
-        expect((await model("read", { path: file })).output).toBe("alpha\nbeta\n");
-        expect((await cell("read", { path: file, offset: 2, limit: 1 })).output).toEqual({
+        expect((await model("read", { path: file })).content).toBe("alpha\nbeta\n");
+        expect((await cell("read", { path: file, offset: 2, limit: 1 })).structuredContent).toEqual({
           content: "beta",
           bytes: 11,
         });
         expect(
           (await cell("edit", { path: file, edits: [{ oldText: "beta", newText: "gamma" }] }))
-            .output,
+            .structuredContent,
         ).toEqual({ bytesWritten: 12 });
         expect(await readFile(join(root, "file"), "utf8")).toBe("alpha\ngamma\n");
-        expect((await cell("ls", { path: path(".") })).output).toEqual({
+        expect((await cell("ls", { path: path(".") })).structuredContent).toEqual({
           entries: [{ name: "file", kind: "file" }],
           truncated: false,
         });
         await mkdir(join(root, "nested"));
         await writeFile(join(root, "nested", "file"), "gamma in nested\n");
         await symlink(root, join(root, "loop"));
-        expect((await cell("find", { path: path("."), pattern: "**/file" })).output).toEqual({
+        expect((await cell("find", { path: path("."), pattern: "**/file" })).structuredContent).toEqual({
           paths: [file, path("nested/file")],
           truncated: false,
         });
-        expect((await cell("find", { path: path("."), pattern: "*", limit: 1 })).output).toEqual({
+        expect((await cell("find", { path: path("."), pattern: "*", limit: 1 })).structuredContent).toEqual({
           paths: [file],
           truncated: true,
         });
         const renderedFind = await model("find", { path: path("."), pattern: "*", limit: 1 });
-        expect(renderedFind.output.split("\n")[0]).toBe(file);
-        expect(renderedFind.output).toContain("[truncated:");
+        expect(renderedFind.content.split("\n")[0]).toBe(file);
+        expect(renderedFind.content).toContain("[truncated:");
         // A walk root must itself be a regular file or directory; symlinks are never followed.
         expect(await model("find", { path: path("loop"), pattern: "*" })).toMatchObject({
           isError: true,
           errorKind: "precondition_failed",
         });
-        expect((await cell("grep", { path: path("."), pattern: "gamma" })).output).toEqual({
+        expect((await cell("grep", { path: path("."), pattern: "gamma" })).structuredContent).toEqual({
           matches: [
             { path: file, line: 2, text: "gamma", before: [], after: [] },
             { path: path("nested/file"), line: 1, text: "gamma in nested", before: [], after: [] },
@@ -234,7 +234,7 @@ for (const explicit of [false, true]) {
         });
         expect(
           (await cell("grep", { path: path("."), pattern: "GAMMA", ignoreCase: true, context: 1 }))
-            .output,
+            .structuredContent,
         ).toMatchObject({
           matches: [
             { path: file, line: 2, before: ["alpha"], after: [""] },
@@ -242,15 +242,15 @@ for (const explicit of [false, true]) {
           ],
         });
         expect(
-          (await cell("grep", { path: path("."), pattern: "a.*", literal: true })).output,
+          (await cell("grep", { path: path("."), pattern: "a.*", literal: true })).structuredContent,
         ).toEqual({ matches: [], truncated: false });
-        expect((await cell("grep", { path: file, pattern: "^al", limit: 1 })).output).toEqual({
+        expect((await cell("grep", { path: file, pattern: "^al", limit: 1 })).structuredContent).toEqual({
           matches: [{ path: file, line: 1, text: "alpha", before: [], after: [] }],
           truncated: false,
         });
         const malformed = await model("grep", { path: file, pattern: "(" });
         expect(malformed.errorKind).toBe("precondition_failed");
-        expect(malformed.output).toContain("invalid regular expression: (");
+        expect(malformed.content).toContain("invalid regular expression: (");
       });
     });
     test("binary encoding, exact edit conflict, missing files, and full cell output", async () => {
@@ -260,7 +260,7 @@ for (const explicit of [false, true]) {
           (await cell("write", { path: path("binary"), content: binary, encoding: "base64" }))
             .isError,
         ).toBeUndefined();
-        expect((await cell("read", { path: path("binary"), encoding: "base64" })).output).toEqual({
+        expect((await cell("read", { path: path("binary"), encoding: "base64" })).structuredContent).toEqual({
           content: binary,
           bytes: 4,
         });
@@ -286,14 +286,14 @@ for (const explicit of [false, true]) {
         });
         const content = "x".repeat(1_100_000);
         await writeFile(join(root, "large"), content);
-        expect((await cell("read", { path: path("large") })).output).toEqual({
+        expect((await cell("read", { path: path("large") })).structuredContent).toEqual({
           content,
           bytes: content.length,
         });
         const rendered = await model("read", { path: path("large") });
-        expect(rendered.output).toHaveLength(32_000);
-        expect(rendered.output).toContain("truncated:");
-        expect(rendered.output).toContain("1100000 bytes original");
+        expect(rendered.content).toHaveLength(32_000);
+        expect(rendered.content).toContain("truncated:");
+        expect(rendered.content).toContain("1100000 bytes original");
       });
     });
     test("bash returns stdout, stderr, exit status and has no persistent cwd", async () => {
@@ -305,7 +305,7 @@ for (const explicit of [false, true]) {
               command: `cd '${root}'; printf out; printf err >&2; exit 7`,
               ...machine,
             })
-          ).output,
+          ).structuredContent,
         ).toEqual({
           stdout: "out",
           stderr: "err",
@@ -314,7 +314,7 @@ for (const explicit of [false, true]) {
           truncated: false,
         });
         expect(
-          (await cell("bash", { command: "printf '%s' \"$PWD\"", ...machine })).output,
+          (await cell("bash", { command: "printf '%s' \"$PWD\"", ...machine })).structuredContent,
         ).toMatchObject({ stdout: "/", exitCode: 0 });
       });
     });
@@ -354,17 +354,17 @@ test.each([
     await writeFile(join(root, "d:e", "f:g"), "needle in directory\n");
     const file = `${prefix}${join(root, "a:b")}`;
     const nested = `${prefix}${join(root, "d:e", "f:g")}`;
-    expect((await cell("grep", { path: `${prefix}${root}`, pattern: "needle" })).output).toEqual({
+    expect((await cell("grep", { path: `${prefix}${root}`, pattern: "needle" })).structuredContent).toEqual({
       matches: [
         { path: file, line: 1, text: "needle in file", before: [], after: [] },
         { path: nested, line: 1, text: "needle in directory", before: [], after: [] },
       ],
       truncated: false,
     });
-    expect((await model("grep", { path: `${prefix}${root}`, pattern: "needle" })).output).toBe(
+    expect((await model("grep", { path: `${prefix}${root}`, pattern: "needle" })).content).toBe(
       `${file}:1:needle in file\n${nested}:1:needle in directory`,
     );
-    expect((await cell("find", { path: `${prefix}${root}`, pattern: "d:e/*" })).output).toEqual({
+    expect((await cell("find", { path: `${prefix}${root}`, pattern: "d:e/*" })).structuredContent).toEqual({
       paths: [nested],
       truncated: false,
     });
@@ -375,16 +375,16 @@ test("R3 real daemon Unicode read preserves cells and reports exact dropped byte
   await fixture(true, async ({ root, path, cell, model }) => {
     const content = `a${"\u{1F600}".repeat(25_000)}`;
     await writeFile(join(root, "unicode"), content);
-    expect((await cell("read", { path: path("unicode") })).output).toEqual({
+    expect((await cell("read", { path: path("unicode") })).structuredContent).toEqual({
       content,
       bytes: 100_001,
     });
     const result = await model("read", { path: path("unicode") });
     expect(result.isError).toBeUndefined();
-    expect(result.output).toBe(
+    expect(result.content).toBe(
       `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
     );
-    expect(Buffer.from(result.output, "utf8").toString("utf8")).toBe(result.output);
+    expect(Buffer.from(result.content, "utf8").toString("utf8")).toBe(result.content);
   });
 });
 
@@ -392,7 +392,7 @@ test("a real daemon read assembles successive bounded chunks without dropping th
   await fixture(true, async ({ root, path, cell }) => {
     const content = `${"a".repeat(Machine.FS_READ_MAX_BYTES)}TAIL_SENTINEL`;
     await writeFile(join(root, "chunked"), content);
-    expect((await cell("read", { path: path("chunked") })).output).toEqual({
+    expect((await cell("read", { path: path("chunked") })).structuredContent).toEqual({
       content,
       bytes: Buffer.byteLength(content),
     });
@@ -411,7 +411,7 @@ test("a truncated remote read without progress is refused instead of looping", a
     try {
       const result = await model("read", { path: path("stalled") });
       expect(result.isError).toBe(true);
-      expect(result.output).toContain("remote read made no progress");
+      expect(result.content).toContain("remote read made no progress");
       expect(read).toHaveBeenCalledTimes(1);
     } finally {
       read.mockRestore();
@@ -429,7 +429,7 @@ test("a truncated remote listing is refused rather than presented as complete", 
     try {
       const result = await model("ls", { path: path(".") });
       expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
-      expect(result.output).toContain("directory exceeds daemon entry limit");
+      expect(result.content).toContain("directory exceeds daemon entry limit");
       expect(list).toHaveBeenCalledTimes(1);
     } finally {
       list.mockRestore();

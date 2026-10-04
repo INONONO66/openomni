@@ -121,9 +121,10 @@ describe("provision output boundary", () => {
       toolCallId: "provision-invalid-output",
       id: "provision-invalid-output",
       toolName: "provision",
-      output: "provision produced invalid output",
+      content: "provision produced invalid output",
       isError: true,
       errorKind: "invalid_output",
+      details: { errorKind: "invalid_output" },
     });
   });
 });
@@ -504,7 +505,7 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
       operation: { op: "status", args: {} },
     });
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("provision refused: provisioning is not composed");
+    expect(result.content).toBe("provision refused: provisioning is not composed");
   });
 
   test("provision_status reports source, vault state, and per-instance verdicts", async () => {
@@ -560,7 +561,7 @@ describe("refusal branches", () => {
         () => NOW,
       )(input);
       expect(result).toMatchObject({ isError: true, errorKind: "invalid_input" });
-      expect(result.output).toContain("provision refused");
+      expect(result.content).toContain("provision refused");
     }
   });
 

@@ -54,7 +54,7 @@ describe("cell-door executor propagation", () => {
       // serialize on one module-level chain, so nesting one inside a running
       // isolated program deadlocks the chain for the whole test process.
       const nested = await runAgent(inner.executeCell({ id: "call-inner", tool: "echo", input: { value: "nested" } }, context));
-      return String(nested.output);
+      return String(nested.structuredContent);
     })]))));
     const result = yield* outer.execute({ id: "call-outer", tool: "outer", input: {} }, context);
     expect(result.isError).toBeUndefined();

@@ -235,7 +235,7 @@ describe("authenticated gateway ingress", () => {
         input: {},
       });
       if (result === undefined) return { type: "stop" };
-      outputs.push(result.output ?? "");
+      outputs.push(result.content ?? "");
       sink.onMessage(assistantMessage(input, { id: crypto.randomUUID(), text: "noted" }));
       return { type: "stop" };
     }));
@@ -258,7 +258,7 @@ describe("authenticated gateway ingress", () => {
     }));
     await resident.ingest("change configuration", true);
     expect(execution?.isError).toBe(true);
-    expect(execution?.output).toContain("evidence-only");
+    expect(execution?.content).toContain("evidence-only");
   });
 });
 

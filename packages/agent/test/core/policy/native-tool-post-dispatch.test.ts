@@ -72,7 +72,7 @@ describe("tool post-policy refusal", () => {
     it(`${door} door uses a valid transformed output`, async () => isolated(Effect.scoped(Effect.gen(function* () {
       const dispatcher = runAgentSync(createDispatcher({ executor: transformingExecutor("masked") }).pipe(Effect.provide(catalogLayer([definition]))));
       const result = yield* (door === "model" ? dispatcher.execute(call, context) : dispatcher.executeCell(call, context));
-      expect(door === "model" ? result.content : result.output).toEqual(door === "model" ? "masked" : { id: "masked" });
+      expect(door === "model" ? result.content : result.structuredContent).toEqual(door === "model" ? "masked" : { id: "masked" });
     }))));
 
     it(`${door} door rejects a transformed output that breaks the schema`, async () => isolated(Effect.scoped(Effect.gen(function* () {

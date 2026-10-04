@@ -161,7 +161,7 @@ describe("tool dispatcher public contract", () => {
             expect(result).toMatchObject({
               isError: true,
               errorKind: "execution_failed",
-              output: String(failure),
+              content: String(failure),
             });
           }
           const terminals = recording.committed.flatMap((action) => {
@@ -198,7 +198,7 @@ describe("tool dispatcher public contract", () => {
           const cell = yield* dispatch.executeCell(call, context);
           const model = yield* dispatch.execute(call, context);
 
-          expect(cell.output).toBe(output);
+          expect(cell.structuredContent).toBe(output);
           expect(typeof model.content).toBe("string");
           expect(model.content).toHaveLength(32_000);
           const marker = "\n[truncated: 8054 bytes dropped; 40000 bytes original]";
@@ -219,7 +219,7 @@ describe("tool dispatcher public contract", () => {
           const dispatch = dispatcher([definition({ execute: async () => output })]);
           const cell = yield* dispatch.executeCell(call, context);
           const model = yield* dispatch.execute(call, context);
-          expect(cell.output).toBe(output);
+          expect(cell.structuredContent).toBe(output);
           expect(model.isError).toBeUndefined();
           expect(model.content.length).toBeLessThanOrEqual(32_000);
           expect(Buffer.from(model.content, "utf8").toString("utf8")).toBe(model.content);
@@ -251,7 +251,7 @@ describe("tool dispatcher public contract", () => {
           expect(model.content).toBe(
             `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
           );
-          expect((yield* dispatch.executeCell(call, context)).output).toBe(output);
+          expect((yield* dispatch.executeCell(call, context)).structuredContent).toBe(output);
         }),
       ),
     ));

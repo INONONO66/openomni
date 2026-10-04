@@ -318,8 +318,6 @@ type ToolDispatchResult = Tool.Result & { readonly content: string; readonly err
 type CellToolDispatchResult = Omit<ToolDispatchResult, "output" | "content"> & {
   /** Cell-door successes skip render, so they carry typed data without model text. */
   readonly content?: string;
-  /** Pre-D5 alias of structuredContent kept for the cell-door consumer in the app composition (Lane 2 switch). */
-  readonly output?: PlainValue;
 };
 
 interface DispatcherOptions {
@@ -439,7 +437,6 @@ function finishResult(
       toolCallId: call.id,
       id: call.id,
       toolName: call.tool,
-      output: output.data,
       structuredContent: output.data,
     } satisfies CellToolDispatchResult;
   }
@@ -873,11 +870,9 @@ function executionContext(call: Tool.Call, context: DispatchContext): ToolExecut
 }
 
 function renderedResult(result: ToolDispatchResult | CellToolDispatchResult): ToolDispatchResult {
-  const { output, content, ...settled } = result;
+  const { content, ...settled } = result;
   if (content === undefined) throw new AgentInvariantViolation("model tool result must carry rendered content");
-  if (output !== undefined && typeof output !== "string")
-    throw new AgentInvariantViolation("model tool output must be rendered text");
-  return output === undefined ? { ...settled, content } : { ...settled, content, output };
+  return { ...settled, content };
 }
 
 function failed(call: Tool.Call, content: string, errorKind: ToolErrorKind): ToolDispatchResult {
@@ -886,9 +881,6 @@ function failed(call: Tool.Call, content: string, errorKind: ToolErrorKind): Too
     id: call.id,
     toolName: call.tool,
     content,
-    // Pre-D5 alias for the cell-door consumer in the app composition (Lane 2
-    // switches it to content); model readers go through toolResultText.
-    output: content,
     isError: true,
     errorKind,
     details: { errorKind },

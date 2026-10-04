@@ -130,7 +130,7 @@ test("app root runs machine read write shell and code through one eval cell", as
           },
         });
         if (call === undefined) return { type: "stop" };
-        sink.onMessage(assistantMessage(input, { text: call.output }));
+        sink.onMessage(assistantMessage(input, { text: String(call.content) }));
         return { type: "stop" };
       }),
     },
@@ -214,7 +214,7 @@ test("a cell drives a named persistent terminal through m.pty (#1273)", async ()
           input: { machine: MACHINE_ID, session: "door", command: "export DOOR_X=42; echo door-$DOOR_X" },
         });
         if (echo === undefined) return { type: "stop" };
-        sink.onMessage(assistantMessage(input, { text: `${call.output} || ${echo.output}` }));
+        sink.onMessage(assistantMessage(input, { text: `${call.content} || ${echo.content}` }));
         return { type: "stop" };
       }),
     },
@@ -294,7 +294,7 @@ test("a cell creates three child sessions through send_message", async () => {
         if (executed === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
-            text: `offered=[${offered.join(",")}] cell=${executed?.output ?? "nothing"}`,
+            text: `offered=[${offered.join(",")}] cell=${executed?.content ?? "nothing"}`,
           }),
         );
         return { type: "stop" };
@@ -367,7 +367,7 @@ test("the catalog remains available while machine execution refuses without atta
         if (forced === undefined) return { type: "stop" };
         sink.onMessage(
           assistantMessage(input, {
-            text: `forced=${forced?.output ?? "nothing"}`,
+            text: `forced=${forced?.content ?? "nothing"}`,
           }),
         );
         return { type: "stop" };
@@ -530,7 +530,7 @@ async function startCellHarness(ports: Partial<ToolPorts>) {
     stop: (...args: Parameters<typeof portsForCells.cell.stop>) => recordState(portsForCells.cell.stop(...args)),
   } };
   const executeResult = dispatchModelTool("eval", { ...ports, cells: observedCells }, CELL_ORIGIN);
-  const execute = async (input: PlainObject): Promise<string> => String((await executeResult(input)).output);
+  const execute = async (input: PlainObject): Promise<string> => String((await executeResult(input)).content);
   return {
     states,
     socketPath,

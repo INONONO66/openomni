@@ -70,7 +70,7 @@ test("worker actor send is blocked by a compiled B row before transport", async 
   directories.push(fixture.directory);
   const result = await fixture.send(actorMessage("outside"));
   expect(result.isError).toBe(true);
-  expect(result.output).toContain("message.worker.actor");
+  expect(result.content).toContain("message.worker.actor");
   expect(calls()).toBe(0);
 });
 
@@ -189,7 +189,7 @@ test.each([
     content: "corrupt-evidence",
   });
   expect(result.isError).toBe(true);
-  expect(result.output).toContain(error);
+  expect(result.content).toContain(error);
   const stashed = db
     .query("SELECT json_extract(intent, '$.inputHash') AS hash FROM corrupt_keep")
     .all() as { hash: string }[];
@@ -391,7 +391,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         : undefined;
     const result = await f.send(send, midTurn);
     expect(result.isError).toBe(true);
-    expect(result.output).toContain(`message.resident.${check}`);
+    expect(result.content).toContain(`message.resident.${check}`);
   });
 }
 
@@ -407,7 +407,7 @@ test("real compiled B worker cannot interrupt its parent", async () => {
     content: "NO",
   });
   expect(result.isError).toBe(true);
-  expect(result.output).toContain("message.worker.interrupt_parent");
+  expect(result.content).toContain("message.worker.interrupt_parent");
   expect(promptActions(f.plane, "parent")).toEqual([]);
 });
 

@@ -97,7 +97,7 @@ describe("the completion tool", () => {
     };
     // The fenced answer is unwrapped, validated, and returned as canonical JSON text.
     expect(await run({ prompt: "count", system: "terse", model: "mini", schema })).toMatchObject({
-      output: '{"n":7}',
+      content: '{"n":7}',
     });
     expect(seen[0]).toMatchObject({ prompt: "count", model: "mini" });
     expect(seen[0]?.system).toStartWith("terse\n\n");
@@ -105,11 +105,11 @@ describe("the completion tool", () => {
     for (const message of ["does not satisfy the schema", "is not JSON"]) {
       const result = await run({ prompt: "count", schema });
       expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
-      expect(result.output).toContain(message);
+      expect(result.content).toContain(message);
     }
     expect(seen).toHaveLength(3);
     // Without a schema nothing is added to the system text and nothing is parsed.
-    expect(await run({ prompt: "free" })).toMatchObject({ output: "" });
+    expect(await run({ prompt: "free" })).toMatchObject({ content: "" });
     expect(seen[3]).toEqual({ prompt: "free" });
     // Options are typed: an unsupported option is invalid input, never forwarded.
     expect(await run({ prompt: "x", temperature: 1 })).toMatchObject({
@@ -145,12 +145,12 @@ describe("the completion tool", () => {
     const refusal = {
       isError: true,
       errorKind: "precondition_failed",
-      output: `completion refused: the per-cell budget of ${MAX_COMPLETION_CALLS} sub-model calls is spent`,
+      content: `completion refused: the per-cell budget of ${MAX_COMPLETION_CALLS} sub-model calls is spent`,
     };
 
     for (let i = 1; i <= MAX_COMPLETION_CALLS; i++) {
       const result = await run("cell-a", `q${i}`);
-      expect(result.output).toBe(`call ${i}`);
+      expect(result.structuredContent).toBe(`call ${i}`);
       expect(result.isError).toBeUndefined();
     }
     expect(await run("cell-a", "one too many")).toMatchObject(refusal);
@@ -188,7 +188,7 @@ describe("the completion tool", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("Error: llm failed: provider on fire");
+    expect(result.content).toBe("Error: llm failed: provider on fire");
   });
 
   it("refuses an unlisted model instead of guessing an SDK for it", async () => {
@@ -242,7 +242,7 @@ describe("the completion tool", () => {
       ),
     );
     expect(result.isError).toBeUndefined();
-    expect(result.output).toEqual("ok");
+    expect(result.structuredContent).toEqual("ok");
   });
 });
 
@@ -421,7 +421,7 @@ describe("catalog gating for the rlm tools", () => {
       ),
     );
     expect(result.isError).toBe(true);
-    expect(result.output).toBe("completion refused: sub-model port is not composed");
+    expect(result.content).toBe("completion refused: sub-model port is not composed");
   });
 
   it("projects completion without target metadata", () => {
