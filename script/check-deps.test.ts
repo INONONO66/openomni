@@ -697,13 +697,33 @@ test("#1247 S8 pin: validateAgentIndexPerimeter reads the pinned file and tolera
   expect(violations.some((line) => line.includes("exports rogue outside the pinned S8 perimeter"))).toBe(true);
 });
 
-// ─── #1255: legacy-plane token searches ─────────────────────────────────────
-// The issue body's "tokens that must return no output": the deleted monitor
-// tool/ports files, the imperative session-tool constructors, bundle names in
-// boot, the legacy compose plane, and kernel-row @openomni/llm references.
-// These read the LIVE repository (via import.meta.dir), not a fixture.
+// ─── #1255: retired-surface conformance ─────────────────────────────────────
+// ONE conformance assertion over the issue body's "tokens that must return no
+// output" (the deleted monitor tool/ports files, the imperative session-tool
+// constructors, bundle names in boot, the legacy compose plane, kernel-row
+// @openomni/llm references, the ambient cron grid). It reads the LIVE
+// repository via import.meta.dir — never a fixture — so a regrowth of any
+// retired surface names the file that grew it.
 
 const repoRoot = join(import.meta.dir, "..");
+
+const RETIRED_SURFACES: Readonly<Record<string, { pattern: RegExp; globs: readonly string[] }>> = {
+  "monitor tool/ports files": {
+    pattern: /./,
+    globs: ["apps/openomni/src/tools/monitor.ts", "apps/openomni/src/composition/monitor-ports.ts"],
+  },
+  "sessionTool(/toolSpec( in the agent": {
+    pattern: /sessionTool\(|toolSpec\(/,
+    globs: ["packages/agent/src/**/*.ts"],
+  },
+  "bundle name 'monitor' in boot": { pattern: /monitor/, globs: ["apps/openomni/src/index.ts"] },
+  "legacy compose plane BundlesLive": {
+    pattern: /BundlesLive/,
+    globs: ["apps/*/src/**/*.ts", "packages/agent/src/**/*.ts"],
+  },
+  "@openomni/llm in kernel rows": { pattern: /@openomni\/llm/, globs: ["packages/agent/src/**/*.ts"] },
+  "ambient Bun.cron( grid": { pattern: /Bun\.cron\(/, globs: ["apps/**/*.ts", "packages/**/*.ts"] },
+};
 
 async function tokenMatches(pattern: RegExp, globs: readonly string[]): Promise<string[]> {
   const hits: string[] = [];
@@ -716,37 +736,11 @@ async function tokenMatches(pattern: RegExp, globs: readonly string[]): Promise<
   return hits.sort();
 }
 
-test("#1255 T1: the monitor tool and ports files are deleted", async () => {
-  expect(
-    await tokenMatches(/./, [
-      "apps/openomni/src/tools/monitor.ts",
-      "apps/openomni/src/composition/monitor-ports.ts",
-    ]),
-  ).toEqual([]);
-});
-
-test("#1255 T2: no imperative sessionTool(/toolSpec( constructors in the agent", async () => {
-  expect(await tokenMatches(/sessionTool\(|toolSpec\(/, ["packages/agent/src/**/*.ts"])).toEqual(
-    [],
-  );
-});
-
-test("#1255 T3: boot has zero bundle names — no 'monitor' in apps/openomni/src/index.ts", async () => {
-  expect(await tokenMatches(/monitor/, ["apps/openomni/src/index.ts"])).toEqual([]);
-});
-
-test("#1255 T4: the legacy compose plane is gone — no BundlesLive token anywhere", async () => {
-  expect(
-    await tokenMatches(/BundlesLive/, ["apps/*/src/**/*.ts", "packages/agent/src/**/*.ts"]),
-  ).toEqual([]);
-});
-
-test("#1255 T5: kernel rows never name @openomni/llm (was already 0 — stays 0)", async () => {
-  expect(await tokenMatches(/@openomni\/llm/, ["packages/agent/src/**/*.ts"])).toEqual([]);
-});
-
-test("#1255: Bun.cron( stays at 0 — the grid belongs to the cron bundle's pure next()", async () => {
-  expect(
-    await tokenMatches(/Bun\.cron\(/, ["apps/**/*.ts", "packages/**/*.ts"]),
-  ).toEqual([]);
+test("#1255: every retired surface greps to zero in the live repository", async () => {
+  const hits: Record<string, string[]> = {};
+  for (const [surface, { pattern, globs }] of Object.entries(RETIRED_SURFACES)) {
+    hits[surface] = await tokenMatches(pattern, globs);
+  }
+  const expected = Object.fromEntries(Object.keys(RETIRED_SURFACES).map((surface) => [surface, []]));
+  expect(hits).toEqual(expected);
 });

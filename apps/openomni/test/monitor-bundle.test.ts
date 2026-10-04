@@ -343,17 +343,15 @@ test("a bundle off at boot composes out: no tool face, no bundle adoption, unkno
 
 // ─── 4. recompose re-routes alarm purposes (live capability follows the swap) ─
 
-type LlmStep = Parameters<Parameters<typeof suite.boot>[0]["llm"] extends infer L
-  ? L extends { run?: infer R }
-    ? NonNullable<R>
-    : never
-  : never>;
+type StepInput = Parameters<typeof requestToolStep>[0];
+type StepSink = Parameters<typeof requestToolStep>[1];
+type Step = (input: StepInput, sink: StepSink) => void;
 
 test("bundle_disable cron: a due tick folds fired{stale} with no prompt; bundle_enable restores arming and routing", async () => {
   // Clock the whole app (cluster DeliverAt holds included) from one mutable
   // instant; the test advances it instead of sleeping.
   let now = T0;
-  const cronCreate = (id: string): ((...args: LlmStep) => void) => (input, sink) =>
+  const cronCreate = (id: string): Step => (input, sink) =>
     requestToolStep(input, sink, {
       id,
       tool: "monitor",
@@ -365,14 +363,14 @@ test("bundle_disable cron: a due tick folds fired{stale} with no prompt; bundle_
         },
       },
     });
-  const bundleOp = (op: "bundle_enable" | "bundle_disable"): ((...args: LlmStep) => void) => (input, sink) =>
+  const bundleOp = (op: "bundle_enable" | "bundle_disable"): Step => (input, sink) =>
     requestToolStep(input, sink, {
       id: `${op}-cron`,
       tool: "provision",
       input: { operation: { op, args: { name: "cron" } } },
     });
   // Scripted model: each wave consumes one step; an empty queue ends the wave.
-  const steps: ((...args: LlmStep) => void)[] = [];
+  const steps: Step[] = [];
   let calls = 0;
   const app = await suite.boot({
     config: suite.config("monitor-bundle-reroute-", {

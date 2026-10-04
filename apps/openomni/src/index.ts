@@ -460,7 +460,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // #1254 H3: ONE committing arm path — the watch plane's live-arm registry.
     // The LIVE capability registers exactly the composed on-set's purposes;
     // `bundles.set` rebuilds it on every successful recompose behind the
-    // stable view the monitor ports and the entity's capability port hold.
+    // stable view the watch ports and the entity's capability port hold.
     const liveAlarm = {
       current: await runAppBoot(
         runtime,
