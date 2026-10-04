@@ -3,7 +3,7 @@ import type { PlainValue, PolicyRow } from "@openomni/protocol";
 import { compileGateRows, type GateHandler } from "../src/core/gate/compose";
 import {
   compilePolicySnapshot,
-  createNamedPolicyRegistry,
+  createHandlerTable,
   KERNEL_POLICY_REGISTRY,
 } from "../src/core/gate/compile";
 import { fullPointTable, gateRow } from "./helpers/gate-rows";
@@ -222,7 +222,7 @@ describe("production snapshot replay (#1251 r3)", () => {
 
   it("the evaluation carries the replayable gate decision with its consulted responses", () => {
     let calls = 0;
-    const registry = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+    const registry = createHandlerTable({ ...KERNEL_POLICY_REGISTRY, transformers: [
       ...KERNEL_POLICY_REGISTRY.transformers,
       { name: "demo/mask", apply: () => { calls += 1; return { text: "masked" }; } },
     ] });
@@ -245,14 +245,14 @@ describe("production snapshot replay (#1251 r3)", () => {
   });
 
   it("replays a recorded decision even when the handler can no longer run", () => {
-    const working = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+    const working = createHandlerTable({ ...KERNEL_POLICY_REGISTRY, transformers: [
       ...KERNEL_POLICY_REGISTRY.transformers,
       { name: "demo/mask", apply: () => ({ text: "masked" }) },
     ] });
     const recordedBy = compilePolicySnapshot({ registry: working, generation: 1, rows: rows(1) });
     const first = recordedBy.evaluate(input);
 
-    const broken = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+    const broken = createHandlerTable({ ...KERNEL_POLICY_REGISTRY, transformers: [
       ...KERNEL_POLICY_REGISTRY.transformers,
       { name: "demo/mask", apply: () => { throw new Error("handler must not run during replay"); } },
     ] });
@@ -268,7 +268,7 @@ describe("production snapshot replay (#1251 r3)", () => {
   });
 
   it("a decision is bound to its policy generation: a gen-1 allow never replays under gen-2 (#1251 r4)", () => {
-    const registry = createNamedPolicyRegistry(KERNEL_POLICY_REGISTRY);
+    const registry = createHandlerTable(KERNEL_POLICY_REGISTRY);
     const allowRows = (generation: number): PolicyRow.Row[] => [
       { name: "compaction", kind: "compaction", phase: "pre", generation, priority: 1_000,
         match: { encodingVersion: 1, value: {} },

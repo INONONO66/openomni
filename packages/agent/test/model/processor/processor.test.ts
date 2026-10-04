@@ -219,7 +219,7 @@ describe("Processor processor", () => {
     expect(capture.toolResults).toHaveLength(1);
     expect(capture.toolResults[0]).toMatchObject({
       toolCallId: "call-orphan",
-      output: "Processing was interrupted",
+      content: "Processing was interrupted",
       isError: true,
     });
   });

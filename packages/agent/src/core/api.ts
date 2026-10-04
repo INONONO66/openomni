@@ -15,3 +15,8 @@ export {
   ArmRefused, AlarmWakeError, RESERVED_PURPOSES,
   type AlarmCapability, type AlarmWakeContext, type ArmVerb, type AlarmFired, type AlarmWakeOutcome,
 } from "./alarm";
+// #1255 S1: the declaration contract a plugin consumes is `Capability.define`
+// alone (`Bundle.define` / `Manifest.define` are product-side, surfaced by the
+// root `Bundle` barrel); the alarm seam is what the alarm plugin publishes.
+export { Capability, type CapabilityDefinition, type SeamTag } from "./capability";
+export { AlarmSeam } from "./alarm";

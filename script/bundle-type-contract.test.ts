@@ -2,49 +2,44 @@ import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import ts from "typescript";
 
+// #1255: a bundle's acquisition Layer is typed at define time —
+// `Layer<never, SessionError, BundleLayerServices>` — so a Layer that reads a
+// service outside the generation seed or fails outside
+// the typed session errors is refused by the compiler, not discovered at
+// acquisition. Kinds, points and steps are capability-owned and never typed
+// onto a bundle.
 const root = resolve(import.meta.dir, "..");
 const header = `import { Context, Effect, Layer } from "effect";
-import { bundle, compose, bundlePolicyTag } from "../packages/agent/src/core/bundle";
-class A extends Context.Service<A, number>()("@openomni/bundle/a/Value") {}
-class B extends Context.Service<B, string>()("@openomni/bundle/b/Value") {}
+import { defineBundle, seam } from "../packages/agent/src/core/capability";
+import { AgentFailure, type SessionError } from "../packages/agent/src/core/failure";
+import { Entropy, ObservationSink, type BundleLayerServices } from "../packages/agent/src/core/ports";
 class External extends Context.Service<External, boolean>()("@openomni/test/External") {}
-const ALive = Layer.succeed(A, 7);
-const BLive = Layer.effect(B, Effect.map(A, String));
-const a = bundle({name:"a", requires:[], provides:[A], layer:ALive});
-const b = bundle({name:"b", requires:[A], provides:[B], layer:BLive});
-const seed = {requires:[], provides:[], layer:Layer.empty} as const;
+const Alarm = seam("@openomni/agent/capability/alarm");
+const seeded = Layer.effectDiscard(Effect.gen(function* () { yield* Entropy; yield* ObservationSink; }));
+const failing = Layer.effectDiscard(Effect.fail(new AgentFailure({ operation: "fixture", cause: "typed" })));
 `;
 const positive = `${header}
-const ExternalSeed = Layer.effect(A, Effect.flatMap(External, value => value ? Effect.succeed(7) : Effect.fail("seed-error" as const)));
-const composed = compose({requires:[External], provides:[A], layer:ExternalSeed}, [b]);
+const probe = defineBundle({ name: "probe", requires: [Alarm], layer: seeded });
+const typed = defineBundle({ name: "typed", requires: [], layer: failing });
+const bare = defineBundle({ name: "bare", requires: [] });
 type Equal<A,B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
-const output: Equal<Layer.Success<typeof composed>, A | B> = true;
-const input: Equal<Layer.Services<typeof composed>, External> = true;
-const error: Equal<Layer.Error<typeof composed>, "seed-error" | import("../packages/agent/src/core/failure").BundleError> = true;
-const tuple: Equal<typeof a.provides, readonly [typeof A]> = true;
-const original: Equal<typeof a.layer, typeof ALive> = true;
-const ObserverLive = Layer.effectDiscard(Effect.asVoid(B));
-const observer = bundle({name:"observer",requires:[B],provides:[],layer:ObserverLive});
-const complete = compose(seed,[a,b,observer]);
-const result = Effect.runPromise(Effect.all([A,B]).pipe(Effect.provide(complete)));
+const name: Equal<typeof probe.name, "probe"> = true;
+const layer: Equal<typeof probe.layer, Layer.Layer<never, SessionError, BundleLayerServices> | undefined> = true;
+const contract: Equal<typeof typed.contract, "bundle"> = true;
+const requires: Equal<typeof bare.requires, readonly { readonly key: string }[]> = true;
+const key: Equal<typeof Alarm.key, string> = true;
 `;
 const negatives = [
-  ["output mismatch", `bundle({name:"a",requires:[],provides:[B],layer:ALive});`, 2554],
-  ["input mismatch", `bundle({name:"b",requires:[],provides:[B],layer:BLive});`, 2554],
-  ["identity-only forged Tag", `bundle({name:"a",requires:[],provides:[{key:A.key,_op:"Tag"}],layer:ALive});`, 2554],
-  ["later provider", `compose(seed,[b,a]);`, 2554],
-  ["missing provider", `compose(seed,[b]);`, 2554],
-  ["wrong service value", `Layer.succeed(A,"wrong");`, 2345],
-  ["unprovided Effect", `Effect.runPromise(A);`, 2345],
-  ["dropped seed environment", `const SeedLive = Layer.effect(A,Effect.map(External,()=>7)); const live = compose({requires:[External],provides:[A],layer:SeedLive},[b]); const closed: Layer.Layer<A|B,import("../packages/agent/src/core/failure").BundleError> = live;`, 2322],
-  ["reserved policy shape", `class InvalidPolicy extends Context.Service<InvalidPolicy, number>()("@openomni/bundle/b/Policy") {} const live = Layer.succeed(InvalidPolicy,1); bundle({name:"b",requires:[],provides:[InvalidPolicy],layer:live});`, 2554],
-  ["seed output mismatch", `compose({requires:[],provides:[B],layer:ALive},[]);`, 2554],
-  ["seed input mismatch", `compose({requires:[],provides:[B],layer:BLive},[]);`, 2554],
+  ["external service", `defineBundle({ name: "x", requires: [], layer: Layer.effectDiscard(Effect.asVoid(External)) });`, 2322],
+  ["foreign error", `defineBundle({ name: "x", requires: [], layer: Layer.effectDiscard(Effect.fail("boom" as const)) });`, 2322],
+  ["capability-owned kinds", `defineBundle({ name: "x", requires: [], kinds: {} });`, 2322],
+  ["capability-owned points", `defineBundle({ name: "x", requires: [], points: [] });`, 2322],
+  ["forged seam", `defineBundle({ name: "x", requires: [{ name: "alarm" }] });`, 2353],
 ] as const;
 
-test("bundle compiler contract retains exact types and rejects metadata and environment mismatches", () => {
+test("bundle contract types the acquisition layer and refuses capability-owned declarations", () => {
   const fixtures = new Map<string, string>([[resolve(root, "script/bundle-positive.fixture.ts"), positive], ...negatives.map(([name, code]) => [resolve(root, `script/bundle-${name.replaceAll(" ", "-")}.fixture.ts`), `${header}${code}`] as const)]);
-  const options: ts.CompilerOptions = { strict: true, noUncheckedIndexedAccess: true, noEmit: true, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, skipLibCheck: true, types: ["bun"] };
+  const options: ts.CompilerOptions = { strict: true, noUncheckedIndexedAccess: true, noEmit: true, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, skipLibCheck: true, types: [] };
   const host = ts.createCompilerHost(options);
   const read = host.readFile.bind(host);
   const exists = host.fileExists.bind(host);
@@ -52,7 +47,7 @@ test("bundle compiler contract retains exact types and rejects metadata and envi
   host.fileExists = (file) => fixtures.has(file) || exists(file);
   const program = ts.createProgram([...fixtures.keys()], options, host);
   const diagnostics = ts.getPreEmitDiagnostics(program);
-  const owned = diagnostics.filter((item) => item.file?.fileName === resolve(root, "packages/agent/src/core/bundle.ts") || item.file?.fileName.endsWith("bundle-positive.fixture.ts"));
+  const owned = diagnostics.filter((item) => item.file?.fileName === resolve(root, "packages/agent/src/core/capability.ts") || item.file?.fileName.endsWith("bundle-positive.fixture.ts"));
   expect(owned.map((item) => ts.flattenDiagnosticMessageText(item.messageText, "\n"))).toEqual([]);
   for (const [name, , code] of negatives) {
     const path = resolve(root, `script/bundle-${name.replaceAll(" ", "-")}.fixture.ts`);

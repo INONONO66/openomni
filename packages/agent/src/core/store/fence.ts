@@ -1,5 +1,6 @@
 import {
   canonicalDigest,
+  type ConfigureDisabled,
   type ConsumptionSettings,
   Inbox,
   PlainObjectSchema,
@@ -86,6 +87,8 @@ export interface MaterializeInput {
     readonly blocks: readonly SessionGeneration.SystemBlock[];
   };
   readonly policyGeneration: number;
+  /** The composed manifest's `Generation.hash` this session adopts at creation (#1255). */
+  readonly manifestHash?: string;
   readonly actionId: string;
   readonly at: number;
 }
@@ -109,6 +112,7 @@ function materializeIn(
       bundles: input.bundles,
       system: input.system,
       policyGeneration: input.policyGeneration,
+      ...(input.manifestHash === undefined ? {} : { manifestHash: input.manifestHash }),
     }),
   ).pipe(
     Effect.flatMap((snapshot) =>
@@ -466,6 +470,8 @@ export function generationSnapshot(input: {
     readonly blocks: readonly SessionGeneration.SystemBlock[];
   };
   readonly policyGeneration: number;
+  /** The composed manifest's `Generation.hash` this snapshot adopts (#1255). */
+  readonly manifestHash?: string;
 }): SessionGeneration.Snapshot {
   assertUniqueTools(input.tools);
   assertUniqueBlocks(input.system.blocks);
@@ -484,6 +490,7 @@ export function generationSnapshot(input: {
       .join("\n\n"),
     systemHash: canonicalDigest(blocks),
     policyGeneration: input.policyGeneration,
+    ...(input.manifestHash === undefined ? {} : { manifestHash: input.manifestHash }),
   });
 }
 
@@ -497,6 +504,8 @@ export function configureAction(input: {
   readonly settings?: ConsumptionSettings;
   /** Fork ancestry (#1257); present only on a forked child's genesis configure. */
   readonly forkedFrom?: SessionGeneration.ForkAncestry;
+  /** The composed off cascade (#1255); present only when a manifest composed. */
+  readonly disabled?: ConfigureDisabled;
   readonly at: number;
 }): LedgerAction.Append {
   return {
@@ -510,6 +519,7 @@ export function configureAction(input: {
         operation: input.operation,
         ...(input.settings === undefined ? {} : { settings: input.settings }),
         ...(input.forkedFrom === undefined ? {} : { forkedFrom: input.forkedFrom }),
+        ...(input.disabled === undefined ? {} : { disabled: input.disabled.map((entry) => ({ ...entry })) }),
       },
     },
     effect: {

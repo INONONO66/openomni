@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
 import { PlainObjectSchema } from "@openomni/protocol";
 import { Cause, Effect, Fiber } from "effect";
-import { createNamedPolicyRegistry } from "../../../src/core/gate/compile";
+import { createHandlerTable } from "../../../src/core/gate/compile";
 import { requestLedger, crashAfterRequestOpen, failure } from "../../helpers/effect-g1";
 import { z } from "zod";
 import { createExecutor } from "../../../src/core/gate/decide";
@@ -17,7 +17,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
   const recorded = yield* requestLedger();
   let transformations = 0;
   const executed: string[] = [];
-  const registry = createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+  const registry = createHandlerTable({ ...KERNEL_POLICY_REGISTRY, transformers: [
     ...KERNEL_POLICY_REGISTRY.transformers,
     { name: "demo/normalize", apply: () => { transformations += 1; return { text: `admitted-${transformations}` }; } },
   ] });
@@ -42,7 +42,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
   // Recovery replays the committed gate decision: the transformer is gone
   // from this process (it throws), yet the recorded output still admits (r3).
   const recoveredPolicy = compilePolicySnapshot({
-    registry: createNamedPolicyRegistry({ ...KERNEL_POLICY_REGISTRY, transformers: [
+    registry: createHandlerTable({ ...KERNEL_POLICY_REGISTRY, transformers: [
       ...KERNEL_POLICY_REGISTRY.transformers,
       { name: "demo/normalize", apply: () => { throw new Error("handler must not run during replay"); } },
     ] }),
@@ -127,7 +127,7 @@ for (const door of ["model", "cell", "wave"] as const) {
         : door === "cell" ? dispatcher.executeCell(call, context) : dispatcher.execute(call, context));
       expect(executed).toEqual(replacement === null ? [] : [replacement]);
       expect(rendered).toEqual(replacement === null || door === "cell" ? [] : [replacement]);
-      expect(result).toMatchObject(replacement === null ? { isError: true, errorKind: "invalid_input" } : { output: replacement });
+      expect(result).toMatchObject(replacement === null ? { isError: true, errorKind: "invalid_input" } : door === "cell" ? { structuredContent: replacement } : { content: replacement });
       const actions = sessionTree(kernel, id);
       const intent = actions.find((action) => action.kind === "tool" && PlainObjectSchema.parse(action.intent.value).phase === "intent");
       expect(intent?.intent.value).toMatchObject({ value: { text: replacement }, originalArgs: { text: "original" } });

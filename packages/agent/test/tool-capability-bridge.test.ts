@@ -6,13 +6,13 @@ import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import type { AnyToolDefinition, LedgerAction, PlainValue, ToolExecutionContext } from "@openomni/protocol";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { z } from "zod";
-import { NamedPolicyRegistry } from "../src/core/bundle";
+import { GenerationHandlers } from "../src/core/compose";
 import { CommitFailed, InvocationClosed, ToolBodyFailed, type ExecutionError } from "../src/core/failure";
 import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocation, type InvocationFrame } from "../src/core/gate/decide";
 import type { ExecutionResult } from "../src/core/gate/decide";
 import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/core/run";
 import { ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
-import { createTurnDispatcher, sessionTool } from "../src/core/tool";
+import { createTurnDispatcher, projectTools } from "../src/core/tool";
 import { runAgent } from "./helpers/executor";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
@@ -42,10 +42,10 @@ function tool(name: string, execute: (input: PlainValue, context: ToolExecutionC
 }
 function bundle(generation: number, definitions: readonly AnyToolDefinition[], bus: TestObservationBus): GenerationBundle {
   const snapshot = SessionHandleStore.generationSnapshot({ generation, revertTo: generation - 1,
-    tools: definitions.map((definition: AnyToolDefinition) => sessionTool(definition)),
+    tools: projectTools(definitions).session,
     system: { preset: "bridge", blocks: [] }, policyGeneration: 1 });
   return { id: { sessionId: fiberSessionId, generation }, snapshot, activate: Effect.void,
-    layer: Layer.mergeAll(Layer.succeed(ObservationSink, bus), Layer.succeed(NamedPolicyRegistry, KERNEL_POLICY_REGISTRY),
+    layer: Layer.mergeAll(Layer.succeed(ObservationSink, bus), Layer.succeed(GenerationHandlers, KERNEL_POLICY_REGISTRY),
       Layer.succeed(SessionLayer, { snapshot, policy: nativePolicy }), Layer.succeed(ToolCatalog, { definitions })) };
 }
 function setup(definitions: readonly AnyToolDefinition[], signal?: AbortSignal) {
@@ -82,8 +82,8 @@ function detachedRequestCase(rejectBody: boolean, reason: "settled" | "failed") 
       tool("inner", async () => { bodies += 1; return "forbidden"; }),
     ]);
     if (rejectBody)
-      expect(yield* fixture.run).toMatchObject({ isError: true, errorKind: "execution_failed", output: "Error: outer-rejected" });
-    else expect(yield* fixture.run).toMatchObject({ output: "settled" });
+      expect(yield* fixture.run).toMatchObject({ isError: true, errorKind: "execution_failed", content: "Error: outer-rejected" });
+    else expect(yield* fixture.run).toMatchObject({ content: "settled" });
     const pending = yield* awaitSignal(ready);
     const before = sessionTree(fiberSessionId);
     for (const work of pending)
@@ -102,7 +102,7 @@ test("bridge: nested failure in an admitted async body preserves its typed outco
     Deferred.doneUnsafe(observed, Exit.succeed(result));
     return "handled";
   })]);
-  expect(yield* fixture.run).toMatchObject({ output: "handled" });
+  expect(yield* fixture.run).toMatchObject({ content: "handled" });
   const result = yield* awaitSignal(observed);
   expect(failure(result)).toMatchObject({ _tag: "ToolBodyFailed", tool: "nested", cause: "nested-outcome" });
   expect(failure(result)).not.toMatchObject({ _tag: "AgentFailure" });
@@ -141,7 +141,7 @@ test("bridge: two concurrent nested calls resolve independently in call order", 
   yield* awaitSignal(secondReplied);
   expect(replies).toEqual(["two"]);
   yield* Deferred.succeed(first, "first");
-  expect(yield* Fiber.join(running)).toMatchObject({ output: "both" });
+  expect(yield* Fiber.join(running)).toMatchObject({ content: "both" });
   expect(replies).toEqual(["two", "one"]);
 })));
 
@@ -230,7 +230,7 @@ test("bridge: a forked invocation owns its lifetime independently of the body vi
     Deferred.doneUnsafe(frames, Exit.succeed({ view, forked: forkInvocation("forked") }));
     return "forked";
   })]);
-  expect(yield* fixture.run).toMatchObject({ output: "forked" });
+  expect(yield* fixture.run).toMatchObject({ content: "forked" });
   const { view, forked } = yield* awaitSignal(frames);
   expect(() => withInvocation(view, () => requireOpenInvocation())).toThrow(new InvocationClosed({ tool: "outer", reason: "settled" }));
   expect(withInvocation(forked.frame, () => requireOpenInvocation())).toBe(forked.frame);
@@ -267,7 +267,7 @@ test("bridge: generation-one frame refuses nested dispatch after committed gener
   expect(yield* awaitSignal(observed)).toMatchObject({ _tag: "GenerationUnavailable", generation: 1 });
   expect(bodies).toBe(0);
   expect(isolatedLedger().kernel.latestGenerationFor(fiberSessionId).generation).toBe(2);
-  expect(yield* Fiber.join(running)).toMatchObject({ output: "old-outer-settled" });
+  expect(yield* Fiber.join(running)).toMatchObject({ content: "old-outer-settled" });
   expect(sessionTree(fiberSessionId).filter((action: LedgerAction.Node) => action.kind === "tool" && action.intent.value !== null &&
     typeof action.intent.value === "object" && !Array.isArray(action.intent.value) && action.intent.value.callId === "stale")).toHaveLength(0);
   yield* Scope.close(fixture.captureScope, Exit.void);

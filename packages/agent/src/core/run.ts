@@ -10,9 +10,11 @@ export { GenerationRawSlots } from "./gate/decide";
 import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./entity";
 import type { InspectRequest, InspectionPage } from "../inspect";
-import { Inbox, isReservedAlarmPurpose, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
+import { Inbox, isReservedAlarmPurpose, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type ConfigureDisabled, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, AgentResult } from "./types";
 import type { decideSessionAdmission } from "./mailbox";
+import type { Generation } from "./compose";
+import { projectTools } from "./tool";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
 import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { LedgerError } from "./store/errors";
@@ -174,6 +176,36 @@ export interface SessionRuntime {
    * detaches immediately.
    */
   readonly closeGraceMs?: number;
+  /**
+   * The product's currently composed manifest (#1255): read at every turn
+   * start. A `hash` differing from the session's adopted `manifestHash`
+   * appends one `session.configure{operation: "compose", disabled}` through
+   * the single writer BEFORE the turn captures its generation; the in-flight
+   * turn is untouched. Absent = static manifest, no rotation.
+   */
+  readonly composed?: { readonly current: () => ComposedManifest | undefined };
+}
+
+/**
+ * The journal-facing face of one composed `Generation` (#1255): exactly what a
+ * session adopts at its next turn start. Recomputed from empty state by
+ * `compose` on every manifest change; never patched.
+ */
+export interface ComposedManifest {
+  readonly hash: string;
+  readonly tools: readonly SessionGeneration.Tool[];
+  readonly bundles: readonly string[];
+  readonly disabled: ConfigureDisabled;
+}
+
+/** Projects a composed `Generation` once into its adoption face. */
+export function composedManifest(generation: Generation): ComposedManifest {
+  return {
+    hash: generation.hash,
+    tools: projectTools(generation.tools).session,
+    bundles: generation.bundles,
+    disabled: generation.disabled,
+  };
 }
 
 /** Captured once by registry/request acquisition, never an alternate public service API. */
@@ -325,6 +357,12 @@ export interface SessionEntityPorts {
    * Absent means exactly the core registrations.
    */
   readonly inputRegistrations?: readonly string[];
+  /**
+   * The capability journal kinds the composed generation registers (#1255):
+   * session admission refuses a pending input of an absent capability's kind
+   * with `unknown_kind`. Absent means exactly the built-ins.
+   */
+  readonly capabilityKinds?: readonly string[];
   /** Optional domain-revision capture for request bindings, as on `SessionRuntime`. */
   readonly requestDomainRevisions?: (
     request: SessionTransition.Request,
@@ -442,6 +480,9 @@ export function createSessionConfiguration(
         generation, revertTo: previous.generation, tools: nextTools,
         system: nextSystem, policyGeneration: previous.policyGeneration,
         bundles: previous.bundles,
+        // #1255: an app-level configure keeps the adopted manifest — dropping
+        // the hash would force a spurious compose adoption at next turn start.
+        ...(previous.manifestHash === undefined ? {} : { manifestHash: previous.manifestHash }),
       });
       const configured = SessionHandleStore.configureAction({
         id: entropy(), sessionId, parentId: kernel.latestAction(sessionId)?.id ?? null,

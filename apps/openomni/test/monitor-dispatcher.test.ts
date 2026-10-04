@@ -5,7 +5,7 @@ const eraseTool = Core.eraseTool;
 const ExecutorContextError = Core.ExecutorContextError;
 const ToolRefused = Core.ToolRefused;
 import { Effect, Exit, Cause } from "effect";
-import { createMonitorTool } from "../src/tools/monitor";
+import { createMonitorTool } from "../src/bundles/monitor";
 import { alarmChainReads, foldAlarmChains } from "../src/composition/alarm-plane";
 import { runEffect } from "./helpers/effect";
 import { FIXTURE_BASE, awaitScheduled, scheduledAt, withEntityAlarmPorts } from "./helpers/watch-fixture";

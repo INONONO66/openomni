@@ -3,7 +3,7 @@ import { Alarm, Cron, type LedgerAction, type PlainObject, PlainObjectSchema } f
 import { Effect } from "effect";
 import { z } from "zod";
 import { MonitorRefused, type MonitorPorts, type WatchState } from "../tools/core/watch";
-import { CRON_SOURCE, CRON_TICK, CronPayload } from "./bundles/cron";
+import { CRON_SOURCE, CRON_TICK, CronPayload } from "../bundles/cron";
 import type { SessionKernel } from "./cluster-runtime";
 
 /**

@@ -127,7 +127,7 @@ describe("ChatAgent.run() streaming", () => {
         Effect.succeed({
           id: crypto.randomUUID(),
           toolCallId: call.id,
-          output: "tool result",
+          content: "tool result",
           isError: false,
         }),
     });
@@ -136,7 +136,7 @@ describe("ChatAgent.run() streaming", () => {
     const result = await isolated(agent.run(defaultInput, sink));
 
     expect(sink.toolCalls.map((call: Tool.Call) => call.tool)).toEqual(["test_tool"]);
-    expect(sink.toolResults.map((r: Tool.Result) => r.output)).toEqual(["tool result"]);
+    expect(sink.toolResults.map((r: Tool.Result) => r.content)).toEqual(["tool result"]);
     expect(result.finishReason).toBe("stop");
   });
 });

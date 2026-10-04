@@ -36,9 +36,17 @@ export const ForkedFrom = z
   .strict();
 export type ForkedFrom = z.infer<typeof ForkedFrom>;
 
+/** One intended deactivation of the off cascade (#1255): `because` is the root `off` name. */
+export const DisabledEntry = z.object({ name: z.string().min(1), because: z.string().min(1) }).strict();
+export type DisabledEntry = z.infer<typeof DisabledEntry>;
+
+/** The composed generation's full off cascade, journaled with the configure. */
+export const Disabled = z.array(DisabledEntry).readonly();
+export type Disabled = z.infer<typeof Disabled>;
+
 export const sessionConfigure = declare(
   "session.configure",
-  RowBody.superRefine(refineField("intent", "settings", Settings)).superRefine(
-    refineField("intent", "forkedFrom", ForkedFrom),
-  ),
+  RowBody.superRefine(refineField("intent", "settings", Settings))
+    .superRefine(refineField("intent", "disabled", Disabled))
+    .superRefine(refineField("intent", "forkedFrom", ForkedFrom)),
 );

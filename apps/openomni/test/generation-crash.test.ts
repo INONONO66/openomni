@@ -1,14 +1,13 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Core, Bundle } from "@openomni/agent";
-const BundlesLive = Bundle.BundlesLive;
+import { Core } from "@openomni/agent";
 const GenerationLayers = Core.GenerationLayers;
 const SessionLayer = Core.SessionLayer;
 import { Effect } from "effect";
 import { z } from "zod";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { AppLedger } from "../src/composition/cluster-runtime";
-import { auditBundle } from "./helpers/bundle-fixture";
+import { auditBundle, composedHolder } from "./helpers/bundle-fixture";
 import { eventSignal } from "./helpers/event-signal";
 import { residentSuite } from "./helpers/resident-suite";
 import { Bus } from "./helpers/bus";
@@ -38,7 +37,7 @@ test("G1 prerequisite: SIGKILL at committed configure rearms current and recorde
     await stdout;
   } finally { if (child.exitCode === null) { child.kill("SIGKILL"); await exited; } }
   const audit = auditBundle(auditPath);
-  const runtime = gatewayRuntime({ observations: Bus, catalogPath, sessionsDir, bundles: BundlesLive([audit.definition]) });
+  const runtime = gatewayRuntime({ observations: Bus, catalogPath, sessionsDir, composed: composedHolder({ bundles: [audit.contract] }) });
   try {
     const snapshots = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const plane = yield* AppLedger;

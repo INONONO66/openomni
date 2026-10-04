@@ -59,7 +59,7 @@ describe("tool post-policy refusal", () => {
   it("returns an error result through the model door", async () => isolated(Effect.scoped(Effect.gen(function* () {
     const result = yield* runAgentSync(createDispatcher({ executor: recordingExecutor({ policy: accountOutputDeniedPolicy() }).executor }).pipe(Effect.provide(catalogLayer([definition])))).execute(call, context);
     expect(result).toMatchObject({ isError: true, errorKind: "precondition_failed" });
-    expect(result.output).toContain("output_denied");
+    expect(result.content).toContain("output_denied");
   }))));
 
   it("throws through the cell door", async () => isolated(Effect.scoped(Effect.gen(function* () {
@@ -72,7 +72,7 @@ describe("tool post-policy refusal", () => {
     it(`${door} door uses a valid transformed output`, async () => isolated(Effect.scoped(Effect.gen(function* () {
       const dispatcher = runAgentSync(createDispatcher({ executor: transformingExecutor("masked") }).pipe(Effect.provide(catalogLayer([definition]))));
       const result = yield* (door === "model" ? dispatcher.execute(call, context) : dispatcher.executeCell(call, context));
-      expect(result.output).toEqual(door === "model" ? "masked" : { id: "masked" });
+      expect(door === "model" ? result.content : result.structuredContent).toEqual(door === "model" ? "masked" : { id: "masked" });
     }))));
 
     it(`${door} door rejects a transformed output that breaks the schema`, async () => isolated(Effect.scoped(Effect.gen(function* () {

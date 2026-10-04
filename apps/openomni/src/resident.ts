@@ -6,13 +6,14 @@ import { Effect } from "effect";
 const createSessionChatRunner = Core.createSessionChatRunner;
 const createTurnDispatcher = Core.createTurnDispatcher;
 const failureFacts = Core.failureFacts;
-const sessionTool = Core.sessionTool;
+const projectTools = Core.projectTools;
 const ToolRefused = Core.ToolRefused;
 type ChatAgentConfig = Core.ChatAgentConfig;
 type SessionRunner = Core.SessionRunner;
 type SessionRuntime = Core.SessionRuntime;
 import { traceIdFromUuid, type AnyToolDefinition, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
+import type { ComposedContext } from "./composition/composed";
 import { pinnedModelSelection, restoreModelSelection } from "./composition/model-selection";
 import { messageMaterialization } from "./composition/message-session";
 import { classifyTurnFailure } from "./observation/llm-failure";
@@ -28,7 +29,8 @@ export function refuseEvidenceOnly(call: Tool.Call): Tool.Result & { readonly er
     id: call.id,
     toolCallId: call.id,
     toolName: call.tool,
-    output: refusal.message,
+    content: refusal.message,
+    details: { errorKind: refusal.errorKind },
     errorKind: refusal.errorKind,
     isError: true,
     settlement: "settled",
@@ -40,7 +42,8 @@ export interface ResidentOptions {
   readonly modelFallbacks?: readonly Model.Ref[];
   readonly apiKey: string;
   readonly transport?: ChatAgentConfig["transport"];
-  readonly bundles?: readonly string[];
+  /** The composed-generation holder (#1255 P3); absent = legacy static faces (tests). */
+  readonly composed?: { readonly current: () => ComposedContext };
   readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>,  never, import("@openomni/agent").Model.Llm | ObservationSink>;
   readonly tools: ToolPorts;
   readonly toolDefinitions?: readonly AnyToolDefinition[];
@@ -61,6 +64,24 @@ export function createResident(options: ResidentOptions) {
     resident: definitionsFor("resident"),
     worker: definitionsFor("worker"),
     catalogLayer: (select) => toolCatalogLayer(ports, (tools) => select([...tools, ...(options.toolDefinitions ?? [])])),
+  };
+  /**
+   * The journaled tool faces of one role under the current composition
+   * (#1255 P3): bundle-owned names come ONLY from the composed generation —
+   * an off bundle's face disappears even though its ported catalog definition
+   * still exists — while everything else keeps its catalog face.
+   */
+  const composedFaces = (role: LedgerSession.Role) => {
+    const composed = options.composed?.current();
+    if (composed === undefined) return projectTools(definitions[role]).session;
+    const bundleOwned = new Set(
+      composed.manifest.bundles.flatMap((bundle) => bundle.tools.map((tool) => tool.name)),
+    );
+    const base = definitions[role].filter((tool) => !bundleOwned.has(tool.name));
+    const bundleTools = composed.generation.tools.filter(
+      (tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role),
+    );
+    return projectTools([...base, ...bundleTools]).session;
   };
   const runnerFor =
     (row: LedgerSession.Row): SessionRunner =>
@@ -128,16 +149,36 @@ export function createResident(options: ResidentOptions) {
       if (!["resident", "worker", "native", "process"].includes(runner)) {
         throw new AppInvariantError(`runner is not registered: ${runner}`);
       }
+      const composed = options.composed?.current();
       return messageMaterialization(options.policyGeneration, ports.id)({
         id,
         parentId,
         role,
         runner,
-        tools: definitions[role].map(sessionTool),
-        bundles: options.bundles ?? [],
+        tools: composedFaces(role),
+        bundles: composed?.generation.bundles ?? [],
         preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : WORKER_PRESET),
         at: ports.clock(),
+        ...(composed === undefined ? {} : { manifestHash: composed.generation.hash }),
       });
+    },
+    /**
+     * The rotation adoption face (#1255 S3): `SessionRuntime.composed.current()`.
+     * Tools are the role union — the dispatcher still filters per role at
+     * capture, and `manifestHash` equality keeps unchanged sessions append-free.
+     */
+    adoption(): Core.ComposedManifest | undefined {
+      const composed = options.composed?.current();
+      if (composed === undefined) return undefined;
+      const union = [...composedFaces("resident")];
+      for (const face of composedFaces("worker"))
+        if (!union.some((existing) => existing.name === face.name)) union.push(face);
+      return {
+        hash: composed.generation.hash,
+        tools: union,
+        bundles: composed.generation.bundles,
+        disabled: composed.generation.disabled,
+      };
     },
   };
 }

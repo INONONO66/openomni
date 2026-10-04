@@ -9,6 +9,7 @@ import {
   type Message,
   type PlainObject,
   type Tool,
+  toolResultText,
 } from "@openomni/protocol";
 import type { Sink } from "../sink";
 import type { Provider } from "../provider";
@@ -235,7 +236,7 @@ export namespace Processor {
         sink.onToolResult(result);
         publishInfo(events, sessionID, traceId, now, "sink.tool.completed", {
           toolCallId: result.toolCallId,
-          outputLength: result.output.length,
+          outputLength: toolResultText(result).length,
           isError: result.isError === true,
         });
       },

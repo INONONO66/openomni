@@ -4,7 +4,7 @@ import { GateComposeError, type GatePointTable } from "../points";
 import { compileGateRows, type CompiledGate } from "./compose";
 import { legacyPointOf } from "./migrate";
 import type { CompiledRow, Match } from "./legacy-rows";
-import type { NamedPolicyRegistry } from "./registry";
+import type { HandlerTable } from "./registry";
 
 // ─── projection: historical rows onto the fourteen-point gate (#1251) ───
 
@@ -98,7 +98,7 @@ export function projectGeneration(
   parsed: readonly CompiledRow[],
   generation: number,
   table: GatePointTable,
-  registry: NamedPolicyRegistry,
+  registry: HandlerTable,
 ): ProjectedGeneration {
   const ordered = [...parsed].sort(
     (left, right) => right.priority - left.priority || left.name.localeCompare(right.name),

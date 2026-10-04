@@ -8,8 +8,8 @@ import {
   sendPrompt,
 } from "../../../../packages/agent/test/helpers/cluster-runtime";
 import { createAlarmMonitorPorts, createLiveArmRegistry } from "../../src/composition/alarm-plane";
-import { cronPurposes } from "../../src/composition/bundles/cron";
-import { monitorPurposes } from "../../src/composition/bundles/monitor";
+import { cronPurposes } from "../../src/bundles/cron";
+import { monitorPurposes, monitorSeedRows } from "../../src/bundles/monitor";
 import {
   createAppLedger,
   type AppLedgerPlane,
@@ -58,7 +58,7 @@ export async function watchFixture(sessionId: string, owner: string): Promise<Wa
     },
     closeAll: () => Promise.resolve(),
   };
-  seedKernelPolicyRows(plane.catalog.policies);
+  seedKernelPolicyRows(plane.catalog.policies, monitorSeedRows);
   const kernel = plane.openKernel(sessionId);
   await runEffect(
     kernel.materialize({

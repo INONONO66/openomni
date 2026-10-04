@@ -175,7 +175,7 @@ async function serve() {
         }
         const result = requestToolStep(input, sink, ORIGINAL_CALL);
         if (result !== undefined)
-          throw new Error(`unexpected pre-crash tool result: ${result.output}`);
+          throw new Error(`unexpected pre-crash tool result: ${result.content}`);
         return { type: "stop" };
       }),
     },

@@ -4,7 +4,7 @@ const GenerationLayers = Core.GenerationLayers;
 const ToolCatalog = Core.ToolCatalog;
 type ToolCatalog = Core.ToolCatalog;
 const session = Testing.session;
-const sessionTool = Core.sessionTool;
+const projectTools = Core.projectTools;
 import type { AnyToolDefinition } from "@openomni/protocol";
 import { Effect, type Layer } from "effect";
 import { acquireAppResource, gatewayRuntime, runAppEffect } from "../src/gateway";
@@ -46,7 +46,7 @@ test("two turns retain one catalog Layer; configure acquires a fresh generation 
       seedKernelPolicyRows(plane.catalog.policies);
       yield* (yield* GenerationLayers).initialize(definitions);
       return yield* session({
-        id: "catalog-once", role: "resident", tools: schema.map(sessionTool),
+        id: "catalog-once", role: "resident", tools: projectTools(schema).session,
         runner: () => Effect.gen(function* () {
           turns.push((yield* ToolCatalog).definitions);
           return { kind: "result" as const, text: "done" };

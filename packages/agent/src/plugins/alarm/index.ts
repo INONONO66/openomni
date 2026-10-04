@@ -1,10 +1,14 @@
 import { Effect } from "effect";
 import {
+  AlarmSeam,
   AlarmWakeError,
   ArmRefused,
+  Capability,
   RESERVED_PURPOSES,
   type AlarmCapability,
   type ArmVerb,
+  type CapabilityDefinition,
+  type SeamTag,
 } from "../../core/api";
 import {
   createWatchVerb,
@@ -78,8 +82,10 @@ export interface AlarmCapabilityOptions<E> {
   readonly watch: WatchInstallDeps;
 }
 
-/** What the app composes: the #1255 capability shape as it exists today. */
+/** What the app composes: the #1255 `Capability.define` result plus the composed verbs. */
 export interface AlarmCapabilityDefinition extends AlarmCapability {
+  /** The frozen `Capability.define` contract (#1255 S1). */
+  readonly definition: CapabilityDefinition<"alarm">;
   readonly name: "alarm";
   readonly points: readonly ["alarm.fired"];
   /** purpose -> owning bundle; the core's reserved purposes map to "core". */
@@ -102,6 +108,28 @@ function guardArm(registry: ReadonlyMap<string, string>, raw: ArmVerb): ArmVerb 
       return Effect.fail(new ArmRefused({ code: "unknown_purpose" }));
     return raw(input);
   };
+}
+
+/**
+ * The alarm capability's `Capability.define` contract (#1255 S1): the verbs
+ * are `arm` plus the watch verb composed over it. `alarmCapability` freezes
+ * one per live on-set with the registry-guarded arm; the app's manifest lists
+ * the purpose-free form (`purposes: {}`, raw arm) because the manifest's
+ * bundle contracts declare their own purposes and compose rejects a duplicate.
+ */
+export function alarmContract(input: {
+  readonly purposes: Readonly<Record<string, AlarmPurposeHandler>>;
+  readonly arm: (sessionId: string, turnId: string) => ArmVerb;
+  readonly watch: WatchInstallDeps;
+}): CapabilityDefinition<"alarm", SeamTag, AlarmCapabilityDefinition["verbs"], AlarmPurposeHandler> {
+  return Capability.define({
+    name: "alarm",
+    requires: [],
+    points: ["alarm.fired"],
+    purposes: input.purposes,
+    verbs: { arm: input.arm, watch: createWatchVerb(input.arm, input.watch) },
+    seam: AlarmSeam,
+  });
 }
 
 /**
@@ -136,13 +164,19 @@ export function alarmCapability<E>(
         };
         const arm = (sessionId: string, turnId: string) =>
           guardArm(registry, options.arm(sessionId, turnId));
+        const definition = alarmContract({
+          purposes: Object.fromEntries(handlers),
+          arm,
+          watch: options.watch,
+        });
         return {
-          name: "alarm" as const,
-          points: ["alarm.fired"] as const,
-          purposes: [...handlers.keys()],
+          definition,
+          name: definition.name,
+          points: definition.points as readonly ["alarm.fired"],
+          purposes: Object.keys(definition.purposes),
           registry,
           wake,
-          verbs: { arm, watch: createWatchVerb(arm, options.watch) },
+          verbs: definition.verbs,
         };
       }),
     );

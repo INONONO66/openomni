@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { canonicalDigest, type PlainValue, RowVerdict, RowVerdictRead, PolicyRow, type Storage } from "@openomni/protocol";
-import { compilePolicySnapshot, createNamedPolicyRegistry, createPolicyCompiler, KERNEL_POLICY_REGISTRY, NamedPolicyRegistryError, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
+import { compilePolicySnapshot, createHandlerTable, createPolicyCompiler, KERNEL_POLICY_REGISTRY, HandlerTableError, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
 import { atGeneration, compaction, draft, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
 
 const input = {
@@ -69,7 +69,7 @@ describe("immutable named policy registry", () => {
       apply: (args: PlainValue, config: PlainValue): PlainValue => ({ args, config }),
     };
     const transformers = [transformer];
-    const registry = createNamedPolicyRegistry({ transformers, obligations: [] });
+    const registry = createHandlerTable({ transformers, obligations: [] });
     const config = { fields: ["args", "config"], nested: ["first"] };
     const rows = [
       atGeneration(compaction, 1),
@@ -159,26 +159,26 @@ describe("immutable named policy registry", () => {
   test("registry rejects duplicate and invalid names without freezing caller data", () => {
     const transformer = { name: "demo/id", apply: (args: PlainValue) => args };
     expect(() =>
-      createNamedPolicyRegistry({ transformers: [transformer, transformer], obligations: [] }),
-    ).toThrow(NamedPolicyRegistryError);
+      createHandlerTable({ transformers: [transformer, transformer], obligations: [] }),
+    ).toThrow(HandlerTableError);
     expect(() =>
-      createNamedPolicyRegistry({
+      createHandlerTable({
         transformers: [{ ...transformer, name: "invalid" }],
         obligations: [],
       }),
-    ).toThrow(NamedPolicyRegistryError);
+    ).toThrow(HandlerTableError);
     expect(() =>
-      createNamedPolicyRegistry({
+      createHandlerTable({
         transformers: [],
         obligations: [{ name: "demo/cap" }, { name: "demo/cap" }],
       }),
-    ).toThrow(NamedPolicyRegistryError);
+    ).toThrow(HandlerTableError);
     expect(Object.isFrozen(transformer)).toBe(false);
   });
 
   test("transform implementations receive frozen captured config rather than caller-owned objects", () => {
     const frozen: boolean[] = [];
-    const registry = createNamedPolicyRegistry({
+    const registry = createHandlerTable({
       transformers: [
         {
           name: "demo/observe",

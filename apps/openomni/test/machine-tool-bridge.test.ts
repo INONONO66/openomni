@@ -657,7 +657,7 @@ describe("bash session door", () => {
       for (let call = 0; call < 10 && !seen.includes(marker); call += 1) {
         const result = await bash({ machine: "m-1", session: "qa", command: call === 0 ? command : "" } satisfies PlainObject);
         expect(result.isError).toBeUndefined();
-        seen += (JSON.parse(String(result.output)) as { stdout: string }).stdout;
+        seen += (JSON.parse(String(result.content)) as { stdout: string }).stdout;
       }
       return seen;
     }
