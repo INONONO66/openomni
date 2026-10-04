@@ -256,3 +256,73 @@ describe("tool dispatcher public contract", () => {
       ),
     ));
 });
+
+describe("D5 tool result split producers", () => {
+  const structuredTool = eraseTool(defineTool({
+    name: "echo",
+    description: "Returns structured data",
+    category: "query",
+    input: z.object({ value: z.string() }).strict(),
+    output: z.object({ answer: z.number(), note: z.string() }).strict(),
+    visibility: { model: ["resident"], cell: ["resident"] },
+    execute: async () => ({ answer: 42, note: "n" }),
+    render: (_input, value) => `answer=${value.answer}`,
+  }));
+
+  it("model door carries rendered content plus structuredContent; the cell door carries typed data only", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const dispatch = dispatcher([structuredTool]);
+          const model = yield* dispatch.execute(call, context);
+          expect(model.content).toBe("answer=42");
+          expect(model.structuredContent).toEqual({ answer: 42, note: "n" });
+          expect(model.details).toBeUndefined();
+          const cell = yield* dispatch.executeCell({ ...call, id: "cell-structured" }, context);
+          expect(cell.structuredContent).toEqual({ answer: 42, note: "n" });
+          expect(cell.content).toBeUndefined();
+        }),
+      ),
+    ));
+
+  it("oversize structured data is dropped from structuredContent while content keeps the truncated render", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const blob = "x".repeat(300_000);
+          const dispatch = dispatcher([eraseTool(defineTool({
+            name: "echo",
+            description: "Returns oversize structured data",
+            category: "query",
+            input: z.object({ value: z.string() }).strict(),
+            output: z.object({ blob: z.string() }).strict(),
+            visibility: { model: ["resident"], cell: ["resident"] },
+            execute: async () => ({ blob }),
+            render: (_input, value) => value.blob,
+          }))]);
+          const model = yield* dispatch.execute(call, context);
+          expect(model.structuredContent).toBeUndefined();
+          expect(model.isError).toBeUndefined();
+          expect(model.content.length).toBeLessThanOrEqual(32_000);
+          expect(model.content).toContain("[truncated:");
+        }),
+      ),
+    ));
+
+  it("a failed call carries the error text as content and the errorKind as details", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const dispatch = dispatcher([definition({ execute: async () => { throw new ToolRefused("echo", "nope"); } })]);
+          const model = yield* dispatch.execute(call, context);
+          expect(model).toMatchObject({
+            isError: true,
+            errorKind: "precondition_failed",
+            content: "echo refused: nope",
+            details: { errorKind: "precondition_failed" },
+          });
+          expect(model.structuredContent).toBeUndefined();
+        }),
+      ),
+    ));
+});

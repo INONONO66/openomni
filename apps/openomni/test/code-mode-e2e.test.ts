@@ -637,6 +637,19 @@ test("cells from different sessions never share interpreter state", async () => 
   expect(otherSession).toContain("NameError");
 }, 40_000);
 
+test("eval answers the model with rendered content and code consumers with the structuredContent cell state (D5)", async () => {
+  const { executeResult } = await startCellHarness({ llm: async () => "ok" });
+  const result = await executeResult({ operation: { op: "run", code: "1 + 1", timeout: 15 } });
+  expect(result.isError).toBeUndefined();
+  // Model text is the rendered value; typed data is the full CellState.
+  expect(result.content).toBe("2");
+  expect(result.structuredContent).toMatchObject({
+    status: "completed",
+    value: "2",
+    output: { stdout: "", stderr: "" },
+  });
+}, 40_000);
+
 async function heldCell(code: string) {
   const harness = await startHeldCompletionHarness();
   const starting = harness.executeResult({ operation: { op: "run", code, timeout: 1 } });
