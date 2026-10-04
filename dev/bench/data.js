@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791074230770,
+  "lastUpdate": 1791124515915,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -77759,6 +77759,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 197693,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77e1375b059903af425a6ef58205b5112dddaeae",
+          "message": "#1254 Split alarms: core keeps the timer, a removable capability owns the rest (#1285)\n\n* #1254 alarm split: open draft (stamp #1253 merged 4ecb41f3; delete stray diff3 marker)\n\n* feat(protocol): pure Cron.next/occurrences with Vixie day rule and IANA zone math (#1254 step 1)\n\nLane C (st_01a10398) finished the tree test-green (21/21) and died on a provider stream timeout before committing; lead verified build/check-types/lint/dead-exports/written-types/effect-boundaries/deps green and committed on the lane's behalf. Cron.next(expr, fromMs, tz) and Cron.occurrences(expr, afterMs, untilMs, tz, limit=1024) are Effect-free; DST gap skipped, overlap fires once; 366-day unreachable bound.\n\n* wip(agent): S1 contract (lane 1 tree, lead-banked) (#1254 S1)\n\nLane 1 (st_01a10399) died at 6.2M tokens with this tree uncommitted. Lead probe at this tree: build EXIT 0, check-types 11/11, agent+protocol tests 2101 pass / 1 fail (entity-timers 'delivers exactly at its durable not-before instant'), app cluster-runtime 5/5. Lane 1b finishes S1 on top; squashed at PR merge.\n\n* feat(agent): closed alarm contract — tightened kind, one occurrence minter, chain guard, purpose registry seam (#1254 S1)\n\nFrozen seam names (core/api.ts, S1: later steps add, never rename):\nArmRefused, AlarmWakeError, RESERVED_PURPOSES, AlarmCapability, AlarmWakeContext,\nArmVerb, AlarmFired, AlarmWakeOutcome.\n\nCore contract: alarm kind arm{purpose, at, supersedes, alarmId, sourceKey, payload} ->\neffect{occurrenceId}; fired{occurrenceId, outcome: delivered|stale|exhausted};\nAlarm.occurrenceId(sessionId, alarmId, armSeq, sourceKey) is the one minter;\nalarmDisposition is the one chain guard (replaces hasNewerAttempt and the four\n*Delivery dispositions); composeAlarmPurposes rejects reserved names and 'rescan'.\n\nDECISIONS (deviation from body): timer module name stays core/alarm.ts (writer\ndeclaration unchanged, lead delta-g010 #1); alarm kind stays version 1 (no deployed\njournals to migrate; a v2 with no v1 reader is dead code). Lead seam addition\n2026-10-03: AlarmCapability.wake returns AlarmWakeOutcome ('delivered'|'exhausted')\nso a capability settles fired{exhausted} without building an alarm literal; the core\nrecords fired{outcome} through firedAction. Deleted dead WatchTimeoutArm export\n(interface stays file-local for AlarmSenders). An entity alarm with an unregistered\npurpose folds to a recorded fired{stale} fact with zero execution (rpc-surface test).\n\n* feat(agent): plugins/alarm — purpose registry, wake dispatch, watch handlers, arm/watch verbs (#1254 P1)\n\nDECISION: composeAlarmPurposes is not on the frozen core/api.ts seam and lanes may not edit core/**, so the capability takes it as an injected ComposePurposesVerb (the app passes Core.composeAlarmPurposes); the check stays Lane 1's single implementation. DECISION: monitor.hit/monitor.timeout handlers are exported as watchPurposes(deps) and declared by the app's monitor bundle, so the capability itself composes with zero own purposes and the watch verb fails unknown_purpose when the monitor bundle is off. DECISION: watch budget state rides the arm payload ({spec, notifications}) because AlarmChainReads exposes no fired count; the native hit detail is merged onto the resent occurrence payload (hit{content, terminal, detail}).\n\n* refactor(agent): plugins/alarm prompt port pinned to the S4 ctx.prompt signature; session-scoped arm factory (#1254 P1)\n\nPer lead A1/A2 in lane-1254-progress.md: WatchWakeDeps.prompt is typed exactly as the AlarmWakeContext.prompt Lane 4 lands ({content, payload?} -> {seq}, marked // #1254 S4: ctx.prompt); options.arm and verbs.arm are session-scoped factories because the frozen ArmVerb carries no sessionId and the tool-time verbs must route by session. ComposePurposesVerb stays injected until Lane 4 exports composeAlarmPurposes via core/api.ts.\n\n* feat(openomni): alarm-plane composition, monitor/cron bundles, chain-folded monitor tool (#1254 P2)\n\nReplaces the epoch-scheme monitor ports with the alarm chain plane:\ncomposition/alarm-plane.ts (chain fold, chain reads, out-of-band arm\ncommit, alarm prompt port, monitor ports over the capability),\ntools/core/watch.ts (epoch-free WatchState, watch+cron arming behind the\ntool.pre gate), bundles/{alarm,monitor,cron} with the capability-off\nselection cascade, occurrence-based watch-sources senders with refresh(),\nand index.ts wiring over Bundle.alarmCapability.\n\nDECISION: arm commits ride the session's current activation authority and\nretry revision races; a session without an active writer is a die (wiring\ndefect), while the prompt port fails typed (AlarmWakeError) because wake\ndelivery may race hibernation.\nDECISION: monitor.hit arms are never scheduled -- the native holder\nresends the armed occurrence; refresh() swaps the occurrence on a live\nhandle without restarting it; monitor.timeout still schedules.\nDECISION: WatchState drops epoch and lastBatch (batch content lives on\nprompt rows, not arm rows); statuses armed/cancelled/fired/exhausted\nproject from retirement reasons.\nDECISION: cron.tick prompts once with the missed-tick count and re-arms at\nthe next grid time with supersedes -- no catch-up storm.\nDECISION: production wake dispatch stays dark until Lane 4 (S4): the\nentity folds monitor.hit occurrences to recorded stale facts; the app e2e\ntest pins that interim behavior instead of a wake.\n\n#1254 P2\n\n* chore: epoch-scheme sweep — no monitor-ports token survives (#1254 P3)\n\nRepo-wide content grep for `monitor-ports` is now empty; the last mention\n(a scanner-fixture comment in script/check-journal-writers.test.ts) now\ndescribes the alarm prompt origin's nested-payload shape with\noccurrence-scheme fields.\n\nDECISION: remaining `epoch`/`watchFired`/`watchTimeout` tokens are out of\nthis lane's write scope and recorded for Lane 4's sessionTimerPort/wake\nrewrite: core entity/messages/alarm-ports/run,\napps/openomni/src/composition/cluster-runtime.ts and its test. Gateway\n`epoch` (SessionRead cursor/fence) and secret-rotation `epoch` are\nunrelated concepts and stay.\n\n#1254 P3\n\n* feat(agent): armed_alarms index derived in the session transaction; catalog has_armed v2; boot rescan (#1254 S3)\n\nGates at this tree (mise exec bun@1.4.1): build 0, check-types 0, lint 0\n(1 pre-existing machines/reattach warning), check-deps 0,\ncheck-journal-writers 0 (12 kinds), check-dead-exports 0, written-types 0.\nbun test packages/agent packages/protocol: 2133 pass / 0 fail / 281 files\n(60.17s). openomni cluster-runtime+boot-wiring+config: 78 pass / 0 fail.\nKnown risk: nondeterministic combined-suite hang under host load 19-25\n(2 observations) — not reproduced in 3 logged green runs; lead bisects.\n\n* fix(agent): one owned Cause renderer tolerant of Bun's undefined Error.stack (#1254)\n\nBun 1.4.1 lazily materializes Error.stack; under load the getter can return\nundefined once, which made effect's Cause.pretty return \"\" (string defects)\nor throw from cause.stack.split (Error with a string cause). Failure.pretty\nrenders the same bytes as Cause.pretty when stacks are present and falls\nback to name: message otherwise; fromCause, tool.ts, compact.ts and the app\nobservation component read it. Pre-existing flake observed 1/30 at be396c64;\ndeterministic repro pinned in failure-of.test.ts via Error.stackTraceLimit = 0.\n\n* feat(agent): single-writer admission fiber, keepAlive/passivation with reserved resume, catalog-fence commit check, D3 drain config (#1254 S4)\n\n- entity.ts: toLayerQueue writer loop (bounded retryRevision x3 ->\n  AdmissionFailure{revision}; shutdown drain -> AdmissionFailure{shutdown});\n  D3 alarm budget yields the head to a queued prompt; commitIn forwards\n  freshly armed occurrences (forkIn activation scope); passivation arms the\n  reserved resume purpose and persists its occurrence through the cluster\n  discard door; capability wake dispatch with reserved-purpose refusals.\n- alarm.ts/alarm-ports.ts: RetryAlarmDeps port (chain <id>:retry, settle\n  retires at:null); legacy alarmAction deleted; AlarmDrainConfig typed in\n  core, values in apps/openomni/src/config.ts (4 / 64 / 60s idle).\n- store/fence.ts: catalog-fence pre-check refuses a superseded writer\n  (FenceRefused{stale}) before the session-file write.\n- request.ts: deadline arm/retire occurrence identities.\n- tests: admission-writer-fiber, passivation-boundary, alarm-budget,\n  alarm-capability-off (byte-equal journals), Lane 3 bounded-resend\n  regression; existing suites repinned to the occurrence-chain scheme.\n\n* refactor(agent): S5 sweep - epoch alarm-cause scheme removed from inspect; legacy guard names scrubbed; compose tests on the allowlisted runner (#1254 S5)\n\n* chore(1254): clear plugin-branch gate debt before the child merge\n\n- alarm-plane: arm payload parsed as PlainObjectSchema (written unknown 0)\n- un-export same-file types (AlarmArmRow, WatchHit, WatchOccurrenceRef, WatchCreate)\n- test runner sites go through the package owner runTestSync (R2 0)\n- delete the unconsumed bundle-definition seed (bundles/alarm.ts, monitorBundle,\n  cronBundle, selectAlarmBundles): no production consumer exists before #1255's\n  manifest/compose mechanics, which the issue's Non-goals assign the requires\n  cascade to; the purposes declarations stay and compose in index.ts\n\n* test: lint-only import fixes (unused Alarm/once imports, type-only Rpc imports)\n\nultracite lint on the merged tree: llm-attempts.test.ts dropped an unused\nAlarm import, admission-writer-fiber.test.ts imports the four Rpc classes\nas types (typeof-only use), reattach.test.ts dropped an unused node:events\nimport (pre-existing on main; fixed here because the gate runs repo-wide).\n\nRefs #1254\n\n* docs(#1254): receipts — AGENTS.md stamp, implementation-status section, SLOP §K row; flip stale merge stamps\n\nSame-file doc sync: #1243 (fb709568, PR #1261), #1244 (a4478b0e, PR #1262),\n#1245 (c1d5ebd2, PR #1263), #1251 (66d56edb, PR #1269), #1252 (58b7f18d,\nPR #1278), #1276 (6a9063d7, PR #1277) and W5.3 #1113 (f7e36984, PR #1240)\nstill read pending/draft; flipped to their merged SHAs with receipt text\nunchanged. Test occurrence ids 'grid:occ:1'/'late:occ:1' renamed so the\n':occ:' sweep is literally zero.\n\nRefs #1254\n\n* docs(#1254): record the merge with main c8ae79d4 — awaited native install, entity-port capability bind, monitor.hit delivery rule\n\n* fix(#1254): alarm budget bounds only arms that add a chain — retire (at: null) and re-arm of an armed id commit at a full budget; format regenerated conformance snapshots\n\n* docs(#1254): budget rule — only a chain-adding arm consults maxArmed\n\n* fix(entity): gate activation on composition readiness; ring onRequestReady after committed transitions\n\nThe restart e2e (request-owner-e2e.test.ts) went red once activations resend\narmed occurrences and hold keepAlive: the cluster host redelivers a crashed\nprocess's persisted messages at start, activating a session before boot bound\nthe entity ports (the late-bound slot died typed), and the entity Resolve path\ncommitted the answer without waking the recovered turn parked on the still-open\nrequest (drain defers to the live turn; notifyLiveApprovals never saw a turn\nthat was not live when the answer was dispatched).\n\n- SessionEntityPorts.ready?: an activation awaits it before its first port\n  call; createSessionEntityPortsSlot settles it at bind.\n- SessionEntityPorts.onRequestReady?(sessionId): requestCommand rings it after\n  each committed transition (resolve, cancel, deadline expiry); the app binds\n  notifyLiveApprovals. Refused transitions stay silent.\n- Pins: rpc-surface (gate parks an activation, doorbell per committed\n  resolve), resolve-stale (silent on unknown_request), cluster-runtime (slot\n  settle-at-bind, delegation, no-throw before bind).\n\ne2e 3/3 green (was 0/3); agent 1668/0; app 635/0.\n\n* fix(#1254): scheduled arms send through the discard Alarm door — a DeliverAt reply only answers at fireAt, so the arming turn no longer blocks\n\n* test(#1254): cover cron create suspend, boot rescan, unknown-machine refusal, passivation refusal paths, stale folds\n\n* fix(#1254): boot idle probe uses throwIfNoEntry instead of a catch; cover refused rescan/resend sends\n\n* fix(#1254): M3 persist-and-return activation resend — the entity sendAlarm port schedules through the discard Alarm door instead of awaiting a future occurrence's fireAt reply\n\n* fix(#1254): M3 test uses fixed far-future constants instead of Date.now()\n\n* fix(#1254): H3 one committing arm path — the app's duplicate arm verb is deleted; activations register their budgeted entity verb via onLive and the capability delegates, refusing not_live\n\n* fix(#1254): H1 post-commit AlarmArmNotice — the entity arm verb reports every committed arm and the app moves native watch holders onto the re-armed occurrence (refresh) or closes them (retire)\n\n* fix(#1254): H2 typed AlarmSendRefused — a monitor.hit send is the native-source (re)install; the activation resend retires permanently refused chains, transient failures die typed-free and the entity logs them with the armed row standing\n\n* fix(#1254): M3 test waits on the walk's own last fact instead of a past-due marker's fold\n\n* fix(#1254): LOW drop the stale interim-sha paragraph — S4 wake dispatch landed, scheduled occurrences no longer fold stale by default\n\n* fix(#1254): M2 drop deletion-only alarm-cause negative case that predates the change\n\n* fix(#1254): M1 cron missed counts every grid instant in (fireAt, now]; drop the double subtraction\n\n* fix(#1254): H4 catalog fence checked inside the session commit transaction\n\n* fix(#1254): H5a terminal/exhausted monitor.hit retires the armed timeout companion\n\n* fix(#1254): H5b monitor.timeout lapses as exhausted for a settled main chain, no prompt\n\n* fix(#1254): H4 test lives with the other fence tests under test/store\n\n* fix(#1254): gate r6 static — seed helper types the watch as Alarm.WatchSpec[\"watch\"] (tsc), Bundle is a type-only import in alarm-plane.ts (lint)\n\n* fix(#1254): gate r6 patch coverage — monitor.hit payloads parse through protocol parseJson (one wire parser), a spec-less payload and a refused cron re-arm are tested\n\n* test(#1254): Failure.pretty byte-identity test pins its own stack strings — effect's lazy-stack rendering is the defect under test, not an assertion\n\n* fix(#1254 r2 H1): fence authority is the session file alone — delete the commit-time catalog fence guard\n\n* fix(#1254 r2 M1): Cron.missed counts with a saturation flag; the cron prompt discloses 'at least 1024' instead of an exact-looking truncated count\n\n* fix(#1254 r2 M3): reboot test awaits the occurrence's fired{delivered} commit, not the earlier prompt commit\n\nThe old barrier resolved woke on ANY prompt commit for the session and then\nasserted actionById('<occurrenceId>:delivered') plus chain state. Production\norder is prompt commit -> re-arm -> handler returns -> fired{delivered}\nappend, so the assertion depended on producer progress AFTER the observed\nevent: it passed only when the wake fiber happened to finish the two later\ncommits before the test thread read the kernel — timing luck, and a hang/fail\non a correct build was possible. The new barrier subscribes before boot to the\nexact strictly-last fact (the '<occurrenceId>:delivered' ActionCommittedEvent),\nso every subsequent read is causally after the whole wake path; it fails only\nwhen the resend/wake path really regresses.\n\n* fix(#1254 r2 M4): fault test identifies the resend defect by the injected error's sentinel, not the human log sentence\n\nThe old test matched the production prose 'armed alarm send failed:\nfault-resend' — a human logging sentence, not a machine contract: it could\nkeep passing while pinning wording (any reword breaks it without a behavior\nchange), and it only proved SOME line contained that sentence, not that the\nlogged defect was the injected failure. The new test identifies the log call\nthrough the injected error's own identity — the sqlite trigger's RAISE message\n('injected resend refusal') carried by the cause the logger renders — resolves\nthe barrier on it, and counts exactly one such logger call. The durable\narmed-row/no-fired assertions stand unchanged, so the test still fails if the\nentity stops logging the send defect (bounded await times out) or starts\nretiring the row.\n\n* fix(#1254 r2 H2): every step after the watch verb's first committed arm compensates — a refused timeout arm or install retires exactly the committed chains, the caller gets the original typed refusal\n\n* fix(#1254 r2 H3): tool-facing arms carry the turn token — onLive exposes ownsTurn, the registry refuses not_live/stale_turn without re-resolving to a successor, and the entity arm verb types CAS exhaustion (revision) and fence-stale commits (stale_activation)\n\n* fix(#1254 r2 M2): the apps alarm tests exercise the REAL entity arm path — the parallel fixture verb is deleted; lifecycle/cron/gate tests run over a live cluster activation and a real end-to-end H5 sequence proves one wake, both chains retired, late timeout lapses stale\n\n* test(1254): M2 follow-up — route the two mailbox waits through the sanctioned waitUntil poll\n\nawaitScheduled (watch-fixture) and the H5 processed-envelope wait\n(alarm-budget) hand-rolled Date.now()+setTimeout loops. The cluster\nmailbox row has no in-process event (onArmed fires on the journal commit\nbefore the DeliverAt fork; fired facts exist only after delivery), so\nboth now use cluster-runtime's one sanctioned bounded observation poll\nwaitUntil(label, check, timeoutMs) — timeout as failure guard only.\n\n* docs(1254): implementation-status lists the full ArmRefused code union (not_live, stale_turn, stale_activation, revision added by r2 H3)\n\n* fix(1254 gate r7): H3 CAS test commits with H1's one-argument sessions.commit; LiveActivationArm is module-private\n\nThe lane-B H3 test was written on 184a5f1c where sessions.commit still\ntook the catalog fence guard that H1 (14b5f601) deleted; after the rebase\nthe wrapStore override typed its parameters as any and passed two\narguments (agent tsconfig.test.json: 6 errors). LiveActivationArm was an\nexported interface with no importer outside alarm-plane.ts — the\ndead-export ratchet refused it; it is only the onLive verbs parameter\ntype, so it is private now.\n\n* test(1254 gate r7): cover the refused-compensation branch of the watch verb\n\nwatch.ts:265 (the Effect.catch that logs a refused compensating retire\nand lets the ORIGINAL refusal reach the caller) was the one uncovered\nchanged line in patch-coverage r7. The new test drives the double\nrefusal (timeout arm refused, then the compensating retire refused) and\nasserts the original code reaches the caller, exactly one warning with\nthe injected sentinel code, zero installs; mutating the catch into a\nre-fail makes it the only failing test.\n\n* fix(#1254): r3 H1 — bind tool-facing arm authority to the authorizing activation, not the turn token\n\nA recovered turn keeps open.turnId, so a zombie continuation from a\nreplaced activation passed ownsTurn and committed with the successor's\nfence. The registry now captures the live activation entry when the\ntool-facing verb is created and refuses stale_activation at execution\nonce that registration is replaced — never re-resolving a continuation\nto a successor. The turn guard (stale_turn) stays behind it. Regression:\nsuccessor recovers the SAME turn id; the old activation's pre-built\ncontinuation is a typed stale_activation refusal with zero verb calls.\n\n* fix(#1254): r3 M1 — saturation test asserts parsed missed/missedSaturated, not the prose note sentence\n\n* fix(#1254): r3 M2 — H5 orders hit-then-timeout deterministically via a held DeliverAt forward; no wall-clock race, no poll\n\n* fix(#1254): r4 H1 — mint the watch verb's arm authority at invocation, not inside the suspended generator\n\n* fix(#1254): r4 M2 — awaitScheduled awaits the real persisted discard-send completion (Runners.ts saveRequest barrier) instead of polling sqlite\n\n* fix(#1254): r5 H1 — cancel mints ONE arm verb before its first await; retire takes the captured verb, never re-resolving registry authority\n\n* test(#1254): r5 M1 — passivation-boundary subscribes to turn-entry and committed-fact seams instead of waitUntil polls",
+          "timestamp": "2026-10-04T23:32:28+09:00",
+          "tree_id": "91ba08d069f0c4c3d568afa74084131898f25413",
+          "url": "https://github.com/INONONO66/openomni/commit/77e1375b059903af425a6ef58205b5112dddaeae"
+        },
+        "date": 1791124515511,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 992,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1760,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1336,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1351790,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 388330,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6484533,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 713,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 198635,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 771257,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 483456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3175,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11563800,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1456103,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 18125,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 166536,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 848913,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 264230,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15848495,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 92,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 184333,
             "unit": "ns/op"
           }
         ]
