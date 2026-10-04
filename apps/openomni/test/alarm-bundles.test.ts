@@ -59,7 +59,11 @@ function cronWake() {
         reads: { latestArm: () => undefined, settled: () => false },
         arm: (input) => {
           arms.push(input);
-          return Effect.succeed({ alarmId: input.alarmId ?? "grid", occurrenceId: "occ-next", armSeq: arms.length });
+          return Effect.succeed({
+            alarmId: input.alarmId ?? "grid",
+            occurrenceId: "occ-next",
+            armSeq: arms.length,
+          });
         },
         now,
         prompt,
@@ -96,19 +100,50 @@ test("cron.tick prompts once and re-arms the chain at the next grid time", async
       payload,
     },
   ]);
-  // Downtime: fired at 0:05, woken at 0:20:10 — 0:10 and 0:15 were missed
-  // (0:20 is the due tick), one prompt carries the count, no catch-up storm.
+  // Downtime: fired at 0:05, woken at 0:20:10 — 0:10, 0:15 and 0:20 elapsed
+  // in (fireAt, now]; one prompt carries the count, no catch-up storm.
   expect(await runEffect(wake(cronFired(payload, 300_000), 1_210_000))).toBe("delivered");
   expect(prompts).toHaveLength(2);
-  expect(prompts.at(-1)).toMatchObject({ payload: { expr: "*/5 * * * *", missed: 2 } });
+  expect(prompts.at(-1)).toMatchObject({ payload: { expr: "*/5 * * * *", missed: 3 } });
   expect(arms.at(-1)).toMatchObject({ at: 1_500_000 });
+});
+
+test("cron.tick counts every grid instant lost to downtime: */30 asleep 3h reports missed: 6", async () => {
+  const { prompts, arms, wake } = cronWake();
+  const half = { expr: "*/30 * * * *", tz: "UTC", description: "half-hour grid" };
+  // Issue #1254 line 64: fired at 10:00Z, host slept, woken at 13:00Z. The six
+  // elapsed grid instants in (fireAt, now] are 10:30, 11:00, 11:30, 12:00,
+  // 12:30 and 13:00 — missed: 6, and the chain re-arms at 13:30.
+  const firedAt = Date.UTC(2026, 0, 1, 10, 0);
+  const now = Date.UTC(2026, 0, 1, 13, 0);
+  expect(await runEffect(wake(cronFired(half, firedAt), now))).toBe("delivered");
+  expect(prompts).toEqual([
+    {
+      content: JSON.stringify({
+        kind: CRON_TICK,
+        description: "half-hour grid",
+        expr: "*/30 * * * *",
+        firedAt,
+        missed: 6,
+      }),
+      payload: { expr: "*/30 * * * *", missed: 6 },
+    },
+  ]);
+  expect(arms).toEqual([
+    {
+      purpose: CRON_TICK,
+      at: Date.UTC(2026, 0, 1, 13, 30),
+      alarmId: "grid",
+      supersedes: "grid:tick:1",
+      sourceKey: "cron",
+      payload: half,
+    },
+  ]);
 });
 
 test("cron.tick reports payload and expression faults as typed wake failures", async () => {
   const { wake } = cronWake();
-  const bad = await runEffect(
-    Effect.flip(wake(cronFired({ not: "cron" }, 300_000), 300_000)),
-  );
+  const bad = await runEffect(Effect.flip(wake(cronFired({ not: "cron" }, 300_000), 300_000)));
   expect(bad).toBeInstanceOf(Bundle.AlarmWakeError);
   expect(bad.reason).toBe("payload");
   const expr = await runEffect(

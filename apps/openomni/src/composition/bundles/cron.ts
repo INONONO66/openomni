@@ -32,11 +32,8 @@ function cronTick(): Bundle.AlarmPurposeHandler {
       });
       const grid = yield* Effect.try({
         try: () => ({
-          /** Grid times in (fireAt, now] beyond the due one: ticks lost to downtime. */
-          missed: Math.max(
-            0,
-            Cron.occurrences(payload.expr, fired.fireAt, ctx.now, payload.tz).length - 1,
-          ),
+          /** Every grid instant in (fireAt, now]: ticks lost to downtime. */
+          missed: Cron.occurrences(payload.expr, fired.fireAt, ctx.now, payload.tz).length,
           next: Cron.next(payload.expr, Math.max(ctx.now, fired.fireAt), payload.tz),
         }),
         catch: () => new Bundle.AlarmWakeError({ purpose: fired.purpose, reason: "cron_expr" }),
@@ -62,7 +59,8 @@ function cronTick(): Bundle.AlarmPurposeHandler {
         })
         .pipe(
           Effect.mapError(
-            (refused) => new Bundle.AlarmWakeError({ purpose: fired.purpose, reason: refused.code }),
+            (refused) =>
+              new Bundle.AlarmWakeError({ purpose: fired.purpose, reason: refused.code }),
           ),
         );
       return "delivered" as const;
