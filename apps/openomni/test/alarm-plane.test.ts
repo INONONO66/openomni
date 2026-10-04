@@ -15,6 +15,7 @@ import {
   watchFixture,
   withEntityAlarmPorts,
 } from "./helpers/watch-fixture";
+import { createWatchVerb } from "../../../packages/agent/src/plugins/alarm/watch";
 
 const OWNER = "alarm-plane-owner";
 const SESSION = "alarm-plane-session";
@@ -105,6 +106,63 @@ test("r3 H1: a recovered turn never lets an old activation's continuation borrow
   const committed = runSyncResult(registry.arm(SESSION, "persisted-turn")(armInput));
   expect(Result.isSuccess(committed) && committed.success.occurrenceId).toBe("occ-successor");
   expect(calls).toEqual(["occ-successor"]);
+});
+
+test("r4 H1: a watch continuation built under the old activation never commits through the successor", () => {
+  const registry = createLiveArmRegistry();
+  const calls: string[] = [];
+  const installs: string[] = [];
+  const verbOf =
+    (occurrenceId: string): Core.ArmVerb =>
+    (input) =>
+      Effect.sync(() => {
+        calls.push(occurrenceId);
+        return { alarmId: input.alarmId ?? "minted", occurrenceId, armSeq: 1 };
+      });
+  // Recovery retains the open turn id: BOTH activations own `persisted-turn`.
+  const ownsPersisted = (turnId: string) => turnId === "persisted-turn";
+  registry.onLive(SESSION, { arm: verbOf("occ-old"), ownsTurn: ownsPersisted });
+  const watch = createWatchVerb(registry.arm, {
+    install: ({ watchId }) =>
+      Effect.sync(() => {
+        installs.push(watchId);
+      }),
+  });
+  // The pending watch effect is BUILT under the old activation — NOT executed.
+  const pending = watch({
+    sessionId: SESSION,
+    turnId: "persisted-turn",
+    watchId: "watch-1",
+    spec: watchSpec(1),
+    now: 1,
+  });
+  // The successor activation recovers the same turn and registers.
+  registry.onLive(SESSION, { arm: verbOf("occ-successor"), ownsTurn: ownsPersisted });
+  // Executing the stale watch is a typed refusal through the COMPOSED verb
+  // (r4 H1): the authorizing arm is minted at watch invocation, never
+  // re-minted from the durable turn id after suspension — zero arm calls on
+  // either activation, zero native installs.
+  const outcome = runSyncResult(pending);
+  expect(
+    Result.isFailure(outcome) &&
+      outcome.failure instanceof Core.ArmRefused &&
+      outcome.failure.code,
+  ).toBe("stale_activation");
+  expect(calls).toEqual([]);
+  expect(installs).toEqual([]);
+  // A watch invoked under the live successor still arms and installs.
+  const committed = runSyncResult(
+    watch({
+      sessionId: SESSION,
+      turnId: "persisted-turn",
+      watchId: "watch-2",
+      spec: watchSpec(1),
+      now: 1,
+    }),
+  );
+  expect(Result.isSuccess(committed) && committed.success.occurrenceId).toBe("occ-successor");
+  expect(calls).toEqual(["occ-successor"]);
+  expect(installs).toEqual(["watch-2"]);
 });
 
 test("the chain fold pages full history and feeds the chain-guard reads", async () => {

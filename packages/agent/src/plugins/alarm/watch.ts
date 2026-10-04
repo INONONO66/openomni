@@ -272,15 +272,21 @@ export function createWatchVerb(
   armFor: (sessionId: string, turnId: string) => ArmVerb,
   deps: WatchInstallDeps,
 ): WatchVerb {
-  return (input) =>
-    Effect.gen(function* () {
+  return (input) => {
+    // #1254 r4 H1: mint the authorizing arm when the watch verb is INVOKED,
+    // before any suspension — the registry binds authority at mint time, so a
+    // watch effect built under one activation and executed after a successor
+    // registered (recovery keeps the durable turn id) refuses
+    // `stale_activation` instead of committing through the successor. The one
+    // captured verb authorizes the arms AND the compensating retires below.
+    const arm = armFor(input.sessionId, input.turnId);
+    return Effect.gen(function* () {
       const parsed = Alarm.WatchSpec.safeParse(input.spec);
       if (!parsed.success)
         return yield* new WatchRefused({
           reason: parsed.error.issues[0]?.message ?? "invalid watch spec",
         });
       const spec = parsed.data;
-      const arm = armFor(input.sessionId, input.turnId);
       // The first commit: before it succeeds nothing needs compensation.
       const main = yield* arm({
         purpose: MONITOR_HIT,
@@ -338,4 +344,5 @@ export function createWatchVerb(
       );
       return main;
     });
+  };
 }
