@@ -15,6 +15,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
+import { L0Observation } from "@openomni/protocol";
 import { Effect } from "effect";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
@@ -28,7 +29,6 @@ import {
   runCluster,
   sendPrompt,
   sessionFileFor,
-  waitUntil,
 } from "../helpers/cluster-runtime";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-passivation-");
@@ -51,9 +51,36 @@ async function withKernel<A>(read: (kernel: SessionHandleStore.SessionKernel) =>
   }
 }
 
+/**
+ * #1254 r5 M1: completion signals replace the waitUntil polls. A signal is
+ * created BEFORE the seam that fires it is installed (the blocking runner's
+ * entry callback / the store's post-commit observation sink) and resolved
+ * from that exact seam, so completion is subscribed, never polled.
+ */
+function completionSignal(): { readonly done: Promise<void>; readonly fire: () => void } {
+  let resolveDone: () => void = () => undefined;
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve;
+  });
+  return { done, fire: () => resolveDone() };
+}
+
+const SIGNAL_CAP_MS = 15_000;
+
+/** Bounded await of one signal: the cap is a failure guard, never a synchronizer. */
+function boundedAwait(label: string, done: Promise<void>): Promise<void> {
+  let cap: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<never>((_, reject) => {
+    cap = setTimeout(() => reject(new Error(`timed out awaiting ${label}`)), SIGNAL_CAP_MS);
+  });
+  return Promise.race([done, guard]).finally(() => clearTimeout(cap));
+}
+
 test("passivation arms resume for unconsumed input; the resume wake continues the session", async () => {
   const keepAliveToggles: boolean[] = [];
-  const turnsEntered: string[] = [];
+  // Created before the runner is installed; fired from inside the runner when
+  // p1's turn enters (the intent + delivery chain commit already happened).
+  const turnEntered = completionSignal();
   const closedAround = Date.now();
 
   // ── Activation 1: p1's turn detaches and blocks; p2 arrives while the turn
@@ -66,13 +93,13 @@ test("passivation arms resume for unconsumed input; the resume wake continues th
       // Short idle budget: the resume occurrence (DeliverAt = close + idleMs)
       // comes due quickly under the second runtime.
       idleMs: 1_000,
-      runner: blockingRunner((turnId) => turnsEntered.push(turnId)),
+      runner: blockingRunner(() => turnEntered.fire()),
       onKeepAlive: (enabled) => keepAliveToggles.push(enabled),
     },
     Effect.gen(function* () {
       const first = yield* sendPrompt(sessionId, "p1", "start the long turn");
       expect(first.existed).toBe(false);
-      yield* Effect.promise(() => waitUntil("turn entered", () => turnsEntered.length === 1));
+      yield* Effect.promise(() => boundedAwait("turn entered", turnEntered.done));
       const second = yield* sendPrompt(sessionId, "p2", "arrives during the live turn");
       expect(second.existed).toBe(false);
     }),
@@ -96,19 +123,28 @@ test("passivation arms resume for unconsumed input; the resume wake continues th
   // ── Activation 2: the closing activation already PERSISTED the resume
   // occurrence (discard door, DeliverAt = close + idleMs); the next runtime
   // delivers it with no new send, recovers p1's open turn and starts p2's.
+  // Subscribed BEFORE the runtime starts: the injected store sink publishes
+  // `ledger.action.committed` post-commit for every chain row, so the
+  // delivered occurrence row fires the signal the moment it is committed.
+  const deliveredId = `${resume.occurrenceId}:delivered`;
+  const resumeDelivered = completionSignal();
   await runCluster(
-    { sessionsDir, catalogFile, runner: resolvedRunner("resumed") },
-    Effect.promise(() =>
-      waitUntil("resume occurrence delivered", () =>
-        readChain(sessionFileFor(sessionsDir, sessionId), sessionId).some(
-          (row) => row.id === `${resume.occurrenceId}:delivered`,
-        ),
-      ),
-    ),
+    {
+      sessionsDir,
+      catalogFile,
+      runner: resolvedRunner("resumed"),
+      observationSink: {
+        publish: (event, data) => {
+          if (event.name !== L0Observation.ActionCommittedEvent.name) return;
+          if (L0Observation.ActionCommitted.parse(data).id === deliveredId) resumeDelivered.fire();
+        },
+      },
+    },
+    Effect.promise(() => boundedAwait("resume occurrence delivered", resumeDelivered.done)),
   );
 
   const chain = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
-  expect(chain.find((row) => row.id === `${resume.occurrenceId}:delivered`)?.kind).toBe("alarm");
+  expect(chain.find((row) => row.id === deliveredId)?.kind).toBe("alarm");
   // p1's interrupted turn sealed and p2's follow-up turn ran to its result.
   expect(chain.some((row) => row.id === "p2:turn:result")).toBe(true);
 
@@ -128,18 +164,18 @@ async function closeWithPendingBacklog(
   sessionId: string,
   beforeClose: () => void,
 ): Promise<void> {
-  const turnsEntered: string[] = [];
+  const turnEntered = completionSignal();
   await runCluster(
     {
       sessionsDir: world.sessionsDir,
       catalogFile: world.catalogFile,
       detachTurns: true,
       idleMs: 1_000,
-      runner: blockingRunner((turnId) => turnsEntered.push(turnId)),
+      runner: blockingRunner(() => turnEntered.fire()),
     },
     Effect.gen(function* () {
       yield* sendPrompt(sessionId, "p1", "start the long turn");
-      yield* Effect.promise(() => waitUntil("turn entered", () => turnsEntered.length === 1));
+      yield* Effect.promise(() => boundedAwait("turn entered", turnEntered.done));
       yield* sendPrompt(sessionId, "p2", "arrives during the live turn");
       yield* Effect.sync(beforeClose);
     }),

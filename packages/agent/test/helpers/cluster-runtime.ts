@@ -38,7 +38,7 @@ import { Database } from "bun:sqlite";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { L0Write } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
-import type { Inbox } from "@openomni/protocol";
+import type { Inbox, ObservationSink } from "@openomni/protocol";
 import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { openCatalogStore } from "../../src/core/store/catalog";
@@ -80,6 +80,13 @@ export interface TestClusterOptions {
   readonly onArmed?: SessionEntityPorts["onArmed"];
   /** Injected entity clock (byte-equality fixtures); default wall clock. */
   readonly clock?: () => number;
+  /**
+   * #1254 r5 M1: post-commit observation sink injected into every session
+   * store this cluster opens — the store publishes `ledger.action.committed`
+   * for each chain row AFTER its transaction commits, so a test subscribes to
+   * the exact committed fact instead of polling the file.
+   */
+  readonly observationSink?: ObservationSink;
   /** Wraps each freshly opened per-session store (fault injection). */
   readonly wrapStore?: (
     sessionId: string,
@@ -367,6 +374,9 @@ function entityEnvLayer(options: TestClusterOptions) {
             openSession: (sessionId) => {
               const store = openSessionStore(sessionFileFor(options.sessionsDir, sessionId), {
                 now: wallClock,
+                ...(options.observationSink === undefined
+                  ? {}
+                  : { observationSink: options.observationSink }),
               });
               return options.wrapStore === undefined ? store : options.wrapStore(sessionId, store);
             },
