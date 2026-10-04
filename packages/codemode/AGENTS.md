@@ -2,7 +2,7 @@
 
 Created 2026-10-03 (#1272, branch `machines/1272-codemode-package`).
 
-Code-mode package (`@openomni/codemode`): the reusable Python-backed cell runtime shared by the application host and the machine daemon. Owns the code facade (`createCodemode`), machine object handles (`read/write/ls/bash/eval`), one lazy `PythonKernel` per tenant, the cell registry and `cell.run/peek/stop` lifecycle, the Python prelude (machine handles, `parallel`, `completion`, `tool.<name>()` proxies), `listMachines`/`getMachine`/`findMachine`, codemode errors, callback routing, cancellation, and interpreter cleanup. Extracted from `packages/machines/src/codemode/` (#1246 fold reversed by #1272). It must NOT own kernel policy, ledger state, or model-facing rendering — those stay in `packages/agent` and `apps/openomni`.
+Code-mode package (`@openomni/codemode`): the reusable Python-backed cell runtime shared by the application host and the machine daemon. Owns the code facade (`createCodemode`), machine object handles (`read/write/ls/bash/eval`), one lazy `PythonKernel` per tenant, the cell registry and `cell.run/peek/stop` lifecycle, the Python prelude (machine handles, `parallel`, `completion`, `tool.<name>()` proxies, `browser()`/`BrowserClient` Chromium-over-CDP automation in a `pty.session`, #1275), `listMachines`/`getMachine`/`findMachine`, codemode errors, callback routing, cancellation, and interpreter cleanup. Extracted from `packages/machines/src/codemode/` (#1246 fold reversed by #1272). It must NOT own kernel policy, ledger state, or model-facing rendering — those stay in `packages/agent` and `apps/openomni`.
 
 ## STRUCTURE
 

@@ -1,5 +1,23 @@
 # Implementation Status
 
+## #1275 browser automation recipe: browser() over CDP in a pty.session
+
+On `machines/1275-browser-recipe` (2026-10-03, draft PR #1286). The codemode
+Python prelude gains `browser(machine_id, *, headless=True, profile_dir=None,
+executable_path=None)` returning a thin `BrowserClient` around Playwright's
+`connect_over_cdp`; Chromium runs persistently in a cell-owned tmux
+`pty.session` (name `openomni-browser-<sha256(profile)[:12]>`), with the CDP
+port probe-bound from 9222 and port + pid retained in the session output.
+Profile dirs are export-confined via the existing `openCwd` rule
+(`path_escapes_export` before launch); loss at any client accessor raises the
+typed `browser_lost` refusal with the captured tmux output; a missing
+executable refuses typed naming the path and install command and tears the
+launch session down. No new capability id, wire method, or model tool.
+`PythonKernel.close()` is EOF-first (bounded grace before hard discard) so the
+driver's cleanup stops each client's browser process. Recipe documented in
+`docs/machines-and-delegation.md` section 2.7; end-to-end tests in
+`packages/codemode/test/codemode/browser.test.ts` run real tmux + Chromium.
+
 ## #1273 persistent terminals: pty.session over tmux
 
 On `machines/1273-pty-session` (2026-10-03, base `a004bdb0`, draft PR #1283).

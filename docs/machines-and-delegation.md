@@ -312,6 +312,74 @@ from `openomni daemon`, which still manages the Resident service. Example:
 }
 ```
 
+### 2.7 Browser automation recipe (`browser()`, #1275)
+
+Code cells drive a Chromium on an attached machine through the prelude helper
+`browser(machine_id, *, headless=True, profile_dir=None, executable_path=None)`.
+It adds no capability id, wire method, or model tool: Chromium runs
+persistently inside a cell-owned `pty.session` tmux session and the returned
+`BrowserClient` is a thin wrapper around Playwright's
+`chromium.connect_over_cdp(endpoint)` — `client.browser` is the raw Playwright
+browser, `client.context`/`client.pages` expose the default persistent
+context, and raw page operations raise Playwright's own errors. The embedded
+desktop browser tracked in #1023 has separate ownership and is not changed
+here.
+
+Prerequisites on the machine: `pty.session` + `kernel.py` capabilities,
+`tmux`, and Python Playwright with a Chromium download
+(`pip install playwright && python -m playwright install chromium`). A missing
+executable refuses typed as `browser_lost` naming the resolved path and that
+install command, and the launch session is torn down. Cells execute on the
+machine itself, so the CDP endpoint is `http://127.0.0.1:<port>` and the
+helper may address the browser process directly during cleanup.
+
+- Profile confinement: `profile_dir` must sit inside an effective export;
+  omitted, it defaults to `<cell cwd>/.openomni/browser-profile`. The session
+  opens with that directory as cwd, so the existing `openCwd` export rule
+  refuses `path_escapes_export` before Chromium starts. The profile persists
+  across close and reconnect (`--user-data-dir`), pairing the documented
+  requirement that `--remote-debugging-port` never runs on the default
+  profile.
+- Port selection: the launch probe-binds on the machine starting at the
+  documented default 9222 and advances past occupied ports; the chosen port
+  and the browser pid are printed as `[openomni-browser] cdp-port <port>` /
+  `chromium-pid <pid>` lines and retained in the session output, which is the
+  source of truth for reconnection and diagnostics. Readiness is the exact
+  `DevTools listening on ws://` line from Chromium, never elapsed time.
+- Display mode is explicit: `headless=True` (default) for unattended
+  machines, `headless=False` for a usable display. Both share profile,
+  connection, and lifecycle. Switching modes on a live client is a typed
+  error: `close()` first.
+- Reuse and loss: repeated `browser()` calls for the same machine and profile
+  return the live client; a stale connection reconnects over the retained
+  endpoint. Liveness is a bounded probe of the CDP http endpoint at every
+  client accessor; a browser that exited or lost CDP raises the typed
+  `browser_lost` refusal carrying the captured tmux output. The helper never
+  silently launches a replacement — that would hide profile, process, or
+  display failures.
+- Session lifetime: the launch line ends the tmux session on a clean exit or
+  a signal-range status, and keeps it alive on a real error status so the
+  failure output stays readable (`codemode.getMachine(id).pty(session)` or
+  `tmux attach -t <session>` inspects it; the session name is
+  `openomni-browser-<sha256(profile_dir)[:12]>`). `client.close()` ends
+  Chromium and the session but keeps the profile. Interpreter close stops
+  each client's browser process directly as best-effort cleanup.
+
+```python
+client = browser("laptop")                      # headless, default profile
+page = client.context.new_page()
+page.goto("https://example.com")
+print(page.title())
+
+# later cell, same interpreter: the live client is reused
+client = browser("laptop")
+
+# headed variant on a machine with a display, explicit profile
+headed = browser("laptop", headless=False,
+                 profile_dir="/home/owner/work/.openomni/browser-profile")
+headed.close()                                  # ends Chromium + session, keeps profile
+```
+
 ## 3. Session messaging contracts
 
 The model and cell catalog exposes one `send_message({to, message, kind?, reply_to?, deadline_ms?})` tool. Targets are an existing session (`to.kind: session`), a new parent-linked session (`new_session`), or an existing contact (`contact`; the protocol keeps `actor` internally). `kind` is `prompt | interrupt | resume` and defaults to `prompt`; a committed prompt becomes a letter in the recipient inbox. The returned `{messageId, target}` is a handle, not a synchronous join.
