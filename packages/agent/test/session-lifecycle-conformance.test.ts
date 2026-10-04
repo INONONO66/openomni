@@ -17,7 +17,6 @@ import { openCatalogStore } from "../src/core/store/catalog";
 import { openSessionStore } from "../src/core/store/session-file";
 import * as SessionHandleStore from "../src/core/store/fence";
 import type { SessionKernel } from "../src/core/entity";
-import { receivedMessages } from "../src/core/commit";
 import { type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
 import { createExecutor } from "../src/core/gate/decide";
 import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult, } from "../src/core/gate/decide";
@@ -119,7 +118,7 @@ function snapshotFrom(reads: SessionKernel, sessionId: string): SessionSnapshot 
     return {
         row: reads.row(sessionId),
         actions: sessionTree(reads, sessionId),
-        inbox: receivedMessages(reads, sessionId).rows,
+        inbox: reads.inputMessages(sessionId),
         requests: reads.requestRows(sessionId),
         outbound: reads.outboundRows(sessionId),
         tail: reads.getSnapshot(sessionId, 4),

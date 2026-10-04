@@ -367,6 +367,37 @@ const ReceivedEffect = z.object({
  * payload whose id no delivery row references yet, folded from the
  * chain — there is no inbox table.
  */
+/**
+ * Every input row, consumed or pending (#1257): the SQL projection that
+ * replaced the retired `receivedMessages` chain fold. Status comes from the
+ * same delivery-reference rule the pending read uses.
+ */
+function inputMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
+  const pending = new Set(
+    requiredActionsIn(context)
+      .pendingMessages(sessionId)
+      .map((action) => action.id),
+  );
+  return requiredActionsIn(context)
+    .inputMessages(sessionId)
+    .map((action, index) => {
+      const effect = ReceivedEffect.parse(action.effect.value);
+      return Inbox.Row.parse({
+        id: action.id,
+        sessionId: action.sessionId,
+        kind: effect.inboxKind,
+        content: effect.content,
+        origin: action.intent,
+        ...(effect.delivery === undefined ? {} : { delivery: effect.delivery }),
+        status: pending.has(action.id) ? "pending" : "consumed",
+        consumedBy: null,
+        consumedAt: null,
+        createdAt: action.ts,
+        ordinal: index + 1,
+      });
+    });
+}
+
 function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
   return requiredActionsIn(context)
     .pendingMessages(sessionId)
@@ -862,6 +893,7 @@ function makeSessionKernel(context: SessionKernelContext) {
       sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
     commit: (input: LedgerSession.Commit) => commitIn(context, input),
     pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
+    inputMessages: (sessionId: string): Inbox.Row[] => inputMessagesIn(context, sessionId),
     latestAction: (
       sessionId: string,
       throughRevision = Number.MAX_SAFE_INTEGER,

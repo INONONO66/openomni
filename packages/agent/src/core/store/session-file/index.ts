@@ -137,6 +137,7 @@ type Reads = Pick<
   | "openOperationsPage"
   | "operationChildrenPage"
   | "pendingMessages"
+  | "inputMessages"
 >;
 
 /**
@@ -429,6 +430,17 @@ function createActionReads(db: Database, sink: ObservationSink): Reads {
           AND NOT EXISTS (SELECT 1 FROM action d WHERE d.session_id = a.session_id
             AND d.kind IN ('prompt', 'signal', 'action')
             AND json_extract(d.intent, '$.inboxId') = a.id)
+        ORDER BY a.ordinal`)
+          .all(sessionId),
+      );
+    },
+    // #1257: the SQL replacement for the retired `receivedMessages` TS fold.
+    inputMessages(sessionId) {
+      return decodeRows(
+        db
+          .query<ActionSqlRow, [string]>(`
+        SELECT a.* FROM action a WHERE a.session_id = ? AND a.kind IN ('prompt', 'signal', 'action')
+          AND json_extract(a.effect, '$.inboxKind') IS NOT NULL
         ORDER BY a.ordinal`)
           .all(sessionId),
       );

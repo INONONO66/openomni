@@ -517,10 +517,6 @@ export function generationForOpen(
   return Effect.succeed(snapshot);
 }
 
-/** The chain effect one received message commits; the pending fold reads it back. */
-const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
-const DeliverIntent = z.object({ inboxId: z.string() });
-
 /** The durable chain action for one received message (the inbox table is gone; the chain is the inbox). */
 export function receivedMessageAction(input: {
   readonly id: string;
@@ -550,69 +546,6 @@ export function receivedMessageAction(input: {
     },
     irreversible: true,
     ts: input.at,
-  };
-}
-
-/**
- * Chain fold over received-message actions (W5.2 F1): every `prompt` action
- * carrying an inbox payload, projected to the historical inbox row shape.
- * Entries whose `<id>` a later delivery row's intent references are consumed.
- */
-interface ReceivedEntry {
-  readonly action: LedgerAction.Node;
-  readonly kind: Inbox.Kind;
-  readonly content: string;
-  readonly delivery?: JournalKind.Delivery;
-}
-
-function foldReceivedAction(
-  action: LedgerAction.Node,
-  received: ReceivedEntry[],
-  delivered: Set<string>,
-): void {
-  if (action.kind !== "prompt" && action.kind !== "signal" && action.kind !== "action") return;
-  const effect = ReceivedEffect.safeParse(action.effect.value);
-  if (effect.success)
-    received.push({
-      action,
-      kind: effect.data.inboxKind,
-      content: effect.data.content,
-      ...(effect.data.delivery === undefined ? {} : { delivery: effect.data.delivery }),
-    });
-  const intent = DeliverIntent.safeParse(action.intent.value);
-  if (intent.success) delivered.add(intent.data.inboxId);
-}
-
-export function receivedMessages(
-  kernel: SessionKernel,
-  sessionId: string,
-): { readonly rows: Inbox.Row[]; readonly delivered: ReadonlySet<string> } {
-  const received: ReceivedEntry[] = [];
-  const delivered = new Set<string>();
-  let afterRevision = 0;
-  for (;;) {
-    const page = kernel.historyPage(sessionId, { afterRevision, limit: 256 });
-    for (const action of page.actions) foldReceivedAction(action, received, delivered);
-    if (page.nextRevision === null) break;
-    afterRevision = page.nextRevision;
-  }
-  return {
-    delivered,
-    rows: received.map((entry, index) =>
-      Inbox.Row.parse({
-        id: entry.action.id,
-        sessionId,
-        kind: entry.kind,
-        content: entry.content,
-        origin: entry.action.intent,
-        ...(entry.delivery === undefined ? {} : { delivery: entry.delivery }),
-        status: delivered.has(entry.action.id) ? "consumed" : "pending",
-        consumedBy: null,
-        consumedAt: null,
-        createdAt: entry.action.ts,
-        ordinal: index + 1,
-      }),
-    ),
   };
 }
 

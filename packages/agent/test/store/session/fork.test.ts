@@ -134,7 +134,9 @@ function buildParent() {
     if (node === undefined) throw new Error(`missing parent node ${id}`);
     return node.actionHash;
   };
-  return { authority, hashOf, head: stores.kernel.verifyChain(PARENT).head };
+  const verdict = stores.kernel.verifyChain(PARENT);
+  if (verdict.kind !== "intact" || verdict.head === null) throw new Error("parent chain not intact");
+  return { authority, hashOf, head: verdict.head };
 }
 
 function ports(overrides: Partial<ForkPorts> = {}): ForkPorts {
@@ -180,7 +182,7 @@ describe("Session.fork", () => {
 
     // The child chain verifies on its own hashes, with its own head.
     const verdict = childKernel.verifyChain(CHILD);
-    expect(verdict.kind).toBe("intact");
+    if (verdict.kind !== "intact") throw new Error("child chain not intact");
     expect(verdict.head).toBe(receipt.head);
     expect(verdict.head).not.toBe(parent.head);
 
@@ -190,16 +192,16 @@ describe("Session.fork", () => {
     if (genesis === undefined) throw new Error("child genesis missing");
     expect(genesis.kind).toBe("session.configure");
     expect(genesis.parentId).toBeNull();
-    const intent = genesis.intent.value as { operation: string; forkedFrom: Record<string, unknown> };
+    const intent = genesis.intent.value as { operation: string; forkedFrom: unknown };
     expect(intent.operation).toBe("fork");
-    expect(intent.forkedFrom).toEqual({
+    expect(intent.forkedFrom as Record<string, unknown>).toEqual({
       session: PARENT,
       anchor: parent.hashOf("turn-1:terminal"),
       parentSeq: 4,
       parentHead: parent.head,
       copied: 4,
     });
-    expect(receipt.forkedFrom).toEqual(intent.forkedFrom);
+    expect(receipt.forkedFrom).toEqual(intent.forkedFrom as typeof receipt.forkedFrom);
 
     // Copied rows: parent genesis + input + delivery + terminal; arm and msg-2 (post-anchor) absent.
     expect(nodes.map((node) => node.id)).toEqual([

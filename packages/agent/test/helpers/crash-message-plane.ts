@@ -7,7 +7,7 @@ import { z } from "zod";
 import { sessionTree } from "./session-tree";
 import type { SessionKernel } from "../../src/core/entity";
 import { CommitFailed } from "../../src/core/failure";
-import { receivedMessageAction, receivedMessages } from "../../src/core/commit";
+import { receivedMessageAction } from "../../src/core/commit";
 import { firedAction } from "../../src/core/alarm";
 import { closeSessions } from "../../src/core/run";
 import { session } from "../../src/testing/registry";
@@ -113,7 +113,7 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
     const before = sessionTree(kernel, sessionId);
     const outboundBefore = kernel.outboundRows(sessionId);
     const watch = point === "watch_fired_committed_before_entity_wake";
-    const inboxBefore = receivedMessages(kernel, watch ? sessionId : "parent").rows;
+    const inboxBefore = kernel.inputMessages(watch ? sessionId : "parent");
     const externalBefore = platformEntries(dbPath);
     let dispatches = 0;
     let sourceRuns = 0;
@@ -149,7 +149,7 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
     const proof = messagePlaneProof.parse({
       before, after, repeated: sessionTree(kernel, sessionId), outboundBefore,
       outboundAfter: kernel.outboundRows(sessionId), inboxBefore,
-      inboxAfter: receivedMessages(kernel, watch ? sessionId : "parent").rows,
+      inboxAfter: kernel.inputMessages(watch ? sessionId : "parent"),
       dispatches, sourceRuns, destinationRuns, externalBefore, externalAfter: platformEntries(dbPath),
       watch: watch
         ? {
