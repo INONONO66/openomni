@@ -849,8 +849,10 @@ test("activation resend persists every armed envelope at the insert, never await
   );
   plane1.catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: 1 });
   const fence = await runEffect(adoptTestFence(kernel, sessionId, "future-seeder"));
-  // One past-due marker (folds stale on delivery: the causal barrier) followed
-  // in fire order by two far-future chains that no reply will settle today.
+  // Two far-future chains that no reply will settle today, followed in fire
+  // order by an uninstallable monitor.hit chain whose refused send is the
+  // walk's OWN last fact: the sequential resend reaches it only after both
+  // future inserts, so its retire commit is the causal barrier.
   const arm = (alarmId: string, at: number, armSeq: number) =>
     Core.armAction({
       parentId: `${sessionId}:materialize`,
@@ -865,9 +867,27 @@ test("activation resend persists every armed envelope at the insert, never await
       ts: 2,
     });
   const FAR_FUTURE = 4_102_444_800_000; // 2100-01-01Z: undeliverable today, replies only then
-  const marker = arm("due-past", 1_000, 1);
-  const futureA = arm("due-future-a", FAR_FUTURE, 2);
-  const futureB = arm("due-future-b", FAR_FUTURE + 3_600_000, 3);
+  const futureA = arm("due-future-a", FAR_FUTURE, 1);
+  const futureB = arm("due-future-b", FAR_FUTURE + 3_600_000, 2);
+  const refused = Core.armAction({
+    parentId: `${sessionId}:materialize`,
+    sessionId,
+    purpose: Bundle.MONITOR_HIT,
+    at: FAR_FUTURE + 7_200_000,
+    supersedes: null,
+    alarmId: "barrier-watch",
+    sourceKey: Bundle.MONITOR_SOURCE,
+    payload: {
+      spec: {
+        watch: { machine: "m-ghost", session: "qa", description: "barrier", persistent: true },
+        policyGeneration: 1,
+        notificationLimit: 8,
+      },
+      notifications: 0,
+    },
+    armSeq: 3,
+    ts: 2,
+  });
   await runEffect(
     kernel.commit({
       sessionId,
@@ -875,23 +895,27 @@ test("activation resend persists every armed envelope at the insert, never await
       fence,
       now: 3,
       expectedRevision: kernel.row(sessionId).revision,
-      actions: [marker.action, futureA.action, futureB.action],
+      actions: [futureA.action, futureB.action, refused.action],
       state: "idle",
     }),
   );
   await app1.stop();
 
-  const markerFolded = Promise.withResolvers<void>();
+  const walked = Promise.withResolvers<void>();
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
-    if (event.sessionId === sessionId && event.kind === "alarm") markerFolded.resolve();
+    if (event.sessionId === sessionId && event.kind === "alarm") walked.resolve();
   });
   suite.defer(unsubscribe);
   const app2 = await suite.boot({ config: { ...config, machines: testMachinesPlane() }, llm: stopLlm });
-  await planeOf(app2.runtime);
-  // The marker sorts first in the armed index: its fold proves the resend
-  // walked the rows, and its delivery needed a full cluster round trip that
-  // started only after the two future inserts had already been issued.
-  await bounded(markerFolded.promise);
+  const plane2 = await planeOf(app2.runtime);
+  // The refused watch sorts LAST in the armed index: the only alarm commit a
+  // reboot can produce here is its send_refused retire (#1254 H2), appended
+  // by the walk itself strictly after both future inserts were issued.
+  await bounded(walked.promise);
+  const barrier = foldAlarmChains(plane2.openKernel(sessionId), sessionId).get("barrier-watch");
+  if (barrier === undefined) throw new Error("barrier chain lost");
+  expect(barrier.latest.at).toBeNull();
+  expect(barrier.latest.payload).toMatchObject({ reason: "send_refused" });
 
   // Persist-and-return: both future envelopes are durable in the catalog
   // mailbox now; a reply-awaiting send would still be parked on due-future-a.
