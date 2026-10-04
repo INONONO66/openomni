@@ -20,8 +20,8 @@ export {
 } from "./points";
 export { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } from "./gate/migrate";
 export {
-  createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, sessionTool,
-  ToolRefused, toolInputSchema, toolSpec,
+  createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, projectTools,
+  ToolRefused, toolInputSchema, type ToolProjections, type ProjectableTool,
 } from "./tool";
 
 export {
