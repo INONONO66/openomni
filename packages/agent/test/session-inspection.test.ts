@@ -419,8 +419,10 @@ describe("action-based history and diagnostic projections", () => {
                 for (const id of transition.cause.inboxIds) expect(inbox.has(id)).toBe(true);
                 break;
               case "alarm":
-                expect(transition.cause).toEqual({ kind: "alarm", alarmId: "monitor", epoch: 1 });
-                break;
+                // #1254 S5: the epoch alarm-cause scheme is deleted; alarm
+                // rows fall through to delivery/lineage causes until the
+                // protocol Cause reshape (Lane 1) lands.
+                throw new Error("no epoch alarm cause may surface after #1254 S5");
               case "root":
                 expect(transition.parentId).toBeNull();
                 expect(["session.configure", "alarm"]).toContain(transition.kind);
@@ -500,26 +502,16 @@ describe("action-based history and diagnostic projections", () => {
           expect(inspection.compactions).toHaveLength(1);
           expect(inspection.compactions[0]?.discarded.count).toBeGreaterThan(0);
           expect(inspection.compactions[0]?.restoredBy).toEqual([]);
-          const woke = inspection.transitions.filter(
+          // #1254 S5: a fired alarm row's cause is its chain lineage (its
+          // arm action); the dedicated epoch cause variant is gone.
+          const monitorFire = Alarm.occurrenceId("parent", "monitor", 1, "timer:1000");
+          const woke = inspection.transitions.find(
             (
               entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
-            ) => entry.cause.kind === "alarm",
+            ) => entry.actionId === monitorFire,
           );
-          expect(
-            woke.map(
-              (
-                entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
-              ) => entry.kind,
-            ),
-          ).toEqual(["alarm"]);
-          const monitorFire = Alarm.occurrenceId("parent", "monitor", 1, "timer:1000");
-          expect(
-            woke.map(
-              (
-                entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],
-              ) => entry.actionId,
-            ),
-          ).toEqual([monitorFire]);
+          expect(woke?.kind).toBe("alarm");
+          expect(woke?.cause).toEqual({ kind: "action", actionId: "monitor" });
           const wakePrompt = inspection.transitions.find(
             (
               entry: import("@openomni/protocol").SessionHistory.Inspection["transitions"][number],

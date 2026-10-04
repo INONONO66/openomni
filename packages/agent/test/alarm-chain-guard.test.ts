@@ -20,9 +20,10 @@ import {
   type AlarmWakeOutcome,
   type ArmVerb,
 } from "../src/core/api";
+import { runAgent } from "./helpers/executor";
 
-// #1254 S1: one chain guard replaces hasNewerAttempt/retryDelivery/
-// deadlineDelivery/watch*Delivery. A delivered occurrence is fresh iff the
+// #1254 S1: one chain guard replaces the four per-purpose delivery guards
+// (retry/deadline/watch). A delivered occurrence is fresh iff the
 // latest arm row still names it, the arm is not retired, and no accepted
 // firing settled it; everything else folds to a recorded skip.
 
@@ -139,9 +140,9 @@ describe("alarm row builders", () => {
 });
 
 describe("composeAlarmPurposes registry", () => {
-  test("rejects a capability declaring a reserved purpose with a typed compose error", () => {
+  test("rejects a capability declaring a reserved purpose with a typed compose error", async () => {
     for (const purpose of [...RESERVED_PURPOSES, "rescan"]) {
-      const error = Effect.runSync(
+      const error = await runAgent(
         Effect.flip(
           composeAlarmPurposes({ capabilities: [{ bundle: "monitor", purposes: [purpose] }] }),
         ),
@@ -153,8 +154,8 @@ describe("composeAlarmPurposes registry", () => {
     }
   });
 
-  test("rejects a duplicate purpose across capabilities with a typed compose error", () => {
-    const error = Effect.runSync(
+  test("rejects a duplicate purpose across capabilities with a typed compose error", async () => {
+    const error = await runAgent(
       Effect.flip(
         composeAlarmPurposes({
           capabilities: [
@@ -169,8 +170,8 @@ describe("composeAlarmPurposes registry", () => {
     expect(error.bundle).toBe("monitor");
   });
 
-  test("accepts a capability declaring cron.tick and keeps the reserved purposes present", () => {
-    const registry = Effect.runSync(
+  test("accepts a capability declaring cron.tick and keeps the reserved purposes present", async () => {
+    const registry = await runAgent(
       composeAlarmPurposes({ capabilities: [{ bundle: "cron", purposes: ["cron.tick"] }] }),
     );
     expect(registry.get("cron.tick")).toBe("cron");
