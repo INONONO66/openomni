@@ -518,8 +518,8 @@ export function createWatchSources(
       (content, identity) =>
         enqueue(holder, { content, terminal: false, detail: `path:${identity}` }),
       (error) => sourceFailure(spec, holder, error),
-      options.pathWatch ?? nativePathWatch,
-      options.reconcile ?? nativeReconcile,
+      options.pathWatch,
+      options.reconcile,
     );
   }
 
