@@ -127,28 +127,46 @@ function cascadeOff(manifest: ManifestDefinition): ReadonlyMap<string, string> {
     manifest.bundles.flatMap((bundle) => bundle.provides.map((tag) => [tag.key, bundle.name] as const)),
   );
   for (;;) {
-    let changed = false;
-    for (const capability of manifest.capabilities) {
-      if (disabled.has(capability.name)) continue;
-      const hit = capability.requires.find((required) => disabled.has(required));
-      if (hit !== undefined) {
-        disabled.set(capability.name, disabled.get(hit) ?? hit);
-        changed = true;
-      }
-    }
-    for (const bundle of manifest.bundles) {
-      if (disabled.has(bundle.name)) continue;
-      for (const tag of bundle.requires) {
-        const owner = seamOwner.get(tag.key) ?? provideOwner.get(tag.key);
-        if (owner !== undefined && disabled.has(owner)) {
-          disabled.set(bundle.name, disabled.get(owner) ?? owner);
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (!changed) return disabled;
+    const capabilitiesChanged = sweepOffCapabilities(manifest, disabled);
+    const bundlesChanged = sweepOffBundles(manifest, disabled, seamOwner, provideOwner);
+    if (!(capabilitiesChanged || bundlesChanged)) return disabled;
   }
+}
+
+/** One cascade sweep over capabilities: a disabled requirement disables the dependent. */
+function sweepOffCapabilities(manifest: ManifestDefinition, disabled: Map<string, string>): boolean {
+  let changed = false;
+  for (const capability of manifest.capabilities) {
+    if (disabled.has(capability.name)) continue;
+    const hit = capability.requires.find((required) => disabled.has(required));
+    if (hit !== undefined) {
+      disabled.set(capability.name, disabled.get(hit) ?? hit);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** One cascade sweep over bundles: a disabled seam owner disables the requiring bundle. */
+function sweepOffBundles(
+  manifest: ManifestDefinition,
+  disabled: Map<string, string>,
+  seamOwner: ReadonlyMap<string, string>,
+  provideOwner: ReadonlyMap<string, string>,
+): boolean {
+  let changed = false;
+  for (const bundle of manifest.bundles) {
+    if (disabled.has(bundle.name)) continue;
+    for (const tag of bundle.requires) {
+      const owner = seamOwner.get(tag.key) ?? provideOwner.get(tag.key);
+      if (owner !== undefined && disabled.has(owner)) {
+        disabled.set(bundle.name, disabled.get(owner) ?? owner);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return changed;
 }
 
 /** Composition order of on bundles over seam/provide availability; cycle rejects. */
@@ -233,13 +251,27 @@ function hashProjection(
   };
 }
 
-function composeManifest(manifest: ManifestDefinition): Generation {
-  uniqueNames(manifest);
-  const disabledMap = cascadeOff(manifest);
-  const onCapabilities = manifest.capabilities.filter(
-    (capability) => !disabledMap.has(capability.name),
-  );
-  const orderedCapabilities = orderCapabilities(onCapabilities);
+/** Collision-guarded merge of a named handler/purpose table into the composed registry. */
+function mergeInto(
+  target: Map<string, object>,
+  entries: Readonly<Record<string, object>>,
+  owner: string,
+  label: string,
+): void {
+  for (const [key, value] of Object.entries(entries)) {
+    if (target.has(key)) reject("duplicate", owner, `${label} ${key}`);
+    target.set(key, value);
+  }
+}
+
+/** The merged capability-owned tables in topological order; any collision rejects. */
+function mergeCapabilityTables(orderedCapabilities: readonly CapabilityDefinition[]): {
+  kinds: Record<string, CapabilityKindDeclaration>;
+  points: Set<string>;
+  handlers: Map<string, object>;
+  purposes: Map<string, object>;
+  inputs: string[];
+} {
   const kinds: Record<string, CapabilityKindDeclaration> = {};
   const points = new Set<string>(CORE_POINT_RECORDS.map((record) => record.id));
   const handlers = new Map<string, object>();
@@ -254,27 +286,22 @@ function composeManifest(manifest: ManifestDefinition): Generation {
       if (points.has(point)) reject("duplicate", capability.name, `point ${point}`);
       points.add(point);
     }
-    for (const [purpose, handler] of Object.entries(capability.purposes)) {
-      if (purposes.has(purpose)) reject("duplicate", capability.name, `purpose ${purpose}`);
-      purposes.set(purpose, handler);
-    }
-    for (const [ref, handler] of Object.entries(capability.handlers)) {
-      if (handlers.has(ref)) reject("duplicate", capability.name, `handler ${ref}`);
-      handlers.set(ref, handler);
-    }
+    mergeInto(purposes, capability.purposes, capability.name, "purpose");
+    mergeInto(handlers, capability.handlers, capability.name, "handler");
     for (const input of capability.inputs) {
       if (inputs.includes(input)) reject("duplicate", capability.name, `input ${input}`);
       inputs.push(input);
     }
   }
-  const onBundles = manifest.bundles.filter((bundle) => !disabledMap.has(bundle.name));
-  for (const bundle of onBundles) {
-    for (const owned of ["kinds", "points", "step"] as const) {
-      if (owned in bundle) reject("product_declares_kind", bundle.name, owned);
-    }
-  }
-  const seams = new Set(orderedCapabilities.map((capability) => capability.seam.key));
-  const orderedBundles = orderBundles(onBundles, seams);
+  return { kinds, points, handlers, purposes, inputs };
+}
+
+/** The merged bundle-owned tables in composition order; collisions (including against capability tables) reject. */
+function mergeBundleTables(
+  orderedBundles: readonly BundleContract[],
+  purposes: Map<string, object>,
+  handlers: Map<string, object>,
+): { tools: BundleTool[]; rows: BundleGateRow[] } {
   const tools: BundleTool[] = [];
   const rows: BundleGateRow[] = [];
   for (const bundle of orderedBundles) {
@@ -283,20 +310,34 @@ function composeManifest(manifest: ManifestDefinition): Generation {
         reject("duplicate", bundle.name, `tool ${tool.name}`);
       tools.push(tool);
     }
-    for (const [purpose, handler] of Object.entries(bundle.purposes)) {
-      if (purposes.has(purpose)) reject("duplicate", bundle.name, `purpose ${purpose}`);
-      purposes.set(purpose, handler);
-    }
-    for (const [ref, handler] of Object.entries(bundle.handlers)) {
-      if (handlers.has(ref)) reject("duplicate", bundle.name, `handler ${ref}`);
-      handlers.set(ref, handler);
-    }
+    mergeInto(purposes, bundle.purposes, bundle.name, "purpose");
+    mergeInto(handlers, bundle.handlers, bundle.name, "handler");
     for (const row of bundle.rows) {
       if (rows.some((existing) => existing.id === row.id))
         reject("duplicate", bundle.name, `row ${row.id}`);
       rows.push(row);
     }
   }
+  return { tools, rows };
+}
+
+function composeManifest(manifest: ManifestDefinition): Generation {
+  uniqueNames(manifest);
+  const disabledMap = cascadeOff(manifest);
+  const onCapabilities = manifest.capabilities.filter(
+    (capability) => !disabledMap.has(capability.name),
+  );
+  const orderedCapabilities = orderCapabilities(onCapabilities);
+  const { kinds, points, handlers, purposes, inputs } = mergeCapabilityTables(orderedCapabilities);
+  const onBundles = manifest.bundles.filter((bundle) => !disabledMap.has(bundle.name));
+  for (const bundle of onBundles) {
+    for (const owned of ["kinds", "points", "step"] as const) {
+      if (owned in bundle) reject("product_declares_kind", bundle.name, owned);
+    }
+  }
+  const seams = new Set(orderedCapabilities.map((capability) => capability.seam.key));
+  const orderedBundles = orderBundles(onBundles, seams);
+  const { tools, rows } = mergeBundleTables(orderedBundles, purposes, handlers);
   for (const row of rows) {
     if (!points.has(row.on)) reject("unknown_point", row.id, row.on);
     if (row.how.ref !== undefined && !handlers.has(row.how.ref))
