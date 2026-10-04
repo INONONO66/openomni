@@ -6,7 +6,7 @@ const session = Testing.session;
 const createTurnDispatcher = Core.createTurnDispatcher;
 const defineTool = Core.defineTool;
 const eraseTool = Core.eraseTool;
-const sessionTool = Core.sessionTool;
+const projectTools = Core.projectTools;
 type SessionRuntime = Core.SessionRuntime;
 import { planeOf } from "./helpers/ledger";
 import { z } from "zod";
@@ -140,7 +140,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
   });
   await runAppEffect(runtime, Effect.flatMap(GenerationLayers, (generations) => generations.initialize(resident.definitions)));
   const handle = await acquireAppResource(runtime, session({
-    id: "shutdown-raw", role: "resident", tools: [sessionTool(tool)],
+    id: "shutdown-raw", role: "resident", tools: projectTools([tool]).session,
     runner: (input) => Effect.flatMap(createTurnDispatcher(input, sessionRuntime), (dispatcher) => dispatcher.execute(
       { id: "hold-call", tool: tool.name, input: {} },
       { sessionId: input.sessionId, turnId: input.turnId, signal: input.signal },

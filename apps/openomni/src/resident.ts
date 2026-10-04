@@ -6,7 +6,7 @@ import { Effect } from "effect";
 const createSessionChatRunner = Core.createSessionChatRunner;
 const createTurnDispatcher = Core.createTurnDispatcher;
 const failureFacts = Core.failureFacts;
-const sessionTool = Core.sessionTool;
+const projectTools = Core.projectTools;
 const ToolRefused = Core.ToolRefused;
 type ChatAgentConfig = Core.ChatAgentConfig;
 type SessionRunner = Core.SessionRunner;
@@ -133,7 +133,7 @@ export function createResident(options: ResidentOptions) {
         parentId,
         role,
         runner,
-        tools: definitions[role].map(sessionTool),
+        tools: projectTools(definitions[role]).session,
         bundles: options.bundles ?? [],
         preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : WORKER_PRESET),
         at: ports.clock(),

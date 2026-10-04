@@ -6,7 +6,7 @@ import { acquireAppResource, gatewayRuntime } from "../src/gateway";
 import { Effect } from "effect";
 import { ownerStart } from "./helpers/owner-start";
 import { Core } from "@openomni/agent";
-const sessionTool = Core.sessionTool;
+const projectTools = Core.projectTools;
 import { Bus } from "./helpers/bus";
 import { Database } from "bun:sqlite";
 import { catalogDefinitions } from "../src/tools/core/catalog";
@@ -172,7 +172,7 @@ test("process entry logs committed sessions and disposes its runtime", async () 
   const fixture = messageFixture(
     "resident",
     undefined,
-    catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")).map(sessionTool),
+    projectTools(catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"))).session,
   );
   const stdin = new PassThrough();
   let requests = 0;
@@ -405,7 +405,7 @@ test.each([
   const fixture = messageFixture(
     "resident",
     undefined,
-    toolSend ? catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")).map(sessionTool) : [],
+    toolSend ? projectTools(catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"))).session : [],
   );
   let requests = 0;
   const provider = Bun.serve({
@@ -495,12 +495,12 @@ test.each([
   failTarget,
   requestCount,
 }) => {
-  const tools = catalogDefinitions(testToolPorts)
-    .filter(
+  const tools = projectTools(
+    catalogDefinitions(testToolPorts).filter(
       (tool: import("@openomni/protocol").AnyToolDefinition) =>
         tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"),
-    )
-    .map(sessionTool);
+    ),
+  ).session;
   const fixture = messageFixture("resident", undefined, tools);
   let requests = 0;
   const provider = Bun.serve({

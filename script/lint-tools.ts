@@ -29,7 +29,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { runScriptMain } from "./main-runner";
-import { toolSpec } from "../packages/agent/src/core/tool.js";
+import { projectTools } from "../packages/agent/src/core/tool.js";
 import { catalogDefinitions, type ToolPorts } from "../apps/openomni/src/tools/core/catalog.js";
 import type { Tool, AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
 import type { PlainObject, PlainValue } from "../packages/protocol/src/json.js";
@@ -43,6 +43,21 @@ const schemaPorts: ToolPorts = {
   llm: undefined, provisioning: undefined, clock: () => 0, id: () => "schema",
 };
 const definitions = catalogDefinitions(schemaPorts);
+
+/**
+ * The snapshot pins the FULL catalog surface, cell-only doors included:
+ * `projectTools(...).specs` drops model-invisible tools, so visibility is
+ * widened for the projection alone (`Tool.Spec` carries no visibility).
+ */
+function allToolSpecs(list: readonly AnyToolDefinition[]): readonly Tool.Spec[] {
+  return projectTools(
+    list.map((definition) =>
+      definition.visibility.model.length > 0
+        ? definition
+        : { ...definition, visibility: { ...definition.visibility, model: ["resident" as const] } },
+    ),
+  ).specs;
+}
 
 interface Violation {
   readonly check:
@@ -271,7 +286,7 @@ export function lintToolSurface(tool: ToolSurface): ToolLintFailure[] {
 }
 
 function collectToolSurfaces(): ToolSurface[] {
-  return definitions.map(toolSpec).map((spec) => ({
+  return allToolSpecs(definitions).map((spec) => ({
     name: spec.name,
     description: spec.description,
     inputSchema: spec.inputSchema,
@@ -601,7 +616,7 @@ async function checkSchemaSnapshot(): Promise<Violation[]> {
 }
 
 export function buildToolSchemaSnapshot(): readonly Tool.Spec[] {
-  return definitions.map(toolSpec);
+  return allToolSpecs(definitions);
 }
 
 export function diffToolSchemaSnapshots<T extends { readonly name?: string }>(

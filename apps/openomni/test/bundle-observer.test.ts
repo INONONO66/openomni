@@ -9,7 +9,7 @@ const bundlePolicyTag = Bundle.bundlePolicyTag;
 const BundlesLive = Bundle.BundlesLive;
 const defineTool = Core.defineTool;
 const eraseTool = Core.eraseTool;
-const sessionTool = Core.sessionTool;
+const projectTools = Core.projectTools;
 const Llm = Model.Llm;
 const run = Model.run;
 import { sessionFilePath } from "../src/composition/cluster-runtime";
@@ -111,7 +111,7 @@ test("a held WS generation keeps its catalog and transformer while public tools.
     if (handle === undefined) throw new Error("missing live session");
     const retired = eventSignal<void>("g1 observer finalized");
     void audit.whenClosed(2).then(retired.resolve, retired.reject);
-    expect(await runAppEffect(runtime, handle.tools.add([sessionTool(demo)]))).toMatchObject({ generation: 2 });
+    expect(await runAppEffect(runtime, handle.tools.add(projectTools([demo]).session))).toMatchObject({ generation: 2 });
     expect(audit.closed).not.toContain(2);
     release.resolve();
     await first;

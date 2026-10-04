@@ -16,7 +16,7 @@ const createTurnDispatcher = Core.createTurnDispatcher;
 const defineTool = Core.defineTool;
 const eraseTool = Core.eraseTool;
 const session = Testing.session;
-const sessionTool = Core.sessionTool;
+const projectTools = Core.projectTools;
 type SessionRuntime = Core.SessionRuntime;
 import { Bus } from "./helpers/bus";
 import { L0Observation, Tool } from "@openomni/protocol";
@@ -189,7 +189,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
       seedKernelPolicyRows(plane.catalog.policies);
       const handle = await acquireEffect(
         session(
-          { id: sessionId, role: "resident", runner, tools: definitions.map(sessionTool) },
+          { id: sessionId, role: "resident", runner, tools: projectTools(definitions).session },
           runtime,
         ).pipe(Effect.provide(services)),
       );
