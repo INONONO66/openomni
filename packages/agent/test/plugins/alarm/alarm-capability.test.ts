@@ -426,9 +426,11 @@ describe("monitor.timeout", () => {
     });
   });
 
-  test("an already retired chain lapses without a superseding arm", () => {
+  test("a timeout for a settled watch appends no prompt, arms nothing, and lapses as exhausted", () => {
+    const prompts: PromptCall[] = [];
     const calls: ArmCall[] = [];
-    const definition = capability({ arm: stubArm([]) });
+    const closed: string[] = [];
+    const definition = capability({ arm: stubArm([]), closed });
     const outcome = runTestSync(
       definition.wake(
         fired({
@@ -438,12 +440,15 @@ describe("monitor.timeout", () => {
         }),
         stubContext({
           arm: stubArm(calls),
+          prompts,
           chains: { "watch-1": { occurrenceId: "occ-main", at: null } },
         }),
       ),
     );
-    expect(outcome).toBe("delivered");
+    expect(outcome).toBe("exhausted");
+    expect(prompts).toEqual([]);
     expect(calls).toEqual([]);
+    expect(closed).toEqual([]);
   });
 });
 

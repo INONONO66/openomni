@@ -196,18 +196,23 @@ function monitorHit(deps: WatchWakeDeps): AlarmPurposeHandler {
     });
 }
 
-/** `monitor.timeout`: one terminal wake that retires the main watch chain. */
+/**
+ * `monitor.timeout`: one terminal wake that retires the main watch chain.
+ * A settled main chain (retired or never armed) gets no prompt and no arm —
+ * the occurrence lapses as `exhausted` (fired{exhausted}, no drain wake), so
+ * a completed watch is never woken again (#1254 H5b).
+ */
 function monitorTimeout(deps: WatchWakeDeps): AlarmPurposeHandler {
   return ({ fired, ctx }) =>
     Effect.gen(function* () {
       const payload = yield* parsePayload(WatchTimeoutPayload, fired);
+      const latest = ctx.reads.latestArm(payload.watchId);
+      if (latest === undefined || latest.at === null) return "exhausted" as const;
       yield* ctx.prompt({
         content: JSON.stringify({ watchId: payload.watchId, reason: "timeout" }),
         payload: { watchId: payload.watchId, reason: "timeout" },
       });
-      const latest = ctx.reads.latestArm(payload.watchId);
-      if (latest !== undefined && latest.at !== null)
-        yield* retire(ctx, fired, payload.watchId, latest.occurrenceId, "timeout");
+      yield* retire(ctx, fired, payload.watchId, latest.occurrenceId, "timeout");
       deps.close(payload.watchId);
       return "delivered" as const;
     });
