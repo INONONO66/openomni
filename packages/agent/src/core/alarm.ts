@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { interruptOn } from "./ports";
-import { Alarm, canonicalKey, isReservedAlarmPurpose, RESERVED_ALARM_PURPOSES, type LedgerAction, type PlainObject } from "@openomni/protocol";
+import { Alarm, canonicalJson, isReservedAlarmPurpose, RESERVED_ALARM_PURPOSES, type LedgerAction, type PlainObject } from "@openomni/protocol";
 import type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
 
 export type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
@@ -325,7 +325,7 @@ export function createRetryAlarmPort(deps: RetryAlarmDeps): RetryAlarmPort {
             alarmId,
             armSeq,
             sourceKey: "retry",
-            payload: canonicalKey(payload),
+            payload: canonicalJson(payload),
             fireAt: input.fireAt,
           }),
         ),

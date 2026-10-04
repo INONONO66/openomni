@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   canonicalDigest,
+  canonicalJson,
   canonicalKey,
   PlainObjectSchema,
   PlainValueSchema,
@@ -12,6 +13,14 @@ describe("plain JSON owner", () => {
     expect(canonicalKey({ z: false, a: [2, "y", null] })).toBe(
       '{"a":[number:2,string:"y",null],"z":boolean:false}',
     );
+  });
+
+  test("canonical JSON bytes sort keys and round-trip through JSON.parse", () => {
+    const value = { z: false, a: [2, "y", null], n: { b: 1, a: "x" } };
+    const bytes = canonicalJson(value);
+    expect(bytes).toBe('{"a":[2,"y",null],"n":{"a":"x","b":1},"z":false}');
+    expect(JSON.parse(bytes)).toEqual(value);
+    expect(() => canonicalJson({ gap: undefined } as never)).toThrow(CanonicalJsonError);
   });
 
   test("one grammar rejects non-JSON values for live boundaries and typed keys", () => {

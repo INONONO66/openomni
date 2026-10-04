@@ -3,6 +3,7 @@ import { expect, it } from "bun:test";
 import type { LedgerAction } from "@openomni/protocol";
 import type { ExecutionApprovalRequest, ExecutionApprovals } from "../src/core/gate/decide";
 import { sessionStopEvidence } from "../src/core/run";
+import { armAction, firedAction } from "../src/core/alarm";
 import { fencedTurnFixture, type FencedTurnFixture } from "./helpers/fenced-writer";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { sessionTree } from "./helpers/session-tree";
@@ -13,13 +14,18 @@ function approvalsWith(ids: readonly string[]): ExecutionApprovals {
     answer: () => Effect.void,
   };
 }
-function alarmAction(op: "arm" | "fired", id: string, parentId: string, ts: number): LedgerAction.Append {
-  return {
-    id, parentId, sessionId: "evidence", kind: "alarm", ts,
-    intent: { encodingVersion: 1, value: { phase: "intent", op } },
-    effect: { encodingVersion: 1, value: { phase: "result" } },
-    irreversible: true,
-  };
+/** #1254 chain rows: a capability arm and the fired row that settles its occurrence. */
+function armed(parentId: string, ts: number) {
+  return armAction({
+    parentId, sessionId: "evidence", purpose: "test.tick", at: ts + 1, supersedes: null,
+    alarmId: "alarm-1", sourceKey: "test", payload: {}, armSeq: 1, ts,
+  });
+}
+function fired(occurrenceId: string, parentId: string, ts: number): LedgerAction.Append {
+  return firedAction({
+    parentId, sessionId: "evidence", purpose: "test.tick", alarmId: "alarm-1", occurrenceId,
+    outcome: "delivered", ts,
+  });
 }
 function commitAlarm(fixture: FencedTurnFixture, action: LedgerAction.Append) {
   const kernel = isolatedLedger().kernel;
@@ -33,16 +39,18 @@ it("reports armed alarms of this turn and every open intent from obligations and
   const kernel = isolatedLedger().kernel;
   const fixture = yield* fencedTurnFixture(kernel, { id: "evidence", clock: () => 0 });
   const evidence = sessionStopEvidence(kernel, "evidence", fixture.turnId, () => approvalsWith(["approval-1"]), () => Effect.succeed([{ actionId: "obligation-1", kind: "message" as const }]));
-  yield* commitAlarm(fixture, alarmAction("arm", "alarm-1", fixture.turnId, 5_000));
-  expect(yield* evidence()).toEqual({ progress: true, blocked: false, openIntent: ["obligation-1", "approval-1"], alarmIds: ["alarm-1"] });
+  const arm = armed(fixture.turnId, 5_000);
+  yield* commitAlarm(fixture, arm.action);
+  expect(yield* evidence()).toEqual({ progress: true, blocked: false, openIntent: ["obligation-1", "approval-1"], alarmIds: [arm.action.id] });
 })));
 
 it("ignores alarms that are no longer armed and reports nothing when no obligations exist", () => isolated(Effect.gen(function* () {
   const kernel = isolatedLedger().kernel;
   const fixture = yield* fencedTurnFixture(kernel, { id: "evidence", clock: () => 0 });
   const evidence = sessionStopEvidence(kernel, "evidence", fixture.turnId, () => undefined);
-  yield* commitAlarm(fixture, alarmAction("arm", "alarm-1", fixture.turnId, 5_000));
-  yield* commitAlarm(fixture, alarmAction("fired", "alarm-1:fired", "alarm-1", 5_000));
+  const arm = armed(fixture.turnId, 5_000);
+  yield* commitAlarm(fixture, arm.action);
+  yield* commitAlarm(fixture, fired(arm.occurrenceId, arm.action.id, 5_000));
   expect(sessionTree(kernel, "evidence").some((action: LedgerAction.Node) => action.kind === "alarm")).toBe(true);
   expect(yield* evidence()).toEqual({ progress: true, blocked: false, openIntent: [], alarmIds: [] });
 })));

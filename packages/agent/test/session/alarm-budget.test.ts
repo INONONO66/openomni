@@ -3,12 +3,13 @@
  * a capability wake arming through `ctx.arm` succeeds until the durable armed
  * index holds `maxArmed` rows, then receives the typed
  * `ArmRefused{code: alarm_budget}` — and reserved purposes are refused with
- * `reserved_purpose` regardless of budget headroom.
+ * `reserved_purpose` regardless of budget headroom. The same wake commits one
+ * alarm-originated prompt through `ctx.prompt` (origin fixed by the core).
  */
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Effect, Result } from "effect";
-import { armAction, type AlarmCapability, ArmRefused } from "../../src/core/alarm";
+import { armAction, type AlarmCapability, type ArmRefused } from "../../src/core/alarm";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
@@ -24,6 +25,10 @@ afterAll(() => {
 const sessionId = "budget-session";
 const MAX_ARMED = 64;
 const FAR_FUTURE = 4_102_444_800_000;
+
+// Non-empty on purpose: the resent occurrence must carry the arm's payload as
+// JSON bytes a capability can parse (`{}` would pass under any serializer).
+const BOOT_PAYLOAD = { reason: "boot", attempt: 1, tags: ["a", "b"] };
 
 test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reserved purposes always refuse", async () => {
   // Seed: one committed boot arm (purpose test.tick) whose resent occurrence
@@ -55,7 +60,7 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
         supersedes: null,
         alarmId: "boot",
         sourceKey: "boot",
-        payload: {},
+        payload: BOOT_PAYLOAD,
         armSeq: row.revision + 1,
         ts: 100,
       });
@@ -79,6 +84,12 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
     readonly armed: number;
     readonly refusal: ArmRefused | undefined;
     readonly reserved: ArmRefused | undefined;
+    readonly prompt: { readonly seq: number };
+    readonly fired: {
+      readonly occurrenceId: string;
+      readonly alarmId: string;
+      readonly payload: string;
+    };
   }
   let resolveReport: (report: WakeReport) => void = () => undefined;
   const report = new Promise<WakeReport>((resolve) => {
@@ -86,8 +97,9 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
   });
   const capability: AlarmCapability = {
     purposes: ["test.tick"],
-    wake: (_fired, ctx) =>
+    wake: (fired, ctx) =>
       Effect.gen(function* () {
+        const prompt = yield* ctx.prompt({ content: "WAKE tick", payload: { detail: "line:1" } });
         const reserved = yield* Effect.result(
           ctx.arm({ purpose: "retry", at: FAR_FUTURE, payload: {}, sourceKey: "t" }),
         );
@@ -115,6 +127,12 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
           armed,
           refusal,
           reserved: Result.isFailure(reserved) ? reserved.failure : undefined,
+          prompt,
+          fired: {
+            occurrenceId: fired.occurrenceId,
+            alarmId: fired.alarmId,
+            payload: fired.payload,
+          },
         });
         return "delivered" as const;
       }),
@@ -143,19 +161,39 @@ test("ctx.arm fills the budget to maxArmed, then ArmRefused{alarm_budget}; reser
   expect(outcome.refusal?.code).toBe("alarm_budget");
 
   // Durable index after the wake: the boot row retired on `fired{delivered}`,
-  // the 63 accepted arms remain.
+  // the 63 accepted arms remain; the wake's prompt is one `prompt` row keyed
+  // by the fired occurrence with the core-fixed alarm origin.
   const after = await runAgent(
     Effect.sync(() => {
       const catalog = openCatalogStore(catalogFile, { now: () => Date.now() });
-      const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => Date.now() });
+      const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), {
+        now: () => Date.now(),
+      });
       try {
-        return SessionHandleStore.createSessionKernel(store, catalog).armedAlarms();
+        const kernel = SessionHandleStore.createSessionKernel(store, catalog);
+        return {
+          armed: kernel.armedAlarms(),
+          prompt: kernel.actionById(`${outcome.fired.occurrenceId}:prompt`),
+        };
       } finally {
         store.close();
         catalog.close();
       }
     }),
   );
-  expect(after.find((row) => row.occurrenceId === boot.occurrenceId)).toBeUndefined();
-  expect(after).toHaveLength(MAX_ARMED - 1);
+  expect(after.armed.find((row) => row.occurrenceId === boot.occurrenceId)).toBeUndefined();
+  expect(after.armed).toHaveLength(MAX_ARMED - 1);
+  expect(outcome.fired.alarmId).toBe("boot");
+  expect(JSON.parse(outcome.fired.payload)).toEqual(BOOT_PAYLOAD);
+  expect(after.prompt?.kind).toBe("prompt");
+  expect(after.prompt?.ordinal).toBe(outcome.prompt.seq);
+  expect(after.prompt?.effect.value).toMatchObject({ content: "WAKE tick" });
+  expect(after.prompt?.intent.value).toMatchObject({
+    kind: "alarm",
+    alarmId: "boot",
+    occurrenceId: outcome.fired.occurrenceId,
+    purpose: "test.tick",
+    sourceKey: "boot",
+    payload: { detail: "line:1" },
+  });
 });

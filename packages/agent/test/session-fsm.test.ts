@@ -12,6 +12,7 @@ import { turnIntentAction } from "../src/core/commit";
 import type { SessionRunner, SessionRunnerInput } from "../src/core/run";
 import { createExecutor } from "../src/core/gate/decide";
 import { CommitFailed } from "../src/core/failure";
+import { armAction, firedAction } from "../src/core/alarm";
 import { createSessionChatRunner } from "../src/core/run";
 import { prepareChatFixture } from "./helpers/chat-services";
 import { assistantStep } from "./helpers/dispatching-runner";
@@ -563,28 +564,37 @@ describe("T01-T15 real controller transition witnesses", () => {
         Effect.gen(function* () {
           seedPolicy();
           const runtime = fixture();
-          // W5.2: the alarms table is gone; an armed alarm is an armed `alarm` chain
-          // action with no settling fired `alarm` child (session-stop-evidence).
+          // W5.2: the alarms table is gone; an armed alarm is an `alarm{arm}`
+          // chain row (#1254: alarmId + armSeq, capability purpose) with no
+          // settling `fired` row for its occurrence (session-stop-evidence).
+          const armed = armAction({
+            parentId: null,
+            sessionId: "S",
+            purpose: "test.tick",
+            at: 100,
+            supersedes: null,
+            alarmId: "alarm",
+            sourceKey: "test",
+            payload: {},
+            armSeq: 1,
+            ts: 20,
+          });
           const alarmAction = (
             op: "arm" | "fired",
-            id: string,
+            _id: string,
             parentId: string | null,
-          ): LedgerAction.Append => ({
-            id,
-            parentId,
-            sessionId: "S",
-            kind: "alarm",
-            ts: 20,
-            irreversible: true,
-            intent: { encodingVersion: 1, value: { phase: "intent", op } },
-            effect: {
-              encodingVersion: 1,
-              value:
-                op === "arm"
-                  ? { status: "armed", spec: { kind: "at", fireAt: 100 } }
-                  : { status: "fired" },
-            },
-          });
+          ): LedgerAction.Append =>
+            op === "arm"
+              ? { ...armed.action, parentId }
+              : firedAction({
+                  parentId,
+                  sessionId: "S",
+                  purpose: "test.tick",
+                  alarmId: "alarm",
+                  occurrenceId: armed.occurrenceId,
+                  outcome: "delivered",
+                  ts: 20,
+                });
           const runner = createSessionChatRunner({
             prepare: (input) =>
               Effect.gen(function* () {
@@ -632,7 +642,7 @@ describe("T01-T15 real controller transition witnesses", () => {
             expect(result).toMatchObject({
               kind: "waiting",
               reason: "live_wait",
-              alarmIds: ["alarm"],
+              alarmIds: [armed.action.id],
             });
           else expect(result?.kind).toBe("error");
           expect(isolatedLedger().kernel.latestTurnTerminal("S")?.effect.kind).toBe(

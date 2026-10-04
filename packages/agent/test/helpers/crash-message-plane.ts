@@ -8,6 +8,7 @@ import { sessionTree } from "./session-tree";
 import type { SessionKernel } from "../../src/core/entity";
 import { CommitFailed } from "../../src/core/failure";
 import { receivedMessageAction, receivedMessages } from "../../src/core/commit";
+import { firedAction } from "../../src/core/alarm";
 import { closeSessions } from "../../src/core/run";
 import { session } from "../../src/testing/registry";
 import { isolated, isolatedLedger } from "./isolated";
@@ -38,13 +39,15 @@ export const messagePlaneProof = z.object({
 const sessionId = "crash-session";
 const watchId = "doorbell";
 const occurrenceId = `${watchId}:fired:1`;
+/** The `alarm{fired}` fact a delivered occurrence commits (#1254): `<occurrenceId>:<outcome>`. */
+const firedFactId = `${occurrenceId}:delivered`;
 
-/** Inline watch-occurrence dedupe (#1254 S1): a committed occurrence id no-ops. */
+/** Inline watch-occurrence dedupe (#1254 S1): a committed fired fact for the occurrence no-ops. */
 function watchFiredDisposition(
   kernel: SessionKernel,
   occurrence: string,
 ): { readonly op: "run" } | { readonly op: "skip"; readonly reason: "duplicate_occurrence" } {
-  return kernel.actionById(occurrence) === undefined
+  return kernel.actionById(`${occurrence}:delivered`) === undefined
     ? { op: "run" }
     : { op: "skip", reason: "duplicate_occurrence" };
 }
@@ -79,15 +82,13 @@ function watchCut() {
       sessionId, owner: row.fenceOwner, fence: row.fence, now,
       expectedRevision: row.revision, state: row.state,
       actions: [
-        {
-          id: occurrenceId, sessionId, parentId: null, kind: "alarm",
-          intent: { encodingVersion: 1, value: { watchId, epoch: 1, sourceKey: `timer:${now}`, batch: "b1" } },
-          effect: { encodingVersion: 1, value: { phase: "fired", terminal: true } },
-          ts: now, irreversible: true,
-        },
+        firedAction({
+          parentId: null, sessionId, purpose: "monitor.hit", alarmId: watchId, occurrenceId,
+          outcome: "delivered", ts: now,
+        }),
         receivedMessageAction({
           id: `${occurrenceId}:prompt`, sessionId, kind: "prompt", content: "watch prompt",
-          origin: { encodingVersion: 1, value: { watchId } }, parentActionId: occurrenceId, at: now,
+          origin: { encodingVersion: 1, value: { watchId } }, parentActionId: firedFactId, at: now,
         }),
       ],
     }).pipe(Effect.mapError((error: LedgerError) => new CommitFailed({ error })));

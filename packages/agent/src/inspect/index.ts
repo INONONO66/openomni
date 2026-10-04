@@ -263,9 +263,9 @@ function causeOf(
   action: LedgerAction.Node,
   effect: PlainObject,
 ): SessionHistory.Cause {
-  // #1254 S5: the epoch alarm-cause scheme is gone; occurrence-chain alarm
-  // rows surface through the `alarms` read model, so history causes fall
-  // through to delivery/lineage.
+  // #1254 S5: the dedicated alarm-cause variant is gone; occurrence-chain
+  // alarm rows surface through the `alarms` read model, so history causes
+  // fall through to delivery/lineage.
   return deliveryCause(action, effect) ?? lineageCause(action);
 }
 

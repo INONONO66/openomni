@@ -526,3 +526,61 @@ describe("crash recovery through the cluster", () => {
     });
   }, 30_000);
 });
+
+/**
+ * #1254 S4: a capability arm commits through the entity's commit door, and the
+ * minted occurrence is forwarded to DeliverAt from the committed row itself
+ * (not from the index the activation resend reads). Its `payload` must be the
+ * arm's canonical JSON bytes — a non-empty payload, because `{}` serializes
+ * identically under every profile and hides a wrong serializer.
+ */
+describe("live arm forward through the cluster", () => {
+  test("ctx.arm's forwarded occurrence carries the arm payload as parseable canonical JSON", async () => {
+    const sessionId = "live-forward";
+    await withSession(sessionId, async ({ commit }) => {
+      expect(Result.isSuccess(await commit([arm(sessionId, "seed", 1, PAST_FIRE_AT).action]))).toBe(true);
+    });
+    const payloads: string[] = [];
+    let resolveChained: () => void = () => undefined;
+    const chained = new Promise<void>((resolve) => {
+      resolveChained = resolve;
+    });
+    const capability: AlarmCapability = {
+      purposes: ["note.due"],
+      wake: (fired, ctx) =>
+        Effect.gen(function* () {
+          payloads.push(fired.payload);
+          if (fired.alarmId === "seed") {
+            yield* ctx.arm({
+              purpose: "note.due",
+              at: ctx.now - 1,
+              payload: { note: "live", attempt: 2, tags: ["z", "a"] },
+              sourceKey: "note",
+              alarmId: "chained",
+            }).pipe(Effect.orDie);
+          } else resolveChained();
+          return "delivered" as const;
+        }),
+    };
+    await runCluster(
+      { sessionsDir, catalogFile, alarmCapability: capability },
+      Effect.gen(function* () {
+        yield* sendAlarm(sessionId, {
+          occurrenceId: "kick",
+          purpose: "rescan",
+          alarmId: "kick",
+          armSeq: 1,
+          sourceKey: "rescan",
+          payload: "{}",
+          fireAt: Date.now() - 1,
+        });
+        yield* Effect.promise(() => chained);
+      }),
+    );
+    expect(payloads.map((payload) => JSON.parse(payload))).toEqual([
+      { note: "seed@1" },
+      { note: "live", attempt: 2, tags: ["z", "a"] },
+    ]);
+    expect(payloads[1]).toBe('{"attempt":2,"note":"live","tags":["z","a"]}');
+  });
+});

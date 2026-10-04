@@ -322,7 +322,7 @@ test("alarm(watch.*) purposes are capability-dispatched: unbound occurrences fol
         alarmId: "w1",
         armSeq: 1,
         sourceKey: "watch-occ-1",
-        payload: JSON.stringify({ watchId: "w1", epoch: 1, sourceKey: "watch-occ-1", batch: "[]" }),
+        payload: JSON.stringify({ watchId: "w1", sourceKey: "watch-occ-1", batch: "[]" }),
         fireAt: Date.now() - 1000,
       });
       expect(fired.outcome).toBe("stale");
@@ -332,7 +332,7 @@ test("alarm(watch.*) purposes are capability-dispatched: unbound occurrences fol
         alarmId: "w1",
         armSeq: 1,
         sourceKey: "watch.timeout",
-        payload: JSON.stringify({ watchId: "w1", epoch: 1 }),
+        payload: JSON.stringify({ watchId: "w1" }),
         fireAt: Date.now() - 1000,
       });
       expect(timeout.outcome).toBe("stale");
@@ -351,7 +351,7 @@ test("alarm(watch.*) purposes are capability-dispatched: unbound occurrences fol
       alarmId: "w1",
       armSeq: 1,
       sourceKey: "watch-occ-1",
-      payload: JSON.stringify({ watchId: "w1", epoch: 1, sourceKey: "watch-occ-1", batch: "[]" }),
+      payload: JSON.stringify({ watchId: "w1", sourceKey: "watch-occ-1", batch: "[]" }),
       fireAt: Date.now() - 1000,
     }),
   );

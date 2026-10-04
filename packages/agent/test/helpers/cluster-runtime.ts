@@ -350,7 +350,7 @@ function clusterHostLayer(options: TestClusterOptions) {
 }
 
 /** D3 drain values for one test cluster: the app defaults with the host idle budget. */
-export function testDrainConfig(options: TestClusterOptions): AlarmDrainConfig {
+function testDrainConfig(options: TestClusterOptions): AlarmDrainConfig {
   return {
     alarmsBeforePrompt: 4,
     maxArmed: 64,

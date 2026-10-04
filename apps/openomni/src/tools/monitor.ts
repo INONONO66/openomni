@@ -1,4 +1,4 @@
-import { armWatch, type MonitorPorts, WatchState } from "./core/monitor-ports";
+import { armCron, armWatch, type MonitorPorts, WatchState } from "./core/watch";
 import { isAbsolute } from "node:path";
 import { Core } from "@openomni/agent";
 const defineTool = Core.defineTool;
@@ -27,8 +27,17 @@ const source = z
         ...lifetime,
       })
       .strict(),
+    z
+      .object({
+        kind: z.literal("cron"),
+        expr: z.string().min(1),
+        /** IANA zone the grid is computed in (DST-correct re-arms). */
+        tz: z.string().min(1),
+      })
+      .strict(),
   ])
   .superRefine((spec, context) => {
+    if (spec.kind === "cron") return;
     if ((spec.persistent === true) === (spec.timeout_ms !== undefined))
       context.addIssue({
         code: "custom",
@@ -61,7 +70,7 @@ export function createMonitorTool(ports?: MonitorPorts) {
     name: "monitor",
     category: "mutation",
     description:
-      "Watch command output in a PTY or an absolute path outside the session. Create a persistent or timed watch, rearm a paused watch, or cancel it.",
+      "Watch command output in a PTY, an absolute path, or a cron schedule outside the session. Create a persistent or timed watch or a recurring cron chain, rearm a retired one, or cancel it.",
     input,
     output: WatchState,
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
@@ -70,13 +79,16 @@ export function createMonitorTool(ports?: MonitorPorts) {
       const args = request.operation;
       if (ports === undefined) throw new ToolRefused("monitor", "alarm port unavailable");
       context.signal.throwIfAborted();
-      const at = ports.clock();
       if (args.op !== "create") {
-        return ports[args.op](args.id, context.sessionId, at, context.signal);
+        return ports[args.op](args.id, context.sessionId, ports.clock(), context.signal);
+      }
+      if (args.source.kind === "cron") {
+        const { kind, ...fields } = args.source;
+        return armCron(ports, fields, args.description, context);
       }
       const { kind, ...fields } = args.source;
-      return armWatch(ports, fields, args.description, context, at);
+      return armWatch(ports, fields, args.description, context);
     },
-    render: (_args, row) => JSON.stringify({ id: row.id, status: row.status, epoch: row.epoch }),
+    render: (_args, row) => JSON.stringify({ id: row.id, kind: row.kind, status: row.status }),
   });
 }

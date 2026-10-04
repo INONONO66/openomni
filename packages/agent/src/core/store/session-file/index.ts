@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  canonicalJson,
   Journal,
   LedgerAction,
   PlainObjectSchema,
@@ -638,7 +639,7 @@ function createArmedAlarmReads(db: Database): {
           purpose: intent.purpose,
           armSeq: armSeqFromArmRowId(row.arm_id),
           sourceKey: intent.sourceKey,
-          payload: JSON.stringify(intent.payload ?? {}),
+          payload: canonicalJson(intent.payload ?? {}),
         };
       });
     },

@@ -1,7 +1,8 @@
 
 import * as SessionHandleStore from "./store/fence";
 import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "./store/errors";
-import { canonicalKey, Inbox as InboxSchema, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction } from "@openomni/protocol";
+import { canonicalJson, Inbox as InboxSchema, PlainObjectSchema, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction } from "@openomni/protocol";
+import { z } from "zod";
 import { Cause, Context, Effect, Exit, Option, Queue, Schema, type Scope, Semaphore } from "effect";
 import { Entity, type Envelope, type Sharding } from "effect/cluster";
 import { LeaseLost, SessionAdmissionRefused, type SessionError } from "./failure";
@@ -212,26 +213,32 @@ function forwardArmedOccurrences(
   ).pipe(Effect.asVoid);
 }
 
+/** A live arm append (`at: null` retires the chain and forwards nothing). */
+const ArmAppendIntent = z.object({
+  op: z.literal("arm"),
+  at: z.number(),
+  alarmId: z.string().min(1),
+  purpose: z.string().min(1),
+  sourceKey: z.string().min(1),
+  payload: PlainObjectSchema.optional(),
+});
+const ArmAppendEffect = z.object({ occurrenceId: z.string().min(1) });
+
 function armedOccurrenceOf(action: LedgerAction.Append): AlarmFired | undefined {
   if (action.kind !== "alarm") return undefined;
-  const intent = action.intent.value;
-  const effect = action.effect.value;
-  if (typeof intent !== "object" || intent === null || Array.isArray(intent)) return undefined;
-  if (typeof effect !== "object" || effect === null || Array.isArray(effect)) return undefined;
-  const { op, at, alarmId, purpose, sourceKey, payload } = intent as Record<string, unknown>;
-  const occurrenceId = (effect as Record<string, unknown>).occurrenceId;
-  if (op !== "arm" || typeof at !== "number") return undefined;
-  if (typeof alarmId !== "string" || typeof purpose !== "string" || typeof sourceKey !== "string") return undefined;
-  if (typeof occurrenceId !== "string") return undefined;
+  const intent = ArmAppendIntent.safeParse(action.intent.value);
+  const effect = ArmAppendEffect.safeParse(action.effect.value);
+  if (!intent.success || !effect.success) return undefined;
+  const { at, alarmId, purpose, sourceKey, payload } = intent.data;
   const armSeq = Number(action.id.slice(`${alarmId}:arm:`.length));
   if (!Number.isFinite(armSeq)) return undefined;
   return {
-    occurrenceId,
+    occurrenceId: effect.data.occurrenceId,
     purpose,
     alarmId,
     armSeq,
     sourceKey,
-    payload: canonicalKey(PlainValueSchema.parse(payload ?? {})),
+    payload: canonicalJson(payload ?? {}),
     fireAt: at,
   };
 }
@@ -589,7 +596,7 @@ function wakeContext(handle: ActivationHandle, occurrence: AlarmOccurrence): Ala
       appendReceived(handle, "prompt", {
         messageId: `${occurrence.occurrenceId}:prompt`,
         content: input.content,
-        origin: canonicalKey(PlainValueSchema.parse({
+        origin: canonicalJson(PlainValueSchema.parse({
           kind: "alarm",
           alarmId: occurrence.alarmId,
           occurrenceId: occurrence.occurrenceId,

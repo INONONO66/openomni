@@ -33,9 +33,8 @@ import { outboundMessage } from "./composition/terminal-message";
 import { type Context, Effect, Result, Exit, ManagedRuntime, Scope } from "effect";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
 import { captureNow } from "./composition/platform";
-import type { WatchSources } from "./composition/watch-sources";
-import { createWatchMonitorPorts } from "./composition/monitor-ports";
-import { MonitorRefused, type MonitorPorts } from "./tools/core/monitor-ports";
+import { createAlarmMonitorPorts } from "./composition/alarm-plane";
+import { MonitorRefused, type MonitorPorts } from "./tools/core/watch";
 import {
   AppLifecycleFailure,
   AppLive,
@@ -355,10 +354,10 @@ export function webSocketCallbacks(
   };
 }
 
-/** The watch plane's tool ports: chain-fact commits plus native source installs. */
+/** The alarm plane's tool ports: capability verbs over chain facts (#1254). */
 export async function createMonitorPorts(
   runtime: AppRuntime,
-  sources: WatchSources,
+  capability: Bundle.AlarmCapabilityDefinition,
 ): Promise<MonitorPorts> {
   const { plane, clock, entropy } = await runAppBoot(
     runtime,
@@ -370,9 +369,9 @@ export async function createMonitorPorts(
       };
     }),
   );
-  return createWatchMonitorPorts({
+  return createAlarmMonitorPorts({
+    capability,
     openKernel: plane.openKernel,
-    sources,
     clock,
     entropy: entropy.id,
     run: <A>(effect: Effect.Effect<A, Error>, signal: AbortSignal): Promise<A> =>
