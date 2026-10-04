@@ -6,7 +6,7 @@ import { Capability, defineBundle, Manifest, type BundleTool, type SeamTag } fro
 import { compose } from "../src/core/compose";
 import { composedManifest, type ComposedManifest, type SessionRunnerInput } from "../src/core/run";
 import { session } from "../src/testing/registry";
-import { isolated, isolatedLedger } from "./helpers/isolated";
+import { isolated, isolatedLedger, runTestPromise } from "./helpers/isolated";
 import { seedPolicy } from "./helpers/seed-policy";
 import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, withSessionServices, type SessionFixture } from "./helpers/session-services";
@@ -60,13 +60,13 @@ const ConfigureIntentValue = z.looseObject({
 });
 
 test("recompute is from empty state: compose is deterministic per manifest and rollback is compose with the previous manifest", async () => {
-  const first = await Effect.runPromise(compose(manifestOn));
-  const again = await Effect.runPromise(compose(manifestOn));
-  const off = await Effect.runPromise(compose(manifestOff));
+  const first = await runTestPromise(compose(manifestOn));
+  const again = await runTestPromise(compose(manifestOn));
+  const off = await runTestPromise(compose(manifestOff));
   expect(again.hash).toBe(first.hash);
   expect(off.hash).not.toBe(first.hash);
   // Rollback = compose with the previous manifest, not a patch of the next one.
-  const rolledBack = await Effect.runPromise(compose(manifestOn));
+  const rolledBack = await runTestPromise(compose(manifestOn));
   expect(rolledBack.hash).toBe(first.hash);
   // The adoption face preserves the bundle's idempotent declaration.
   const adoption = composedManifest(first);

@@ -1,4 +1,4 @@
-import { Context, type Effect, type Layer, Schema } from "effect";
+import { type Effect, type Layer, Schema } from "effect";
 import type { z } from "zod";
 import type {
   AnyToolDefinition,
@@ -8,6 +8,8 @@ import type {
   Tool,
 } from "@openomni/protocol";
 import type { AlarmFired } from "./alarm";
+import type { SessionError } from "./failure";
+import type { BundleLayerServices } from "./ports";
 
 /**
  * The three #1255 declaration contracts: `Capability.define` (removable
@@ -19,8 +21,20 @@ import type { AlarmFired } from "./alarm";
  * data; `compose(manifest)` turns them into one journaled generation.
  */
 
-/** Identity view of an Effect Context tag: a capability seam or a bundle's provide. */
-export type SeamTag = Pick<Context.Service<never, never>, "key" | typeof Context.ServiceTypeId>;
+/**
+ * A seam identity: what a capability publishes and a declaration's `requires`
+ * resolves against at compose. A seam is a KEY, deliberately not a
+ * `Context.Service`: no composed context provides or reads one today, and the
+ * boundary gate refuses an unread service tag (R9). Promotion to a live
+ * service is additive — an Effect `Context.Service` class carries the same
+ * `key` field, so one may stand where a `SeamTag` is expected.
+ */
+export interface SeamTag {
+  readonly key: string;
+}
+
+/** `@openomni/<owner>/<Name>` — the key law the boundary gate holds Context tags to (R4). */
+const SEAM_KEY = /^@openomni\/[a-z][a-z0-9-]*\/[A-Za-z][\w/-]*$/;
 
 /**
  * Typed define-time refusal: `namespace` (a malformed name — the former
@@ -164,6 +178,16 @@ function checkUnique(values: readonly string[], name: string): void {
   }
 }
 
+function checkSeam(tag: SeamTag, name: string): void {
+  if (!SEAM_KEY.test(tag.key)) refuse("namespace", name, tag.key);
+}
+
+/** `Bundle.seam(key)` — the one seam constructor; a key outside the `@openomni/<owner>/` law refuses `namespace`. */
+export function seam(key: string): SeamTag {
+  checkSeam({ key }, key);
+  return Object.freeze({ key });
+}
+
 function defineCapability<
   const Name extends string,
   Seam extends SeamTag,
@@ -179,7 +203,7 @@ function defineCapability<
   checkUnique(input.requires, input.name);
   checkUnique(input.points ?? [], input.name);
   checkUnique(input.inputs ?? [], input.name);
-  if (!Context.isKey(input.seam)) refuse("namespace", input.name, input.seam.key);
+  checkSeam(input.seam, input.name);
   return Object.freeze({
     contract: "capability" as const,
     name: input.name,
@@ -200,6 +224,13 @@ function defineCapability<
 /** `Capability.define` — the one way a removable built-in declares what it owns. */
 export const Capability = Object.freeze({ define: defineCapability });
 
+/**
+ * A bundle's acquisition Layer (#1255 P3): acquired inside the generation's
+ * Scope over the seed services, failing only with the typed session errors
+ * the generation's `configure`/`capture` unwind on — anything else is a defect.
+ */
+type BundleLayer = Layer.Layer<never, SessionError, BundleLayerServices>;
+
 /** One bundle tool face; `idempotent` survives into the generation tool table. */
 export type BundleTool = AnyToolDefinition & { readonly idempotent?: boolean };
 
@@ -213,7 +244,7 @@ export interface BundleContractInput<Name extends string, Handler, Purpose> {
   /** Services published for later bundles. */
   readonly provides?: readonly SeamTag[];
   /** Implementation of `provides`. */
-  readonly layer?: Layer.Any;
+  readonly layer?: BundleLayer;
   readonly tools?: readonly BundleTool[];
   readonly rows?: readonly BundleGateRow[];
   /** `how.ref` targets (requires the action capability). */
@@ -235,7 +266,7 @@ export interface BundleContract<
   readonly name: Name;
   readonly requires: readonly SeamTag[];
   readonly provides: readonly SeamTag[];
-  readonly layer: Layer.Any | undefined;
+  readonly layer: BundleLayer | undefined;
   readonly tools: readonly BundleTool[];
   readonly rows: readonly BundleGateRow[];
   readonly handlers: Readonly<Record<string, Handler>>;
@@ -251,8 +282,7 @@ export function defineBundle<const Name extends string, Handler = object, Purpos
   checkUnique((input.provides ?? []).map((tag) => tag.key), input.name);
   checkUnique((input.tools ?? []).map((tool) => tool.name), input.name);
   checkUnique((input.rows ?? []).map((row) => row.id), input.name);
-  for (const tag of [...input.requires, ...(input.provides ?? [])])
-    if (!Context.isKey(tag)) refuse("namespace", input.name, tag.key);
+  for (const tag of [...input.requires, ...(input.provides ?? [])]) checkSeam(tag, input.name);
   return Object.freeze({
     contract: "bundle" as const,
     name: input.name,

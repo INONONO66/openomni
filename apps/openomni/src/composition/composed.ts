@@ -1,5 +1,5 @@
 import { Bundle } from "@openomni/agent";
-import { Context, Effect } from "effect";
+import { Context } from "effect";
 
 /**
  * The composed-generation seam (#1255 P3): boot runs `config → manifest →
@@ -46,5 +46,5 @@ const EMPTY_MANIFEST = Bundle.Manifest.define({ capabilities: [], bundles: [], o
  * one honest table set instead of special-casing "not composed yet".
  */
 export function emptyComposition(): ComposedContext {
-  return { manifest: EMPTY_MANIFEST, generation: Effect.runSync(Bundle.compose(EMPTY_MANIFEST)) };
+  return { manifest: EMPTY_MANIFEST, generation: Bundle.composeSync(EMPTY_MANIFEST) };
 }

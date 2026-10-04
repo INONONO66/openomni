@@ -1,4 +1,5 @@
-import { Context, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { seam } from "./capability";
 import { interruptOn } from "./ports";
 import { Alarm, canonicalJson, isReservedAlarmPurpose, RESERVED_ALARM_PURPOSES, type LedgerAction, type PlainObject } from "@openomni/protocol";
 import type { RetryAlarmPort, RetryAlarmDeps } from "./alarm-ports";
@@ -406,9 +407,7 @@ export function createRetryAlarmPort(deps: RetryAlarmDeps): RetryAlarmPort {
 }
 
 /**
- * The alarm capability's seam tag (#1255 S1): what a declaration requiring
- * `"alarm"` receives from the composed context.
+ * The alarm capability's seam (#1255 S1): the identity a declaration requiring
+ * `"alarm"` resolves against at compose.
  */
-export class AlarmSeam extends Context.Service<AlarmSeam, AlarmCapability>()(
-  "@openomni/agent/capability/alarm",
-) {}
+export const AlarmSeam = seam("@openomni/agent/capability/alarm");

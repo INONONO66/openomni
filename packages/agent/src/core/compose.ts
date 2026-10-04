@@ -321,7 +321,12 @@ function mergeBundleTables(
   return { tools, rows };
 }
 
-function composeManifest(manifest: ManifestDefinition): Generation {
+/**
+ * `composeSync(manifest) -> Generation` (#1255): the Effect-free form of
+ * `compose` for Promise-side composition roots (boot, fixtures); a refusal
+ * throws the typed `ComposeRefused`. Same single implementation.
+ */
+export function composeSync(manifest: ManifestDefinition): Generation {
   uniqueNames(manifest);
   const disabledMap = cascadeOff(manifest);
   const onCapabilities = manifest.capabilities.filter(
@@ -368,7 +373,7 @@ function composeManifest(manifest: ManifestDefinition): Generation {
 export function compose(manifest: ManifestDefinition): Effect.Effect<Generation, ComposeRefused> {
   return Effect.suspend(() => {
     try {
-      return Effect.succeed(composeManifest(manifest));
+      return Effect.succeed(composeSync(manifest));
     } catch (failure) {
       if (failure instanceof ComposeRefused) return Effect.fail(failure);
       throw failure;

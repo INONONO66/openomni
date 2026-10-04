@@ -281,7 +281,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // The native-source alarm plane exists before the manifest: its purpose-free
   // capability CONTRACT is what the manifest lists, while the live wake router
   // below is rebuilt per composed on-set.
-  const watchPlane = await createWatchPlane();
+  const watchPlane = createWatchPlane();
   // Boot is config -> manifest -> compose -> runtime (#1255): a ComposeRefused
   // here is the typed boot failure, thrown before any listener exists. An
   // injected runtime carries its own composed holder (tests).
@@ -291,7 +291,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       wake: watchPlane.wake,
       ...(config.bundlesOff === undefined ? {} : { off: config.bundlesOff }),
     });
-    const generation = await Effect.runPromise(Bundle.compose(manifest));
+    const generation = Bundle.composeSync(manifest);
     const holder = composedHolderOf({ manifest, generation });
     return gatewayRuntime({
       // Cluster storage rides only on configs that resolved it (loadConfig
@@ -481,7 +481,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         off: () => services.composed.current().manifest.off,
         set: async (off) => {
           const manifest = appManifest({ alarm: watchPlane.contract, wake: watchPlane.wake, off });
-          const generation = await Effect.runPromise(Bundle.compose(manifest));
+          const generation = await runAppEffect(runtime, Bundle.compose(manifest));
           services.composed.swap({ manifest, generation });
           // The recomposed gate rows seed a fresh policy generation alongside
           // the swap, so adopted turns evaluate the matching row tables.

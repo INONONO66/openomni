@@ -11,6 +11,7 @@ import {
   type CapabilityDefinition,
   type SeamTag,
 } from "../src/core/capability";
+import { runTestPromise } from "./helpers/isolated";
 import { compose, COMPOSE_REJECTION_CODES, ComposeRefused } from "../src/core/compose";
 
 class SeamA extends Context.Service<SeamA, object>()("@openomni/agent/test/compose/A") {}
@@ -54,7 +55,7 @@ const row = (id: string, on: PointId, ref?: string): BundleGateRow => ({
 });
 
 async function rejectionOf(manifest: Parameters<typeof compose>[0]): Promise<ComposeRefused> {
-  const refused = await Effect.runPromise(Effect.flip(compose(manifest)));
+  const refused = await runTestPromise(Effect.flip(compose(manifest)));
   expect(refused).toBeInstanceOf(ComposeRefused);
   return refused;
 }
@@ -198,7 +199,7 @@ test("a valid manifest composes one generation with merged tables and a stable h
       }),
     ],
   });
-  const generation = await Effect.runPromise(compose(manifest));
+  const generation = await runTestPromise(compose(manifest));
   expect(generation.capabilities).toEqual(["a", "b"]);
   expect(generation.bundles).toEqual(["m"]);
   expect(Object.keys(generation.kinds)).toEqual(["probe"]);
@@ -207,7 +208,7 @@ test("a valid manifest composes one generation with merged tables and a stable h
   expect(generation.handlers.has("a/guard")).toBe(true);
   expect(generation.rows.map((entry) => entry.id)).toEqual(["m/x#1", "m/y#1"]);
   expect(generation.disabled).toEqual([]);
-  const again = await Effect.runPromise(compose(manifest));
+  const again = await runTestPromise(compose(manifest));
   expect(again.hash).toBe(generation.hash);
 });
 
@@ -304,7 +305,7 @@ test("composition preserves install order across bundles: tools and rows merge i
       }),
     ],
   });
-  const generation = await Effect.runPromise(compose(manifest));
+  const generation = await runTestPromise(compose(manifest));
   // Install order, not lexical order: the manifest's declaration sequence IS
   // the composition order for bundles, their tool faces and their gate rows.
   expect(generation.bundles).toEqual(["zeta", "alpha"]);

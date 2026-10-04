@@ -4,6 +4,7 @@ import { Context, Effect } from "effect";
 import { z } from "zod";
 import { Inbox, Journal, type LedgerSession, type PlainValue } from "@openomni/protocol";
 import { Capability, Manifest, type SeamTag } from "../src/core/capability";
+import { runTestPromise } from "./helpers/isolated";
 import { compose } from "../src/core/compose";
 import { decideSessionAdmission } from "../src/core/mailbox";
 import type { DeliverRefused } from "../src/core/messages";
@@ -49,8 +50,8 @@ afterAll(() => {
 });
 
 test("off-capability rows stay opaque with hashes intact and deliver refuses the kind as unknown_kind", async () => {
-  const generationOn = await Effect.runPromise(compose(onManifest));
-  const generationOff = await Effect.runPromise(compose(offManifest));
+  const generationOn = await runTestPromise(compose(onManifest));
+  const generationOff = await runTestPromise(compose(offManifest));
   // The composed tables drive both doors: deliver registrations and admission kinds.
   expect(generationOn.inputs).toEqual(["action"]);
   expect(Object.keys(generationOn.kinds)).toEqual(["action"]);

@@ -10,7 +10,7 @@ export * from "./plugins/alarm";
 // #1255 S1: the three declaration contracts, surfaced for the app manifest.
 // `Bundle.define` is the barrel's `define`.
 export {
-  Capability, defineBundle as define, Manifest, DefineRefused, CapabilityHookError,
+  Capability, defineBundle as define, Manifest, DefineRefused, CapabilityHookError, seam,
   type BundleContract, type BundleContractInput, type BundleGateRow, type BundleTool,
   type CapabilityCore, type CapabilityDefinition, type CapabilityInput,
   type CapabilityInputRow, type CapabilityKindDeclaration, type CapabilityStep,

@@ -1,12 +1,9 @@
 import { Bundle } from "@openomni/agent";
-import { Context } from "effect";
 import { cronBundle } from "./bundles/cron";
 import { monitorBundle } from "./bundles/monitor";
 
-/** The tool capability's seam tag; no bundle consumes it yet, compose requires one. */
-class ToolCapabilitySeam extends Context.Service<ToolCapabilitySeam, object>()(
-  "@openomni/openomni/ToolCapabilitySeam",
-) {}
+/** The tool capability's seam; no bundle requires it yet, `Capability.define` needs one. */
+const ToolCapabilitySeam = Bundle.seam("@openomni/openomni/ToolCapabilitySeam");
 
 /**
  * The thin tool-capability contract (#1255 P3): the dispatcher stays the
@@ -21,7 +18,7 @@ export const toolCapability = Bundle.Capability.define({
   points: ["tool.pre", "tool.post"],
   handlers: { "kernel/budget-clamp": {} },
   verbs: {},
-  seam: ToolCapabilitySeam as Bundle.SeamTag,
+  seam: ToolCapabilitySeam,
 });
 
 /**

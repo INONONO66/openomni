@@ -37,6 +37,8 @@ export function interruptOn(signal: AbortSignal): Effect.Effect<never> {
 // ─── from services.ts (#1247) ───
 export type ProcessServices = Entropy | ObservationSink;
 export type GenerationServices = SessionLayer | ToolCatalog | ObservationSink | GenerationHandlers;
+/** The generation seed a bundle's Layer may require (#1255 P3): provided before any bundle layer acquires. */
+export type BundleLayerServices = Entropy | ObservationSink | ToolCatalog | GenerationHandlers;
 export type SessionEntryServices = ProcessServices | Llm | GenerationLayers;
 export type RunnerServices = ProcessServices | SessionLayer | ToolCatalog | Llm | GenerationOwnership;
 

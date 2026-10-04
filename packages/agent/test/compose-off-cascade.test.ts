@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Context, Effect } from "effect";
+import { Context } from "effect";
 import { z } from "zod";
 import { Journal, type PlainValue } from "@openomni/protocol";
 import { configureAction } from "../src/core/store/fence";
@@ -9,6 +9,7 @@ import {
   Manifest,
   type SeamTag,
 } from "../src/core/capability";
+import { runTestPromise } from "./helpers/isolated";
 import { compose } from "../src/core/compose";
 
 class SeamA extends Context.Service<SeamA, object>()("@openomni/agent/test/off/A") {}
@@ -42,7 +43,7 @@ function manifest(off: readonly string[]) {
 }
 
 test("off cascades transitively through requires with the root recorded as because", async () => {
-  const generation = await Effect.runPromise(compose(manifest(["a"])));
+  const generation = await runTestPromise(compose(manifest(["a"])));
   expect(generation.disabled).toEqual([
     { name: "a", because: "a" },
     { name: "b", because: "a" },
@@ -58,7 +59,7 @@ test("off cascades transitively through requires with the root recorded as becau
 });
 
 test("an off bundle cascades to its dependents but leaves capabilities on", async () => {
-  const generation = await Effect.runPromise(compose(manifest(["m"])));
+  const generation = await runTestPromise(compose(manifest(["m"])));
   expect(generation.disabled).toEqual([
     { name: "m", because: "m" },
     { name: "n", because: "m" },
@@ -68,14 +69,14 @@ test("an off bundle cascades to its dependents but leaves capabilities on", asyn
 });
 
 test("the off cascade changes the generation hash", async () => {
-  const on = await Effect.runPromise(compose(manifest([])));
-  const off = await Effect.runPromise(compose(manifest(["m"])));
+  const on = await runTestPromise(compose(manifest([])));
+  const off = await runTestPromise(compose(manifest(["m"])));
   expect(on.disabled).toEqual([]);
   expect(on.hash).not.toBe(off.hash);
 });
 
 test("session.configure journals the cascade as disabled {name, because}", async () => {
-  const generation = await Effect.runPromise(compose(manifest(["a"])));
+  const generation = await runTestPromise(compose(manifest(["a"])));
   const action = configureAction({
     id: "cfg-1",
     sessionId: "s-1",

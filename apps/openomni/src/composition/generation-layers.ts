@@ -5,7 +5,6 @@ const AgentFailure = Core.AgentFailure;
 const GenerationLayers = Core.GenerationLayers;
 const GenerationUnavailable = Core.GenerationUnavailable;
 const GenerationHandlers = Bundle.GenerationHandlers;
-type GenerationHandlers = Bundle.GenerationHandlers;
 const ObservationSink = Core.ObservationSink;
 type ObservationSink = Core.ObservationSink;
 const SessionLayer = Core.SessionLayer;
@@ -35,16 +34,15 @@ import { captureNow } from "./platform";
  * generation's `kernel/*` registrations are declarations of intent to use
  * them, not replacements.
  */
-export function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTable {
+function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTable {
   const transformers = [...Core.KERNEL_POLICY_REGISTRY.transformers];
   const obligations = [...Core.KERNEL_POLICY_REGISTRY.obligations];
   const known = new Set([...transformers, ...obligations].map((entry) => entry.name));
   for (const [name, handler] of generation.handlers) {
     if (known.has(name)) continue;
     known.add(name);
-    const apply = (handler as { apply?: unknown }).apply;
-    if (typeof apply === "function")
-      transformers.push({ name, apply: apply as Core.NamedTransformer["apply"] });
+    if ("apply" in handler && typeof handler.apply === "function")
+      transformers.push({ name, apply: handler.apply as Core.NamedTransformer["apply"] });
     else obligations.push({ name });
   }
   return { transformers, obligations };
@@ -62,27 +60,21 @@ export function toolCatalogLayer(ports: ToolPorts, select: CatalogSelection = (d
   return Layer.sync(ToolCatalog, () => ({ definitions: Object.freeze([...select(catalogDefinitions(ports))]) }));
 }
 
-type GenerationSeed = Core.Entropy | ObservationSink | Core.ToolCatalog | GenerationHandlers;
-
-function bundleLayerStack<R extends GenerationSeed, E>(
+/**
+ * The composed ON bundles' Layers over the seed, in composition order, each
+ * provided the seed plus every earlier bundle's outputs. A bundle Layer fails
+ * only with the typed `SessionError` its contract declares (`Bundle.BundleLayer`);
+ * a defect stays a defect.
+ */
+function bundleLayerStack<E>(
   context: ComposedContext,
-  seed: Layer.Layer<R, E>,
-): Layer.Layer<R, E | Core.SessionError> {
-  let stack: Layer.Layer<R, E | Core.SessionError> = seed;
+  seed: Layer.Layer<Core.BundleLayerServices, E>,
+): Layer.Layer<Core.BundleLayerServices, E | Core.SessionError> {
+  let stack: Layer.Layer<Core.BundleLayerServices, E | Core.SessionError> = seed;
   for (const name of context.generation.bundles) {
     const layer = context.manifest.bundles.find((bundle) => bundle.name === name)?.layer;
     if (layer === undefined) continue;
-    const typed = layer as Layer.Layer<never, unknown, R>;
-    const guarded = Layer.catch(typed, (cause: unknown) =>
-      Layer.effectDiscard(
-        Effect.fail(
-          cause instanceof AgentFailure
-            ? cause
-            : new AgentFailure({ operation: "generation.bundle", cause: String(cause) }),
-        ),
-      ),
-    ) as Layer.Layer<never, Core.SessionError, R>;
-    stack = guarded.pipe(Layer.provideMerge(stack));
+    stack = layer.pipe(Layer.provideMerge(stack));
   }
   return stack;
 }

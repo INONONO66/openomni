@@ -7,6 +7,7 @@ import {
   defineBundle,
   DefineRefused,
   Manifest,
+  seam,
   type CapabilityInput,
 } from "../src/core/capability";
 import { AlarmSeam } from "../src/core/alarm";
@@ -103,6 +104,31 @@ test("malformed names and duplicate declarations refuse typed", () => {
     throw new Error("unreachable");
   } catch (refusal) {
     expect((refusal as DefineRefused).code).toBe("duplicate");
+  }
+});
+
+test("a seam key outside the @openomni/<owner>/ law refuses namespace at construction and at define", () => {
+  expect(() => seam("alarm")).toThrow(DefineRefused);
+  try {
+    seam("@acme/agent/Seam");
+    throw new Error("unreachable");
+  } catch (refusal) {
+    expect((refusal as DefineRefused).code).toBe("namespace");
+  }
+  const other = seam("@openomni/agent/test/capability/Other");
+  expect(Object.isFrozen(other)).toBe(true);
+  expect(other.key).toBe("@openomni/agent/test/capability/Other");
+  try {
+    defineTestCapability({ seam: { key: "nope" } });
+    throw new Error("unreachable");
+  } catch (refusal) {
+    expect((refusal as DefineRefused).code).toBe("namespace");
+  }
+  try {
+    defineBundle({ name: "m", requires: [{ key: "nope" }] });
+    throw new Error("unreachable");
+  } catch (refusal) {
+    expect((refusal as DefineRefused).code).toBe("namespace");
   }
 });
 

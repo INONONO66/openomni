@@ -8,6 +8,7 @@ import {
   type AlarmCapability,
   type ArmVerb,
   type CapabilityDefinition,
+  type SeamTag,
 } from "../../core/api";
 import {
   createWatchVerb,
@@ -110,6 +111,28 @@ function guardArm(registry: ReadonlyMap<string, string>, raw: ArmVerb): ArmVerb 
 }
 
 /**
+ * The alarm capability's `Capability.define` contract (#1255 S1): the verbs
+ * are `arm` plus the watch verb composed over it. `alarmCapability` freezes
+ * one per live on-set with the registry-guarded arm; the app's manifest lists
+ * the purpose-free form (`purposes: {}`, raw arm) because the manifest's
+ * bundle contracts declare their own purposes and compose rejects a duplicate.
+ */
+export function alarmContract(input: {
+  readonly purposes: Readonly<Record<string, AlarmPurposeHandler>>;
+  readonly arm: (sessionId: string, turnId: string) => ArmVerb;
+  readonly watch: WatchInstallDeps;
+}): CapabilityDefinition<"alarm", SeamTag, AlarmCapabilityDefinition["verbs"], AlarmPurposeHandler> {
+  return Capability.define({
+    name: "alarm",
+    requires: [],
+    points: ["alarm.fired"],
+    purposes: input.purposes,
+    verbs: { arm: input.arm, watch: createWatchVerb(input.arm, input.watch) },
+    seam: AlarmSeam,
+  });
+}
+
+/**
  * The one export the app composes. Reserved/`rescan`/duplicate purpose names
  * are refused through the injected compose verb (no partial activation); the
  * wake dispatch routes a fired occurrence to its registered handler, and an
@@ -141,14 +164,10 @@ export function alarmCapability<E>(
         };
         const arm = (sessionId: string, turnId: string) =>
           guardArm(registry, options.arm(sessionId, turnId));
-        const verbs = { arm, watch: createWatchVerb(arm, options.watch) };
-        const definition = Capability.define({
-          name: "alarm",
-          requires: [],
-          points: ["alarm.fired"],
+        const definition = alarmContract({
           purposes: Object.fromEntries(handlers),
-          verbs,
-          seam: AlarmSeam,
+          arm,
+          watch: options.watch,
         });
         return {
           definition,
@@ -157,7 +176,7 @@ export function alarmCapability<E>(
           purposes: Object.keys(definition.purposes),
           registry,
           wake,
-          verbs,
+          verbs: definition.verbs,
         };
       }),
     );

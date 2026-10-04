@@ -24,7 +24,7 @@ export function composedHolder(options: {
     bundles: options.bundles ?? [],
     off: options.off ?? [],
   });
-  const generation = Effect.runSync(Bundle.compose(manifest));
+  const generation = Bundle.composeSync(manifest);
   return composedHolderOf({ manifest, generation });
 }
 

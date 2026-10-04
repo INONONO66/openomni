@@ -9,7 +9,7 @@ import { refusal } from "./contacts";
  * their captured generation; sessions adopt the new hash at their next turn
  * start (core rotation, #1255 S3).
  */
-export const BUNDLE_INPUT = z
+const BUNDLE_INPUT = z
   .object({ name: z.string().min(1).describe("The declared bundle name, e.g. monitor.") })
   .strict();
 

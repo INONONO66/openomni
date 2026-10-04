@@ -54,7 +54,7 @@ export interface WatchPlane {
   readonly onArmed: (notice: Core.AlarmArmNotice) => void;
 }
 
-export interface AlarmOccurrence {
+interface AlarmOccurrence {
   readonly occurrenceId: string;
   readonly purpose: string;
   readonly alarmId: string;
@@ -64,7 +64,7 @@ export interface AlarmOccurrence {
   readonly fireAt: number;
 }
 
-export async function createWatchPlane(): Promise<WatchPlane> {
+export function createWatchPlane(): WatchPlane {
   let sources: WatchSources | undefined;
   const live = (): WatchSources => {
     if (sources === undefined) throw new AppInvariantError("watch sources used before boot bound them");
@@ -89,11 +89,9 @@ export async function createWatchPlane(): Promise<WatchPlane> {
       watch,
       arm: arms.arm,
     });
-  const contract = (
-    await Effect.runPromise(
-      Bundle.alarmCapability({ bundles: [], compose: Core.composeAlarmPurposes, watch, arm: arms.arm }),
-    )
-  ).definition;
+  // The manifest's contract is purpose-free (bundles declare theirs) and
+  // needs no registry: the raw arm verb is the live activation's own guard.
+  const contract = Bundle.alarmContract({ purposes: {}, arm: arms.arm, watch });
   // #1254 H2: a `monitor.hit` send (activation resend or fresh-arm forward)
   // is the native-source plane's (re)install, never a time delivery: a live
   // holder adopts the occurrence; a missing one is installed from the

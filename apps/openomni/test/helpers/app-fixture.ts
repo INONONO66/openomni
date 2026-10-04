@@ -16,10 +16,10 @@ import { Bus } from "./bus";
  * composed tables (names, tools, rows, kinds) are what matter; the LIVE wake
  * router is always the booting process's own plane.
  */
-export async function productComposedHolder(off?: readonly string[]): Promise<ComposedHolder> {
-  const plane = await createWatchPlane();
+async function productComposedHolder(off?: readonly string[]): Promise<ComposedHolder> {
+  const plane = createWatchPlane();
   const manifest = appManifest({ alarm: plane.contract, wake: plane.wake, ...(off === undefined ? {} : { off }) });
-  const generation = await Effect.runPromise(Bundle.compose(manifest));
+  const generation = Bundle.composeSync(manifest);
   return composedHolderOf({ manifest, generation });
 }
 
