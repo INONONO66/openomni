@@ -6,6 +6,7 @@
  */
 export * from "./core/compose";
 export * from "./plugins/alarm";
+export * from "./plugins/hook";
 
 // #1255 S1: the three declaration contracts, surfaced for the app manifest.
 // `Bundle.define` is the barrel's `define`.
