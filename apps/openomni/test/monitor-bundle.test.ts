@@ -54,6 +54,15 @@ async function untilCommitted(check: () => boolean, label: string, timeoutMs = 2
   }
 }
 
+/** The `alarm{fired}` rows of one chain, in journal order. */
+function firedOutcomes(plane: AppLedgerPlane, sessionId: string, alarmId: string) {
+  return sessionTree(sessionId, plane.sessionStore(sessionId).actions)
+    .filter((action) => action.kind === "alarm")
+    .map((action) => action.intent.value as { op?: string; alarmId?: string; outcome?: string })
+    .filter((value) => value.op === "fired" && value.alarmId === alarmId)
+    .map((value) => value.outcome);
+}
+
 function residentSessionId(plane: AppLedgerPlane): string | undefined {
   return plane.listSessions().find((row) => row.id !== "gateway-ingress")?.id;
 }
@@ -331,3 +340,123 @@ test("a bundle off at boot composes out: no tool face, no bundle adoption, unkno
   expect(refusal).toMatchObject({ _tag: "Failure", failure: { code: "unknown_kind" } });
   expect(sessionTree(sessionId, plane.sessionStore(sessionId).actions)).toHaveLength(before);
 }, 40_000);
+
+// ─── 4. recompose re-routes alarm purposes (live capability follows the swap) ─
+
+type LlmStep = Parameters<Parameters<typeof suite.boot>[0]["llm"] extends infer L
+  ? L extends { run?: infer R }
+    ? NonNullable<R>
+    : never
+  : never>;
+
+test("bundle_disable cron: a due tick folds fired{stale} with no prompt; bundle_enable restores arming and routing", async () => {
+  // Clock the whole app (cluster DeliverAt holds included) from one mutable
+  // instant; the test advances it instead of sleeping.
+  let now = T0;
+  const cronCreate = (id: string): ((...args: LlmStep) => void) => (input, sink) =>
+    requestToolStep(input, sink, {
+      id,
+      tool: "monitor",
+      input: {
+        operation: {
+          op: "create",
+          description: "five minute grid",
+          source: { kind: "cron", expr: "*/5 * * * *", tz: "UTC" },
+        },
+      },
+    });
+  const bundleOp = (op: "bundle_enable" | "bundle_disable"): ((...args: LlmStep) => void) => (input, sink) =>
+    requestToolStep(input, sink, {
+      id: `${op}-cron`,
+      tool: "provision",
+      input: { operation: { op, args: { name: "cron" } } },
+    });
+  // Scripted model: each wave consumes one step; an empty queue ends the wave.
+  const steps: ((...args: LlmStep) => void)[] = [];
+  let calls = 0;
+  const app = await suite.boot({
+    config: suite.config("monitor-bundle-reroute-", {
+      wsToken: TOKEN,
+      compactionSummarizer: false,
+    }),
+    clusterClock: "injected",
+    sessionRuntime: { clock: () => now },
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) => Effect.sync(() => {
+        calls += 1;
+        const step = steps.shift();
+        if (step === undefined) sink.onMessage(assistantMessage(input, { text: `wave ${calls}` }));
+        else step(input, sink);
+        return { type: "stop" as const };
+      }),
+    },
+  });
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", TOKEN]);
+  const plane = await planeOf(app.runtime);
+  const say = (text: string) => ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text }));
+  const openRequest = (sessionId: string) =>
+    plane.openKernel(sessionId).requestRows(sessionId).find((request) => request.state === "open");
+  /** Owner consent for one provision op: wait for the open request, approve, wait for the turn. */
+  const consent = async (sessionId: string, label: string) => {
+    await untilCommitted(() => openRequest(sessionId) !== undefined, `${label} consent never opened`);
+    const request = openRequest(sessionId);
+    if (request === undefined) throw new Error(`${label}: missing consent request`);
+    const inputId = newTraceId();
+    const receipt = nextFrame(ws, (frame) => frame.type === "receipt" && frame.inputId === inputId);
+    ws.send(
+      JSON.stringify({ type: "request_answer", inputId, request, decision: "approve", credential: TOKEN }),
+    );
+    await receipt;
+    await untilCommitted(() => lastTurnTerminal(plane, sessionId) === "result", `${label} turn never finished`);
+  };
+
+  // Arm a cron chain while cron is on; it holds on the injected FIRST_FIRE.
+  steps.push(cronCreate("cron-create-1"));
+  say("arm the grid");
+  await untilCommitted(() => {
+    const sessionId = residentSessionId(plane);
+    return sessionId !== undefined && lastTurnTerminal(plane, sessionId) === "waiting";
+  }, "cron create did not suspend");
+  const sessionId = residentSessionId(plane);
+  if (sessionId === undefined) throw new Error("no resident session");
+  const kernel = plane.openKernel(sessionId);
+  const [firstId, firstChain] = [...foldAlarmChains(kernel, sessionId).entries()][0] ?? ["", undefined];
+  if (firstChain === undefined) throw new Error("no armed chain");
+  expect(watchStateOf(firstChain, sessionId)).toMatchObject({ kind: "cron", status: "armed", fireAt: FIRST_FIRE });
+
+  // Disable the cron bundle (Owner consent) — the live alarm capability must
+  // drop `cron.tick` with the swap, not keep the boot-time registry.
+  steps.push(bundleOp("bundle_disable"));
+  say("disable cron");
+  await consent(sessionId, "bundle_disable");
+  const callsAfterDisable = calls;
+
+  // The due tick now fires into an unregistered purpose: one recorded
+  // `fired{stale}`, zero handler execution, no alarm prompt, no model wave.
+  now = FIRST_FIRE + 1_000;
+  await untilCommitted(() => firedOutcomes(plane, sessionId, firstId).length > 0, "disabled cron never fired");
+  expect(firedOutcomes(plane, sessionId, firstId)).toEqual(["stale"]);
+  expect(alarmPrompts(plane, sessionId)).toHaveLength(0);
+  expect(calls).toBe(callsAfterDisable);
+
+  // Re-enable, arm again: the purpose routes once more and the tick delivers.
+  steps.push(bundleOp("bundle_enable"));
+  say("enable cron");
+  await consent(sessionId, "bundle_enable");
+  steps.push(cronCreate("cron-create-2"));
+  say("arm the grid again");
+  await untilCommitted(() => lastTurnTerminal(plane, sessionId) === "waiting", "second cron create did not suspend");
+  const secondEntry = [...foldAlarmChains(kernel, sessionId).entries()].find(
+    ([id, chain]) => id !== firstId && watchStateOf(chain, sessionId).kind === "cron",
+  );
+  if (secondEntry === undefined) throw new Error("no second armed chain");
+  const [secondId, secondChain] = secondEntry;
+  expect(watchStateOf(secondChain, sessionId)).toMatchObject({ kind: "cron", status: "armed", fireAt: SECOND_FIRE });
+  const callsBeforeFire = calls;
+  now = SECOND_FIRE + 1_000;
+  await untilCommitted(() => lastTurnTerminal(plane, sessionId) === "result", "re-enabled cron never prompted");
+  expect(firedOutcomes(plane, sessionId, secondId)).toEqual(["delivered"]);
+  expect(alarmPrompts(plane, sessionId)).toHaveLength(1);
+  expect(calls).toBe(callsBeforeFire + 1);
+}, 60_000);

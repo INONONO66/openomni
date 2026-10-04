@@ -457,6 +457,17 @@ export async function startOpenOmni(options: StartOptions = {}) {
         throw new AppInvariantError("provisioning used before composition finished");
       return channelSupervisor;
     };
+    // #1254 H3: ONE committing arm path — the watch plane's live-arm registry.
+    // The LIVE capability registers exactly the composed on-set's purposes;
+    // `bundles.set` rebuilds it on every successful recompose behind the
+    // stable view the monitor ports and the entity's capability port hold.
+    const liveAlarm = {
+      current: await runAppBoot(
+        runtime,
+        watchPlane.capabilityFor(services.composed.current().generation.bundles),
+      ),
+    };
+    const alarmPlane = alarmCapabilityView(liveAlarm);
     const provisioningPort: ProvisionPort = {
       persons: plane.stores.persons,
       instances: plane.stores.instances,
@@ -482,7 +493,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
         set: async (off) => {
           const manifest = appManifest({ alarm: watchPlane.contract, wake: watchPlane.wake, off });
           const generation = await runAppEffect(runtime, Bundle.compose(manifest));
+          // The live alarm capability is rebuilt from the new on-set BEFORE the
+          // swap: a refusal leaves the composition AND the purpose registry on
+          // the previous generation, so a disabled bundle's purposes stop
+          // routing (its due fires fold `stale`) and an enabled one's resume.
+          const alarm = await runAppEffect(
+            runtime,
+            watchPlane.capabilityFor(generation.bundles),
+          );
           services.composed.swap({ manifest, generation });
+          liveAlarm.current = alarm;
           // The recomposed gate rows seed a fresh policy generation alongside
           // the swap, so adopted turns evaluate the matching row tables.
           seedKernelPolicyRows(
@@ -569,16 +589,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
     );
     watchPlane.bind(watchSources);
-    // #1254 H3: ONE committing arm path — the watch plane's live-arm registry.
-    // The LIVE capability registers exactly the composed on-set's purposes and
-    // is rebuilt on recompose behind the stable view the ports below hold.
-    const liveAlarm = {
-      current: await runAppBoot(
-        runtime,
-        watchPlane.capabilityFor(services.composed.current().generation.bundles),
-      ),
-    };
-    const alarmPlane = alarmCapabilityView(liveAlarm);
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       ...residentModelOptions(config.model, transport),
