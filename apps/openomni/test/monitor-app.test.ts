@@ -277,3 +277,72 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
   const probe = Bun.spawnSync(["tmux", "-L", tmuxSocket, "has-session", "-t", "qa"], { stderr: "pipe" });
   expect(probe.exitCode).toBe(0);
 }, 60_000);
+
+/**
+ * #1254 cron chains through the real tool door, end to end: the create commits
+ * the arm, schedules the occurrence WITHOUT blocking on its DeliverAt reply
+ * (which only answers at `fireAt`), and the turn suspends on live-wait
+ * evidence. Expression/gate refusals are unit-covered in monitor-dispatcher.
+ */
+test("monitor cron create arms a grid chain and the turn suspends instead of blocking on the tick", async () => {
+  let calls = 0;
+  const app = await suite.boot({
+    config: suite.config("monitor-cron-db-", {
+      wsToken: "monitor-test",
+      compactionSummarizer: false,
+    }),
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) => Effect.sync(() => {
+        calls += 1;
+        if (calls === 1)
+          requestToolStep(input, sink, {
+            id: "cron-create",
+            tool: "monitor",
+            input: {
+              operation: {
+                op: "create",
+                description: "five minute grid",
+                source: { kind: "cron", expr: "*/5 * * * *", tz: "UTC" },
+              },
+            },
+          });
+        else sink.onMessage(assistantMessage(input, { text: "cron armed" }));
+        return { type: "stop" as const };
+      }),
+    },
+  });
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "monitor-test"]);
+  const plane = await planeOf(app.runtime);
+  const waiting = Promise.withResolvers<void>();
+  const unsubscribeWaiting = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind !== "turn") return;
+    const snapshot = plane.openKernel(event.sessionId).getSnapshot(event.sessionId);
+    if (snapshot.turns.at(-1)?.terminal?.kind === "waiting") waiting.resolve();
+  });
+  const waitTimer = setTimeout(() => waiting.reject(new Error("cron create did not suspend")), 15_000);
+  try {
+    ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "arm the cron" }));
+    await waiting.promise;
+  } finally {
+    clearTimeout(waitTimer);
+    unsubscribeWaiting();
+  }
+  // One model call: the create returned promptly (the DeliverAt reply is NOT
+  // awaited) and the loop suspended on the armed chain's live-wait evidence.
+  expect(calls).toBe(1);
+  const session = plane.listSessions().find((row) => row.id !== "gateway-ingress");
+  if (session === undefined) throw new Error("no resident session");
+  const kernel = plane.openKernel(session.id);
+  const chains = [...foldAlarmChains(kernel, session.id).values()];
+  expect(chains).toHaveLength(1);
+  const chain = chains[0];
+  if (chain === undefined) throw new Error("no cron chain");
+  const state = watchStateOf(chain, session.id);
+  expect(state).toMatchObject({ kind: "cron", status: "armed", notifications: 0 });
+  if (state.fireAt === null) throw new Error("armed cron without a fire instant");
+  // The scheduled instant is the grid's next UTC five-minute boundary, in the future.
+  expect(state.fireAt % 60_000).toBe(0);
+  expect(new Date(state.fireAt).getUTCMinutes() % 5).toBe(0);
+  expect(state.fireAt).toBeGreaterThan(Date.now());
+}, 30_000);

@@ -503,6 +503,12 @@ export async function startOpenOmni(options: StartOptions = {}) {
         readonly fireAt: number;
       },
     ) => entityClient(sessionId).Alarm(occurrence).pipe(Effect.asVoid);
+    // Scheduled occurrences persist without awaiting the reply: a DeliverAt
+    // send only answers at `fireAt`, and the arming turn must not block on it.
+    const scheduleAlarm = (
+      sessionId: string,
+      occurrence: Parameters<typeof sendAlarm>[1],
+    ) => entityClient(sessionId).Alarm(occurrence, { discard: true });
     // Terminal watches drain the same machines surface the bash door uses.
     const watchSources = createWatchSources(
       {
@@ -526,7 +532,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       openKernel: plane.openKernel,
       clock: services.now,
       entropy: services.entropy.id,
-      schedule: (sessionId, occurrence) => sendAlarm(sessionId, occurrence),
+      schedule: (sessionId, occurrence) => scheduleAlarm(sessionId, occurrence),
       // Native handles follow committed arm rows: a re-arm after a hit moves
       // the live source onto the new occurrence; a retiring arm closes it.
       // First install is the capability's install seam below, awaited by the
