@@ -87,8 +87,9 @@ test("cron.tick prompts once and re-arms the chain at the next grid time", async
         expr: "*/5 * * * *",
         firedAt: 300_000,
         missed: 0,
+        missedSaturated: false,
       }),
-      payload: { expr: "*/5 * * * *", missed: 0 },
+      payload: { expr: "*/5 * * * *", missed: 0, missedSaturated: false },
     },
   ]);
   expect(arms).toEqual([
@@ -105,7 +106,9 @@ test("cron.tick prompts once and re-arms the chain at the next grid time", async
   // in (fireAt, now]; one prompt carries the count, no catch-up storm.
   expect(await runEffect(wake(cronFired(payload, 300_000), 1_210_000))).toBe("delivered");
   expect(prompts).toHaveLength(2);
-  expect(prompts.at(-1)).toMatchObject({ payload: { expr: "*/5 * * * *", missed: 3 } });
+  expect(prompts.at(-1)).toMatchObject({
+    payload: { expr: "*/5 * * * *", missed: 3, missedSaturated: false },
+  });
   expect(arms.at(-1)).toMatchObject({ at: 1_500_000 });
 });
 
@@ -126,8 +129,9 @@ test("cron.tick counts every grid instant lost to downtime: */30 asleep 3h repor
         expr: "*/30 * * * *",
         firedAt,
         missed: 6,
+        missedSaturated: false,
       }),
-      payload: { expr: "*/30 * * * *", missed: 6 },
+      payload: { expr: "*/30 * * * *", missed: 6, missedSaturated: false },
     },
   ]);
   expect(arms).toEqual([
@@ -140,6 +144,28 @@ test("cron.tick counts every grid instant lost to downtime: */30 asleep 3h repor
       payload: half,
     },
   ]);
+});
+
+test("cron.tick saturates the missed count at 1024 and the prompt says at least (#1254 r2 M1)", async () => {
+  const { prompts, arms, wake } = cronWake();
+  const minute = { expr: "* * * * *", tz: "UTC", description: "minute grid" };
+  // 1025 elapsed minute ticks: the count stops at the 1024 cap WITHOUT
+  // materializing more, and the payload discloses the saturation instead of
+  // reporting an exact-looking truncated number.
+  const firedAt = Date.UTC(2026, 0, 1, 0, 0);
+  const now = firedAt + 1025 * 60_000;
+  expect(await runEffect(wake(cronFired(minute, firedAt), now))).toBe("delivered");
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]).toMatchObject({
+    payload: { expr: "* * * * *", missed: 1024, missedSaturated: true },
+  });
+  // The prompt the model reads says "at least 1024", never a fake-exact 1024.
+  expect(JSON.parse(prompts[0]?.content ?? "{}")).toMatchObject({
+    missed: 1024,
+    missedSaturated: true,
+    note: "at least 1024 grid instants missed (count saturated)",
+  });
+  expect(arms.at(-1)).toMatchObject({ at: now + 60_000 });
 });
 
 test("cron.tick surfaces a refused grid re-arm as a typed wake failure carrying the refusal code", async () => {

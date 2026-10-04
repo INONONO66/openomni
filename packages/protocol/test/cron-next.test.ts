@@ -48,6 +48,31 @@ describe("Cron.next grid", () => {
   });
 });
 
+describe("Cron.missed saturation (#1254 r2 M1)", () => {
+  test("1025 elapsed minute ticks saturate at the default 1024 cap with the flag raised", () => {
+    const after = Date.UTC(2026, 0, 15, 10, 0);
+    const until = after + 1025 * 60 * 1000;
+    expect(Cron.missed("* * * * *", after, until, UTC)).toEqual({ count: 1024, saturated: true });
+  });
+
+  test("exactly 1024 elapsed minute ticks report the exact count, not saturated", () => {
+    const after = Date.UTC(2026, 0, 15, 10, 0);
+    const until = after + 1024 * 60 * 1000;
+    expect(Cron.missed("* * * * *", after, until, UTC)).toEqual({ count: 1024, saturated: false });
+  });
+
+  test("a custom limit saturates without materializing instants past the cap", () => {
+    const after = Date.UTC(2026, 0, 15, 10, 0);
+    const until = after + 3 * 60 * 60 * 1000;
+    expect(Cron.missed("*/30 * * * *", after, until, UTC, 2)).toEqual({ count: 2, saturated: true });
+    expect(Cron.missed("*/30 * * * *", after, until, UTC)).toEqual({ count: 6, saturated: false });
+  });
+
+  test("unknown zone is a zone error from missed too", () => {
+    expect(errorCode(() => Cron.missed("* * * * *", 0, 1, "Not/AZone").count)).toBe("zone");
+  });
+});
+
 describe("Vixie day rule", () => {
   const expr = "0 0 13 * 5";
 

@@ -32,8 +32,8 @@ function cronTick(): Bundle.AlarmPurposeHandler {
       });
       const grid = yield* Effect.try({
         try: () => ({
-          /** Every grid instant in (fireAt, now]: ticks lost to downtime. */
-          missed: Cron.occurrences(payload.expr, fired.fireAt, ctx.now, payload.tz).length,
+          /** Grid instants in (fireAt, now] lost to downtime, capped with a saturation flag. */
+          missed: Cron.missed(payload.expr, fired.fireAt, ctx.now, payload.tz),
           next: Cron.next(payload.expr, Math.max(ctx.now, fired.fireAt), payload.tz),
         }),
         catch: () => new Bundle.AlarmWakeError({ purpose: fired.purpose, reason: "cron_expr" }),
@@ -44,9 +44,18 @@ function cronTick(): Bundle.AlarmPurposeHandler {
           description: payload.description,
           expr: payload.expr,
           firedAt: fired.fireAt,
-          missed: grid.missed,
+          // Saturated means "at least this many" — the note says so to the model.
+          missed: grid.missed.count,
+          missedSaturated: grid.missed.saturated,
+          ...(grid.missed.saturated
+            ? { note: `at least ${grid.missed.count} grid instants missed (count saturated)` }
+            : {}),
         }),
-        payload: { expr: payload.expr, missed: grid.missed },
+        payload: {
+          expr: payload.expr,
+          missed: grid.missed.count,
+          missedSaturated: grid.missed.saturated,
+        },
       });
       yield* ctx
         .arm({

@@ -228,7 +228,7 @@ export namespace Cron {
 
   /**
    * Grid instants in `(afterMs, untilMs]`, capped at `limit` (default 1024).
-   * The cron purpose handler's `missed` count is `occurrences(...).length`.
+   * For a saturation-aware count (#1254 r2 M1) use `Cron.missed`.
    */
   export function occurrences(
     expr: string,
@@ -250,5 +250,33 @@ export namespace Cron {
       cursor = hit;
     }
     return hits;
+  }
+
+  /**
+   * Counts grid instants in `(afterMs, untilMs]` without materializing them,
+   * stopping at `limit` (default 1024). `saturated` is true iff at least one
+   * further instant lies inside the window beyond the cap — a saturated
+   * `count` means "at least this many", never an exact-looking truncation
+   * (#1254 r2 M1).
+   */
+  export function missed(
+    expr: string,
+    afterMs: number,
+    untilMs: number,
+    tz: string,
+    limit = 1024,
+  ): { readonly count: number; readonly saturated: boolean } {
+    const spec = parse(expr);
+    const format = zoneFormatter(tz);
+    let count = 0;
+    let hit = nextAfterMinute(spec, format, Math.floor(afterMs / MINUTE_MS) * MINUTE_MS, expr);
+    while (hit <= untilMs) {
+      if (count === limit) {
+        return { count, saturated: true };
+      }
+      count += 1;
+      hit = nextAfterMinute(spec, format, hit, expr);
+    }
+    return { count, saturated: false };
   }
 }
