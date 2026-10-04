@@ -1,4 +1,4 @@
-import { Bundle, Core } from "@openomni/agent";
+import { type Bundle, Core } from "@openomni/agent";
 import { Alarm, Cron, type LedgerAction, type PlainObject, PlainObjectSchema } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";

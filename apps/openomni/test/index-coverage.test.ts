@@ -7,7 +7,7 @@ type ExecutionApprovalRequest = Core.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
 const CommitRefused = Core.CommitRefused;
-import { canonicalDigest, L0Observation } from "@openomni/protocol";
+import { type Alarm, canonicalDigest, L0Observation } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src";
 import {
   assistantMessage,
@@ -613,7 +613,7 @@ const stopLlm = {
 async function seedNativeSession(
   plane: Awaited<ReturnType<typeof planeOf>>,
   sessionId: string,
-  watch: Record<string, unknown>,
+  watch: Alarm.WatchSpec["watch"],
 ) {
   const kernel = plane.openKernel(sessionId);
   await runEffect(
