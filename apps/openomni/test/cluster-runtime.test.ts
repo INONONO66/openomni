@@ -11,7 +11,7 @@ type ObservationPublishFailure = Core.ObservationPublishFailure;
 const openCatalogStore = Core.openCatalogStore;
 const openSessionStore = Core.openSessionStore;
 import type { Inbox, ObservationSink } from "@openomni/protocol";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import {
   createAppLedger,
@@ -251,12 +251,15 @@ test("without an injected port a publish failure on a file-mode handle is an inc
 test("late-bound entity ports refuse early use and forward after one binding", async () => {
   const plane = createAppLedger({ now: testClock() });
   const slot = createSessionEntityPortsSlot();
-  const { sendAlarm, alarmCapability, onKeepAlive, requestDomainRevisions } = slot.ports;
+  const { sendAlarm, alarmCapability, onKeepAlive, requestDomainRevisions, ready, onRequestReady } =
+    slot.ports;
   if (
     sendAlarm === undefined ||
     alarmCapability === undefined ||
     onKeepAlive === undefined ||
-    requestDomainRevisions === undefined
+    requestDomainRevisions === undefined ||
+    ready === undefined ||
+    onRequestReady === undefined
   )
     throw new Error("the slot must delegate every optional entity port");
   const occurrence = {
@@ -286,10 +289,22 @@ test("late-bound entity ports refuse early use and forward after one binding", a
     );
     expect(alarmCapability.purposes).toEqual([]);
     expect(() => onKeepAlive(true)).not.toThrow();
+    // The doorbell before binding has nobody to ring and must not throw: a
+    // redelivered Resolve can only reach an activation that passed `ready`.
+    expect(() => onRequestReady("late-session")).not.toThrow();
+    // An activation parks on `ready` instead of dying: the gate is still
+    // open-ended here and settles exactly when boot binds the ports.
+    const readyProbe: string[] = [];
+    const parked = await runEffect(
+      Effect.forkDetach(ready.pipe(Effect.tap(() => Effect.sync(() => readyProbe.push("ready"))))),
+    );
+    expect(readyProbe).toEqual([]);
     const forwarded: string[] = [];
     const keepAlive: boolean[] = [];
+    const rung: string[] = [];
     const ports: SessionEntityPorts = {
       runTurn: () => Effect.void,
+      onRequestReady: (sessionId) => rung.push(sessionId),
       sendAlarm: (sessionId, fired) =>
         Effect.sync(() => {
           forwarded.push(`${sessionId}:${fired.occurrenceId}`);
@@ -306,6 +321,10 @@ test("late-bound entity ports refuse early use and forward after one binding", a
       requestDomainRevisions: () => ({ person: 3 }),
     };
     slot.bind(ports);
+    await runEffect(Fiber.join(parked));
+    expect(readyProbe).toEqual(["ready"]);
+    onRequestReady("late-session");
+    expect(rung).toEqual(["late-session"]);
     await runEffect(sendAlarm("late-session", occurrence));
     expect(await runEffect(alarmCapability.wake(occurrence, context))).toBe("delivered");
     expect(alarmCapability.purposes).toEqual(["cron.tick"]);

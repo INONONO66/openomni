@@ -70,6 +70,10 @@ export interface TestClusterOptions {
   readonly alarmCapability?: AlarmCapability;
   /** #1254 S4: keep-alive toggles observed around detached turns. */
   readonly onKeepAlive?: (enabled: boolean) => void;
+  /** Composition readiness gate an activation awaits before its first port call. */
+  readonly ready?: Effect.Effect<void>;
+  /** Fires after the entity commits one request transition. */
+  readonly onRequestReady?: (sessionId: string) => void;
   /** Injected entity clock (byte-equality fixtures); default wall clock. */
   readonly clock?: () => number;
   /** Wraps each freshly opened per-session store (fault injection). */
@@ -311,6 +315,10 @@ function entityEnvLayer(options: TestClusterOptions) {
                 ? {}
                 : { alarmCapability: options.alarmCapability }),
               ...(options.onKeepAlive === undefined ? {} : { onKeepAlive: options.onKeepAlive }),
+              ...(options.ready === undefined ? {} : { ready: options.ready }),
+              ...(options.onRequestReady === undefined
+                ? {}
+                : { onRequestReady: options.onRequestReady }),
               sendAlarm: (sessionId, occurrence) =>
                 makeClient(sessionId)
                   .Alarm(occurrence)

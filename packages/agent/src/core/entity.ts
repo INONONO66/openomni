@@ -818,7 +818,13 @@ function requestCommand(
   });
   return Effect.gen(function* () {
     const result = yield* retryRevision(attempt);
-    if (result.committed) yield* drain(handle);
+    if (result.committed) {
+      // A turn recovered by this activation may be parked on the request
+      // (it read `open` before this commit); ring it before the drain, which
+      // defers to that live turn.
+      handle.env.ports.onRequestReady?.(handle.authority.sessionId);
+      yield* drain(handle);
+    }
     return { resolution: result.resolution };
   }).pipe(Effect.catchIf(
     (error): error is LedgerError | SessionError => !(error instanceof AdmissionFailure),
@@ -1010,6 +1016,9 @@ export function createSessionEntityLayer(drainConfig: AlarmDrainConfig) {
   return SessionEntity.toLayerQueue(
     Effect.gen(function* () {
       const env = yield* SessionEntityContext;
+      // A redelivered message can activate a session before the composition
+      // root bound the real ports; hold the activation until it has.
+      yield* env.ports.ready ?? Effect.void;
       const address = yield* Entity.CurrentAddress;
       const sessionId = address.entityId;
       const store = env.openSession(sessionId);

@@ -74,7 +74,25 @@ the alarm prompt, the `<occurrenceId>:delivered` row and the re-armed chain).
 The armed budget bounds the index, so only an arm that adds a chain (non-null
 `at`, no armed row for its id) consults `maxArmed`; a retire or a re-arm of an
 armed chain commits at a full budget and a retire frees its slot
-(`alarm-budget.test.ts`).
+(`alarm-budget.test.ts`). Two activation-order defects surfaced by the
+restart e2e (`request-owner-e2e.test.ts`, red 3/3 before, green 3/3 after)
+once activations resend their armed occurrences and hold `keepAlive`: the
+cluster host redelivers a crashed process's persisted messages as soon as it
+starts, so a session activated before the composition root bound the entity
+ports and the late-bound slot died typed — the ports now carry an optional
+`ready` gate an activation awaits before its first port call
+(`createSessionEntityPortsSlot` settles it at `bind`; the entity activation
+yields it first; `rpc-surface.test.ts` parks an activation at the gate and
+observes no port entry until release, `cluster-runtime.test.ts` pins the
+slot's settle-at-bind). And the entity `Resolve` path committed the answer
+but woke nobody: the turn that activation had recovered was parked on the
+still-open request, the drain deferred to that live turn, and the app's
+direct answer route (`notifyLiveApprovals`) never saw a turn that was not
+live when the answer was dispatched — `requestCommand` now rings the optional
+`onRequestReady(sessionId)` port after each committed transition (resolve,
+cancel, deadline expiry) and the app binds it to `notifyLiveApprovals`, the
+same doorbell the direct path rings; a refused transition stays silent
+(`rpc-surface.test.ts`, `resolve-stale.test.ts`).
 `Protocol.Cron.next(expr, fromMs, tz)` / `Cron.occurrences(expr, afterMs,
 untilMs, tz, limit)` is a dependency-free Vixie grid over `Intl.DateTimeFormat`
 zone math (DST gap skipped, overlap fires once, 366-day `unreachable` bound,

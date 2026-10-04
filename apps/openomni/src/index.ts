@@ -816,6 +816,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
               services.scope,
             )(input),
       requestDomainRevisions: domainRevisions,
+      // An entity-path Resolve (the answer found no live turn) may land after
+      // the activation it triggered recovered the open turn, which then parked
+      // on the still-open request: the entity rings the live approval gate
+      // after its commit, the same doorbell the direct answer path rings.
+      onRequestReady: notifyLiveApprovals,
       // #1254 S4: the composed monitor/cron capability the entity dispatches a
       // delivered non-reserved occurrence to; unbound it would fold every
       // watch hit and cron tick to a recorded stale fact with zero execution.

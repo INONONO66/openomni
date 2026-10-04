@@ -14,7 +14,7 @@ type ObservationFailurePort = Core.ObservationFailurePort;
 type ObservationPublishFailure = Core.ObservationPublishFailure;
 import { createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore } from "@openomni/channels";
 import type { LedgerSession, ObservationSink } from "@openomni/protocol";
-import { Context, Duration, Effect, Layer } from "effect";
+import { Context, Deferred, Duration, Effect, Exit, Layer } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -219,8 +219,10 @@ export function appLedgerLayer(options: AppLedgerOptions): Layer.Layer<AppLedger
 /**
  * Late-bound entity ports (plan §1): the entity layer is composed before the
  * Resident exists, so the composition root hands the layer this slot and
- * binds the real ports once boot resolves them. Unbound use dies typed —
- * an entity activation before composition finished is a wiring defect.
+ * binds the real ports once boot resolves them. An activation awaits `ready`
+ * before its first port call (the cluster host redelivers a crashed
+ * process's persisted messages as soon as it starts, before boot reaches the
+ * binding); unbound use outside an activation dies typed — a wiring defect.
  */
 export interface SessionEntityPortsSlot {
   readonly ports: SessionEntityPorts;
@@ -229,6 +231,7 @@ export interface SessionEntityPortsSlot {
 
 export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
   let bound: SessionEntityPorts | undefined;
+  const ready = Deferred.makeUnsafe<void>();
   const resolve = (): SessionEntityPorts => {
     if (bound === undefined) throw new AppInvariantError("session entity ports are not bound yet");
     return bound;
@@ -237,9 +240,12 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
     bind: (ports) => {
       if (bound !== undefined) throw new AppInvariantError("session entity ports are already bound");
       bound = ports;
+      Deferred.doneUnsafe(ready, Exit.succeed(undefined));
     },
     ports: {
+      ready: Deferred.await(ready),
       runTurn: (input) => Effect.suspend(() => resolve().runTurn(input)),
+      onRequestReady: (sessionId) => bound?.onRequestReady?.(sessionId),
       requestDomainRevisions: (request) => resolve().requestDomainRevisions?.(request) ?? {},
       sendAlarm: (sessionId, occurrence) =>
         Effect.suspend(() => resolve().sendAlarm?.(sessionId, occurrence) ?? Effect.void),

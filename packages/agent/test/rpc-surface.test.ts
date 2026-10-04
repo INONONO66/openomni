@@ -8,7 +8,7 @@
  */
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { openCatalogStore } from "../src/core/store/catalog";
 import { openSessionStore } from "../src/core/store/session-file";
 import * as SessionHandleStore from "../src/core/store/fence";
@@ -106,6 +106,41 @@ test("deliver(prompt) replaces Prompt: the input row lands and a turn runs to se
   expect(chain.some((row) => row.id === "p1:turn:result")).toBe(true);
 });
 
+test("an activation holds at the composition readiness gate before its first port call", async () => {
+  const sessionId = "surface-gated";
+  const reached = Deferred.makeUnsafe<void>();
+  const release = Deferred.makeUnsafe<void>();
+  const entered: string[] = [];
+  const receipt = await runCluster(
+    {
+      ...options,
+      // The gate reports arrival, then parks until the test releases it —
+      // the shape of a redelivered message activating a session before boot
+      // bound the real ports.
+      ready: Deferred.succeed(reached, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      runner: (input) =>
+        Effect.sync(() => {
+          entered.push(input.turnId);
+          return { kind: "result", text: "ok" };
+        }),
+    },
+    Effect.gen(function* () {
+      const delivery = yield* Effect.forkChild(
+        sendDeliver(sessionId, { kind: "prompt", idempotencyKey: "gated", content: "hello" }),
+      );
+      yield* Deferred.await(reached);
+      // Parked at the gate: nothing has crossed into the turn port.
+      expect(entered).toEqual([]);
+      yield* Deferred.succeed(release, undefined);
+      return yield* Fiber.join(delivery);
+    }),
+  );
+  expect(receipt.existed).toBe(false);
+  expect(entered.length).toBe(1);
+  const chain = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
+  expect(chain.some((row) => row.id === "gated:turn:result")).toBe(true);
+});
+
 test("deliver(signal interrupt/resume) replaces Interrupt and Resume: idle control is consumed", async () => {
   const sessionId = "surface-signal";
   await runCluster(
@@ -167,8 +202,10 @@ test("resolve replaces RequestResolve/RequestCancel: answer resolves, cancel clo
     sessionId: cancelled,
     requestId: "req-cancel",
   });
+  // Each committed transition rings the request doorbell once for its session.
+  const rung: string[] = [];
   await runCluster(
-    options,
+    { ...options, onRequestReady: (sessionId) => rung.push(sessionId) },
     Effect.gen(function* () {
       const answer = approvalAnswer(answerable, "answer-1", Date.now());
       const resolved = yield* sendResolve(answered, {
@@ -191,6 +228,7 @@ test("resolve replaces RequestResolve/RequestCancel: answer resolves, cancel clo
       expect(closed.resolution).toBe("cancelled");
     }),
   );
+  expect(rung).toEqual([answered, cancelled]);
   const chain = readChain(sessionFileFor(sessionsDir, cancelled), cancelled);
   expect(chain.some((row) => row.id === "req-cancel:resolution")).toBe(true);
 });

@@ -288,8 +288,24 @@ export interface SessionEntityTurnInput {
 }
 
 export interface SessionEntityPorts {
+  /**
+   * Composition readiness: an activation awaits this before its first port
+   * call. The cluster redelivers a crashed process's persisted messages (its
+   * keep-alive, a due alarm) as soon as the host starts, which can activate
+   * a session before the composition root has bound the real ports; the gate
+   * holds that activation until boot binds them. Absent means ready.
+   */
+  readonly ready?: Effect.Effect<void>;
   /** Runs one admitted decision to a durable boundary; the ack follows its commits. */
   readonly runTurn: (input: SessionEntityTurnInput) => Effect.Effect<void, SessionError>;
+  /**
+   * Fires after the entity commits one request transition (a `resolve` or a
+   * deadline expiry). A recovered turn that went live in this same activation
+   * and parked on the still-open request re-reads it through this doorbell —
+   * the app-side answer path never saw that turn, since it was not live when
+   * the answer was dispatched. Mirrors `SessionRuntime.onRequestReady`.
+   */
+  readonly onRequestReady?: (sessionId: string) => void;
   /**
    * #1254 S4: the composed non-reserved alarm capability. A delivered
    * occurrence whose purpose is neither loop-reserved nor declared here folds
