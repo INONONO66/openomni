@@ -42,7 +42,8 @@ nothing arms it; `admission-writer-fiber.test.ts`, `rpc-surface.test.ts`). The
 removable capability `packages/agent/src/plugins/alarm/` imports only
 `core/api.ts` (`AlarmCapability{purposes, wake → delivered|exhausted}`,
 `AlarmWakeContext`, `ArmVerb`,
-`ArmRefused{alarm_budget|unknown_purpose|reserved_purpose}`, `AlarmFired`,
+`ArmRefused{alarm_budget|unknown_purpose|reserved_purpose|not_live|stale_turn|stale_activation|revision}`,
+`AlarmFired`,
 `AlarmWakeOutcome`, `RESERVED_PURPOSES`) and owns the purpose registry
 (`Core.composeAlarmPurposes` refuses the reserved four, the entity-internal
 `rescan`, and duplicates with a typed `AlarmComposeError`), wake dispatch, the
