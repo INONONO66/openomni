@@ -1,6 +1,10 @@
 # Implementation Status
 
-## #1254 alarm split: core timer, removable alarm capability (epic #1260, PR #1285, ⏳ pending merge)
+## #1255 declarative capabilities and bundles (epic #1260, ⏳ in flight)
+
+Branch `epic1260/1255-declarative-bundles`, base `77e1375b` (#1254). Scope per the live issue body: `Capability.define` / `Bundle.define` / `Manifest.define` exported from `packages/agent/src/core/api.ts`; `compose(manifest) → Generation{hash, kinds, points, handlers, purposes, tools, rows}` in `packages/agent/src/core/compose.ts` rejecting exactly `requires_cycle | duplicate | product_declares_kind | seam_missing | unknown_handler | unknown_point`; the `off` cascade recorded as `session.configure{disabled: [{name, because}]}` (no new journal kind); generations recomputed from empty state on every manifest change and adopted by each session at its next turn start; `Tool.Spec`, `SessionGeneration.Tool` and the dispatch table derived once from the composed generation (`sessionTool()`/`toolSpec()` deleted); product bundles `apps/openomni/src/bundles/{monitor,cron}` replacing `tools/monitor.ts` and the composition bundles; the D5 tool-result split (`content / details / structuredContent`) as protocol owner fields consumed by eval and code mode. This section is replaced by the landed receipt when the PR merges.
+
+## #1254 alarm split: core timer, removable alarm capability (epic #1260, PR #1285, merged `77e1375b`)
 
 On `epic1260/1254-alarm-split` (2026-10-04, base `4ecb41f3`, merged with main
 `c8ae79d4` at `277b3ce5`). The timer plane
