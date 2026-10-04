@@ -289,15 +289,15 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
   const state = (sessionId: string, id: string) =>
     watchStateOf(requireChain(deps, sessionId, id), sessionId);
   const retire = (
-    sessionId: string,
-    turnId: string,
+    // #1254 r5 H1: the caller's ONE arm verb, minted before its first await —
+    // retire never re-resolves authority from the registry after suspension.
+    arm: Bundle.ArmVerb,
     chain: AlarmChainView,
     reason: "cancel",
     signal: AbortSignal,
   ) =>
     deps.run(
-      deps
-        .capability.verbs.arm(sessionId, turnId)({
+      arm({
           purpose: chain.latest.purpose,
           at: null,
           alarmId: chain.alarmId,
@@ -345,12 +345,17 @@ export function createAlarmMonitorPorts(deps: AlarmMonitorDeps): MonitorPorts {
       return state(input.sessionId, input.id);
     },
     async cancel(id, sessionId, turnId, _at, signal) {
+      // #1254 r5 H1: mint ONE arm verb at invocation, before any await. The
+      // registry binds authority at mint time; a registry replacement between
+      // the two retires (recovery keeps the durable turn id) must refuse
+      // stale_activation, never mutate through the successor.
+      const arm = deps.capability.verbs.arm(sessionId, turnId);
       const chain = requireChain(deps, sessionId, id);
-      if (chain.latest.at !== null) await retire(sessionId, turnId, chain, "cancel", signal);
+      if (chain.latest.at !== null) await retire(arm, chain, "cancel", signal);
       const chains = foldAlarmChains(deps.openKernel(sessionId), sessionId);
       const timeout = chains.get(`${id}:timeout`);
       if (timeout !== undefined && timeout.latest.at !== null)
-        await retire(sessionId, turnId, timeout, "cancel", signal);
+        await retire(arm, timeout, "cancel", signal);
       return state(sessionId, id);
     },
     async rearm(id, sessionId, turnId, at, signal) {

@@ -3,6 +3,7 @@ import { Core } from "@openomni/agent";
 import { Effect, Result } from "effect";
 import {
   alarmChainReads,
+  createAlarmMonitorPorts,
   createLiveArmRegistry,
   foldAlarmChains,
   watchStateOf,
@@ -383,5 +384,70 @@ test("monitor ports arm and revive a cron chain on its grid through the real ent
     );
     expect(revived).toMatchObject({ status: "armed", fireAt: FIXTURE_BASE + 600_000 });
     await awaitScheduled(fx.catalogFile, FIXTURE_BASE + 600_000);
+  });
+});
+
+test("r5 H1: cancel's timeout retire never borrows a successor activation's authority", async () => {
+  await withEntityAlarmPorts("entity-cancel-stale-session", async (fx) => {
+    const signal = new AbortController().signal;
+    await fx.ports.create(
+      {
+        sessionId: fx.sessionId,
+        turnId: fx.turnId,
+        id: "watch",
+        kind: "watch",
+        spec: {
+          watch: { command: "true", description: "timed", timeout_ms: 500 },
+          policyGeneration: 1,
+          notificationLimit: 2,
+        },
+      },
+      signal,
+    );
+    // Recovery keeps the durable turn id: BOTH activations own fx.turnId.
+    const registry = createLiveArmRegistry();
+    const calls: Array<readonly [string, string]> = [];
+    const successor = {
+      ownsTurn: (turnId: string) => turnId === fx.turnId,
+      arm: ((input) =>
+        Effect.sync(() => {
+          calls.push(["successor", input.alarmId ?? "minted"]);
+          return { alarmId: input.alarmId ?? "minted", occurrenceId: "successor", armSeq: 1 };
+        })) satisfies Core.ArmVerb,
+    };
+    // The old activation commits through the REAL entity verb; completing the
+    // main-chain retire replaces the live entry with a successor owning the
+    // SAME recovered turn — exactly the window between cancel's two awaits.
+    registry.onLive(fx.sessionId, {
+      ownsTurn: (turnId) => turnId === fx.turnId,
+      arm: (input) =>
+        fx.entityArm(input).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              calls.push(["old", input.alarmId ?? "minted"]);
+              registry.onLive(fx.sessionId, successor);
+            }),
+          ),
+        ),
+    });
+    const ports = createAlarmMonitorPorts({
+      capability: { ...fx.capability, verbs: { ...fx.capability.verbs, arm: registry.arm } },
+      openKernel: fx.plane.openKernel,
+      clock: () => FIXTURE_BASE,
+      entropy: () => "unused",
+      run: (effect) => runEffect(effect),
+    });
+    // The stale cancel continuation is a typed refusal (retire maps the
+    // ArmRefused code into the thrown Error): ONE arm verb is minted at
+    // cancel invocation, so the timeout retire never re-resolves authority.
+    await expect(
+      ports.cancel("watch", fx.sessionId, fx.turnId, FIXTURE_BASE, signal),
+    ).rejects.toMatchObject({ message: "stale_activation" });
+    // The successor's verb never ran — the only commit went through the old
+    // activation's entity verb for the main chain.
+    expect(calls).toEqual([["old", "watch"]]);
+    // The timeout chain was NOT retired through the successor: it stands armed.
+    const timeout = foldAlarmChains(fx.kernel, fx.sessionId).get("watch:timeout");
+    expect(timeout?.latest.at).toBe(FIXTURE_BASE + 500);
   });
 });
