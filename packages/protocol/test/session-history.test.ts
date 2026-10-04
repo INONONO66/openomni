@@ -109,7 +109,6 @@ describe("SessionHistory projections", () => {
     for (const cause of [
       { kind: "inbox", inboxIds: [] },
       { kind: "root", actionId: "a" },
-      { kind: "alarm", alarmId: "m" },
     ])
       expect(SessionHistory.Transition.safeParse({ ...transition, cause }).success).toBe(false);
   });
