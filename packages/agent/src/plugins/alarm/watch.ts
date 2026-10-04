@@ -134,6 +134,29 @@ function retire(
 }
 
 /**
+ * A settled watch leaves no armed row behind (#1254 H5a): retire the
+ * `<watchId>:timeout` companion when it is still armed.
+ */
+function retireTimeoutCompanion(
+  ctx: AlarmWakeContext,
+  fired: AlarmFired,
+): Effect.Effect<void, AlarmWakeError> {
+  const companionId = `${fired.alarmId}:timeout`;
+  const companion = ctx.reads.latestArm(companionId);
+  if (companion === undefined || companion.at === null) return Effect.void;
+  return ctx
+    .arm({
+      purpose: MONITOR_TIMEOUT,
+      at: null,
+      alarmId: companionId,
+      supersedes: companion.occurrenceId,
+      sourceKey: MONITOR_SOURCE,
+      payload: { watchId: fired.alarmId },
+    })
+    .pipe(Effect.mapError(armToWake(fired)), Effect.asVoid);
+}
+
+/**
  * `monitor.hit`: commit the wake prompt, then either retire (terminal hit),
  * exhaust (budget spent — the core records `fired{exhausted}` from the
  * returned outcome), or re-arm with `supersedes` and the spent budget.
@@ -148,12 +171,14 @@ function monitorHit(deps: WatchWakeDeps): AlarmPurposeHandler {
       yield* ctx.prompt({ content: hit.content, payload: { watchId: fired.alarmId, detail: hit.detail } });
       if (hit.terminal) {
         yield* retire(ctx, fired, fired.alarmId, fired.occurrenceId, "fired");
+        yield* retireTimeoutCompanion(ctx, fired);
         deps.close(fired.alarmId);
         return "delivered" as const;
       }
       const notifications = payload.notifications + 1;
       if (notifications >= payload.spec.notificationLimit) {
         yield* retire(ctx, fired, fired.alarmId, fired.occurrenceId, "exhausted");
+        yield* retireTimeoutCompanion(ctx, fired);
         deps.close(fired.alarmId);
         return "exhausted" as const;
       }

@@ -28,27 +28,29 @@ import {
 
 type ArmCall = Parameters<ArmVerb>[0];
 
-function stubArm(calls: ArmCall[], refuse?: ArmRefused): ArmVerb {
+/** In-test chain pages keyed by alarmId — the latest committed arm row per chain. */
+type ChainRows = Record<string, { occurrenceId: string; at: number | null }>;
+
+function stubArm(calls: ArmCall[], refuse?: ArmRefused, chains?: ChainRows): ArmVerb {
   return (input) => {
     if (refuse !== undefined) return Effect.fail(refuse);
     calls.push(input);
-    return Effect.succeed({
-      alarmId: input.alarmId ?? "minted-alarm",
-      occurrenceId: `occ-${calls.length}`,
-      armSeq: calls.length,
-    });
+    const alarmId = input.alarmId ?? "minted-alarm";
+    const occurrenceId = `occ-${calls.length}`;
+    if (chains !== undefined) chains[alarmId] = { occurrenceId, at: input.at };
+    return Effect.succeed({ alarmId, occurrenceId, armSeq: calls.length });
   };
 }
 
 function stubContext(input: {
   readonly arm: ArmVerb;
   readonly prompts?: PromptCall[];
-  readonly latestArm?: { readonly occurrenceId: string; readonly at: number | null };
+  readonly chains?: ChainRows;
 }): AlarmWakeContext {
   const prompts = input.prompts ?? [];
   return {
     sessionId: "session-1",
-    reads: { latestArm: () => input.latestArm, settled: () => false },
+    reads: { latestArm: (alarmId) => input.chains?.[alarmId], settled: () => false },
     arm: input.arm,
     now: 5_000,
     prompt: ({ content }) =>
@@ -292,6 +294,66 @@ describe("monitor.hit over the supersedes lifecycle", () => {
     expect(closed).toEqual(["watch-1"]);
   });
 
+  test("a terminal hit retires the armed timeout companion with the main chain", () => {
+    const closed: string[] = [];
+    const calls: ArmCall[] = [];
+    const chains: ChainRows = {
+      "watch-1": { occurrenceId: "occ-live", at: 4_000 },
+      "watch-1:timeout": { occurrenceId: "occ-timeout", at: 65_000 },
+    };
+    const definition = capability({ arm: stubArm([]), closed });
+    const outcome = runTestSync(
+      definition.wake(
+        fired({
+          payload: JSON.stringify({
+            spec,
+            notifications: 0,
+            hit: { content: "exit 0", terminal: true, detail: "exit" },
+          }),
+        }),
+        stubContext({ arm: stubArm(calls, undefined, chains), chains }),
+      ),
+    );
+    expect(outcome).toBe("delivered");
+    expect(calls.map((call) => [call.purpose, call.at, call.alarmId, call.supersedes])).toEqual([
+      [MONITOR_HIT, null, "watch-1", "occ-live"],
+      [MONITOR_TIMEOUT, null, "watch-1:timeout", "occ-timeout"],
+    ]);
+    expect(calls[1]?.payload).toEqual({ watchId: "watch-1" });
+    expect(chains["watch-1"]?.at).toBeNull();
+    expect(chains["watch-1:timeout"]?.at).toBeNull();
+    expect(closed).toEqual(["watch-1"]);
+  });
+
+  test("budget exhaustion retires the armed timeout companion with the main chain", () => {
+    const closed: string[] = [];
+    const calls: ArmCall[] = [];
+    const chains: ChainRows = {
+      "watch-1": { occurrenceId: "occ-live", at: 4_000 },
+      "watch-1:timeout": { occurrenceId: "occ-timeout", at: 65_000 },
+    };
+    const definition = capability({ arm: stubArm([]), closed });
+    const outcome = runTestSync(
+      definition.wake(
+        fired({
+          payload: JSON.stringify({
+            spec,
+            notifications: 1,
+            hit: { content: "last", terminal: false, detail: "line:2" },
+          }),
+        }),
+        stubContext({ arm: stubArm(calls, undefined, chains), chains }),
+      ),
+    );
+    expect(outcome).toBe("exhausted");
+    expect(calls.map((call) => [call.purpose, call.at, call.alarmId, call.supersedes])).toEqual([
+      [MONITOR_HIT, null, "watch-1", "occ-live"],
+      [MONITOR_TIMEOUT, null, "watch-1:timeout", "occ-timeout"],
+    ]);
+    expect(chains["watch-1:timeout"]?.at).toBeNull();
+    expect(closed).toEqual(["watch-1"]);
+  });
+
   test("a hit without native detail is a typed wake failure", () => {
     const definition = capability({ arm: stubArm([]) });
     const error = runTestSync(
@@ -342,7 +404,7 @@ describe("monitor.timeout", () => {
         stubContext({
           arm: stubArm(calls),
           prompts,
-          latestArm: { occurrenceId: "occ-main", at: 4_500 },
+          chains: { "watch-1": { occurrenceId: "occ-main", at: 4_500 } },
         }),
       ),
     );
@@ -374,7 +436,10 @@ describe("monitor.timeout", () => {
           alarmId: "watch-1:timeout",
           payload: JSON.stringify({ watchId: "watch-1" }),
         }),
-        stubContext({ arm: stubArm(calls), latestArm: { occurrenceId: "occ-main", at: null } }),
+        stubContext({
+          arm: stubArm(calls),
+          chains: { "watch-1": { occurrenceId: "occ-main", at: null } },
+        }),
       ),
     );
     expect(outcome).toBe("delivered");
