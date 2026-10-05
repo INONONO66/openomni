@@ -11,7 +11,7 @@ import { CHILD, PARENT, forkFixture } from "../helpers/fork-fixture";
 import * as SessionHandleStore from "../../../src/core/store/fence";
 import { openSessionStore, readSessionFileSchemaVersion, SESSION_FILE_SCHEMA_VERSION, type SessionStore } from "../../../src/core/store/session-file";
 import { receivedMessageAction } from "../../../src/core/commit";
-import { isForkBoundary } from "../../../src/core/fork";
+import { forkSession, isForkBoundary } from "../../../src/core/fork";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { foldSessionHistory } from "../../../src/inspect/history";
 import { createCompactionPlan } from "../../../src/plugins/compaction/durable";
@@ -196,9 +196,71 @@ describe("Session.fork", () => {
     const armHash = parent.hashOf("alarm-1:arm:1");
     expect(fixture.refusalOf(fixture.fork(armHash)).reason).toBe("anchor_not_boundary");
     expect(fixture.refusalOf(fixture.fork("no-such-hash")).reason).toBe("anchor_not_found");
-    expect(
-      fixture.refusalOf(fixture.fork(parent.hashOf("turn-1:terminal"), {}, { byteCap: 16 })).reason,
-    ).toBe("byte_cap");
+    const overCap = fixture.refusalOf(
+      fixture.fork(parent.hashOf("turn-1:terminal"), {}, { byteCap: 16 }),
+    );
+    expect(overCap.reason).toBe("byte_cap");
+    // The typed refusal renders a complete operator-facing message.
+    expect(overCap.message).toBe(`fork of session ${PARENT} refused (byte_cap): ${overCap.detail}`);
+  });
+
+  test("refuses a fork when the parent session row is missing", () => {
+    const result = runLedgerSync(
+      Effect.result(
+        forkSession(fixture.ports(), {
+          from: "ghost",
+          at: "irrelevant",
+          childId: CHILD,
+          genesisActionId: `${CHILD}:genesis`,
+          now: 100,
+        }),
+      ),
+    );
+    const refusal = fixture.refusalOf(result);
+    expect(refusal.reason).toBe("parent_not_found");
+    expect(refusal.sessionId).toBe("ghost");
+    // Refused before any child write or catalog index row.
+    expect(child().sessions.get(CHILD)).toBeUndefined();
+    expect(stores.catalog.sessionIndex(CHILD)).toBeUndefined();
+  });
+
+  test("finds a boundary anchor beyond the first 256-row history page", () => {
+    const parent = fixture.buildParent();
+    // 260 chained prompt rows push the anchor past the 256-row page the
+    // prefix reader walks, forcing it onto the second page.
+    const extras: LedgerAction.Append[] = [];
+    let previous = "msg-2";
+    for (let i = 0; i < 260; i += 1) {
+      const id = `bulk-${i}`;
+      extras.push(
+        receivedMessageAction({
+          id,
+          sessionId: PARENT,
+          kind: "prompt",
+          content: `bulk ${i}`,
+          origin: { encodingVersion: 1, value: { source: "test" } },
+          parentActionId: previous,
+          at: 10 + i,
+        }),
+      );
+      previous = id;
+    }
+    fixture.commit(parent.authority, extras);
+    const verdict = stores.kernel.verifyChain(PARENT);
+    if (verdict.kind !== "intact" || verdict.head === null)
+      throw new Error("parent chain not intact after bulk append");
+
+    // The chain head is the last bulk prompt: a legal boundary on page two.
+    const receipt = fixture.forked(verdict.head);
+    expect(receipt.forkedFrom.anchor).toBe(verdict.head);
+    // 266 parent rows minus the excluded arm row were copied.
+    expect(receipt.forkedFrom.copied).toBe(265);
+    const childKernel = SessionHandleStore.createSessionKernel(child(), stores.catalog);
+    expect(childKernel.verifyChain(CHILD)).toEqual({
+      kind: "intact",
+      head: receipt.head,
+      length: 266,
+    });
   });
 
   test("refuses a real old-schemaVersion parent file and leaves its bytes identical", () => {

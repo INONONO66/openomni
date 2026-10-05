@@ -54,9 +54,14 @@ function chainReads(kernel: SessionHandleStore.SessionKernel, sessionId: string)
 }
 
 describe("Session.fork exclusions", () => {
-  test("child re-registers zero alarms while the parent occurrence still runs", () => {
+  // The real firing proof — one parent delivery through the live entity,
+  // zero child registrations/deliveries — lives in
+  // `test/session/fork-alarm-firing.test.ts` (r3 M-1); this test pins the
+  // durable facts the guard folds from.
+  test("the fork drops a PRE-ANCHOR arm from the child index and chain", () => {
     const parent = fixture.buildParent();
-    fixture.forked(parent.hashOf("turn-1:terminal"));
+    // Anchor at msg-2: the armed alarm PRECEDES the anchor, yet is excluded.
+    fixture.forked(parent.hashOf("msg-2"));
     const childKernel = SessionHandleStore.createSessionKernel(child(), stores.catalog);
 
     // No arm row was copied and the child's armed-alarm index is empty; the
@@ -64,8 +69,9 @@ describe("Session.fork exclusions", () => {
     expect(child().armedAlarms()).toEqual([]);
     expect(stores.session.armedAlarms().map((alarm) => alarm.alarmId)).toEqual(["alarm-1"]);
 
-    // The #1254 chain guard: the parent occurrence is fresh in the parent
-    // chain and unknown in the child chain — it can never fire there.
+    // The #1254 chain guard folds from exactly these facts: the parent
+    // occurrence is on the latest live arm in the parent chain and has no arm
+    // at all in the child chain.
     const occurrence = { alarmId: "alarm-1", occurrenceId: parent.occurrenceId };
     expect(alarmDisposition(chainReads(stores.kernel, PARENT), occurrence)).toEqual({ op: "run" });
     expect(alarmDisposition(chainReads(childKernel, CHILD), occurrence)).toEqual({
