@@ -456,7 +456,7 @@
   },
   {
     "name": "send_message",
-    "description": "Send one letter to a session, a new child session, or a contact. Returns a handle without waiting for a reply; the reply arrives in your inbox.",
+    "description": "Send one letter to a contact: a session, a new child session, a telegram or discord channel, a human, or an external CLI agent (cli:claude-code|codex|omp). Returns a handle without waiting for a reply; the reply arrives in your inbox.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -535,6 +535,11 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
+        },
+        "spend_cap": {
+          "description": "Spending cap granted to a new child session; creation without one is refused by policy.",
+          "type": "number",
+          "exclusiveMinimum": 0
         }
       },
       "required": ["to", "message"],
