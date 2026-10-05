@@ -5,4 +5,3 @@ export { createMachineHost, type MachineHost, type MachineHandle, type MachineIn
 export * from "./ipc";
 export { typedCall } from "./typed-call";
 export { onAbort } from "./interrupt-on";
-export { machinesFallback } from "./failure";

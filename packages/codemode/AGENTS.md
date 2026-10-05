@@ -16,7 +16,7 @@ src/
 
 ## DEPENDENCIES
 
-`@openomni/protocol` and `@openomni/machines` (the structural host/daemon contracts: `CodeRunner`, `MachineHost`, `MachineHandle`, `MachineInfo`, `MachinesFailure`, `onAbort`, `machinesFallback`), plus `effect@4.0.0-rc.118` (exact pin) and `zod` — enforced by `script/check-deps.ts`. Consumers: `apps/openomni` only.
+`@openomni/protocol` and `@openomni/machines` (the structural host/daemon contracts: `CodeRunner`, `MachineHost`, `MachineHandle`, `MachineInfo`, `MachinesFailure`, `onAbort`), plus `effect@4.0.0-rc.118` (exact pin) and `zod` — enforced by `script/check-deps.ts`. Consumers: `apps/openomni` only.
 
 ## KEY PATTERNS
 
