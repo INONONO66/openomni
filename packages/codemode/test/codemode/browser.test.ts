@@ -341,8 +341,28 @@ test(
     expect(pid).toBeGreaterThan(0);
     let cursor = view.status === "ok" ? view.cursor : undefined;
     await kernelSide.close();
-    // The driver's EOF cleanup runs before the interpreter exits, so once
-    // close() resolves the browser process is already stopped.
+    // close() resolving means the driver acknowledged its browser cleanup
+    // (the cleanup-complete lifecycle frame) before exiting, i.e. SIGKILL was
+    // sent to Chromium; an unacknowledged cleanup fails close() typed instead
+    // of resolving. Even so the pid stays kill(pid, 0)-visible as a zombie until the launch
+    // shell's `wait` reaps it: Chromium is the shell's child, not the
+    // driver's, so the reap is not close()'s to guarantee. The reap IS
+    // observable: the shell prints the chromium-exited status line right after
+    // `wait` returns and then exits the session itself, so cursor long-polls
+    // pace a bounded wait on either of those exact events before probing the
+    // pid - no elapsed-time guessing.
+    const sessionListed = () =>
+      Bun.spawnSync(["tmux", "-L", TMUX_SOCKET, "has-session", "-t", `=${session}`]).exitCode === 0;
+    let tail = "";
+    let listed = sessionListed();
+    for (let round = 0; round < 60 && listed && !tail.includes("[openomni-browser] chromium-exited"); round += 1) {
+      const paced = await host.get("M").pty.read(session, { ...(cursor ? { cursor } : {}), waitMs: 1_000 });
+      if (paced.status === "ok") {
+        cursor = paced.cursor;
+        tail += Buffer.from(paced.data).toString("utf8");
+      }
+      listed = sessionListed();
+    }
     let alive = true;
     try {
       process.kill(pid, 0);
@@ -351,10 +371,8 @@ test(
     }
     expect(alive).toBe(false);
     // The shell observes the signal-range status and exits the session itself;
-    // cursor long-polls pace the bounded wait on that tmux-internal hand-off.
-    const sessionListed = () =>
-      Bun.spawnSync(["tmux", "-L", TMUX_SOCKET, "has-session", "-t", `=${session}`]).exitCode === 0;
-    let listed = sessionListed();
+    // the same cursor long-polls pace the bounded wait on that tmux-internal
+    // hand-off.
     for (let round = 0; round < 30 && listed; round += 1) {
       const paced = await host.get("M").pty.read(session, { ...(cursor ? { cursor } : {}), waitMs: 1_000 });
       if (paced.status === "ok") cursor = paced.cursor;

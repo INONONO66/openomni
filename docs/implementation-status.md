@@ -233,6 +233,25 @@ launch session down. No new capability id, wire method, or model tool.
 driver's cleanup stops each client's browser process. Recipe documented in
 `docs/machines-and-delegation.md` section 2.7; end-to-end tests in
 `packages/codemode/test/codemode/browser.test.ts` run real tmux + Chromium.
+Close-race fix (fix/1275-browser-close-race): `pty_close` removes the daemon
+record when the session's shell already exited on its own (the launch line
+exits once Chromium stops), and is fail-closed otherwise: a `kill-session` or
+`kill-window` failure is re-checked against the server and propagates (record
+kept) unless the session/window is confirmed absent. Interpreter `close()`
+sends stdin EOF and waits on the driver's explicit `browser-cleanup-complete`
+ack (bounded 2s) before cancelling any active cell, so an in-flight cell can
+no longer bypass the witness through the cancellation discard path; an
+unacknowledged teardown (idle or wedged-cell) fails typed instead of
+resolving as success. Nothing writes to the driver after that EOF: a tool
+answer or request racing close() becomes a typed refusal instead of a stream
+write, and asynchronous stdin errors land in the typed driver-failure path,
+so a normally resolving tool callback can no longer crash the process with
+`ERR_STREAM_WRITE_AFTER_END`. Caveat: `BrowserClient.close()`
+itself still swallows pty `ToolError`, so its successful return alone does not
+prove the session record is gone on failure paths - the listing guarantee
+belongs to `pty_close`'s `ok`. The interpreter-close test awaits the shell's
+`chromium-exited` reap line instead of assuming the pid is unprobeable the
+instant `close()` resolves.
 
 ## #1273 persistent terminals: pty.session over tmux
 
