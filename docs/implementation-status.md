@@ -178,8 +178,11 @@ record when the session's shell already exited on its own (the launch line
 exits once Chromium stops), and is fail-closed otherwise: a `kill-session` or
 `kill-window` failure is re-checked against the server and propagates (record
 kept) unless the session/window is confirmed absent. Interpreter `close()`
-waits on the driver's explicit `browser-cleanup-complete` ack (bounded 2s);
-expiry fails typed instead of resolving as success. Caveat: `BrowserClient.close()`
+sends stdin EOF and waits on the driver's explicit `browser-cleanup-complete`
+ack (bounded 2s) before cancelling any active cell, so an in-flight cell can
+no longer bypass the witness through the cancellation discard path; an
+unacknowledged teardown (idle or wedged-cell) fails typed instead of
+resolving as success. Caveat: `BrowserClient.close()`
 itself still swallows pty `ToolError`, so its successful return alone does not
 prove the session record is gone on failure paths - the listing guarantee
 belongs to `pty_close`'s `ok`. The interpreter-close test awaits the shell's

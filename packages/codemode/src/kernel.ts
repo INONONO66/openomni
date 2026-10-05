@@ -768,19 +768,19 @@ export class PythonKernel {
 
   close(): Effect.Effect<void, CodeError> {
     return Effect.gen({ self: this }, function* () {
-      this.lifetime.abort();
+      // Cleanup is requested from the live driver BEFORE the lifetime abort
+      // (#1293 r2): aborting first lets an active cell's ensuring block
+      // discard the interpreter, and close() would then observe no process
+      // and resolve without any cleanup witness. EOF-first close: the driver
+      // loop breaks on stdin EOF once the current cell (if any) returns, runs
+      // its browser cleanup (#1275) and acknowledges it with the lifecycle
+      // frame before exiting; a wedged cell never lets that ack arrive, so
+      // the bounded grace below expires and close() fails typed exactly like
+      // the idle path. stdin.end on a torn-down pipe is ignored because the
+      // discard SIGKILL is the authoritative teardown.
+      const process = this.process;
       let unconfirmed: DriverFailure | undefined;
-      // The permit serializes close with a just-cancelled cell: that cell's
-      // ensuring block discards the driver first, so close observes process
-      // undefined instead of waiting out the grace on a process the
-      // cancellation path already SIGKILLed.
-      yield* this.lock.withPermits(1)(Effect.gen({ self: this }, function* () {
-        const process = this.process;
-        if (process === undefined) return;
-        // EOF-first close: the driver loop breaks on stdin EOF, runs its
-        // browser cleanup (#1275) and acknowledges it with the lifecycle frame
-        // before exiting; stdin.end on a torn-down pipe is ignored because the
-        // SIGKILL below is the authoritative teardown.
+      if (process !== undefined) {
         yield* Effect.try({ try: () => { process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
         const cleanup = this.cleanups.get(process);
         const acked =
@@ -799,7 +799,15 @@ export class PythonKernel {
             cause: "cleanup-complete frame not observed before grace expiry",
           });
         }
-        yield* this.discard(process);
+      }
+      this.lifetime.abort();
+      // The permit serializes close with a just-cancelled cell: that cell's
+      // ensuring block discards the driver first, so this discard only fires
+      // when the driver is still live (idle expiry, or an acked exit whose
+      // process record lingers) and is otherwise a no-op.
+      yield* this.lock.withPermits(1)(Effect.suspend(() => {
+        const live = this.process;
+        return live === undefined ? Effect.void : this.discard(live);
       }));
       yield* Effect.forEach([...this.exits], Deferred.await, { discard: true });
       if (unconfirmed !== undefined) {

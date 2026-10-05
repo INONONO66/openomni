@@ -150,6 +150,80 @@ describe("code-mode kernel substrate", () => {
     await expect(kernel.close()).resolves.toBeUndefined();
   });
 
+  test("close() during a wedged active cell fails typed instead of resolving without the cleanup ack (#1293 r2)", async () => {
+    const kernel = new PythonKernel();
+    // Mirrors the r2 review reproduction: the cell wedges the driver's EOF
+    // cleanup hook and then blocks forever, so the cleanup ack can never
+    // arrive. Event synchronization: the cell's real tool_call frame reaching
+    // the host proves the cell is inside its blocking section before close()
+    // is invoked; the host never answers, and close()'s own stdin EOF is what
+    // fails the pending call (ToolError: driver stdin closed), after which the
+    // cell wedges on the bare Event. No sleeps, no timing guesses.
+    let armed!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      armed = resolve;
+    });
+    const running = kernel.run(
+      {
+        cellId: "active-close-wedged",
+        code: [
+          "import __main__, threading",
+          "__main__._browser_close_all = lambda: threading.Event().wait()",
+          "try:",
+          "    tool.block()",
+          "except BaseException:",
+          "    pass",
+          "threading.Event().wait()",
+        ].join("\n"),
+        timeoutMs: 15_000,
+      },
+      () => {
+        armed();
+        return new Promise(() => {
+          // Deliberately unanswered: the cell stays blocked until close()'s EOF.
+        });
+      },
+    );
+    await ready;
+    // The wedged cell never returns to the driver loop, so _browser_close_all
+    // never runs: close() must surface the unconfirmed teardown, not resolve.
+    await expect(kernel.close()).rejects.toMatchObject({ _tag: "DriverFailure", operation: "driver.cleanup" });
+    await expect(running).resolves.toMatchObject({ status: "cancelled", cellId: "active-close-wedged" });
+  });
+
+  test("close() during an active cell that can finish resolves only through the cleanup ack (#1293 r2)", async () => {
+    const kernel = new PythonKernel();
+    // Happy active-cell path: close()'s stdin EOF fails the cell's pending
+    // tool call, the cell catches it and completes, the driver loop drains,
+    // runs _browser_close_all() and emits the ack. Under the fixed contract an
+    // unacknowledged teardown fails typed, so close() resolving undefined IS
+    // the observed-ack witness.
+    let armed!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      armed = resolve;
+    });
+    const running = kernel.run(
+      {
+        cellId: "active-close-completes",
+        code: ["try:", "    tool.block()", "except BaseException:", "    pass", "'survived eof'"].join("\n"),
+        timeoutMs: 15_000,
+      },
+      () => {
+        armed();
+        return new Promise(() => {
+          // Deliberately unanswered: the cell stays blocked until close()'s EOF.
+        });
+      },
+    );
+    await ready;
+    await expect(kernel.close()).resolves.toBeUndefined();
+    await expect(running).resolves.toMatchObject({
+      status: "completed",
+      cellId: "active-close-completes",
+      value: "'survived eof'",
+    });
+  });
+
   test("invalid driver output replaces the interpreter", async () => {
     const kernel = new PythonKernel();
     try {
