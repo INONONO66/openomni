@@ -100,29 +100,37 @@ test("attemptUsage in the read frame is byte-equal to the llm attempt fold DTO",
   expect(SessionRead.Page.parse(frame)).toEqual(frame);
 });
 
-test("session_bound keeps its fields and the page frame keeps its field set", () => {
+test("session_bound keeps its fields and legacy pages round-trip byte-identical", () => {
   expect(Object.keys(SessionRead.Bound.shape)).toEqual(["type", "result"]);
   expect(Object.keys(SessionRead.Receipt.shape)).toEqual(["type", "status"]);
-  // #1257 adds exactly one OPTIONAL field: `ancestry`, the fork projection the
-  // issue requires on the gateway read DTO ("gateway DTO show parent and
-  // anchor"). Every pre-#1257 field keeps its position; a page without a fork
-  // still parses with no ancestry key on the wire.
-  expect(Object.keys(SessionRead.Page.shape)).toEqual([
-    "type",
-    "sessionId",
-    "state",
-    "phase",
-    "phaseSince",
-    "epoch",
-    "afterRevision",
-    "headRevision",
-    "nextRevision",
-    "actions",
-    "usage",
-    "toolWallMs",
-    "ancestry",
-  ]);
-  expect(SessionRead.Page.shape.ancestry.safeParse(undefined).success).toBeTrue();
+  // Wire compatibility as BEHAVIOR, not a schema-key mirror (#1257): a
+  // pre-#1257 page — no `ancestry`, no `children` — parses and round-trips
+  // byte-identical, so the optional fork projections cost old frames nothing.
+  const legacy = {
+    type: "session_snapshot",
+    sessionId,
+    state: "idle",
+    phase: "completed",
+    phaseSince: 5,
+    epoch: 1,
+    afterRevision: 0,
+    headRevision: 2,
+    nextRevision: null,
+    actions: [{ revision: 1, actionId: "llm-attempt-1", kind: "llm", at: 5 }],
+    usage: [],
+    toolWallMs: 0,
+  };
+  const legacyJson = JSON.stringify(legacy);
+  expect(JSON.stringify(SessionRead.Page.parse(JSON.parse(legacyJson)))).toBe(legacyJson);
+  // The optional fork projections parse when present on the same frame.
+  const pin = { session: sessionId, anchor: "hash-1", parentSeq: 2, parentHead: "head-2", copied: 3 };
+  const forked = SessionRead.Page.parse({
+    ...legacy,
+    ancestry: { parentId: sessionId, forkedFrom: pin, aside: "forked aside" },
+    children: [{ sessionId: "child-1", anchor: "hash-1" }],
+  });
+  expect(forked.ancestry).toEqual({ parentId: sessionId, forkedFrom: pin, aside: "forked aside" });
+  expect(forked.children).toEqual([{ sessionId: "child-1", anchor: "hash-1" }]);
   const bound = SessionRead.Bound.parse({
     type: "session_bound",
     result: {
