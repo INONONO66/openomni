@@ -70,22 +70,30 @@ function gateRowVerdict(row: Bundle.BundleGateRow, consultants: ReadonlySet<stri
   // #1256: an observe hook row (PostToolUse) seeds the audit-only consult.
   if (row.do === "observe" && row.how.ref !== undefined)
     return { type: "consult", ref: row.how.ref, observe: true, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
-  if (row.do === "rewrite" && row.how.ref !== undefined) {
-    // #1256 r4 H-2: a rewrite row naming an ASYNC consultant (hook/process)
-    // seeds the consult verdict with the rewrite flag — a transform seed would
-    // refuse the generation (`unknown_ref`: consultants never join the sync
-    // transformer table). The declared fields ride `config.fields`, where the
-    // compiled projection recovers them.
-    if (consultants.has(row.how.ref))
-      return {
-        type: "consult",
-        ref: row.how.ref,
-        rewrite: true,
-        config: { ...paramsRecord(row.how.params), fields: [...(row.how.fields ?? [])] },
-      };
-    return { type: "transform", ref: row.how.ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
-  }
+  if (row.do === "rewrite" && row.how.ref !== undefined) return rewriteRowVerdict(row, row.how.ref, consultants);
   throw new AppInvariantError(`gate row ${row.id} (${row.do}) has no live policy-plane seed shape`);
+}
+
+/**
+ * #1256 r4 H-2: a rewrite row naming an ASYNC consultant (hook/process) seeds
+ * the consult verdict with the rewrite flag — a transform seed would refuse
+ * the generation (`unknown_ref`: consultants never join the sync transformer
+ * table). The declared fields ride `config.fields`, where the compiled
+ * projection recovers them.
+ */
+function rewriteRowVerdict(
+  row: Bundle.BundleGateRow,
+  ref: string,
+  consultants: ReadonlySet<string>,
+): PlainValue {
+  if (consultants.has(ref))
+    return {
+      type: "consult",
+      ref,
+      rewrite: true,
+      config: { ...paramsRecord(row.how.params), fields: [...(row.how.fields ?? [])] },
+    };
+  return { type: "transform", ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
 }
 
 /**
