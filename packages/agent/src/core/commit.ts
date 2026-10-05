@@ -6,6 +6,7 @@ import { canonicalDigest, ConsumptionSettings, type ConsumptionWidth, JournalKin
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
 import { pinCompactionAction } from "../plugins/compaction/successor";
 import type * as SessionHandleStore from "./store/fence";
+import { afterCursorOf } from "./store/fence";
 import { z } from "zod";
 import { RunReasonCode } from "./reason-codes";
 import { GenerationUnavailable } from "./failure";
@@ -522,13 +523,6 @@ export function generationForOpen(
   return Effect.succeed(snapshot);
 }
 
-/** The `after` cursor a deferred `action` input's intent carries (#1256 H-3), if any. */
-function afterCursorOf(action: LedgerAction.Node): number | undefined {
-  const value = action.intent.value;
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const after = (value as Record<string, unknown>).after;
-  return typeof after === "number" && Number.isInteger(after) && after >= 0 ? after : undefined;
-}
 
 /** The chain effect one received message commits; the pending fold reads it back. */
 const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
@@ -619,7 +613,7 @@ export function receivedMessages(
         content: entry.content,
         origin: entry.action.intent,
         ...(entry.delivery === undefined ? {} : { delivery: entry.delivery }),
-        ...(afterCursorOf(entry.action) === undefined ? {} : { after: afterCursorOf(entry.action) }),
+        ...(afterCursorOf(entry.action.intent.value) === undefined ? {} : { after: afterCursorOf(entry.action.intent.value) }),
         status: delivered.has(entry.action.id) ? "consumed" : "pending",
         consumedBy: null,
         consumedAt: null,

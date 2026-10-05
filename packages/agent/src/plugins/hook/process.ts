@@ -111,7 +111,8 @@ export interface HookProcessConfig {
 export interface HookChildProcess {
   readonly pid: number;
   readonly stdout: AsyncIterable<Uint8Array>;
-  readonly stdin: { write(data: string): unknown; flush(): unknown };
+  /** Return values are ignored; `void` admits Bun's number-returning FileSink. */
+  readonly stdin: { write(data: string): void; flush(): void };
   kill(): void;
   readonly exited: Promise<number>;
 }

@@ -4,6 +4,7 @@ import {
   type ConsumptionSettings,
   Inbox,
   PlainObjectSchema,
+  type PlainValue,
   type LedgerAction,
   type LedgerSession,
   L0Observation,
@@ -371,12 +372,15 @@ const ReceivedEffect = z.object({
  * payload whose id no delivery row references yet, folded from the
  * chain — there is no inbox table.
  */
-/** The `after` cursor a deferred `action` input's intent carries (#1256 H-3), if any. */
-function afterCursorOf(action: { readonly intent: { readonly value: unknown } }): number | undefined {
-  const value = action.intent.value;
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const after = (value as Record<string, unknown>).after;
-  return typeof after === "number" && Number.isInteger(after) && after >= 0 ? after : undefined;
+/**
+ * The `after` cursor a deferred `action` input's intent carries (#1256 H-3),
+ * if any — the ONE typed owner of this projection (r3 L-1); commit.ts imports
+ * it rather than duplicating the parse.
+ */
+const AfterCursorIntent = z.looseObject({ after: z.number().int().nonnegative().optional() });
+export function afterCursorOf(intent: PlainValue): number | undefined {
+  const parsed = AfterCursorIntent.safeParse(intent);
+  return parsed.success ? parsed.data.after : undefined;
 }
 
 function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
@@ -384,7 +388,7 @@ function pendingMessagesIn(context: SessionKernelContext, sessionId: string): In
     .pendingMessages(sessionId)
     .map((action, index) => {
       const effect = ReceivedEffect.parse(action.effect.value);
-      const after = afterCursorOf(action);
+      const after = afterCursorOf(action.intent.value);
       return Inbox.Row.parse({
         id: action.id,
         sessionId: action.sessionId,
