@@ -1,17 +1,24 @@
+import { z } from "zod";
 import { MachinesFailure, MachineCellError, MachineRefusalError, SpawnFailure, FilesystemFailure, TransportFailure, type MachineError } from "./errors";
 import { IpcConnectionError, IpcPeerKeyMismatchError, IpcProtocolError, IpcRemoteError, IpcTimeoutError, type IpcError } from "./ipc/errors";
 
 /** One fallback for every machines-owned domain (including `@openomni/codemode`): a Cause without a typed error becomes MachinesFailure. */
 export function machinesFallback(operation: string) {
-  return (cause: unknown) => new MachinesFailure({ operation, cause: String(cause) });
+  return z.preprocess(String, z.string()).transform((cause) => new MachinesFailure({ operation, cause }));
 }
 
 export function decodeMachineFailure(operation: string) {
-  return (error: unknown): MachineError =>
-    error instanceof MachinesFailure || error instanceof MachineCellError || error instanceof MachineRefusalError || error instanceof SpawnFailure || error instanceof FilesystemFailure || error instanceof TransportFailure ? error : machinesFallback(operation)(error);
+  return z.union([
+    z.instanceof(MachinesFailure), z.instanceof(MachineCellError), z.instanceof(MachineRefusalError),
+    z.instanceof(SpawnFailure), z.instanceof(FilesystemFailure), z.instanceof(TransportFailure),
+    machinesFallback(operation),
+  ]).transform((error): MachineError => error).parse;
 }
 
 export function decodeIpcFailure(operation: string) {
-  return (error: unknown): IpcError =>
-    error instanceof MachinesFailure || error instanceof IpcConnectionError || error instanceof IpcProtocolError || error instanceof IpcRemoteError || error instanceof IpcTimeoutError || error instanceof IpcPeerKeyMismatchError ? error : machinesFallback(operation)(error);
+  return z.union([
+    z.instanceof(MachinesFailure), z.instanceof(IpcConnectionError), z.instanceof(IpcProtocolError),
+    z.instanceof(IpcRemoteError), z.instanceof(IpcTimeoutError), z.instanceof(IpcPeerKeyMismatchError),
+    machinesFallback(operation),
+  ]).transform((error): IpcError => error).parse;
 }

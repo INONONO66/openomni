@@ -1252,5 +1252,4 @@ claim about it.
 - Governor/Jester/Voice, Stakes and effective-authority target consumers, dynamic reactive composition, and any later memory/search redesign are not promoted to shipped by retained design prose.
 
 ## #1259 slop cleanup ladder
-
-Band b3 (machines + codemode) landed on `epic1260/1259-b3-machines-codemode`: the zod no-op String-coercion fallbacks in `packages/machines/src/{exec,failure}.ts` and `packages/codemode/src/failure.ts` are plain functions, the `RootWalk` alias is deleted, the duplicated `peek`/`stop` open-check is folded into `tenantCell`, and the unexported `Options` interface is renamed `CodemodeOptions`; item 108 is deferred to PR #1293's ownership and item 109 was already resolved on main.
+Band b3 (machines + codemode) landed on `epic1260/1259-b3-machines-codemode`: the `RootWalk` alias is deleted, the duplicated `peek`/`stop` open-check is folded into `tenantCell`, and the unexported `Options` interface is renamed `CodemodeOptions`; the zod boundary parses in `exec.ts`/`failure.ts` stay (written-types gate: the untyped thrown value is owned by the parse), item 108 is deferred to PR #1293's ownership, and item 109 was already resolved on main.

@@ -41,10 +41,7 @@ type FsDriverTestHooks = {
   readonly closeRootDescriptor?: (fd: number) => void;
 };
 
-type Root = {
-  readonly canonicalPath: string;
-  readonly fd: number;
-};
+type Root = { readonly canonicalPath: string; readonly fd: number };
 
 const libcPath = process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6";
 // Darwin's public openat is variadic: arm64 passes its mode on the stack.

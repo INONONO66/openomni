@@ -222,8 +222,7 @@ export function createCodemode(options: CodemodeOptions) {
       });
     }
     function tenantCell(cellId: string, tenant: string): BackgroundCell {
-      requireOpen();
-      const entry = background.get(cellId);
+      requireOpen(); const entry = background.get(cellId);
       if (!entry || entry.tenant !== tenant) throw new CodemodeError({ reason: "unknown_cell_id", message: "no such cell" });
       return entry;
     }
@@ -245,11 +244,7 @@ export function createCodemode(options: CodemodeOptions) {
       });
     }
     function stop(cellId: string, tenant: string): Effect.Effect<Machine.CellResult, Failure> {
-      return Effect.gen(function* () {
-        const entry = yield* Effect.try({ try: () => tenantCell(cellId, tenant), catch: decodeCodeFailure("cell.stop") });
-        entry.controller.abort();
-        return yield* settle(cellId, entry);
-      });
+      return Effect.try({ try: () => tenantCell(cellId, tenant), catch: decodeCodeFailure("cell.stop") }).pipe(Effect.flatMap((entry) => { entry.controller.abort(); return settle(cellId, entry); }));
     }
     function launch(id: string, code: string, tenant: string, caller: Caller, runOptions: RunOptions, boundary = (runOptions.bindings ?? options).boundary?.(tenant)) {
       return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
