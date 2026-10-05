@@ -876,7 +876,6 @@
   "Policy.PolicyEffect#run.continue_with_prompt": ["prompt", "type"],
   "Policy.PolicyEffect#run.replace_messages": ["messages", "type"],
   "Policy.PolicyEffect#run.retry_after": ["delayMs", "maxRetries", "type"],
-  "Policy.PolicyEffect#runtime.workspace_lock": ["required", "type"],
   "Policy.PolicyEffect#tool.filter": ["toolPattern", "type"],
   "Policy.PolicyEffect#tool.require_approval": ["reason", "type"],
   "Policy.PolicyEffect#tool.rewrite_input": ["input", "type"],

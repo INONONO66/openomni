@@ -83,10 +83,6 @@ export namespace PolicyEffects {
       type: z.literal("writeback.suppress"),
       reason: z.string().optional(),
     }),
-    z.object({
-      type: z.literal("runtime.workspace_lock"),
-      required: z.boolean(),
-    }),
     // Per-point model routing (#753): reroutes the CONNECTION being gated at
     // `connection.llm.pre` to a different model — connection-scoped by
     // definition (the next connection re-resolves normally; a policy that
