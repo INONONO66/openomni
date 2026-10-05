@@ -57,7 +57,7 @@ async function provisionSession(
     await runEffect(
       kernel.materialize({
         actionId: `${sessionId}:materialize`,
-        at: Date.now(),
+        at: now(),
         id: sessionId,
         parentId: null,
         policyGeneration: 1,
@@ -70,7 +70,7 @@ async function provisionSession(
       id: sessionId,
       parentId: null,
       role: "resident",
-      createdAt: Date.now(),
+      createdAt: now(),
     });
   } finally {
     store.close();
@@ -129,6 +129,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
       source: origin(sessionId, "m-1"),
       idempotencyKey: "m-1",
     };
+    const fireAt = testClock();
     const { first, replay, retry, deadline, fired, timeout } = await runAppEffect(
       runtime,
       Effect.scoped(
@@ -149,7 +150,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
             armSeq: 1,
             sourceKey: "retry",
             payload: JSON.stringify({ attempt: 1 }),
-            fireAt: Date.now(),
+            fireAt: fireAt(),
           });
           const deadline = yield* entity.Alarm({
             occurrenceId: "missing-request:deadline",
@@ -158,7 +159,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
             armSeq: 1,
             sourceKey: "deadline",
             payload: JSON.stringify({ requestId: "missing-request" }),
-            fireAt: Date.now(),
+            fireAt: fireAt(),
           });
           const fired = yield* entity.Alarm({
             occurrenceId: "missing-watch:1:missing-source",
@@ -172,7 +173,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
               sourceKey: "missing-watch:1:missing-source",
               batch: "[]",
             }),
-            fireAt: Date.now(),
+            fireAt: fireAt(),
           });
           const timeout = yield* entity.Alarm({
             occurrenceId: "missing-watch:timeout:1",
@@ -181,7 +182,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
             armSeq: 1,
             sourceKey: "watch.timeout",
             payload: JSON.stringify({ watchId: "missing-watch" }),
-            fireAt: Date.now(),
+            fireAt: fireAt(),
           });
           return { first, replay, retry, deadline, fired, timeout };
         }),

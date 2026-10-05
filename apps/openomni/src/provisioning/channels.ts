@@ -3,7 +3,7 @@ import { Vault } from "@openomni/channels";
 import type { Provisioning } from "@openomni/protocol";
 import { z } from "zod";
 import { validateProviderCredential, validateProviderSettings } from "../channels";
-import type { ChannelRuntimeStatus, ChannelSupervisor } from "./supervisor";
+import type { ChannelSupervisor } from "./supervisor";
 import type { KekResolution } from "./vault-key";
 import { refusal, storeRefusal } from "./contacts";
 import type { BundlePort } from "./bundles";
@@ -88,10 +88,6 @@ export interface ProvisionPort {
   readonly removeIdentity: (id: string) => boolean;
 }
 
-async function reconcile(port: ProvisionPort): Promise<ChannelRuntimeStatus[]> {
-  return port.supervisor.reconcile();
-}
-
 function sealCredential(
   port: ProvisionPort,
   secretId: string,
@@ -151,7 +147,7 @@ export function executeChannelDeclare(port: ProvisionPort, now: () => number) {
         }),
       )
       .catch((error: Error) => storeRefusal("channel_add", error));
-    return { id: input.id, action: "declared" as const, statuses: await reconcile(port) };
+    return { id: input.id, action: "declared" as const, statuses: await port.supervisor.reconcile() };
   };
 }
 
@@ -170,7 +166,7 @@ function channelToggleExecutor(port: ProvisionPort, enabled: boolean, now: () =>
     return {
       id: existing.id,
       action: enabled ? ("enabled" as const) : ("disabled" as const),
-      statuses: await reconcile(port),
+      statuses: await port.supervisor.reconcile(),
     };
   };
 }
@@ -200,6 +196,6 @@ export function executeSecretRotate(port: ProvisionPort, now: () => number) {
     const sealed = sealCredential(port, existing.id, input.credential, existing, now());
     if (typeof sealed === "string") return refusal("secret_rotate", sealed);
     port.secrets.put(sealed);
-    return { id: existing.id, kekId: sealed.kekId, statuses: await reconcile(port) };
+    return { id: existing.id, kekId: sealed.kekId, statuses: await port.supervisor.reconcile() };
   };
 }
