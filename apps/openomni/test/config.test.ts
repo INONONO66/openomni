@@ -37,6 +37,7 @@ const ENV_KEYS = [
   "OPENOMNI_MODEL_FALLBACKS",
   "OPENOMNI_COMPACTION_SUMMARIZER",
   "OPENOMNI_SOCIAL_BUDGETS",
+  "OPENOMNI_HOOKS_PATH",
   "OPENOMNI_MACHINES_DEFAULT",
   "OPENOMNI_MACHINES_ENROLLED",
   "OPENOMNI_MACHINES_SELF",
@@ -179,6 +180,14 @@ describe("declared channel cutover", () => {
     process.env.DISCORD_BOT_TOKEN = " ";
     process.env.TELEGRAM_BOT_TOKEN = "";
     expect(loadConfig().model.provider).toBe("fake");
+  });
+
+  // #1256: the hooks file path rides OPENOMNI_HOOKS_PATH; blank means absent.
+  it("reads OPENOMNI_HOOKS_PATH and treats blank as absent", () => {
+    process.env.OPENOMNI_HOOKS_PATH = " /etc/openomni/hooks.json ";
+    expect(loadConfig().hooksPath).toBe("/etc/openomni/hooks.json");
+    process.env.OPENOMNI_HOOKS_PATH = "  ";
+    expect(loadConfig().hooksPath).toBeUndefined();
   });
 });
 
