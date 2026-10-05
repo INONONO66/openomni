@@ -1,4 +1,4 @@
-import { canonicalDigest } from "@openomni/protocol";
+import { canonicalDigest, type PlainValue } from "@openomni/protocol";
 import { Effect, type Scope } from "effect";
 import { z } from "zod";
 import type {
@@ -85,10 +85,55 @@ function resultOf(outcome: HookOutcome): GateHandlerResult {
  * `hook/process`. Late results (H-3) re-enter through `seed.late` as action
  * rows via the composition's deliver door; a seed without the port drops them.
  */
+/** Timed-out calls remembered for late correlation; older entries evict first. */
+const LATE_WINDOW = 256;
+
+/** The PlainValue rendering of a late outcome; failures are never late (they WERE the fold). */
+function latePayloadOf(outcome: HookOutcome): PlainValue | undefined {
+  switch (outcome.kind) {
+    case "gate":
+      return {
+        type: "gate",
+        verdict: outcome.verdict,
+        ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+      };
+    case "rewrite":
+      return { type: "rewrite", fields: outcome.fields };
+    case "observe":
+      return { type: "observe", payload: outcome.payload };
+    case "failure":
+      return undefined;
+  }
+}
+
 export function hookProcessConsultant(
   seed: ConsultantSeed,
 ): Effect.Effect<NamedConsultant["consult"], HookSpawnError, Scope.Scope> {
   return Effect.gen(function* () {
+    // #1256 H-3: calls that timed out, keyed by wire id with the journal
+    // cursor captured at CALL time — a late line re-enters the session as an
+    // `action` row carrying that `after` cursor through `seed.late`.
+    const timedOut = new Map<string, number | null>();
+    const rememberTimeout = (id: string, after: number | null): void => {
+      timedOut.set(id, after);
+      for (const key of timedOut.keys()) {
+        if (timedOut.size <= LATE_WINDOW) break;
+        timedOut.delete(key);
+      }
+    };
+    const routeLate = (late: { id: string; outcome: HookOutcome }): void => {
+      if (!timedOut.has(late.id)) return;
+      const after = timedOut.get(late.id);
+      timedOut.delete(late.id);
+      const result = latePayloadOf(late.outcome);
+      if (result === undefined) return;
+      seed.late?.({
+        hook: HOOK_PROCESS_REF,
+        id: late.id,
+        result,
+        ...(after === null ? {} : { after }),
+      });
+    };
     // One PID per distinct configured command, spawned EAGERLY in the
     // generation's Scope: a missing executable refuses the generation.
     const pool = new Map<string, HookProcess>();
@@ -105,6 +150,7 @@ export function hookProcessConsultant(
           ...(params.data.maxLineBytes === undefined
             ? {}
             : { maxLineBytes: params.data.maxLineBytes }),
+          onLate: routeLate,
         }),
       );
     }
@@ -116,14 +162,22 @@ export function hookProcessConsultant(
         const hook = pool.get(processKey(params.data));
         if (hook === undefined) return Effect.succeed(denyResult("process_unavailable"));
         calls += 1;
+        const id = `${input.rowId}#${calls}`;
+        const after = seed.cursor?.() ?? null;
         return hook
           .call({
-            id: `${input.rowId}#${calls}`,
+            id,
             point: input.point,
             event: params.data.event,
             decisionInput: input.value,
           })
-          .pipe(Effect.map(resultOf));
+          .pipe(
+            Effect.map((outcome) => {
+              if (outcome.kind === "failure" && outcome.cause === "timeout")
+                rememberTimeout(id, after);
+              return resultOf(outcome);
+            }),
+          );
       });
   });
 }

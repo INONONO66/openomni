@@ -6,9 +6,12 @@ import {
   HOOK_PROCESS_REF,
   HookSpawnError,
   hookCapability,
+  hookProcessConsultant,
+  type HookLateResult,
   type HookOutcome,
   type HookProcess,
 } from "../src/plugins/hook";
+import type { PlainValue } from "@openomni/protocol";
 import { runTestPromise } from "./helpers/isolated";
 
 /**
@@ -54,6 +57,11 @@ for await (const chunk of Bun.stdin.stream()) {
         break;
       }
       case "flush-split": process.stdout.write(splitRest); reply({ type: "gate", verdict: "allow" }); break;
+      case "flush-held": {
+        for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
+        reply({ type: "gate", verdict: "allow" });
+        break;
+      }
     }
   }
 }
@@ -292,6 +300,88 @@ test("M-1: one JSON line split across two stdout writes decodes once complete", 
         });
         expect(yield* Fiber.join(splitCall)).toEqual({ kind: "gate", verdict: "allow" });
         expect(hook.inFlight()).toBe(0);
+      }),
+    ),
+  ));
+
+test("H-3: a result settling after its timeout surfaces through the typed onLate port, never dropped", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        let resolveLate!: (late: HookLateResult) => void;
+        const arrived = new Promise<HookLateResult>((resolve) => {
+          resolveLate = resolve;
+        });
+        const hook = yield* acquireHookProcess({
+          command: COMMAND,
+          timeoutMs: 5_000,
+          onLate: (late) => resolveLate(late),
+        }).pipe(Scope.provide(scope));
+        const call = yield* Effect.forkChild(hook.call(request("hold", "late-1")));
+        yield* settledWhen(() => hook.inFlight() === 1);
+        yield* TestClock.adjust(5_001);
+        // The call itself settled as the one timeout failure the gate folds to deny.
+        expect(yield* Fiber.join(call)).toEqual({
+          kind: "failure",
+          code: "hook_timeout",
+          cause: "timeout",
+        });
+        // The child answers AFTER the deadline (stdin is processed in order, so
+        // "flush-held" strictly follows "hold"): the decoded result re-surfaces
+        // through onLate with its original call id.
+        const flush = yield* Effect.forkChild(hook.call(request("flush-held")));
+        expect(yield* Effect.promise(() => arrived)).toEqual({
+          id: "late-1",
+          outcome: { kind: "gate", verdict: "allow" },
+        });
+        expect(yield* Fiber.join(flush)).toEqual({ kind: "gate", verdict: "allow" });
+      }),
+    ).pipe(Effect.provide(TestClock.layer())),
+  ));
+
+test("H-3: the consultant routes a late result to seed.late with its CALL-time after cursor", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        let resolveLate!: (payload: PlainValue) => void;
+        const arrived = new Promise<PlainValue>((resolve) => {
+          resolveLate = resolve;
+        });
+        // A real (short) timeout: the "hold" child NEVER answers until told to
+        // flush, so the timeout outcome cannot race the reply.
+        const params = { event: "hold", command: [...COMMAND], timeoutMs: 250 };
+        const rowId = "hooks-json/tool.pre#1";
+        let ordinal = 41;
+        const consult = yield* hookProcessConsultant({
+          name: HOOK_PROCESS_REF,
+          rows: [{ id: rowId, on: "tool.pre", when: {}, do: "gate", how: { ref: HOOK_PROCESS_REF, params }, order: 0 }],
+          late: (payload) => resolveLate(payload),
+          cursor: () => ordinal,
+        }).pipe(Scope.provide(scope));
+        const timedOut = yield* consult({ rowId, point: "tool.pre", params, value: { op: "bash" } });
+        expect(timedOut).toEqual({
+          verdict: "deny",
+          payload: {
+            ref: HOOK_PROCESS_REF,
+            verdict: "deny",
+            reason: "bundle_failure",
+            code: "hook_timeout",
+            cause: "timeout",
+          },
+        });
+        // The journal moved on; the late payload must carry the CALL-time cursor.
+        ordinal = 99;
+        const flushed = yield* consult({ rowId, point: "tool.pre", params: { ...params, event: "flush-held" }, value: { op: "bash" } });
+        expect(flushed).toEqual({
+          verdict: "allow",
+          payload: { ref: HOOK_PROCESS_REF, verdict: "allow" },
+        });
+        expect(yield* Effect.promise(() => arrived)).toEqual({
+          hook: HOOK_PROCESS_REF,
+          id: `${rowId}#1`,
+          result: { type: "gate", verdict: "allow" },
+          after: 41,
+        });
       }),
     ),
   ));

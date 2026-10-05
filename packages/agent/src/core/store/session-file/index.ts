@@ -134,6 +134,7 @@ type Reads = Pick<
   | "openOperationsPage"
   | "operationChildrenPage"
   | "pendingMessages"
+  | "latestCompaction"
 >;
 
 /**
@@ -426,8 +427,21 @@ function createActionReads(db: Database, sink: ObservationSink): Reads {
           AND NOT EXISTS (SELECT 1 FROM action d WHERE d.session_id = a.session_id
             AND d.kind IN ('prompt', 'signal', 'action')
             AND json_extract(d.intent, '$.inboxId') = a.id)
+          AND NOT EXISTS (SELECT 1 FROM action t, json_each(t.intent, '$.consumedStale') stale
+            WHERE t.session_id = a.session_id AND t.kind = 'turn' AND json_valid(t.intent)
+            AND stale.value = a.id)
         ORDER BY a.ordinal`)
           .all(sessionId),
+      );
+    },
+    latestCompaction(sessionId) {
+      return decodeOne(
+        db
+          .query<ActionSqlRow, [string]>(`
+        SELECT * FROM action WHERE session_id = ? AND kind = 'compaction'
+          AND json_extract(effect, '$.terminal') = 'executed'
+        ORDER BY ordinal DESC LIMIT 1`)
+          .get(sessionId),
       );
     },
   };

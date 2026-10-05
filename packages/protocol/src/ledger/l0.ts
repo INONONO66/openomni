@@ -359,6 +359,8 @@ export namespace SessionTurn {
     phase: z.literal("intent"),
     resultId: Identifier,
     inboxIds: z.array(Identifier),
+    /** #1256 H-3: stale `action` inputs (after < compaction head) closed by this turn WITHOUT execution. */
+    consumedStale: z.array(Identifier).optional(),
     resumeCount: z.number().int().nonnegative(),
     boundaryActionId: NullableIdentifier,
   }).strict();
@@ -568,6 +570,8 @@ export namespace Inbox {
       origin: EncodedPayload,
       /** Loop-consumption mode (#1253): `steer` drains at tool.post boundaries, `followUp` only at turn end. Absent folds to `followUp`. */
       delivery: Delivery.optional(),
+      /** #1256 H-3 (`action` inputs): the journal ordinal the deferred payload was computed against; older than the compaction head means stale. */
+      after: z.number().int().nonnegative().optional(),
       status: Status,
       consumedBy: NullableIdentifier,
       consumedAt: EpochMs.nullable(),

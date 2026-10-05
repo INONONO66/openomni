@@ -17,7 +17,7 @@ type GenerationBundle = Core.GenerationBundle;
 type SessionError = Core.SessionError;
 type SessionRuntime = Core.SessionRuntime;
 const compilePolicySnapshot = Core.compilePolicySnapshot;
-import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
+import { LedgerAction, type AnyToolDefinition, type LedgerSession, type PlainValue, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
@@ -62,6 +62,7 @@ function composedPolicyRegistry(
  */
 function acquireConsultants(
   generation: Bundle.Generation,
+  ports: Pick<Bundle.ConsultantSeed, "late" | "cursor">,
 ): Effect.Effect<readonly Core.NamedConsultant[], Core.SessionError, Scope.Scope> {
   return Effect.gen(function* () {
     const consultants: Core.NamedConsultant[] = [];
@@ -69,7 +70,7 @@ function acquireConsultants(
       if (!Bundle.isConsultantHandler(handler)) continue;
       const rows = generation.rows.filter((row) => row.how.ref === name);
       const consult = yield* handler
-        .consultant({ name, rows })
+        .consultant({ name, rows, ...ports })
         .pipe(
           Effect.mapError(
             (cause) => new AgentFailure({ operation: "generation.consultant", cause: String(cause) }),
@@ -86,6 +87,12 @@ export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => re
 /** App sessions carry a Layer recipe alongside the schema-only materialization surface. */
 export interface GenerationDefinitions extends Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>> {
   readonly catalogLayer?: (select: CatalogSelection) => Layer.Layer<ToolCatalog>;
+  /**
+   * #1256 H-3: the late-result door. A hook payload that settles AFTER its
+   * call timed out re-enters THIS session through the entity `deliver` path
+   * as an `action` row; absent means late results are dropped.
+   */
+  readonly deliverLate?: (sessionId: string, payload: PlainValue, after: number | undefined) => void;
 }
 
 /** The generation manager builds this Layer once per generation and retains its acquired service. */
@@ -167,7 +174,23 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       const seeded = Layer.effect(
         GenerationHandlers,
         Effect.gen(function* () {
-          const consultants = yield* acquireConsultants(generation);
+          // #1256 H-3: the consultant seed's session-scoped ports — the
+          // journal-head cursor captured at call time and the late door.
+          const late = source.deliverLate;
+          const consultants = yield* acquireConsultants(generation, {
+            cursor: () => plane.openKernel(sessionId).latestAction(sessionId)?.ordinal ?? 0,
+            ...(late === undefined
+              ? {}
+              : {
+                  late: (payload: PlainValue) => {
+                    const after =
+                      payload !== null && typeof payload === "object" && !Array.isArray(payload) && typeof payload.after === "number"
+                        ? payload.after
+                        : undefined;
+                    late(sessionId, payload, after);
+                  },
+                }),
+          });
           return composedPolicyRegistry(generation, consultants);
         }),
       ).pipe(Layer.provideMerge(seed));
@@ -205,7 +228,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
   return {
     initialize: (input: GenerationDefinitions) => Effect.suspend(() => {
       if (definitions !== undefined) return Effect.fail(new AgentFailure({ operation: "generation.initialize", cause: "already_initialized" }));
-      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]), catalogLayer: input.catalogLayer });
+      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]), catalogLayer: input.catalogLayer, deliverLate: input.deliverLate });
       return Effect.void;
     }),
     capture: (id: SessionGeneration.Id) => Effect.gen(function* () {

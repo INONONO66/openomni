@@ -371,11 +371,20 @@ const ReceivedEffect = z.object({
  * payload whose id no delivery row references yet, folded from the
  * chain — there is no inbox table.
  */
+/** The `after` cursor a deferred `action` input's intent carries (#1256 H-3), if any. */
+function afterCursorOf(action: { readonly intent: { readonly value: unknown } }): number | undefined {
+  const value = action.intent.value;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const after = (value as Record<string, unknown>).after;
+  return typeof after === "number" && Number.isInteger(after) && after >= 0 ? after : undefined;
+}
+
 function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
   return requiredActionsIn(context)
     .pendingMessages(sessionId)
     .map((action, index) => {
       const effect = ReceivedEffect.parse(action.effect.value);
+      const after = afterCursorOf(action);
       return Inbox.Row.parse({
         id: action.id,
         sessionId: action.sessionId,
@@ -383,6 +392,7 @@ function pendingMessagesIn(context: SessionKernelContext, sessionId: string): In
         content: effect.content,
         origin: action.intent,
         ...(effect.delivery === undefined ? {} : { delivery: effect.delivery }),
+        ...(after === undefined ? {} : { after }),
         status: "pending",
         consumedBy: null,
         consumedAt: null,
@@ -869,6 +879,9 @@ function makeSessionKernel(context: SessionKernelContext) {
       sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
     commit: (input: LedgerSession.Commit) => commitIn(context, input),
     pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
+    /** Ordinal of the latest executed compaction, else 0 — the staleness horizon for `action` inputs (#1256 H-3). */
+    compactionHead: (sessionId: string): number =>
+      requiredActionsIn(context).latestCompaction(sessionId)?.ordinal ?? 0,
     latestAction: (
       sessionId: string,
       throughRevision = Number.MAX_SAFE_INTEGER,

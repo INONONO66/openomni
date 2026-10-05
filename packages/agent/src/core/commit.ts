@@ -232,6 +232,8 @@ export function turnIntentAction(input: {
   readonly sessionId: string;
   readonly resultId: string;
   readonly inboxIds: readonly string[];
+  /** #1256 H-3: stale `action` inputs this turn closes WITHOUT execution (`turn.consumed.stale`). */
+  readonly consumedStale?: readonly string[];
   readonly generation: SessionGeneration.Snapshot;
   readonly resumeCount: number;
   readonly boundaryActionId: string | null;
@@ -242,6 +244,9 @@ export function turnIntentAction(input: {
     SessionTurn.DecodeIntent.parse({
       phase: "intent",
       inboxIds: [...input.inboxIds],
+      ...(input.consumedStale === undefined || input.consumedStale.length === 0
+        ? {}
+        : { consumedStale: [...input.consumedStale] }),
       ...pinnedTurn(input),
     }),
   );
@@ -517,6 +522,14 @@ export function generationForOpen(
   return Effect.succeed(snapshot);
 }
 
+/** The `after` cursor a deferred `action` input's intent carries (#1256 H-3), if any. */
+function afterCursorOf(action: LedgerAction.Node): number | undefined {
+  const value = action.intent.value;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const after = (value as Record<string, unknown>).after;
+  return typeof after === "number" && Number.isInteger(after) && after >= 0 ? after : undefined;
+}
+
 /** The chain effect one received message commits; the pending fold reads it back. */
 const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
 const DeliverIntent = z.object({ inboxId: z.string() });
@@ -606,6 +619,7 @@ export function receivedMessages(
         content: entry.content,
         origin: entry.action.intent,
         ...(entry.delivery === undefined ? {} : { delivery: entry.delivery }),
+        ...(afterCursorOf(entry.action) === undefined ? {} : { after: afterCursorOf(entry.action) }),
         status: delivered.has(entry.action.id) ? "consumed" : "pending",
         consumedBy: null,
         consumedAt: null,
@@ -619,6 +633,26 @@ export function receivedMessages(
 /** Pending admission over a per-session file is the kernel's chain fold (plan F1). */
 export function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.Row[] {
   return kernel.pendingMessages(sessionId);
+}
+
+/**
+ * #1256 H-3: the staleness split a turn start applies to its backlog. A
+ * deferred `action` input carries the journal ordinal (`after`) its payload
+ * was computed against; one pointing BEFORE the latest executed compaction
+ * reasons about a context that no longer exists, so it is never consumed —
+ * the turn closes it via `turn.consumed.stale`. Everything else is live.
+ */
+export function staleActionBacklog(
+  backlog: readonly Inbox.Row[],
+  compactionHead: number,
+): { readonly live: Inbox.Row[]; readonly stale: Inbox.Row[] } {
+  const live: Inbox.Row[] = [];
+  const stale: Inbox.Row[] = [];
+  for (const row of backlog) {
+    const isStale = row.kind === "action" && row.after !== undefined && row.after < compactionHead;
+    (isStale ? stale : live).push(row);
+  }
+  return { live, stale };
 }
 
 /** `session.configure.settings` carrier (#1253); any configure row may pin the widths. */

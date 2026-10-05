@@ -33,6 +33,12 @@ export interface ConsultantSeed {
    * as an `action` row — never through this turn's decision.
    */
   readonly late?: (payload: PlainValue) => void;
+  /**
+   * The session's journal head ordinal at call time (#1256 H-3): a late
+   * result delivers with this `after` cursor, and one older than the
+   * compaction head folds to `turn.consumed.stale` instead of a prompt.
+   */
+  readonly cursor?: () => number;
 }
 
 /**

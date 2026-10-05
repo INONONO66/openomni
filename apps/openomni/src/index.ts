@@ -29,7 +29,7 @@ type SessionRuntime = Core.SessionRuntime;
 const AgentFailure = Core.AgentFailure;
 const ExecutionApprovalError = Core.ExecutionApprovalError;
 const CommitRefused = Core.CommitRefused;
-import { SessionGeneration, SessionTransition, type LedgerAction } from "@openomni/protocol";
+import { canonicalJson, SessionGeneration, SessionTransition, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
@@ -103,7 +103,7 @@ import {
   toolPorts,
   webSocketCallbacks,
 } from "./gateway";
-import { configureAuthority } from "./composition/generation-layers";
+import { configureAuthority, type GenerationDefinitions } from "./composition/generation-layers";
 import { createResident } from "./resident";
 import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
 import { createRequestDomainRevisions } from "./tools/core/request-domain-revisions";
@@ -630,7 +630,26 @@ export async function startOpenOmni(options: StartOptions = {}) {
     });
 
     residentAdoption = () => resident.adoption();
-    await runAppBoot(runtime, services.generations.initialize(resident.definitions));
+    // #1256 H-3: the late-result door. A hook payload that settled after its
+    // call timed out re-enters the session through the entity's one `deliver`
+    // path as an `action` row carrying its call-time `after` cursor; a stale
+    // cursor (before the compaction head) folds to `turn.consumed.stale`.
+    const deliverLate = (sessionId: string, payload: PlainValue, after: number | undefined): void => {
+      runAppEffect(
+        runtime,
+        entityClient(sessionId).Deliver({
+          kind: "action",
+          body: JSON.stringify({
+            content: canonicalJson(payload),
+            ...(after === undefined ? {} : { after }),
+          }),
+          source: JSON.stringify({ kind: "hook.late" }),
+          idempotencyKey: `hook-late:${services.entropy.id()}`,
+        }),
+      ).catch((error) => console.error(`late hook result for ${sessionId} dropped`, error));
+    };
+    const generationDefinitions: GenerationDefinitions = { ...resident.definitions, deliverLate };
+    await runAppBoot(runtime, services.generations.initialize(generationDefinitions));
 
     const routingHandler: Channel.MessageHandler = async ({ sender, facts }) => {
       const admission = await runAppEffect(runtime, messages.ingest(sender, facts));

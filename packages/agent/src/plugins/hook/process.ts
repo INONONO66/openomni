@@ -81,6 +81,12 @@ export class HookSpawnError extends Schema.TaggedError<HookSpawnError>(
   cause: Schema.String,
 }) {}
 
+/** A well-formed response line that arrived AFTER its call settled (#1256 H-3). */
+export interface HookLateResult {
+  readonly id: string;
+  readonly outcome: HookOutcome;
+}
+
 export interface HookProcessConfig {
   /** The hook executable and its arguments, exactly as configured. */
   readonly command: readonly string[];
@@ -88,6 +94,13 @@ export interface HookProcessConfig {
   readonly timeoutMs: number;
   /** Per-line/buffer byte bound on stdout framing; default `HOOK_MAX_LINE_BYTES`. */
   readonly maxLineBytes?: number;
+  /**
+   * #1256 H-3: the typed late-result port. A well-formed line whose id no
+   * longer matches an in-flight call (it timed out) is handed here instead of
+   * being dropped — the consultant routes it back into the session as an
+   * `action` row through the composition's deliver door. Fire-and-forget.
+   */
+  readonly onLate?: (late: HookLateResult) => void;
 }
 
 /** The scoped service face: one live PID, one bounded call at a time semantics-free. */
@@ -175,7 +188,12 @@ export function acquireHookProcess(
         return;
       }
       const entry = pending.get(decoded.id);
-      if (entry === undefined) return;
+      if (entry === undefined) {
+        // #1256 H-3: a response whose call already settled (timeout) is a
+        // LATE result — typed and surrendered to the port, never dropped.
+        config.onLate?.({ id: decoded.id, outcome: outcomeOf(decoded.result) });
+        return;
+      }
       pending.delete(decoded.id);
       Deferred.doneUnsafe(entry.waiter, Effect.succeed(outcomeOf(decoded.result)));
       settleDrained();
