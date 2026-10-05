@@ -1,5 +1,43 @@
 # Implementation Status
 
+## #1258 one send_message tool for every contact, delegation-policy caps (epic #1260)
+
+On `epic1260/1258-send-message-contacts` (2026-10-05, base `ab62ca98`). The
+agent owns one session; every other party is a contact behind the single
+`send_message` tool. The tool face moved (git mv) from
+`apps/openomni/src/tools/send-message.ts` to
+`apps/openomni/src/bundles/send-message/index.ts` (`Bundle.define`, requires
+tool; the sealed 12-tool catalog is unchanged — the bundle face shares the
+catalog definition name). Contact registry: `telegram:<id>` / `discord:<id>` /
+`human:<id>` / `cli:claude-code|codex|omp`; one Effect connector per kind over
+injected ports (`ChannelEgressPort`, `HumanNotifyPort`, `CliRunnerPort`,
+`ContactReplyPort`); a connector never throws — failure is the journaled
+`{contact, status: not_sent, reason}` fact, and captured CLI stdout returns as
+the sender's prompt. Session/new-session sends keep riding the gateway ingest
+door; a `to.new` send with `deadline_ms` arms the `delegation.deadline`
+purpose for the created child.
+
+`apps/openomni/src/bundles/delegation-policy/` (`Bundle.define`, requires
+action + alarm — composing `action` off cascades the bundle off) owns the
+delegation policy as generation data: three consulted gate rows at `tool.pre`
+(`spawn_depth` limit 3 from catalog parent links, `spawn_children` limit 4
+from the parent's live children, spend-cap refusal when `spend_cap` is unset —
+`DEFAULT_DELEGATION_CAPS`, row params, never code constants), the
+`delegation.deadline` alarm purpose (its wake cancels the silent child through
+the injected entity door — the new `cancel` control riding the `signal`
+journal kind — and prompts the parent), and the child-reply prompt wording
+(`composition/parent-reply/` deleted; `parent-reply` greps zero in app src).
+Core gained the consulted-guard verdict `{type: "guard", ref, config?}` with
+`NamedGuard` handlers and the `when` context (`op`/`role`/`sessionId`) at the
+point; guard reads bind in `composition/generation-layers.ts` to the live
+catalog plane and register unconditionally so persisted guard rows compile
+under any composition (the process child boots the empty composition). Tests:
+`apps/openomni/test/send-message-contacts.test.ts` (routing per kind, scripted
+CLI stdout -> parent prompt, boot-bind of both bundles, idempotent first-prompt
+replay `{seq, existed: true}`, action-off cascade) and
+`apps/openomni/test/delegation-policy.test.ts` (cap matrix fail-closed,
+deadline wake cancel + parent prompt, typed wake failures).
+
 ## #1257 fork sessions into verifiable chains (epic #1260, draft PR #1291)
 
 On `epic1260/1257-fork-chains` (2026-10-05, base `3ccafed1`). `Core.forkSession`
@@ -1142,7 +1180,7 @@ WebSocket/path wake still commits one fired pair and reaches revision 59.
 | Machine body and raw endpoints | Stable list/get handles expose binary-safe confined fs read/write/list/stat, stateless exec(cmd,cwd), and runCode. Enrollment/offer intersection is fail-closed. Exactly two authorization boundaries: captured kernel tool.pre and daemon capability/export enforcement. The descriptor-pinned no-follow confinement driver remains; the injected interpreter runner lives in `packages/codemode` since #1272. Old app filesystem/list-machines tools remain absent. #1270: the host binds a listener set (unix always; TCP+TLS only with the full `OPENOMNI_MACHINES_TCP_*`/`OPENOMNI_MACHINES_TLS_*` tuple) into one registry; network trust is chain-verified on the daemon side (the configured `hostCertificate` PEM is the trust anchor and its key fingerprint the pin) and key-pinned on the host side (`Enrollment.publicKey`, sha256 over SPKI DER), refusing `peer_key_mismatch` before admission; a known machine's dropped/in-window calls fail once typed `disconnected`; the daemon's opt-in reconnect redials with full-jitter backoff (250ms base, 30s cap, injected scheduler), reattaches the same identity to the existing handles, and closes terminally on a refused reattach; the `machine attach` CLI config gains the pinned-TLS tcp shape (see `docs/key-generation.md`). #1271: the brain host attaches as machine `self` — `machines.self {id?="self", capabilities, exports}` + `machines.default?="self"` (`OPENOMNI_MACHINES_SELF`/`OPENOMNI_MACHINES_DEFAULT`), boot validates the plane, starts the listener, attaches an in-process daemon over the unix loopback and completes `machine.attach` before tool ports publish; every failure in that chain is the typed startup refusal `self_attach_failed {cause}`; `apps/openomni/src/tools/` has no local execution path (`node:fs`, `Bun.spawn`, `localBash`, `kind: "local"` all grep 0) — prefix-less paths resolve to the configured default machine via `parseLocus(input, {defaultMachine})`, relative paths refuse, bash runs on the daemon (absolute `cwd`, daemon-bounded execution), and `openomni machine attach` still attaches a remote daemon alongside self. | `packages/machines/`, `packages/protocol/src/machine/`, `packages/machines/src/ipc/`, `packages/machines/src/reconnect.ts` |
 | Code mode | Public factory supplies machine object handles named after the tools (`read/write/ls/bash/eval`) and `cell.run/peek/stop`. The injected daemon runner owns lazy per-tenant Python processes, parallel/completion helpers and callback routing. The brain facade never spawns Python. Cancellation and close propagate across the attachment and await process cleanup. App VFS, cell registry and old machine methods are deleted; the single `eval` tool delegates to codemode: `run` waits `timeout` seconds then answers `running` with a `cell_id`, `peek` reads the streamed partial output (`machine.peek_code`), `stop` interrupts and settles the cell as `cancelled` with its output, never re-running it; a ten-minute ceiling bounds background cells. Cell-only `completion({prompt, model?, system?, schema?})` has a 32-call per-catalog budget; a `schema` answer is validated host-side and returned as canonical JSON; batching is the cell's `parallel()`. | `packages/codemode/src/`, `apps/openomni/src/composition/codemode.ts`, `apps/openomni/src/tools/eval.ts`, `apps/openomni/src/tools/completion.ts` |
 | Tool catalog and prompts | The catalog is sealed (#949): eleven model-door tools `read`, `write`, `edit`, `ls`, `find`, `grep`, `bash`, `eval`, `monitor`, `send_message`, `provision` plus the cell-only `completion`; snake_case names, one `op` discriminator under `operation` for eval/monitor/provision, flat `tools/<name>.ts` (`_` written `-` in file names; `lint:tools` `[tool-file-name]` pins the correspondence). There is no `approval` tool: `provision.contact_promote`/`contact_merge` carry `require_approval` policy rows resolved through the kernel request path. `lint:tools` and the catalog test pin the exact set and refuse retired names. The prompt builder accepts model tuning only; deleted-domain injection/instructions are absent. Dispatcher-only model truncation caps at 32,000 UTF-16 code units on a Unicode code-point boundary, with exact dropped/original UTF-8 byte counts; cell values stay full. | `apps/openomni/src/tools/core/catalog.ts`, `apps/openomni/src/prompt/`, `packages/agent/src/core/tool.ts` |
-| CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/composer.ts` |
+| CLI and composition | Start/onboard/daemon/doctor/logs and npm staging belong to the app. The minimal `openomni machine attach <config.json>` composes the retained machine daemon wire; Resident `openomni daemon` remains unchanged. Reversible composition owns both boot rollback and reverse-order shutdown. | `apps/openomni/src/cli/`, `apps/openomni/script/build-npm-package.ts`, `apps/openomni/src/composition/boot.ts` |
 
 #949 stage 1 removes the target-selection workspace and capability-based catalog fold; call-time admission belongs to executor `tool.pre`. Model fallback selection belongs to `packages/llm`. Together with #991's codemode workspace, the generated topology describes twelve workspaces. The standalone waiting/approval folds and stores are removed by #969. #949 stage 2 seals the catalog, folds approval into `provision`, and drops the catalog's conditional Proxy port scaffolding: every tool is constructed statically and refuses at execution when its port is absent. #949 stage 3 adds `eval` `peek`/`stop` over a background cell registry with streamed partial output, `completion` options `{model, system, schema}`, and renames the codemode handle methods to the tool names.
 
