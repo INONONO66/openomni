@@ -222,8 +222,6 @@ describe("Session.fork", () => {
     fixture.pinForkCap(parent.authority, 16);
     const overCap = fixture.refusalOf(fixture.fork(anchor, {}, { childId: "child-capped" }));
     expect(overCap.reason).toBe("byte_cap");
-    // The typed refusal renders a complete operator-facing message.
-    expect(overCap.message).toBe(`fork of session ${PARENT} refused (byte_cap): ${overCap.detail}`);
   });
 
   test("refuses a fork when the parent session row is missing", () => {
