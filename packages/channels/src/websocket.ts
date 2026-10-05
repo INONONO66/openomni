@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Effect } from "effect";
 import { decodeChannelFailure, DeliveryNotSent, InvalidInbound, type ChannelError } from "./errors";
 import { newTraceId } from "./support/trace";
-import { Channel, Gateway, Operational, SessionRead } from "@openomni/protocol";
+import { Channel, Gateway, Operational, SessionFork, SessionRead } from "@openomni/protocol";
 import { authenticateWebSocketUpgrade } from "./authn/websocket";
 import type { ChannelAuthnDecisionObserver } from "./authn/types";
 import type { PublishPort } from "./types";
@@ -15,6 +15,7 @@ export type WebSocketFrameOutcome =
   | z.infer<typeof SessionRead.Receipt>
   | SessionRead.Bound
   | SessionRead.Request
+  | SessionFork.Request
   | { readonly type: "receipt"; readonly inputId: string; readonly result: Gateway.IngestResult }
   | WebSocketKeyRefusal;
 
@@ -71,7 +72,7 @@ const TextFrame = z
     type: z
       .json()
       .optional()
-      .refine((type) => type !== "request_answer" && type !== "session_read"),
+      .refine((type) => type !== "request_answer" && type !== "session_read" && type !== "session_fork"),
     text: z.string().min(1),
     eventId: z.string().min(1).optional().catch(undefined),
     replyToId: z.string().min(1).optional().catch(undefined),
@@ -82,7 +83,7 @@ const TextFrame = z
     eventId: frame.eventId,
     replyToId: frame.replyToId,
   }));
-const WebSocketFrame = z.union([SessionRead.Request, RequestAnswerFrame, TextFrame]);
+const WebSocketFrame = z.union([SessionRead.Request, SessionFork.Request, RequestAnswerFrame, TextFrame]);
 
 export class WebSocketHandler {
   /**

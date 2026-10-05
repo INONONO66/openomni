@@ -7,7 +7,6 @@
  * hand; #1258 replaces parent-reply with the contact contract.
  */
 import type { SessionKernel } from "../../src/core/entity";
-import { receivedMessages } from "../../src/core/commit";
 import type { SessionRunnerResult } from "../../src/core/run";
 import type { ExecutionError } from "../../src/core/failure";
 import type { Executor } from "../../src/core/gate/decide";
@@ -75,7 +74,7 @@ export function parentReply(
   result: SessionRunnerResult,
 ): SessionTransition.OutboundMessage | undefined {
   if (row.parentId === null || result.kind === "waiting") return undefined;
-  const original = receivedMessages(kernel, row.id).rows
+  const original = kernel.inputMessages(row.id)
     .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
     .find((origin) => origin.success && origin.data.senderSessionId === row.parentId);
   if (original === undefined || !original.success) return undefined;

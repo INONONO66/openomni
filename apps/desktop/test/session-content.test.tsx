@@ -90,3 +90,73 @@ test("a send without a configured gateway surfaces the named class on the chat",
     await window.happyDOM.close();
   }
 });
+
+test("the fork control cites the newest boundary anchor and ancestry renders as data", async () => {
+  const window = new Window({ url: "http://localhost" });
+  const { host, restoreGlobals, root } = mountWindow(window);
+  const chat = new Chat<OpenOmniUIMessage>({ id: "session", messages: [], transport: idle });
+  const forks: [string, string][] = [];
+  const session = makeSession({
+    durableSessionId: "durable",
+    latestForkAnchor: "hash-2",
+    ancestry: {
+      parentId: "parent",
+      forkedFrom: { session: "parent", anchor: "hash-0", parentSeq: 3, parentHead: "head-3", copied: 4 },
+      aside: "aside text",
+    },
+  });
+  try {
+    await act(() =>
+      root.render(
+        <SessionContent
+          chat={chat}
+          notice={undefined}
+          onFork={(sessionId, anchor) => forks.push([sessionId, anchor])}
+          session={session}
+          transport={null}
+        />,
+      ),
+    );
+    // Parent-child inspection: the parent edge and anchor are data, not prose.
+    const ancestry = host.querySelector<HTMLElement>('[data-ui="SessionContent.Ancestry"]');
+    expect(ancestry?.getAttribute("data-parent")).toBe("parent");
+    expect(ancestry?.getAttribute("data-anchor")).toBe("hash-0");
+    const button = host.querySelector<HTMLElement>('[data-ui="SessionContent.Fork"]');
+    expect(button).not.toBeNull();
+    await act(() => button?.click());
+    expect(forks).toEqual([["durable", "hash-2"]]);
+  } finally {
+    await act(() => root.unmount());
+    host.remove();
+    restoreGlobals();
+    await window.happyDOM.close();
+  }
+});
+
+test("a session without a boundary anchor or durable identity offers no fork control", async () => {
+  const window = new Window({ url: "http://localhost" });
+  const { host, restoreGlobals, root } = mountWindow(window);
+  const chat = new Chat<OpenOmniUIMessage>({ id: "session", messages: [], transport: idle });
+  try {
+    await act(() =>
+      root.render(
+        <SessionContent
+          chat={chat}
+          notice={undefined}
+          onFork={() => {
+            throw new Error("no fork may be offered without an anchor");
+          }}
+          session={makeSession()}
+          transport={null}
+        />,
+      ),
+    );
+    expect(host.querySelector('[data-ui="SessionContent.Fork"]')).toBeNull();
+    expect(host.querySelector('[data-ui="SessionContent.Ancestry"]')).toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    host.remove();
+    restoreGlobals();
+    await window.happyDOM.close();
+  }
+});

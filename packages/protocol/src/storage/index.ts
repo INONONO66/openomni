@@ -65,6 +65,8 @@ export namespace Storage {
      * inbox payload that no later delivery row references, in chain order.
      */
     pendingMessages(sessionId: string): LedgerAction.Node[];
+    /** Every input action (rows carrying an inboxKind effect), consumed or not (#1257). */
+    inputMessages(sessionId: string): LedgerAction.Node[];
   }
 
   export interface SessionSubAdapter {

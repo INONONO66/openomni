@@ -17,7 +17,6 @@ import { alarmDisposition } from "../../src/core/alarm";
 import { closeSessions } from "../../src/core/run";
 import { reactivateSession } from "../helpers/wake-session";
 import { foldHistoryState, foldSessionHistory, hydrateSessionHistory } from "../../src/inspect/history";
-import { receivedMessages } from "../../src/core/commit";
 import { configureCrashPoint, configureCutProof, configureRecoveryProof } from "../helpers/crash-configure";
 import { killAtCrashBarrier } from "../helpers/crash-channel";
 import { messagePlanePoint, messagePlaneProof } from "../helpers/crash-message-plane";
@@ -228,7 +227,7 @@ function recoverAdmission(witness: Witness) {
     expect(originalTurns).toEqual([]);
     expect(originalInbox).toMatchObject([{ id: "admitted", content: "original prompt" }]);
     expect(pendingInbox()).toEqual([]);
-    expect(receivedMessages(isolatedLedger().kernel, sessionId).rows).toHaveLength(1);
+    expect(isolatedLedger().kernel.inputMessages(sessionId)).toHaveLength(1);
     return "rearmed";
   } finally {
     yield* closeSessions(runtime);
@@ -253,7 +252,7 @@ function recoverCommittedCompaction(witness: Witness) {
   expectCompactedProjection(history, originalAnswer);
   if (witness.crashPoint === "compaction_concurrent_tail_committed_before_owner_crash") {
     expect(inbox.map((item) => item.id)).toEqual(["tail"]);
-    expect(receivedMessages(isolatedLedger().kernel, sessionId).rows.map((item) => item.id)).toContain("tail");
+    expect(isolatedLedger().kernel.inputMessages(sessionId).map((item) => item.id)).toContain("tail");
   } else expect(inbox).toEqual([]);
   const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
   const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
@@ -495,7 +494,7 @@ function assertOutboundCut(witness: Witness) {
   expect(witness.bodies).toEqual(["reply", ...(accepted ? ["accepted"] : extra)]);
   expect(item.state).toBe(acked ? "delivered" : "pending");
   expect(item.message.content).toBe("durable reply");
-  const destination = receivedMessages(kernel, item.message.destinationSessionId).rows.filter(
+  const destination = kernel.inputMessages(item.message.destinationSessionId).filter(
     (row) => row.id === item.message.messageId,
   );
   expect(destination).toHaveLength(sent ? 1 : 0);

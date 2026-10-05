@@ -1,4 +1,4 @@
-import { consoleStore, type SessionId } from "./store";
+import { consoleStore, createSession, openTab, type SessionId } from "./store";
 
 export function bindDurableSession(id: SessionId, durableSessionId: string): void {
   consoleStore.setState((state) => ({
@@ -21,4 +21,16 @@ export function setSessionTitleIfPlaceholder(id: SessionId, text: string): void 
       ),
     };
   });
+}
+
+/**
+ * Adopt a gateway-forked child (#1257): mint the local handle, bind it to the
+ * durable child id, title it after its origin and open it in a tab.
+ */
+export function adoptForkedSession(durableSessionId: string, title: string, now: number): SessionId {
+  const id = createSession(now);
+  bindDurableSession(id, durableSessionId);
+  setSessionTitleIfPlaceholder(id, title);
+  openTab({ kind: "session", sessionId: id });
+  return id;
 }

@@ -25,6 +25,7 @@ import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
 import { desktopBridge } from "./state/desktop-bridge";
 import { queryKeys, sessionReadModel, useGatewayEndpoint, useSessionReadModels } from "./state/queries";
+import { adoptForkedSession } from "./state/session-actions";
 import { historyMenuEntries, listedSessions, placeTitle, sessionIndex } from "./state/selectors";
 import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
@@ -68,6 +69,45 @@ export function App({ platform, storage, host }: AppEnvironment) {
 
   useShellLifecycle(storage);
   const chatFor = useSessionChats(transport);
+  const [forkNotice, setForkNotice] = useState<string | undefined>(undefined);
+  // Boundary fork (#1257): ask the gateway, adopt the durable child on success,
+  // surface the typed refusal on the composer otherwise.
+  const onFork = useCallback(
+    (sessionId: string, anchor: string) => {
+      if (transport === null || !("forkSession" in transport)) return;
+      void (async () => {
+        try {
+          const response = await transport.forkSession({ sessionId, at: anchor });
+          if (response.type === "session_forked") {
+            setForkNotice(undefined);
+            adoptForkedSession(response.sessionId, `Fork of ${sessionId}`, host.now());
+            return;
+          }
+          setForkNotice(`fork refused: ${response.reason} (${response.detail})`);
+        } catch (error) {
+          // Boundary narrowing without a written type: the catch variable is
+          // already the widest type, narrowed structurally before it renders.
+          setForkNotice(error instanceof Error ? error.message : String(error));
+        }
+      })();
+    },
+    [host, transport],
+  );
+  // Opening a fork child (#1257): reuse the already-bound local session's tab,
+  // otherwise adopt the durable child exactly like a fresh fork result.
+  const onOpenChild = useCallback(
+    (sessionId: string, title?: string) => {
+      const existing = consoleStore.state.sessions.find(
+        (local) => local.durableSessionId === sessionId,
+      );
+      if (existing !== undefined) {
+        openTab({ kind: "session", sessionId: existing.id });
+        return;
+      }
+      adoptForkedSession(sessionId, title ?? sessionId, host.now());
+    },
+    [host],
+  );
 
   const arrive = useCallback((boundary: Boundary | null = "selection") => {
     const searching = search.current.searching;
@@ -245,7 +285,9 @@ export function App({ platform, storage, host }: AppEnvironment) {
       <SessionContent
         chat={chatFor(session.id)}
         key={tab?.id}
-        notice={notice}
+        notice={forkNotice ?? notice}
+        onFork={onFork}
+        onOpenChild={onOpenChild}
         session={session}
         transport={transport}
       />
