@@ -133,6 +133,23 @@ describe("cell settlement ownership", () => {
 });
 
 describe("code-mode kernel substrate", () => {
+  test("close() fails typed when the driver's browser cleanup is never acknowledged (#1293 grace expiry)", async () => {
+    const kernel = new PythonKernel();
+    // Wedge the driver's EOF cleanup hook: close() must not report success on
+    // grace expiry, because an unacknowledged cleanup can leak Chromium. The
+    // block is the adversarial condition under test, not a timing wait - the
+    // assertion rides close()'s own bounded outcome.
+    await expect(
+      kernel.run(
+        cell("import __main__, threading\n__main__._browser_close_all = lambda: threading.Event().wait()"),
+        noTools,
+      ),
+    ).resolves.toMatchObject({ status: "completed" });
+    await expect(kernel.close()).rejects.toMatchObject({ _tag: "DriverFailure", operation: "driver.cleanup" });
+    // The expired close SIGKILLed the driver; a second close is a clean no-op.
+    await expect(kernel.close()).resolves.toBeUndefined();
+  });
+
   test("invalid driver output replaces the interpreter", async () => {
     const kernel = new PythonKernel();
     try {

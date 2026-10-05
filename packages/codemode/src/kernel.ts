@@ -690,6 +690,7 @@ while True:
     _cell_context.cell_id = None
     _emit({"kind": "result", "result": _result})
 _browser_close_all()
+_emit({"kind": "lifecycle", "event": "browser-cleanup-complete"})
 `;
 
 const ToolCallFrame = Machine.ToolCall.extend({
@@ -712,13 +713,19 @@ const Frame = z.discriminatedUnion("kind", [
 ]);
 
 /**
- * EOF-first close grace (#1275): time the driver gets to run its cleanup
- * before SIGKILL. Generous on purpose: the normal path resolves at actual
- * driver exit (milliseconds), while expiry SIGKILLs the driver before its
- * browser cleanup ran and leaks Chromium - a loaded CI host must not be able
- * to spend the whole grace just scheduling the python process.
+ * EOF-first close grace (#1275): bounded wait for the driver's explicit
+ * browser-cleanup acknowledgement after stdin EOF. The normal path resolves
+ * at the ack (milliseconds); expiry is NOT success - close() SIGKILLs the
+ * driver and fails typed (#1293 r1), because elapsed time proves nothing
+ * about whether the cleanup actually ran.
  */
-const DRIVER_EXIT_GRACE_MS = 10_000;
+const DRIVER_EXIT_GRACE_MS = 2_000;
+/**
+ * Exact stdout line the driver emits once `_browser_close_all()` finished:
+ * the machine-observable cleanup outcome close() waits on. Must match
+ * `json.dumps({"kind": "lifecycle", "event": "browser-cleanup-complete"})`.
+ */
+const CLEANUP_COMPLETE_FRAME = '{"kind": "lifecycle", "event": "browser-cleanup-complete"}';
 
 /** Answers a call made from inside a cell. */
 type CellToolCaller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
@@ -739,6 +746,7 @@ export class PythonKernel {
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Deferred.Deferred<void>>();
   private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
+  private readonly cleanups = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
 
   run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Effect.Effect<Machine.CellResult, CodeError> {
     return Effect.suspend(() => {
@@ -761,17 +769,43 @@ export class PythonKernel {
   close(): Effect.Effect<void, CodeError> {
     return Effect.gen({ self: this }, function* () {
       this.lifetime.abort();
-      const process = this.process;
-      if (process) {
-        // EOF-first close: the driver loop breaks on stdin EOF and runs its
-        // browser cleanup (#1275) before exiting; stdin.end on a torn-down pipe
-        // is ignored because the SIGKILL below is the authoritative teardown.
+      let unconfirmed: DriverFailure | undefined;
+      // The permit serializes close with a just-cancelled cell: that cell's
+      // ensuring block discards the driver first, so close observes process
+      // undefined instead of waiting out the grace on a process the
+      // cancellation path already SIGKILLed.
+      yield* this.lock.withPermits(1)(Effect.gen({ self: this }, function* () {
+        const process = this.process;
+        if (process === undefined) return;
+        // EOF-first close: the driver loop breaks on stdin EOF, runs its
+        // browser cleanup (#1275) and acknowledges it with the lifecycle frame
+        // before exiting; stdin.end on a torn-down pipe is ignored because the
+        // SIGKILL below is the authoritative teardown.
         yield* Effect.try({ try: () => { process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
-        const exited = this.processExits.get(process);
-        if (exited !== undefined) yield* Deferred.await(exited).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS));
+        const cleanup = this.cleanups.get(process);
+        const acked =
+          cleanup !== undefined &&
+          (yield* Deferred.await(cleanup).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS)))._tag === "Some";
+        if (acked) {
+          const exited = this.processExits.get(process);
+          if (exited !== undefined) yield* Deferred.await(exited).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS));
+        } else {
+          // Grace expiry is an explicit outcome, not silent success (#1293
+          // r1): the browser cleanup was never confirmed, so the SIGKILL
+          // below may leak Chromium and the caller must see that.
+          unconfirmed = new DriverFailure({
+            operation: "driver.cleanup",
+            message: `browser cleanup unacknowledged within the ${DRIVER_EXIT_GRACE_MS}ms close grace; driver SIGKILLed with teardown unconfirmed`,
+            cause: "cleanup-complete frame not observed before grace expiry",
+          });
+        }
         yield* this.discard(process);
-      }
+      }));
       yield* Effect.forEach([...this.exits], Deferred.await, { discard: true });
+      if (unconfirmed !== undefined) {
+        yield* Effect.logWarning(unconfirmed.message);
+        return yield* unconfirmed;
+      }
     });
   }
 
@@ -832,14 +866,22 @@ export class PythonKernel {
   private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
     return Effect.gen({ self: this }, function* () {
       const exited = yield* Deferred.make<void>();
+      const cleanup = yield* Deferred.make<void>();
       const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
       this.exits.add(exited);
       this.processExits.set(process, exited);
+      this.cleanups.set(process, cleanup);
       process.once("close", () => { this.exits.delete(exited); Deferred.doneUnsafe(exited, Exit.void); });
       const lines = createInterface({ input: process.stdout });
       this.process = process;
       this.lines = lines;
       lines.on("line", (line) => {
+        // The cleanup ack is close()'s signal, never a cell frame: consume it
+        // here so a pending cell's frame loop never sees an unknown kind.
+        if (line === CLEANUP_COMPLETE_FRAME) {
+          Deferred.doneUnsafe(cleanup, Exit.void);
+          return;
+        }
         if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, line);
       });
       const fail = (message: string) => {

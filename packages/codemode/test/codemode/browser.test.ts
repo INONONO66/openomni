@@ -341,8 +341,10 @@ test(
     expect(pid).toBeGreaterThan(0);
     let cursor = view.status === "ok" ? view.cursor : undefined;
     await kernelSide.close();
-    // close() resolving guarantees the driver's EOF cleanup SIGKILLed Chromium,
-    // but the pid stays kill(pid, 0)-visible as a zombie until the launch
+    // close() resolving means the driver acknowledged its browser cleanup
+    // (the cleanup-complete lifecycle frame) before exiting, i.e. SIGKILL was
+    // sent to Chromium; an unacknowledged cleanup fails close() typed instead
+    // of resolving. Even so the pid stays kill(pid, 0)-visible as a zombie until the launch
     // shell's `wait` reaps it: Chromium is the shell's child, not the
     // driver's, so the reap is not close()'s to guarantee. The reap IS
     // observable: the shell prints the chromium-exited status line right after

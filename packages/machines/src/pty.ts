@@ -263,11 +263,25 @@ export function createPtyAdapter(options: PtyAdapterOptions): PtyAdapter {
           ),
         );
         // The window survives its session through the control-session link;
-        // killing it ends the processes without touching other terminals. Its
-        // only in-protocol failure is the window having already closed with
-        // its dead pane (the same shell-exited race), which is the outcome
-        // kill-window exists to force.
-        if (record.windowId !== undefined) yield* ctl.command(`kill-window -t ${record.windowId}`).pipe(Effect.ignore);
+        // killing it ends the processes without touching other terminals. A
+        // kill-window failure is NOT proof of teardown (#1293 r1): the control
+        // transport can drop or the command can time out while the linked
+        // window - and the processes it holds - survive. Re-check the server
+        // exactly like the kill-session path above: a confirmed-absent window
+        // (the shell already exited with its dead pane) is the tolerated
+        // outcome; a surviving window or a failed verification propagates and
+        // keeps the record, so close stays retryable instead of reporting ok
+        // over a live window.
+        if (record.windowId !== undefined) {
+          const windowId = record.windowId;
+          yield* ctl.command(`kill-window -t ${windowId}`).pipe(
+            Effect.catch((error) =>
+              Effect.flatMap(ctl.command('list-windows -a -F "#{window_id}"'), (ids) =>
+                ids.includes(windowId) ? Effect.fail(error) : Effect.void,
+              ),
+            ),
+          );
+        }
         if (record.paneId !== undefined) paneRoutes.delete(record.paneId);
         registry.remove(record.name);
         return { status: "ok" } as const;
