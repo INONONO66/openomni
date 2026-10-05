@@ -56,7 +56,7 @@ const store = {
   FenceRefused: new Store.FenceRefused({ sessionId: "session", reason: "held", holder: "holder", fence: 1, expiresAt: 1 }),
   CommitRefused: new Store.CommitRefused({ sessionId: "session", reason: "fence", fence: 1, currentFence: 2, expectedRevision: 0, currentRevision: 1 }),
   PolicyGenerationRefused: new Store.PolicyGenerationRefused({ generation: 1, reason: "conflict" }),
-  StorageUnavailable: new Store.StorageUnavailable({ capability: "storage" }),
+  StorageUnavailable: new Store.StorageUnavailable({ capability: "sessions" }),
   CorruptRecord: new Store.CorruptRecord({ operation: "decode", id: "record" }),
   SchemaRefused: new Store.SchemaRefused({ sessionId: "session", actionId: "action", kind: "prompt", reason: "fixture" }),
   CatalogVersionRefused: new Store.CatalogVersionRefused({ fileVersion: 99, codeVersion: 1, operation: "indexSession" }),
