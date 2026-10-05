@@ -272,7 +272,20 @@ export function acquireHookProcess(
           settleDrained();
           return failure("exit");
         }
-        const settled = yield* Deferred.await(waiter).pipe(Effect.timeoutOption(config.timeoutMs));
+        // H-2 (r3): interruption while awaiting the child is the third way a
+        // call ends; without this finalizer the pending entry leaks and the
+        // drain finalizer waits forever on a silent child. A response arriving
+        // after the interrupt is a LATE result through `onLate`, like a
+        // timeout's.
+        const settled = yield* Deferred.await(waiter).pipe(
+          Effect.timeoutOption(config.timeoutMs),
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              pending.delete(input.id);
+              settleDrained();
+            }),
+          ),
+        );
         if (settled._tag === "Some") return settled.value;
         pending.delete(input.id);
         settleDrained();

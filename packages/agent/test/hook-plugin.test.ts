@@ -422,3 +422,41 @@ test("C-1: a stdin write failure settles the call as a typed exit failure, nothi
       }),
     ),
   ));
+
+test("H-2 (r3): an interrupted in-flight call cleans up; generation disposal completes and kills the child", () =>
+  runTestPromise(
+    Effect.gen(function* () {
+      // An injected SILENT child: it never answers and never ends its stdout,
+      // so only the interrupt-cleanup path can release the drain finalizer.
+      let killed = false;
+      let exited!: (code: number) => void;
+      const child = {
+        pid: 777,
+        stdout: (async function* (): AsyncGenerator<Uint8Array> {
+          await new Promise<void>(() => undefined);
+        })(),
+        stdin: { write: (): undefined => undefined, flush: (): undefined => undefined },
+        kill: () => {
+          killed = true;
+          exited(0);
+        },
+        exited: new Promise<number>((resolve) => {
+          exited = resolve;
+        }),
+      };
+      const scope = yield* Scope.make();
+      const hook = yield* acquireHookProcess(
+        { command: ["./hook.sh"], timeoutMs: 60_000 },
+        () => child,
+      ).pipe(Scope.provide(scope));
+      const call = yield* Effect.forkChild(hook.call(request("silent")));
+      yield* settledWhen(() => hook.inFlight() === 1);
+      yield* Fiber.interrupt(call);
+      // The interrupted call left NO pending entry behind.
+      expect(hook.inFlight()).toBe(0);
+      // Disposal parks on nothing: drain sees zero pending, the kill runs.
+      yield* Scope.close(scope, Exit.void);
+      expect(killed).toBe(true);
+      expect(yield* hook.exited).toBe(0);
+    }),
+  ));
