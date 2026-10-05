@@ -13,7 +13,7 @@ import { createHandlerTable, wrapTransformer, type HandlerTable } from "./regist
 import { projectGeneration, type ProjectedGeneration } from "./project";
 import { evaluateProjected, failedSnapshot, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
 
-export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer } from "./registry";
+export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedGuard, type NamedTransformer } from "./registry";
 export { PolicyCompileError } from "./legacy-rows";
 export type { CompiledPolicySnapshot, PolicyEvaluation, PolicyEvaluationInput } from "./evaluate";
 
@@ -73,9 +73,13 @@ export function compilePolicySnapshot(
       ...(cause.data.ref === undefined ? {} : { ref: cause.data.ref }),
     });
   }
-  const handlers = new Map(
-    registry.transformers.map((transformer) => [transformer.name, wrapTransformer(transformer)]),
-  );
+  const handlers = new Map([
+    ...registry.transformers.map(
+      (transformer) => [transformer.name, wrapTransformer(transformer)] as const,
+    ),
+    // Guards (#1258) are already gate handlers: consulted, verdict-bearing.
+    ...(registry.guards ?? []).map((guard) => [guard.name, guard.decide] as const),
+  ]);
   const contentHash = canonicalDigest(contentIdentity(options.rows));
   return Object.freeze({
     generation: options.generation,

@@ -26,9 +26,11 @@ const LEGACY_ADDRESS_BY_POINT: Readonly<Record<string, { kind: string; phase: Po
 
 function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
   if (row.do === "gate" && row.how.ref !== undefined) {
-    if (row.how.metric === undefined || row.how.limit === undefined)
-      throw new AppInvariantError(`gate row ${row.id} consults ${row.how.ref} without budget fields; the live plane has no consulted-gate seed shape`);
-    return { type: "obligation", ref: row.how.ref, metric: row.how.metric, limit: row.how.limit };
+    if (row.how.metric !== undefined && row.how.limit !== undefined)
+      return { type: "obligation", ref: row.how.ref, metric: row.how.metric, limit: row.how.limit };
+    // #1258: a consulted gate row (no budget fields) seeds as a guard verdict;
+    // the named guard handler decides per input at the point.
+    return { type: "guard", ref: row.how.ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
   }
   if (row.do === "gate") {
     const verdict = row.how.verdict ?? "allow";

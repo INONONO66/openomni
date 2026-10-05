@@ -29,6 +29,8 @@ const GateRequirementError = NamedError.create(
 interface GateHandlerInput {
   readonly value: PlainValue;
   readonly params: PlainValue;
+  /** The decide input's condition fields (#1258): op/operation/role/sessionId as evaluated. */
+  readonly when: Readonly<Record<string, PlainValue>>;
   /** The row's requires collection: only `how.ref` and declared `how.requires` resolve. */
   readonly service: (ref: string) => GateHandler;
 }
@@ -107,10 +109,11 @@ export function applyRow(
   state: FoldState,
   inputHash: string,
   handlers: HandlerResolver,
+  when: Readonly<Record<string, PlainValue>> = {},
 ): void {
   state.rowIds.push(row.id);
   if (row.do === "observe") {
-    observeRow(row, state, handlers);
+    observeRow(row, state, handlers, when);
     return;
   }
   if (row.how.metric !== undefined && row.how.limit !== undefined)
@@ -131,7 +134,7 @@ export function applyRow(
     state.verdict = foldVerdict(state.verdict, row.how.verdict);
     return;
   }
-  if (row.how.ref !== undefined) consultRow(row, row.how.ref, state, handlers);
+  if (row.how.ref !== undefined) consultRow(row, row.how.ref, state, handlers, when);
 }
 
 /**
@@ -145,11 +148,13 @@ function invokeGuarded(
   handler: GateHandler,
   value: PlainValue,
   handlers: HandlerResolver,
+  when: Readonly<Record<string, PlainValue>>,
 ): GateHandlerResult {
   const allowed = new Set([row.how.ref, ...(row.how.requires ?? [])]);
   return handler({
     value: clonePlain(value),
     params: row.how.params ?? null,
+    when: Object.freeze({ ...when }),
     service: (requested) => {
       const resolved = allowed.has(requested) ? handlers?.(requested) : undefined;
       if (resolved === undefined) throw new GateRequirementError({ rowId: row.id, ref: requested });
@@ -164,7 +169,12 @@ function invokeGuarded(
  * but nothing an observer returns, mutates, or throws can change the verdict
  * or value — a failure is recorded as a fact and the decision stands.
  */
-function observeRow(row: GateRow, state: FoldState, handlers: HandlerResolver): void {
+function observeRow(
+  row: GateRow,
+  state: FoldState,
+  handlers: HandlerResolver,
+  when: Readonly<Record<string, PlainValue>>,
+): void {
   const ref = row.how.ref;
   if (ref === undefined) return;
   const handler = handlers?.(ref);
@@ -174,7 +184,7 @@ function observeRow(row: GateRow, state: FoldState, handlers: HandlerResolver): 
   }
   let result: GateHandlerResult;
   try {
-    result = invokeGuarded(row, handler, state.value, handlers);
+    result = invokeGuarded(row, handler, state.value, handlers, when);
   } catch (cause) {
     if (GateRequirementError.isInstance(cause))
       state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });
@@ -194,6 +204,7 @@ function consultRow(
   ref: string,
   state: FoldState,
   handlers: HandlerResolver,
+  when: Readonly<Record<string, PlainValue>>,
 ): void {
   const handler = handlers?.(ref);
   if (handler === undefined) {
@@ -203,7 +214,7 @@ function consultRow(
   }
   let result: GateHandlerResult;
   try {
-    result = invokeGuarded(row, handler, state.value, handlers);
+    result = invokeGuarded(row, handler, state.value, handlers, when);
   } catch (cause) {
     if (!GateRequirementError.isInstance(cause)) throw cause;
     state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });

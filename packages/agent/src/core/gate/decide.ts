@@ -1664,7 +1664,10 @@ function replayRecordedValue(
 
 function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["verdict"] {
   const parsed = RowVerdictType.safeParse(verdict);
-  if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
+  // "guard" is a row shape, never an evaluation outcome (#1258): a guard row
+  // folds to allow/deny/require_approval, so a recorded "guard" is malformed.
+  if (!parsed.success || parsed.data === "guard")
+    throw new ExecutionApprovalError({ code: "stale_approval" });
   return parsed.data;
 }
 function assertFresh(request: ExecutionRequest, captured: ReturnType<SessionHandleStore.SessionKernel["requestById"]>): void {

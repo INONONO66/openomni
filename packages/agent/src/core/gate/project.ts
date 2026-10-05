@@ -58,6 +58,14 @@ function projectedDoHow(row: CompiledRow): Pick<GateRow, "do" | "how"> {
           ...(row.verdict.config === undefined ? {} : { params: row.verdict.config }),
         },
       };
+    case "guard":
+      return {
+        do: "gate",
+        how: {
+          ref: row.verdict.ref,
+          ...(row.verdict.config === undefined ? {} : { params: row.verdict.config }),
+        },
+      };
     case "obligation":
       return {
         do: "gate",
@@ -125,7 +133,9 @@ export function projectGeneration(
   const gate = compileGateRows<MessagePolicyContext>({
     table,
     rows: gateRows,
-    handlers: [...registry.transformers, ...registry.obligations].map(({ name }) => name),
+    handlers: [...registry.transformers, ...registry.obligations, ...(registry.guards ?? [])].map(
+      ({ name }) => name,
+    ),
     generation,
     matchers,
   });

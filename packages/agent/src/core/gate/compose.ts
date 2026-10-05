@@ -124,7 +124,8 @@ export function compileGateRows<Context = never>(
     }
     const state = initialFoldState(input.value);
     for (const entry of entries) {
-      if (matches(entry, input)) applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers);
+      if (matches(entry, input))
+        applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers, input.when);
     }
     const decision: GateDecision = {
       point,

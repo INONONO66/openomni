@@ -21,6 +21,12 @@ export interface NamedTransformer {
   readonly apply: (args: PlainValue, config: PlainValue) => PlainValue;
 }
 
+/** A consulted gate guard (#1258): decides per input; invoked under the row's requires guard. */
+export interface NamedGuard {
+  readonly name: string;
+  readonly decide: GateHandler;
+}
+
 interface NamedObligation {
   readonly name: string;
 }
@@ -28,6 +34,8 @@ interface NamedObligation {
 export interface HandlerTable {
   readonly transformers: readonly NamedTransformer[];
   readonly obligations: readonly NamedObligation[];
+  /** Consulted gate guards (#1258); absent means none. */
+  readonly guards?: readonly NamedGuard[];
 }
 
 export const HandlerTableError = NamedError.create(
@@ -43,7 +51,7 @@ export const HandlerTableError = NamedError.create(
 /** Copies definitions, never freezes caller objects or exposes mutable Maps. */
 export function createHandlerTable(input: HandlerTable): HandlerTable {
   const names = new Set<string>();
-  for (const entry of [...input.transformers, ...input.obligations]) {
+  for (const entry of [...input.transformers, ...input.obligations, ...(input.guards ?? [])]) {
     if (!PolicyRef.safeParse(entry.name).success)
       throw new HandlerTableError({ code: "invalid_ref", ref: entry.name });
     if (names.has(entry.name))
@@ -55,6 +63,9 @@ export function createHandlerTable(input: HandlerTable): HandlerTable {
       input.transformers.map(({ name, apply }) => Object.freeze({ name, apply })),
     ),
     obligations: Object.freeze(input.obligations.map(({ name }) => Object.freeze({ name }))),
+    guards: Object.freeze(
+      (input.guards ?? []).map(({ name, decide }) => Object.freeze({ name, decide })),
+    ),
   });
 }
 

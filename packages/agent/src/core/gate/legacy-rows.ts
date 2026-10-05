@@ -8,7 +8,7 @@ import {
 } from "@openomni/protocol";
 import { z } from "zod";
 import { freezePlain } from "./match";
-import type { HandlerTable, NamedTransformer } from "./registry";
+import type { HandlerTable, NamedGuard, NamedTransformer } from "./registry";
 
 /**
  * Historical row decoding (#1251): the compile error contract and the parser
@@ -113,8 +113,9 @@ export const Match = z
 export type Match = z.infer<typeof Match>;
 
 type CompiledVerdict =
-  | Exclude<RowVerdict, { type: "transform" }>
-  | (Extract<RowVerdict, { type: "transform" }> & { readonly apply: NamedTransformer["apply"] });
+  | Exclude<RowVerdict, { type: "transform" } | { type: "guard" }>
+  | (Extract<RowVerdict, { type: "transform" }> & { readonly apply: NamedTransformer["apply"] })
+  | (Extract<RowVerdict, { type: "guard" }> & { readonly decide: NamedGuard["decide"] });
 
 export interface CompiledRow {
   readonly name: string;
@@ -230,6 +231,19 @@ function resolveVerdict(
           ref: verdict.ref,
         });
       return Object.freeze({ ...verdict, apply: transformer.apply });
+    }
+    case "guard": {
+      const guard = (registry.guards ?? []).find(({ name }) => name === verdict.ref);
+      if (guard === undefined)
+        throw new PolicyCompileError({
+          code: "unknown_ref",
+          generation,
+          ruleName: row.name,
+          kind: row.kind,
+          phase: row.phase,
+          ref: verdict.ref,
+        });
+      return Object.freeze({ ...verdict, decide: guard.decide });
     }
     case "obligation":
       if (!registry.obligations.some(({ name }) => name === verdict.ref))

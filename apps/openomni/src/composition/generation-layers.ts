@@ -38,14 +38,18 @@ function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTabl
   const transformers = [...Core.KERNEL_POLICY_REGISTRY.transformers];
   const obligations = [...Core.KERNEL_POLICY_REGISTRY.obligations];
   const known = new Set([...transformers, ...obligations].map((entry) => entry.name));
+  const guards = [...(Core.KERNEL_POLICY_REGISTRY.guards ?? [])];
   for (const [name, handler] of generation.handlers) {
     if (known.has(name)) continue;
     known.add(name);
     if ("apply" in handler && typeof handler.apply === "function")
       transformers.push({ name, apply: handler.apply as Core.NamedTransformer["apply"] });
+    else if ("decide" in handler && typeof handler.decide === "function")
+      // A consulted gate guard (#1258): the handler decides per input.
+      guards.push({ name, decide: handler.decide as Core.NamedGuard["decide"] });
     else obligations.push({ name });
   }
-  return { transformers, obligations };
+  return { transformers, obligations, guards };
 }
 
 export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
