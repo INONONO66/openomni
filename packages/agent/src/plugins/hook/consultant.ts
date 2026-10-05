@@ -1,5 +1,5 @@
 import { canonicalDigest, type PlainValue } from "@openomni/protocol";
-import { Effect, type Scope } from "effect";
+import { Clock, Effect, type Scope } from "effect";
 import { z } from "zod";
 import type {
   ConsultantSeed,
@@ -157,7 +157,7 @@ export function hookProcessConsultant(
         calls += 1;
         const id = `${input.rowId}#${calls}`;
         const after = seed.cursor?.() ?? null;
-        return hook
+        const call = hook
           .call({
             id,
             point: input.point,
@@ -175,6 +175,9 @@ export function hookProcessConsultant(
               return resultOf(outcome);
             }),
           );
+        // #1256 r5 H-2: the call deadline runs on the seeded clock when one is
+        // injected (TestClock in tests), else the executing fiber's clock.
+        return seed.clock === undefined ? call : Effect.provideService(call, Clock.Clock, seed.clock);
       });
   });
 }

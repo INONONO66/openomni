@@ -12,7 +12,7 @@ type LedgerError = Core.LedgerError;
 const LlmLive = Model.LlmLive;
 type Llm = Model.Llm;
 import { pid } from "node:process";
-import { Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
+import { type Clock, Context, Data, Effect, Layer, type ManagedRuntime, type Scope, flow } from "effect";
 import {
   type AppLedger,
   appLedgerLayer,
@@ -23,7 +23,7 @@ import {
 } from "./composition/cluster-runtime";
 import { resolveAlarmDrain } from "./config";
 import { ComposedGeneration, composedHolderOf, emptyComposition } from "./composition/composed";
-import { GenerationLayersLive } from "./composition/generation-layers";
+import { GenerationLayersLive, HookConsultClock } from "./composition/generation-layers";
 import { AppPointTable, composedPointTable } from "./composition/point-table";
 import { captureNow, platformEntropy, wallClockLayer } from "./composition/platform";
 
@@ -87,6 +87,12 @@ export interface AppRuntimeOptions {
   readonly clusterClock?: "injected";
   /** Injected entropy source (#1245); absent = the platform CSPRNG. */
   readonly entropy?: EntropySource;
+  /**
+   * The Effect Clock hook consult deadlines run on (#1256 r5 H-2); absent =
+   * the executing fiber's clock. Tests inject a TestClock so a hook call's
+   * timeout advances deterministically instead of on wall time.
+   */
+  readonly hookClock?: Clock.Clock;
   readonly observations?: Context.Service.Shape<typeof ObservationSink>;
   readonly llm?: Layer.Layer<Llm>;
   /** The composed-generation holder (#1255 P3): boot composes the manifest and injects it; absent = the empty composition. */
@@ -130,8 +136,10 @@ function wiredLayer(
   });
   const process = AgentProcessLive(observations, entropy);
   const pointTable = Layer.succeed(AppPointTable, composedPointTable(options.capabilities));
+  const consultClock =
+    options.hookClock === undefined ? Layer.empty : Layer.succeed(HookConsultClock, options.hookClock);
   const generations = GenerationLayersLive.pipe(
-    Layer.provideMerge(Layer.mergeAll(process, composed, plane, pointTable)),
+    Layer.provideMerge(Layer.mergeAll(process, composed, plane, pointTable, consultClock)),
   );
   const hostClock =
     options.clusterClock === "injected" && options.now !== undefined

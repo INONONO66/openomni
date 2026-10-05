@@ -9,7 +9,7 @@
  */
 import type { HandlerTable as PolicyRegistry, NamedConsultant } from "./gate/compile";
 import { canonicalDigest, CORE_POINT_RECORDS, type PlainValue } from "@openomni/protocol";
-import { Context, Effect, Schema, type Scope } from "effect";
+import { type Clock, Context, Effect, Schema, type Scope } from "effect";
 import type {
   BundleContract,
   BundleGateRow,
@@ -44,6 +44,12 @@ export interface ConsultantSeed {
    * older entries evict first. Default 256.
    */
   readonly lateWindow?: number;
+  /**
+   * The Effect Clock a consult call's deadline runs on (#1256 r5 H-2);
+   * absent = the executing fiber's clock. The composition threads a test's
+   * injected TestClock here so hook deadlines advance deterministically.
+   */
+  readonly clock?: Clock.Clock;
 }
 
 /**

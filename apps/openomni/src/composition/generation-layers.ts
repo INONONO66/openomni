@@ -18,7 +18,7 @@ type SessionError = Core.SessionError;
 type SessionRuntime = Core.SessionRuntime;
 const compilePolicySnapshot = Core.compilePolicySnapshot;
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type PlainValue, type SessionGeneration } from "@openomni/protocol";
-import { Context, Effect, Layer, Scope, Semaphore } from "effect";
+import { type Clock, Context, Effect, Layer, Option, Scope, Semaphore } from "effect";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
@@ -54,6 +54,15 @@ function composedPolicyRegistry(
 }
 
 /**
+ * The Effect Clock hook consult deadlines run on when a composition injects
+ * one (#1256 r5 H-2): tests mount a TestClock here so a hook call's timeout
+ * advances deterministically. Absent, deadlines ride the fiber's own clock.
+ */
+export class HookConsultClock extends Context.Service<HookConsultClock, Clock.Clock>()(
+  "@openomni/openomni/HookConsultClock",
+) {}
+
+/**
  * The generation's asynchronous consultants (#1256 r2 H-1): each registered
  * `ConsultantHandler` (the hook capability's `hook/process`) acquires inside
  * the generation Layer's Scope — the PID lifetime — with the rows that name
@@ -62,7 +71,7 @@ function composedPolicyRegistry(
  */
 function acquireConsultants(
   generation: Bundle.Generation,
-  ports: Pick<Bundle.ConsultantSeed, "late" | "cursor">,
+  ports: Pick<Bundle.ConsultantSeed, "late" | "cursor" | "clock">,
 ): Effect.Effect<readonly Core.NamedConsultant[], Core.SessionError, Scope.Scope> {
   return Effect.gen(function* () {
     const consultants: Core.NamedConsultant[] = [];
@@ -177,8 +186,10 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
           // #1256 H-3: the consultant seed's session-scoped ports — the
           // journal-head cursor captured at call time and the late door.
           const late = source.deliverLate;
+          const consultClock = yield* Effect.serviceOption(HookConsultClock);
           const consultants = yield* acquireConsultants(generation, {
             cursor: () => plane.openKernel(sessionId).latestAction(sessionId)?.ordinal ?? 0,
+            ...(Option.isSome(consultClock) ? { clock: consultClock.value } : {}),
             ...(late === undefined
               ? {}
               : {

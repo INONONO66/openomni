@@ -6,7 +6,7 @@ import { Bundle, Core, Model } from "@openomni/agent";
 import { L0Observation } from "@openomni/protocol";
 type RunInput = Model.RunInput;
 type Sink = Model.Sink;
-import { Context, Effect, Layer } from "effect";
+import { Clock, Context, Effect, Layer } from "effect";
 import {
   hooksJsonBundle,
   readHooksJson,
@@ -30,7 +30,7 @@ import { executionReads } from "../../../packages/agent/test/helpers/execution-r
 import { isolated, isolatedLedger } from "../../../packages/agent/test/helpers/isolated";
 import { testExecutor, runAgentSync } from "../../../packages/agent/test/helpers/executor";
 import { catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
-import { runEffect } from "./helpers/effect";
+import { runEffect, testClockRuntime } from "./helpers/effect";
 import { eventSignal } from "./helpers/event-signal";
 import { testEntropy } from "./helpers/test-entropy";
 
@@ -931,13 +931,22 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
     hooksPath,
     JSON.stringify({
       UserPromptSubmit: [
-        { command: [process.execPath, script, `http://127.0.0.1:${barrier.port}/`], timeoutMs: 250 },
+        // Ten minutes: wall time can never fire this deadline inside the test
+        // window — only the injected TestClock below can, which PROVES the
+        // deadline runs on the injected clock (#1256 r5 H-2).
+        { command: [process.execPath, script, `http://127.0.0.1:${barrier.port}/`], timeoutMs: 600_000 },
       ],
     }),
   );
   const config = suite.config("hooks-json-late-state-", { hooksPath });
+  // #1256 r5 H-2: the call deadline runs on an injected TestClock — it fires
+  // only when this test advances it, never on wall time.
+  const clock = testClockRuntime();
+  suite.defer(() => clock.dispose());
+  const hookClock = await clock.run(Clock.clockWith(Effect.succeed));
   const app = await suite.boot({
     config,
+    hookClock,
     llm: {
       resolveModel: fakeProviderModel,
       run: (input: RunInput, sink: Sink) =>
@@ -964,13 +973,14 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
   try {
     // Turn 1: the hook HOLDS the call past its deadline — fail-closed deny.
     ws.send(JSON.stringify({ type: "message", eventId: "late-hold", text: "hold me please" }));
-    // Two barriers, both pushes: the child's receipt (it HOLDS request #1)
-    // and the COMMITTED deny decision (the deadline already fired — the call
-    // settled as a timeout). Only after both can the flush happen, so the
-    // held reply is late BY CONSTRUCTION: the committed deny is the deadline
-    // fact itself, and the flush signal is ordered strictly after it —
-    // wall-clock can no longer race the second reply against the deadline.
+    // Ordered barriers, all pushes: the child's receipt (it HOLDS request
+    // #1), THEN the deadline — advanced deterministically on the injected
+    // TestClock, so the call times out exactly when this test says so — THEN
+    // the committed deny decision (the settled timeout's fact). Only after
+    // all three does the flush happen, so the held reply is late BY
+    // CONSTRUCTION: no wall-clock is anywhere in the ordering.
     const held = await heldRequest.promise;
+    await clock.adjust(600_000);
     await denied.promise;
     process.kill(held.pid, "SIGUSR2");
     const row = await lateRow.promise;
@@ -1362,24 +1372,6 @@ async function untilCommitted(check: () => boolean, label: string, timeoutMs = 2
   }
 }
 
-/**
- * Bounded OS-reap observation: process death has NO committed fact to
- * subscribe to, so `kill(pid, 0)` is probed until ESRCH (the issue's one
- * sanctioned poll). Timeout is a failure guard, never a synchronizer.
- */
-async function untilReaped(pid: number, label: string, timeoutMs = 10_000) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return;
-    }
-    if (Date.now() > deadline) throw new Error(label);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}
-
 test("H-3(b) e2e: a real generation rotation mid-turn — the old turn keeps its captured hook PID, the next turn uses the new one, the old PID is reclaimed", async () => {
   const dir = suite.tempDir("hooks-json-rotate-");
   const script = join(dir, "rotate-hook.js");
@@ -1411,6 +1403,19 @@ test("H-3(b) e2e: a real generation rotation mid-turn — the old turn keeps its
     }),
   );
   let calls = 0;
+  // The app spawns its hook children IN THIS PROCESS: capturing `exited` at
+  // spawn time is the exit signal, subscribed before any retirement — process
+  // reap is then awaited, never probed.
+  const spawnExits = new Map<number, Promise<number>>();
+  const nativeSpawn = Bun.spawn;
+  Bun.spawn = ((...args: Parameters<typeof Bun.spawn>) => {
+    const child = nativeSpawn(...args);
+    spawnExits.set(child.pid, child.exited);
+    return child;
+  }) as typeof Bun.spawn;
+  suite.defer(() => {
+    Bun.spawn = nativeSpawn;
+  });
   const app = await suite.boot({
     config,
     toolDefinitions: [probeTool],
@@ -1515,7 +1520,13 @@ test("H-3(b) e2e: a real generation rotation mid-turn — the old turn keeps its
   ws.send(JSON.stringify({ type: "message", eventId: "rotate-turn-2", text: "probe again" }));
   await untilCommitted(() => calls >= 5, "turn two never ran");
   await untilCommitted(() => lastTerminal(sessionId) === "result", "turn two never finished");
-  await untilReaped(oldPid, "old generation hook PID never reclaimed");
+  const oldExit = spawnExits.get(oldPid);
+  if (oldExit === undefined) throw new Error("old hook PID was not spawned in this process");
+  const reaped = eventSignal<number>("old generation hook PID reclaimed", 10_000);
+  oldExit.then(reaped.resolve, reaped.reject);
+  await reaped.promise;
+  // The exit signal is the reap fact: the PID is gone.
+  expect(() => process.kill(oldPid, 0)).toThrow();
   // Turn 2 ran on the recomposed generation: a NEW hook process served it.
   const newPid = pidFor("new-turn-probe");
   expect(newPid).not.toBe(oldPid);
