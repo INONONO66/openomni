@@ -911,7 +911,7 @@ for await (const chunk of Bun.stdin.stream()) {
 }
 `;
 
-test("H-3 e2e: a hook reply that lands after its call timed out re-enters the session as a hook.late action row", async () => {
+test("H-3 e2e: a hook reply that lands after its call timed out re-enters through the production late door and closes STALE past the compaction head", async () => {
   const dir = suite.tempDir("hooks-json-late-");
   const script = join(dir, "late-hook.js");
   writeFileSync(script, LATE_SCRIPT);
@@ -938,21 +938,43 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
       ],
     }),
   );
-  const config = suite.config("hooks-json-late-state-", { hooksPath });
+  const config = suite.config("hooks-json-late-state-", {
+    hooksPath,
+    compactionSummarizer: false,
+  });
   // #1256 r5 H-2: the call deadline runs on an injected TestClock — it fires
   // only when this test advances it, never on wall time.
   const clock = testClockRuntime();
   suite.defer(() => clock.dispose());
   const hookClock = await clock.run(Clock.clockWith(Effect.succeed));
+  // A real mid-run compaction (#1256 r5 H-3): once `constrained` flips, the
+  // provider reports a 700-token context at 650 used, so the production run
+  // compacts between attempts — the committed head the late cursor is stale
+  // against.
+  let calls = 0;
+  let constrained = false;
+  let constrainedCalls = 0;
   const app = await suite.boot({
     config,
     hookClock,
     llm: {
-      resolveModel: fakeProviderModel,
+      resolveModel: (model) =>
+        fakeProviderModel(model).pipe(
+          Effect.map((resolved) => ({ ...resolved, limit: { context: constrained ? 700 : 100_000 } })),
+        ),
       run: (input: RunInput, sink: Sink) =>
         Effect.sync(() => {
+          calls += 1;
+          if (constrained) constrainedCalls += 1;
           sink.onMessage(
-            assistantMessage(input, { id: "late-1", text: "pong", createdAt: Date.now() }),
+            assistantMessage(input, {
+              call: calls,
+              reason: constrained && constrainedCalls === 1 ? "tool-calls" : "stop",
+              text: `pong ${calls} ${"filler ".repeat(30)}`,
+              tokens: constrained
+                ? { input: 650, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
+                : undefined,
+            }),
           );
           return { type: "stop" as const };
         }),
@@ -963,12 +985,12 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
   // Subscribe BEFORE acting: the late reply must surface as a committed row
   // sourced hook.late — the one `deliver` door, never this turn's decision.
   const lateRow = eventSignal<{ sessionId: string; id: string }>("hook.late action row", 15_000);
-  const denied = eventSignal<void>("timed-out prompt denial", 15_000);
+  const denied = eventSignal<string>("timed-out prompt denial", 15_000);
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     const node = plane.openKernel(event.sessionId).actionById(event.id);
     const rendered = JSON.stringify({ intent: node?.intent.value ?? null, effect: node?.effect?.value ?? null });
     if (rendered.includes("hook.late")) lateRow.resolve({ sessionId: event.sessionId, id: event.id });
-    if (event.kind === "policy.decision" && rendered.includes('"verdict":"deny"')) denied.resolve();
+    if (event.kind === "policy.decision" && rendered.includes('"verdict":"deny"')) denied.resolve(event.sessionId);
   });
   try {
     // Turn 1: the hook HOLDS the call past its deadline — fail-closed deny.
@@ -981,17 +1003,67 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
     // CONSTRUCTION: no wall-clock is anywhere in the ordering.
     const held = await heldRequest.promise;
     await clock.adjust(600_000);
-    await denied.promise;
+    const sessionId = await denied.promise;
+    const kernel = () => plane.openKernel(sessionId);
+    // Seed turns, then the constrained turn: the production run executes a
+    // REAL compaction (committed head) while the first hook reply stays held.
+    for (let index = 0; index < 6; index += 1) {
+      const reply = nextResidentTurn(plane);
+      ws.send(
+        JSON.stringify({ type: "message", eventId: `late-seed-${index}`, text: `seed ${index} ${"filler ".repeat(30)}` }),
+      );
+      await reply;
+    }
+    constrained = true;
+    const compacted = nextResidentTurn(plane);
+    ws.send(JSON.stringify({ type: "message", eventId: "late-compact", text: "compact now" }));
+    await compacted;
+    constrained = false;
+    await untilCommitted(() => kernel().compactionHead(sessionId) > 0, "compaction never executed");
+    const head = kernel().compactionHead(sessionId);
+    // AFTER the compaction, the flush: the held reply traverses the
+    // production late door (`deliverLate` → entity Deliver) as an action row.
     process.kill(held.pid, "SIGUSR2");
     const row = await lateRow.promise;
-    const node = plane.openKernel(row.sessionId).actionById(row.id);
+    expect(row.sessionId).toBe(sessionId);
+    const node = kernel().actionById(row.id);
     const rendered = JSON.stringify({ intent: node?.intent.value ?? null, effect: node?.effect?.value ?? null });
     // The row is sourced hook.late; its content carries the hook ref, the
     // typed late result and the CALL-time after cursor.
     expect(rendered).toContain("hook.late");
     expect(rendered).toContain(Bundle.HOOK_PROCESS_REF);
     expect(rendered).toContain('\\"type\\":\\"gate\\"');
-    expect(rendered).toContain("after");
+    // The committed intent carries the CALL-time cursor — captured at turn 1,
+    // strictly BEHIND the executed compaction head.
+    const intentAfter = (node?.intent.value as { after?: number } | null)?.after;
+    if (typeof intentAfter !== "number") throw new Error("late row intent missing its after cursor");
+    expect(intentAfter).toBeLessThan(head);
+    // The next boundary closes it STALE: a consumedStale fact on the turn
+    // chain, zero ordinary delivery, an empty pending fold. (The pending
+    // followUp action wakes the entity's own drain; the extra prompt below
+    // only guarantees a boundary has run before the assertions read the file.)
+    const closing = nextResidentTurn(plane);
+    ws.send(JSON.stringify({ type: "message", eventId: "late-close", text: "after the flush" }));
+    await closing;
+    if (config.sessionsDir === undefined) throw new Error("fixture config missing sessionsDir");
+    const db = new Database(join(config.sessionsDir, `${sessionId}.sqlite`), { readonly: true });
+    try {
+      const actions = db
+        .query<{ kind: string; intent: string }, []>("SELECT kind, intent FROM action ORDER BY ordinal ASC")
+        .all();
+      const deliveries = actions.filter(
+        (action) => (JSON.parse(action.intent) as { inboxId?: string }).inboxId === row.id,
+      );
+      expect(deliveries).toEqual([]);
+      const closures = actions
+        .filter((action) => action.kind === "turn")
+        .map((action) => (JSON.parse(action.intent) as { consumedStale?: string[] }).consumedStale)
+        .filter((value) => value !== undefined);
+      expect(closures.some((list) => list?.includes(row.id))).toBe(true);
+    } finally {
+      db.close();
+    }
+    expect(kernel().pendingMessages(sessionId)).toEqual([]);
   } finally {
     unsubscribe();
   }

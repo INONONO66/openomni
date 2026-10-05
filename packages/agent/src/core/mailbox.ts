@@ -72,9 +72,14 @@ export function decideSessionAdmission(snapshot: AdmissionSnapshot): AdmissionDe
 
 function decideIdleInbox(pending: readonly Inbox.Row[]): AdmissionDecision {
   if (pending.length === 0) return { kind: "stop" };
-  const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
-  if (firstPrompt === 0) return { kind: "start" };
-  return { kind: "consume", items: firstPrompt > 0 ? pending.slice(0, firstPrompt) : pending };
+  // #1256 r5 H-3: an `action` input heads a turn like a prompt — the turn's
+  // boundary consumption is the ONE owner of its fate (a live one delivers,
+  // a stale one closes via `turn.consumed.stale`). Noop-consuming it here
+  // would drop a late hook result without the durable closure fact. Only
+  // leading control signals are swallowed.
+  const firstInput = pending.findIndex((item) => item.kind === "prompt" || item.kind === "action");
+  if (firstInput === 0) return { kind: "start" };
+  return { kind: "consume", items: firstInput > 0 ? pending.slice(0, firstInput) : pending };
 }
 
 export function createSessionAdmission(

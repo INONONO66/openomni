@@ -456,7 +456,10 @@ test("H-3(a): a stale late-hook action through the REAL entity deliver door clos
         content: "{}",
         delivery: "steer",
         after: 1,
-        source: JSON.stringify({ kind: "hook.late", after: 1 }),
+        // The cursor rides the BODY only (#1256 r5 H-3): the committed row's
+        // origin.after must come from the entity's body->intent merge, so a
+        // regression there fails this test instead of hiding behind a copy.
+        source: JSON.stringify({ kind: "hook.late" }),
       });
       expect(receipt.existed).toBe(false);
       yield* Deferred.succeed(release, undefined);
