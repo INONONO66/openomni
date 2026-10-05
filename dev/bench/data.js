@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791206400368,
+  "lastUpdate": 1791207380347,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -78563,6 +78563,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 126430,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d570d8ef1cb1ea3997b900adf3fc8012141625a",
+          "message": "Add a removable hook capability plus a hooks-json product bundle (#1256) (#1292)\n\n* chore(#1256): open the hook-capability branch on main 5362b3bd\n\n* feat(agent): hook capability with scoped JSON-lines process service (#1256)\n\n* feat(app): hooks-json bundle, action capability and boot wiring (#1256)\n\nThe hooks-json bundle compiles the Owner's hooks JSON file into gate rows\non the four mapped points (PreToolUse/PostToolUse/UserPromptSubmit/\nSessionStart) over the hook capability's handler; unmapped events, bad\nbytes and invalid shapes refuse boot with the typed app invariant failure\nbefore any listener exists. The manifest grows the action capability (the\nhook capability's dependency root) and the bundle; config/env gain\nOPENOMNI_HOOKS_PATH. The app test proves row compilation, the secrets\nguard transform, the off cascade (action -> hook -> hooks-json), the\nseam_missing refusal, catalog policy seeding through real boot, and the\ncapability-removed one-turn gate with a golden-stable journal chain\nacross two pinned-entropy runs.\n\n* docs(#1256): hook plugin README, implementation-status receipt, AGENTS stamp, SLOP note\n\n* fix(agent): H-2 bound hook stdout framing at maxLineBytes, poison fail-closed (#1256)\n\nA response line or unterminated stdout buffer over maxLineBytes (default\n64 KiB) is a framing violation: every in-flight call settles the typed\nframing failure (deny at the gate), the PID is killed, and new calls are\nrefused. Tests cover the oversized-line and unterminated-flood paths.\n\n* test(agent): M-1 split-frame decode — one JSON line across two stdout writes (#1256)\n\n* feat(agent,app): H-1 consulted-gate channel — hook/process registered as the named service compiled rows consult (#1256)\n\n- protocol: RowVerdict gains the 'consult' variant (ref + optional config).\n- gate: HandlerTable gains async NamedConsultants; the compiled snapshot's\n  new evaluateEffect resolves matched consult rows through them and folds\n  the settled results into the sync gate via prepared-by-row-id results.\n  The sync evaluate path on a consult row stays fail-closed\n  (handler_unavailable -> deny). Executor decide() and configureAuthority\n  use evaluateEffect when present.\n- hook plugin: hookProcessConsultant — one PID per distinct configured\n  command, spawned eagerly in the generation Layer's Scope (spawn failure\n  refuses the generation); every process failure folds deny{bundle_failure}.\n- app: hooks-json command rows now seed {type: consult} instead of refusing\n  the boot; the generation layer acquires consultants in the generation\n  scope.\n\n* test(app): M-2 real gate e2e — stub hook script consulted on prompt.pre, verdicts fold and policy.decision rows are durable (#1256)\n\n* feat(agent,app): H-1 two-phase consulted gate — async hook rows decide real verdicts (#1256)\n\nReview r1 H-1 and M-2: configured command hooks now execute instead of\nrefusing boot. A capability handler may register a 'consultant' (async\nnamed policy service); the composition acquires it inside the generation\nLayer's Scope (one PID pool per generation, spawn failure refuses the\ngeneration). CompiledPolicySnapshot gains evaluateEffect: the matched\nrows' consultants resolve first (Effect, bounded by the hook process\ntimeout), then the unchanged synchronous fold runs with their settled\nresults prepared, so policy.decision carries the consulted rows and\ninputHash replay keeps working. Seeded command rows travel as a new\nRowVerdict member {type:'consult', ref, config} because the legacy row\nvocabulary had no consulted-gate shape (policy-seed previously threw).\nFailures keep the hook_timeout code and fold deny{bundle_failure} on\ngate rows, observe rows only annotate. The D2 'command rows refuse\nboot' test is replaced by a consult-verdict seed test and an e2e\nUserPromptSubmit gate test journaling durable policy.decision rows.\n\nFinding: H-1, M-2 (review-1256-r1.md)\n\n* feat(app,agent): PostToolUse compiles audit-only — observe consult rows annotate, never block (#1256)\n\nThe consult RowVerdict member gains 'observe: true'; projection emits the\nobserve row, policy-seed carries the shape, and the hooks-json bundle\ncompiles PostToolUse command entries as observe rows (a finished tool\ncall cannot be retroactively denied; its hook journals an annotation on\nthe policy.decision row instead).\n\nFinding: H-1 (review-1256-r1.md, observe leg)\n\n* feat(protocol,agent,app): H-3 late hook results — deliver as action rows with after cursor; stale closes via turn.consumed.stale (#1256)\n\n- process.ts: typed onLate port — a well-formed line whose call already timed\n  out surrenders {id, outcome} instead of being dropped.\n- consultant: captures the journal-head cursor at CALL time, remembers\n  timed-out ids (bounded window) and routes the late payload to seed.late\n  as {hook, id, result, after}.\n- composition: the generation layer seeds consultants with the session's\n  cursor and the app's deliverLate door; the app delivers late payloads\n  through the entity's one deliver path as 'action' rows (DeliverBody.after).\n- core/protocol: the after cursor rides the action row INTENT (per the\n  protocol 'action' declaration) and surfaces on Inbox.Row; turn intents gain\n  consumedStale; startTurn splits the backlog via staleActionBacklog\n  (after < compaction head -> closed via turn.consumed.stale, never consumed)\n  and the pending SQL projection excludes consumedStale-closed rows;\n  kernel.compactionHead reads the latest executed compaction.\n- tests: process-level onLate (TestClock timeout, ordered flush), consultant\n  late routing with call-time after, pure stale split, chain-fold closure.\n\n* test(app,agent): C-1 patch coverage — tools.add deny e2e, retryableOnce stop memo, hook stdin write-failure seam (#1256)\n\n- index.ts tools.add deny path: real e2e — a SessionStart hook consults on\n  session.open and denies the op; the facade configure fails typed with no\n  generation advance (hooks-json.test.ts).\n- index.ts stop() rejection path: extracted as retryableOnce (concurrent\n  callers join one run, rejection clears the memo for retry, success is\n  permanent) with a direct unit test.\n- process.ts write failure: Bun's FileSink swallows EPIPE, so the spawn seam\n  is now typed (HookChildProcess, default Bun.spawn); a test injects a child\n  whose stdin throws and asserts the typed exit failure with zero in flight.\n- hook stub script generalized: deny trigger rides argv.\n\n* fix(app-test): retryable-once deferred built from plain Promise, no ES2024 PromiseWithResolvers global\n\n[G-1] app tsconfig lib lacks the ES2024 global; check-types rc 2 -> 0. (#1256)\n\n* fix(agent-test): stale-action-backlog turn intent uses the real SessionGeneration.Snapshot type\n\n[G-4] TS2345 at 64,66: the literal lacked revertTo/bundles/systemPreset/systemBlocks/systemValue; parse via the protocol schema, no casts. (#1256)\n\n* fix(agent): written unknown -> 0; one typed owner for the after-cursor projection\n\n[G-2][L-1] fence.ts owns afterCursorOf (zod looseObject over PlainValue); commit.ts imports it instead of duplicating the cast; hook stdin seam returns void (admits Bun FileSink). check-written-types 1 -> 0. (#1256)\n\n* fix(agent): interruption-safe pending cleanup in the hook process call\n\n[H-2] Effect.onInterrupt removes the pending entry and settles the drain waiter, so an interrupted in-flight call can no longer deadlock generation disposal; bounded test with an injected silent child proves disposal completes and the child is killed. (#1256)\n\n* fix(agent): the stale split runs inside boundaryConsumption at EVERY boundary\n\n[H-1] boundaryConsumption takes the compaction head and returns {consumed, stale}; mailbox turn start and run.ts drainBoundary both close stale actions durably (turn intent / checkpoint consumedStale). Live-boundary test: a stale steer action delivered mid-turn closes via turn.consumed.stale with zero delivery. (#1256)\n\n* hook responses are fail-closed against their rows; rewrites reach model and executor\n\n[H-3] A consulted gate row folds a verdict-less response (rewrite/observe\nshape on a command row) to deny with ONE recorded fact\n(incompatible_response); 'missing verdict => allow' is forbidden.\nhooks-json guard entries declare their rewrite fields (UserPromptSubmit\ndefaults to body; tool events must spell them out; SessionStart refuses),\nand the declared fields ride how.fields + params into the live transform.\nrunExisting treats transform/obligation as allow-shaped and hands the pre\ndecision to its body; the prompt decision value is the registry's body\nfield, and mailbox/run deliver the REWRITTEN body - prompt.pre rewrites\nreach the model, tool.pre rewrites reach the executor (admitted intent).\nTests: gate-fold fail-closed units; hooks-json e2e for model-reaching\nprompt rewrite, executor-reaching bash.command rewrite, and the\nincompatible-response denial with its recorded fact.\n\n* seed refuses a sync kernel service named as a consult guard\n\n[G-3] gateRowPolicySeeds: a gate row whose ref is a registered SYNCHRONOUS\nkernel service (KERNEL_POLICY_REGISTRY transformers/obligations) without its\nobligation params throws AppInvariantError at seed time instead of seeding a\nconsult verdict the live plane can never serve. Unknown refs still seed\nconsult and refuse at compile (unknown_ref, #1251) - fail-closed either way.\npolicy-seed-rows.test.ts:45 passes again unweakened.\n\n* hook pool identity is the command; timeout and framing bounds ride each call\n\n[M-2] processKey digests the command only (argv; cwd/env not configurable\ntoday): one PID per distinct command per generation. HookCallInput carries\ntimeoutMs (required) and an optional per-call maxLineBytes that fails ONLY\nits own call as framing; the reader's absolute cap still poisons the PID.\nHookProcessConfig loses timeoutMs. Tests: consultant unit - two rows, same\ncommand, different timeouts share one PID and a bounded call fails alone;\nreal-boot e2e - two same-command rows spawn one PID per live generation\n(2 sessions => 2 PIDs, never 4), both consulted on one decision, and\nteardown (the rotation finalizer path) kills them all.\n\n* hook-plugin tests settle on acknowledged order, controlled chunks and the TestClock\n\n[M-1] Rotation proves child receipt of the held call with an ordered ack\nround-trip before SIGUSR2 (inFlight only proves the parent wrote). The\nsplit-frame case injects a child with an EXACT chunk boundary at byte 6 of\none response line (separate writes never guaranteed separate reader\nchunks). The late-consultant deadline rides the TestClock, driven by a loop\nbounded on the fiber settling - no real 250ms wait, no timing luck. Dead\nsplit/flush-split branches dropped from the scripted child.\n\n* hooks-json refusals assert the typed class and machine codes, not prose\n\n[M-4] AppInvariantError carries an optional machine-consumed code; every\nhooks-json refusal names one (unmapped_event, not_json, unreadable_path,\ninvalid_config, missing_rewrite_fields, session_start_rewrite). Tests assert\ninstanceof + code (+ the offending datum where the message carries it): the\nreadHooksJson matrix, the boot refusal object crossing suite.boot, and the\ntools.add denial via Effect.flip asserting AgentFailure _tag/operation/cause.\nThe no-generation-advance check stays.\n\n* every uncovered changed line earns a real test; late results typed end to end\n\n[G-5] New coverage: prepared observe-row results (annotation vs\nunrecorded_response fact), the missing-consult-ref compile refusal joining\nthe transform/obligation matrix, the consultant's rewrite fold (value +\noutput digest), late rewrite/observe payloads through seed.late, the\nlate-window eviction (ConsultantSeed.lateWindow, default 256), and an app\ne2e where a held hook reply lands after its 250ms deadline and re-enters\nthe session as a hook.late action row through the one deliver door\n(covers the composition's late lambda and deliverLate in index.ts).\nHookLateResult now types late outcomes as Exclude<HookOutcome, failure> -\nfailures settle calls and are never late - deleting the dead undefined\nbranch instead of pretending to test it.\n\n* format the r3-touched files with the repo formatter\n\n[r3 verification] ultracite fix over every file changed since e480cb3b;\nno behavioral change (all per-file suites re-run green, root and app\ncheck-types clean).\n\n* cover the consult and observe seed projections in policy-seed-rows\n\n[G-3][G-5] gateRowPolicySeeds now has direct assertions for the hook\nconsult verdict (PreToolUse guard) and the audit-only observe consult\n(PostToolUse) — closes the uncovered changed lines in policy-seed.ts.\n\n* Revert \"format the r3-touched files with the repo formatter\"\n\nThis reverts commit f2ae87d9c718b4f6415ba2c5e4d0939689cff68b.\n\n* a mid-turn steer deny exercises the run boundary's refusal door\n\n[G-5] the one changed line coverage left dark (run.ts drainBoundary's\nprompt-policy refusal) now has a real e2e: a steer-delivery prompt pushed\nthrough the entity's deliver door mid-turn is consulted at after_tools,\nthe hook denies it, the turn fails with the hook's reason and the model\nnever takes a second step.\n\n* the docs stamp tells the r3 truth\n\n[M-3] AGENTS.md and docs/implementation-status.md no longer describe the\nr1 state (no consulted channel, one PID per generation, static-green\nclaims): consulted gate rows are live at all four points with the\nfail-closed incompatible-response fold, guard field declarations, the\nhook.late door and seed-time kernel-service refusal; the pool key is the\ncommand argv with per-call timeouts; the gate results are the measured\nr3 numbers.\n\n* shutdown twice during an in-flight close joins one real stop()\n\n[L-1] the ruling's real-surface test exists and is bounded: boot the app\nfixture, race two app.stop() calls, assert promise identity and that a\nlater caller still gets the settled memo.\n\n* [M-1] malformed hook framing poisons the PID, not just the in-flight calls\n\nInvalid JSON and out-of-vocabulary verdicts now take the same disposition as\nan oversize line: dead flag, settle pending fail-closed, kill the child. A\nsubsequent call on that PID refuses (exit) instead of trusting a process\nwhose garbage could not be attributed to any request. The reused-PID framing\ntest is split into two single-acquisition poison tests asserting the child\ndies and a later call cannot obtain allow.\n\n* [H-2] the external rewrite path: a hooks-json command entry may declare do:\"rewrite\"\n\nThe consult verdict gains an optional rewrite flag (protocol RowVerdict):\nprojection turns consult{rewrite} into the do:\"rewrite\" gate row whose\ndeclared fields ride config.fields, and the fold applies the PREPARED\nconsultant response as a contained rewrite — a reply that is not a plain\nrecord touching ONLY the declared fields folds to deny with one\nincompatible_response fact (the sync transformer path is unchanged). A\nhooks-json command entry compiles do:\"rewrite\"+fields (UserPromptSubmit\ndefaults to body, SessionStart refuses, fields without do:\"rewrite\"\nrefuse); the live policy seed discriminates by the generation's registered\nconsultants so a rewrite row over hook/process seeds consult{rewrite}\ninstead of the sync transform that could never resolve.\n\ne2e: a real boot with an external PreToolUse rewrite hook and a real\ndispatched tool call — the executor receives the rewritten command and the\ntool.pre policy.decision row records the consulted rewrite (allow verdict,\nhook/process consulted, rewritten gate output). Unit coverage: gate-fold\ncontainment (within/outside/verdict-shaped), compiler projection + sync\nfail-closed + misdeclaration refusals, seed discrimination, bundle compile\nrefusals. Protocol dist rebuilt.\n\n* [H-1] the late-result e2e synchronizes on pushes, never polls\n\nThe late hook child POSTs a barrier receipt the moment it HOLDS request #1\nand flushes the held reply only on SIGUSR2. The test awaits two pushes —\nthe child receipt and the COMMITTED deny decision (the deadline fact\nitself) — then signals the flush, so the held reply is late by\nconstruction: no file polling, no setTimeout sleeps, no wall-clock race\nbetween the deadline and the flush. The second turn is gone; the late row\ncommits through the entity deliver door exactly as before.\n\n* [H-3] (a) the stale late-hook action travels the REAL entity deliver door\n\nOne test on the real Session entity: provision + executed compaction, then\ndeliver{kind:\"action\", delivery:steer, after:1, source:hook.late} through\nthe entity's Deliver RPC mid-turn while the PRODUCTION run loop\n(createSessionEntityRunTurn over resolved session services) holds the turn\nopen. The live after_tools boundary delivers nothing; the checkpoint\njournals turn.consumed.stale [stale-action]; the pending fold never\nsurfaces the row again. Harness: TestClusterOptions.runTurnPort installs a\ntest-built production port; sendDeliver carries after/source; the\ncommitted-terminal barrier wraps the activation store's sessions.commit\n(post-transaction push — no polling, no sleeps).\n\n* [H-3] (b) rotation e2e: the old turn keeps its captured hook PID through a REAL recompose\n\nOne shipped-composition test: turn 1 dispatches provision bundle_disable\n(monitor) — the PreToolUse hook consults the OLD generation's process —\nOwner consent approves mid-turn, the app recomposes, and the SAME turn's\nsecond tool call still consults the SAME pid (the captured consultant, not\nthe recomposed pool). Turn 2 adopts the recomposed generation (compose\nconfigure at turn start, generation +1): the old generation Scope closes\nand the old hook PID is reclaimed (bounded kill(pid,0) ESRCH probe — OS\nreaping has no committed fact); turn 2's consult logs a NEW live pid. Hook\nchild logs pid+request per consult; waits are committed-fact subscriptions\n(untilCommitted) throughout.\n\n* [L-1] receipts literal; retryableOnce off the barrel; config.ts back to base bytes\n\n- retryableOnce moves to the internal (non-barrel) src/retryable-once.ts:\n  index.ts and its two tests stay the only consumers; no public extraction.\n- config.ts reverts to the base commit's bytes plus ONLY the three hooksPath\n  hunks (doc comment, loadConfig env read, spread) — zero formatting churn.\n- hook README: one PID per DISTINCT COMMAND per generation; malformed\n  framing poisons the process (in-flight fail, PID marked dead and killed,\n  later calls refuse).\n- implementation-status: states literally that AppInvariantError.code is an\n  optional string (the code set is NOT closed at the type level) with the\n  exact codes the hooks-json reader emits; records the r4 PID-poison and\n  external consult{rewrite} semantics; suite receipts at r4 counts\n  (hook-plugin 19, hooks-json 21, policy-seed-rows 3, stale-action-backlog\n  6, retryable-once 2).\n\n* [H-2] the plain consulted GATE projection is covered beside the rewrite one\n\nnamed-registry gains the no-flag consult compile: the same consultant ref\nwithout rewrite projects do:\"gate\", the consultant's allow verdict folds\nthrough evaluateEffect and the input value is untouched — project.ts at\n100% lines in the gate coverage subset.\n\n* [L-1] loadConfig's OPENOMNI_HOOKS_PATH read is covered\n\nconfig.test.ts pins the env read the kept hooksPath hunks added: a trimmed\npath lands on config.hooksPath, a blank value means absent, and the key\njoins ENV_KEYS so the suite's save/restore isolation covers it.\n\n* [H-2] the rewrite-row seed branch is its own named helper\n\ngateRowVerdict crossed the cognitive-complexity cap (24 > 21) with the H-2\nconsult{rewrite} branch inlined; rewriteRowVerdict extracts it unchanged —\nroot lint green, policy-seed-rows 3/3, check-types 0.\n\n* [H-2] named-registry runs effects through the sanctioned test runner\n\ncheck-effect-boundaries flagged the two direct Effect.runPromise sites the\nH-2 tests added; runTestPromise (helpers/isolated) keeps the same failure\nsemantics — boundary gate exit 0, suite 11/11.\n\n* [H-1] async consultants fold in row order with each position's value\n\nThe probe fold pauses at the first unprepared async consult row and hands\nits consultant the value every earlier row already folded; evaluateEffect\nresolves consultations one at a time and runs the final fold with all\nsettled results prepared. A later guard now judges the value an earlier\nrewrite sends to the executor (r4 reviewer reproduction: deny, not allow).\ninputHash stays the input's identity, so decision replay is untouched.\n\n* [H-2] hook deadlines run on an injected TestClock; reap awaited by exit signal\n\nConsultantSeed gains an optional Effect Clock; the hook consultant provides\nit to each call, so the per-call timeout advances deterministically. The\ncomposition threads it as HookConsultClock through AppRuntimeOptions and the\napp fixture. The late test's deadline is ten minutes of FAKE time — only the\ninjected TestClock can fire it inside the test window, proving the seam.\nThe rotation test subscribes to each spawned hook child's exited promise at\nspawn time (before any retirement) and awaits that exit signal bounded by a\nfailure timeout; the setTimeout(resolve, 25) poll and its wrongly claimed\nissue-sanctioned exception are gone.\n\n* [H-3] a real late hook reply closes STALE through the production deliver door\n\nThe app-level late test now runs the FULL production path: real child holds\nthe first UserPromptSubmit call, the injected-clock deadline denies it, a\nreal mid-run compaction commits the head, SIGUSR2 flushes the held reply\nthrough deliverLate -> entity Deliver, and the next boundary closes the row\nvia turn.consumed.stale — asserted with zero ordinary delivery and an empty\npending fold.\n\nThat path exposed the production gap the r4 review predicted: the idle\nadmission rule noop-consumed any non-prompt-leading backlog, so an idle\nsession swallowed a late action row with no stale closure (and dropped live\nones without delivery). decideIdleInbox now lets an action input head a turn\nlike a prompt — the documented contract — so boundary consumption owns its\nfate.\n\nThe entity-level deliver test no longer duplicates the after cursor into the\nsource origin: the committed row's cursor must come from the entity's\nbody->intent merge.",
+          "timestamp": "2026-10-05T13:33:20Z",
+          "tree_id": "8a9bc455801aa610fe23f41c8aa7518761515db2",
+          "url": "https://github.com/INONONO66/openomni/commit/5d570d8ef1cb1ea3997b900adf3fc8012141625a"
+        },
+        "date": 1791207379396,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1095,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1975,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1551364,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 423958,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6952854,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 137,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1129,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 723,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 209051,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 843271,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 508987,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3520,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 13812215,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1509872,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19291,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 180691,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 981697,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 294135,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 17532820,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 223220,
             "unit": "ns/op"
           }
         ]
