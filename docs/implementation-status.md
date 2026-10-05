@@ -653,6 +653,10 @@ intra-package band edges now; the baseline is pinned shrink-only, every survivin
 entry is a pre-existing edge (one scanner hit on a lane-written comment was
 reworded away in review r1), and the provenance table is in the lane evidence.
 
+## #1259 slop cleanup band b1: protocol core and gateway tests (epic #1260)
+
+Band b1 of the #1259 cleanup ladder landed on `epic1260/1259-b1-protocol`: thirteen protocol items fixed (dead `NamedError.Unknown`, `Tool.Events.PermissionDenied` and `Operational.envelope` deleted with their tests, four stale/false doc comments rewritten, zod-4 `code: "custom"` spelling unified, redundant `EpochMs.nonnegative()` dropped, hand-rolled test try/catch patterns replaced with `.toThrow()`, `const it = test` aliases removed, the author's personal path replaced in the `SurfaceKey` fixture and doc example), three kept with rationale, two deferred (154 to the channels band, 145 `Inbox.Port` to #1258's `ledger/l0.ts`); receipts in the `docs/SLOP.md` §L row.
+
 ## #1250 model and desktop unified on AI SDK 7 (epic #1260, merged as `9b4e4b8c` (PR #1265))
 
 On `epic1260/1250-ai-7` (2026-10-02, base `0ebef4b0`). `packages/agent` and

@@ -29,13 +29,6 @@ export const Events = {
     }),
     { visibility: "llm_reason" },
   ),
-  PermissionDenied: BusEvent.define(
-    "tool.execution.permission_denied",
-    Base.extend({
-      reason: z.string(),
-    }),
-    { visibility: "llm_reason" },
-  ),
   TimedOut: BusEvent.define(
     "tool.execution.timed_out",
     Base.extend({

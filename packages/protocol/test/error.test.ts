@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { z, ZodError } from "zod";
+import { z } from "zod";
 
 import { NamedError } from "../src/error/index.js";
 
@@ -111,38 +111,6 @@ describe("NamedError.create", () => {
     const impostor = new Error("boom");
     impostor.name = "MyError";
     expect(MyError.isInstance(impostor)).toBe(false);
-  });
-});
-
-describe("NamedError.Unknown", () => {
-  test("uses the built-in name and message field", () => {
-    const error = new NamedError.Unknown({ message: "oops" });
-
-    expect(error.name).toBe("UnknownError");
-    expect(error.message).toBe("oops");
-    expect(error.toObject()).toEqual({
-      name: "UnknownError",
-      data: { message: "oops" },
-    });
-  });
-
-  test("parses valid objects and rejects missing message", () => {
-    expect(
-      NamedError.Unknown.Schema.parse({
-        name: "UnknownError",
-        data: { message: "test" },
-      }),
-    ).toEqual({
-      name: "UnknownError",
-      data: { message: "test" },
-    });
-
-    expect(() =>
-      NamedError.Unknown.Schema.parse({
-        name: "UnknownError",
-        data: {},
-      }),
-    ).toThrow(ZodError);
   });
 });
 

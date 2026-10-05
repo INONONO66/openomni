@@ -18,17 +18,12 @@ describe("Blacklist protocol contracts", () => {
   });
 
   test("rejects entries without an audit creator", () => {
-    let failed = false;
-    try {
+    expect(() =>
       Actor.BlacklistEntry.parse({
         id: "bl-missing-creator",
         kind: "actor",
         value: "act_bad",
-      });
-    } catch {
-      failed = true;
-    }
-
-    expect(failed).toBe(true);
+      }),
+    ).toThrow();
   });
 });

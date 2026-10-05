@@ -11,8 +11,8 @@ describe("Channel.SurfaceKey codec", () => {
     });
 
     test("creates a surfaceKey with single part and colon", () => {
-      const key = SurfaceKey.create(["tui", "/Users/ino/Develop/OpenOmni"]);
-      expect(key).toBe("tui:/Users/ino/Develop/OpenOmni");
+      const key = SurfaceKey.create(["tui", "/srv/workspaces/example"]);
+      expect(key).toBe("tui:/srv/workspaces/example");
     });
 
     test("throws error on empty parts", () => {

@@ -14,10 +14,10 @@ export const CanonicalJsonError = NamedError.create(
 export type CanonicalJsonError = InstanceType<typeof CanonicalJsonError>;
 
 /**
- * Internal single owner for plain-JSON validation and canonical JSON
- * serialization. Not exported from the package barrel: protocol modules
- * import it relatively; external packages consume the domains built on it
- * (policy effects and stable archive hashing).
+ * Single owner for plain-JSON validation and canonical JSON serialization.
+ * Protocol modules import it relatively; the package barrel re-exports the
+ * canonical helpers and plain-value schemas for external consumers (policy
+ * effects and stable archive hashing).
  */
 
 export type PlainObject = { [key: string]: PlainValue };

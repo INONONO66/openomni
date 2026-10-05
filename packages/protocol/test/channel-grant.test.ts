@@ -32,17 +32,12 @@ describe("Actor.ChannelGrant", () => {
   });
 
   test("rejects missing creator audit field", () => {
-    let failed = false;
-    try {
+    expect(() =>
       Actor.ChannelGrant.parse({
         id: "grant-missing-creator",
         surface: "discord",
         kind: "trusted_channel",
-      });
-    } catch {
-      failed = true;
-    }
-
-    expect(failed).toBe(true);
+      }),
+    ).toThrow();
   });
 });

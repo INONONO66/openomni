@@ -86,9 +86,8 @@ const SenderMetaSchema = z
  * projection/audit path (surfaceKey, kind, sender, threadId, replyToId,
  * agentName) are declared as typed optional fields instead of
  * riding the untyped `.catchall(z.unknown())`. The catchall is RETAINED for
- * the external DirectEventSchema.parse boundary: meta carries `raw` (the
- * arbitrary per-platform payload, Channel.InboundMessage.raw) and a channel
- * driver may attach further escape-hatch keys — genuinely unknown, never an
+ * the external DirectEventSchema.parse boundary: a channel driver may attach
+ * arbitrary per-platform escape-hatch keys — genuinely unknown, never an
  * authorization input. meta is in-process on InboundEvent and never persisted.
  */
 const MetaSchemaImpl = z
