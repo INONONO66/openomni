@@ -63,7 +63,10 @@ export function subscribeSessionReads(client: QueryClient, transport: GatewayCha
 
 export function sessionReadModel(session: LocalSession, page: SessionRead.Page | undefined): Session {
   const authoritative = page?.sessionId === session.durableSessionId ? page : undefined;
-  const latestForkAnchor = authoritative?.actions.findLast((action) => action.forkAnchor !== undefined)?.forkAnchor;
+  // Newest boundary anchor; a reverse scan because the desktop lib target predates `findLast`.
+  const latestForkAnchor = [...(authoritative?.actions ?? [])]
+    .reverse()
+    .find((action) => action.forkAnchor !== undefined)?.forkAnchor;
   return {
     ...session,
     phase: authoritative?.phase ?? null,
