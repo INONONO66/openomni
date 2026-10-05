@@ -245,17 +245,48 @@ export function createPtyAdapter(options: PtyAdapterOptions): PtyAdapter {
   }
 
   function close(request: Machine.PtyCloseRequest): Effect.Effect<Machine.PtyCloseResult, MachineError> {
-    return session(request.name, (ctl, record) =>
-      Effect.gen(function* () {
-        yield* ctl.command(`kill-session -t =${record.name}`);
+    return Effect.suspend(() => {
+      if (!available) return Effect.succeed<Machine.PtyCloseResult>(ptyNotAvailable);
+      return Effect.gen(function* () {
+        const ctl = yield* ensureControl;
+        // Close is a teardown guarantee (#1275): a session whose shell already
+        // exited on its own (the browser launch line exits once Chromium
+        // stops) is gone on the server but may still be recorded, and closing
+        // it must drop the record either way. So a recorded-but-lost session
+        // stays closable, and a kill-session failure is re-checked against
+        // the server: only a session that still exists propagates the error.
+        const record = registry.get(request.name) ?? (yield* resolve(ctl, request.name));
+        if (record === undefined) return ptyNotFound;
+        yield* ctl.command(`kill-session -t =${record.name}`).pipe(
+          Effect.catch((error) =>
+            Effect.flatMap(listNames(ctl), (names) => (names.includes(record.name) ? Effect.fail(error) : Effect.void)),
+          ),
+        );
         // The window survives its session through the control-session link;
-        // killing it ends the processes without touching other terminals.
-        if (record.windowId !== undefined) yield* ctl.command(`kill-window -t ${record.windowId}`);
+        // killing it ends the processes without touching other terminals. A
+        // kill-window failure is NOT proof of teardown (#1293 r1): the control
+        // transport can drop or the command can time out while the linked
+        // window - and the processes it holds - survive. Re-check the server
+        // exactly like the kill-session path above: a confirmed-absent window
+        // (the shell already exited with its dead pane) is the tolerated
+        // outcome; a surviving window or a failed verification propagates and
+        // keeps the record, so close stays retryable instead of reporting ok
+        // over a live window.
+        if (record.windowId !== undefined) {
+          const windowId = record.windowId;
+          yield* ctl.command(`kill-window -t ${windowId}`).pipe(
+            Effect.catch((error) =>
+              Effect.flatMap(ctl.command('list-windows -a -F "#{window_id}"'), (ids) =>
+                ids.includes(windowId) ? Effect.fail(error) : Effect.void,
+              ),
+            ),
+          );
+        }
         if (record.paneId !== undefined) paneRoutes.delete(record.paneId);
         registry.remove(record.name);
         return { status: "ok" } as const;
-      }),
-    );
+      });
+    });
   }
 
   function list(_request: Machine.PtyListRequest): Effect.Effect<Machine.PtyListResult, MachineError> {

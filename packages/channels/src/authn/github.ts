@@ -1,7 +1,7 @@
 import type { Policy } from "@openomni/protocol";
 import { evaluateChannelPermission, recordDecision } from "./decision";
 import type { ChannelAuthnDecisionObserver } from "./types";
-import { verifyGitHubSignature } from "../provider/github/webhook";
+import { verifyGitHubSignature } from "./github-signature";
 
 interface GitHubAuthResult {
   readonly verdict: Policy.PolicyDecision;

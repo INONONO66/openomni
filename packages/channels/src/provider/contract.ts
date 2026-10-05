@@ -56,8 +56,7 @@ export interface RenderPolicy {
 /**
  * What a provider's runtime exposes, declared statically so composition and
  * conformance tests can check the runtime against the declaration instead of
- * duck-typing the constructed object (the `DeliveringSurface` casts this
- * replaces).
+ * duck-typing the constructed object.
  */
 interface ProviderCapabilities {
   /** The runtime exposes `deliveryRoute` — the Resident can message into it. */

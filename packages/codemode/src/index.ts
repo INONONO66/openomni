@@ -14,7 +14,7 @@ export interface RunOptions {
   readonly waitMs?: number;
   readonly signal?: AbortSignal;
   readonly ownership?: { retain(): () => void; interrupt?(): void };
-  readonly bindings?: Pick<Options, "tools" | "boundary">;
+  readonly bindings?: Pick<CodemodeOptions, "tools" | "boundary">;
 }
 interface BackgroundCell {
   readonly tenant: string;
@@ -27,7 +27,7 @@ interface BackgroundCell {
 const RETAINED_SETTLED_CELLS = 64;
 /** Upper bound on tenant interpreters shut down at once during close. */
 const CLOSE_CONCURRENCY = 16;
-interface Options {
+interface CodemodeOptions {
   /** Injected cell-id entropy (#1245): required, no ambient crypto fallback. */
   readonly id: () => string;
   readonly machines?: Pick<MachineHost, "list" | "get">;
@@ -50,12 +50,12 @@ const PtyCloseInput = Machine.PtyCloseRequest.extend({ machineId: Machine.Machin
 const PtyListInput = z.object({ machineId: Machine.MachineId }).strict();
 
 /** One app-owned scope retains background cells and tenant interpreters. */
-export function createCodemode(options: Options) {
+export function createCodemode(options: CodemodeOptions) {
   return Effect.gen(function* () {
     const scope = yield* Scope.Scope;
     const kernels = new Map<string, PythonKernel>();
     const handles = new Map<string, ReturnType<typeof makeHandle>>();
-    const live = new Map<string, { caller: Caller; tenant: string; timeoutMs: number; signal?: AbortSignal; ownership?: RunOptions["ownership"]; boundary?: ReturnType<NonNullable<Options["boundary"]>> }>();
+    const live = new Map<string, { caller: Caller; tenant: string; timeoutMs: number; signal?: AbortSignal; ownership?: RunOptions["ownership"]; boundary?: ReturnType<NonNullable<CodemodeOptions["boundary"]>> }>();
     const lifetime = new AbortController();
     const running = new Set<Deferred.Deferred<void>>();
     const background = new Map<string, BackgroundCell>();
@@ -222,7 +222,7 @@ export function createCodemode(options: Options) {
       });
     }
     function tenantCell(cellId: string, tenant: string): BackgroundCell {
-      const entry = background.get(cellId);
+      requireOpen(); const entry = background.get(cellId);
       if (!entry || entry.tenant !== tenant) throw new CodemodeError({ reason: "unknown_cell_id", message: "no such cell" });
       return entry;
     }
@@ -236,7 +236,7 @@ export function createCodemode(options: Options) {
     }
     function peek(cellId: string, tenant: string): Effect.Effect<Machine.CellState, Failure> {
       return Effect.gen(function* () {
-        const entry = yield* Effect.try({ try: () => { requireOpen(); return tenantCell(cellId, tenant); }, catch: decodeCodeFailure("cell.peek") });
+        const entry = yield* Effect.try({ try: () => tenantCell(cellId, tenant), catch: decodeCodeFailure("cell.peek") });
         if (entry.done) return yield* settle(cellId, entry);
         const view = yield* machines().get(entry.machineId).peekCode(cellId);
         if (!background.has(cellId)) return yield* new CodemodeError({ reason: "unknown_cell_id", message: "no such cell" });
@@ -244,11 +244,7 @@ export function createCodemode(options: Options) {
       });
     }
     function stop(cellId: string, tenant: string): Effect.Effect<Machine.CellResult, Failure> {
-      return Effect.gen(function* () {
-        const entry = yield* Effect.try({ try: () => { requireOpen(); return tenantCell(cellId, tenant); }, catch: decodeCodeFailure("cell.stop") });
-        entry.controller.abort();
-        return yield* settle(cellId, entry);
-      });
+      return Effect.try({ try: () => tenantCell(cellId, tenant), catch: decodeCodeFailure("cell.stop") }).pipe(Effect.flatMap((entry) => { entry.controller.abort(); return settle(cellId, entry); }));
     }
     function launch(id: string, code: string, tenant: string, caller: Caller, runOptions: RunOptions, boundary = (runOptions.bindings ?? options).boundary?.(tenant)) {
       return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {

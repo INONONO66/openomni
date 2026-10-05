@@ -82,7 +82,7 @@ export class TelegramAdapter implements Channel.Surface {
       this.options,
     );
 
-    this.poller.start();
+    void this.poller.start();
   }
 
   stop(traceId: string): void {
@@ -118,11 +118,6 @@ export class TelegramAdapter implements Channel.Surface {
 
   private async handleMessage(message: TelegramMessage, traceId: string): Promise<void> {
     if (!this.normalizer) return;
-    const text = message.text;
-    if (!text) return;
-    if (!message.from) return;
-
-    const chatId = String(message.chat.id);
     const inbound = this.normalizer.normalize(message);
     if (!inbound) return;
 
@@ -131,9 +126,9 @@ export class TelegramAdapter implements Channel.Surface {
       time: this.options.now(),
       component: "server",
       msg: "telegram message received",
-      context: { chatId },
+      context: { chatId: String(message.chat.id) },
     });
 
-    await (this.handler as Channel.MessageHandler)(inbound);
+    await requireHandler(this.handler, "telegram")(inbound);
   }
 }

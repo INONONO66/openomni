@@ -1,6 +1,9 @@
 import { Bundle } from "@openomni/agent";
+import { Journal, type PlainValue } from "@openomni/protocol";
 import { cronBundle } from "./bundles/cron";
+import { hooksJsonBundle, type HooksJsonInput } from "./bundles/hooks-json";
 import { monitorBundle } from "./bundles/monitor";
+import { AppInvariantError } from "./invariant";
 
 /** The tool capability's seam; no bundle requires it yet, `Capability.define` needs one. */
 const ToolCapabilitySeam = Bundle.seam("@openomni/openomni/ToolCapabilitySeam");
@@ -21,6 +24,39 @@ export const toolCapability = Bundle.Capability.define({
   seam: ToolCapabilitySeam,
 });
 
+/** The action capability's seam; the hook capability requires it by NAME. */
+const ActionCapabilitySeam = Bundle.seam("@openomni/openomni/ActionCapabilitySeam");
+
+const actionKindDeclaration = Journal.CAPABILITY_DECLARATIONS.find(
+  (declaration) => declaration.kind === "action",
+);
+if (actionKindDeclaration === undefined)
+  throw new AppInvariantError("protocol no longer declares the action journal kind");
+
+/**
+ * The thin action-capability contract (#1256): declares the protocol's
+ * `action` journal kind, admits `action` as `deliver` input, and owns the
+ * `action.pre` point — the seam the hook capability's `requires: ["action"]`
+ * resolves against, so `off: ["action"]` cascades `hook` and `hooks-json`
+ * off together. The reducer is identity: an action row is a deferred INPUT
+ * consumed by delivery, never folded session state.
+ */
+const actionCapability = Bundle.Capability.define({
+  name: "action",
+  requires: [],
+  kinds: {
+    action: {
+      schema: actionKindDeclaration.schema,
+      version: actionKindDeclaration.version,
+      reduce: (state: PlainValue) => state,
+    },
+  },
+  inputs: ["action"],
+  points: ["action.pre"],
+  verbs: {},
+  seam: ActionCapabilitySeam,
+});
+
 /**
  * The product manifest (#1255): THE one place openomni lists what is on —
  * its capabilities and its bundles — as plain data for `compose`. Boot is
@@ -34,14 +70,16 @@ export interface AppManifestInput {
   readonly alarm: Bundle.CapabilityDefinition<"alarm">;
   /** The watch wake dependencies the monitor bundle's purposes close over. */
   readonly wake: Bundle.WatchWakeDeps;
+  /** The parsed hooks JSON config (#1256); absent composes zero hook rows. */
+  readonly hooks?: HooksJsonInput;
   /** Owner-configured off names; absent means everything declared is on. */
   readonly off?: readonly string[];
 }
 
 export function appManifest(input: AppManifestInput): Bundle.ManifestDefinition {
   return Bundle.Manifest.define({
-    capabilities: [toolCapability, input.alarm],
-    bundles: [monitorBundle(input.wake), cronBundle()],
+    capabilities: [toolCapability, actionCapability, Bundle.hookCapability(), input.alarm],
+    bundles: [monitorBundle(input.wake), cronBundle(), hooksJsonBundle(input.hooks)],
     off: input.off ?? [],
   });
 }

@@ -6,8 +6,9 @@ import {
   PolicyRef,
 } from "@openomni/protocol";
 import { z } from "zod";
+import type { Effect } from "effect";
 import { clonePlain, freezePlain } from "./match";
-import type { GateHandler } from "./compose";
+import type { GateHandler, GateHandlerResult } from "./compose";
 
 /**
  * Named policy services (#1251): the registry of transformer/obligation
@@ -25,9 +26,30 @@ interface NamedObligation {
   readonly name: string;
 }
 
+/** One asynchronous consultation request the snapshot resolves before its sync fold. */
+export interface ConsultInput {
+  readonly rowId: string;
+  readonly point: string;
+  readonly params: PlainValue;
+  readonly value: PlainValue;
+}
+
+/**
+ * An asynchronous named policy service (#1256): the compiled snapshot calls
+ * it through `evaluateEffect` BEFORE the synchronous gate fold and feeds the
+ * settled result in as the row's prepared handler response. A consultant
+ * never fails its Effect — every failure maps to a deny-folding result.
+ */
+export interface NamedConsultant {
+  readonly name: string;
+  readonly consult: (input: ConsultInput) => Effect.Effect<GateHandlerResult>;
+}
+
 export interface HandlerTable {
   readonly transformers: readonly NamedTransformer[];
   readonly obligations: readonly NamedObligation[];
+  /** Async consulted services; absent means none are registered. */
+  readonly consultants?: readonly NamedConsultant[];
 }
 
 export const HandlerTableError = NamedError.create(
@@ -43,7 +65,7 @@ export const HandlerTableError = NamedError.create(
 /** Copies definitions, never freezes caller objects or exposes mutable Maps. */
 export function createHandlerTable(input: HandlerTable): HandlerTable {
   const names = new Set<string>();
-  for (const entry of [...input.transformers, ...input.obligations]) {
+  for (const entry of [...input.transformers, ...input.obligations, ...(input.consultants ?? [])]) {
     if (!PolicyRef.safeParse(entry.name).success)
       throw new HandlerTableError({ code: "invalid_ref", ref: entry.name });
     if (names.has(entry.name))
@@ -55,6 +77,9 @@ export function createHandlerTable(input: HandlerTable): HandlerTable {
       input.transformers.map(({ name, apply }) => Object.freeze({ name, apply })),
     ),
     obligations: Object.freeze(input.obligations.map(({ name }) => Object.freeze({ name }))),
+    consultants: Object.freeze(
+      (input.consultants ?? []).map(({ name, consult }) => Object.freeze({ name, consult })),
+    ),
   });
 }
 

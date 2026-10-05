@@ -129,6 +129,12 @@ export interface OpenOmniConfig {
    */
   readonly bundlesOff?: readonly string[];
   /**
+   * Path of the Owner's hooks JSON file (#1256, `OPENOMNI_HOOKS_PATH`).
+   * Absent composes the hooks-json bundle with zero rows. The file is read
+   * and validated at compose time; any refusal fails the boot fail-closed.
+   */
+  readonly hooksPath?: string;
+  /**
    * Per-surface sender allowlists for the trusted-channel grant (external
    * ids on that surface, e.g. Telegram user ids). A surface listed here
    * serves only the listed senders; everyone else finds no grant and the
@@ -679,6 +685,7 @@ export function loadConfig(
   const forkCopyByteCap = forkCopyByteCapFromEnv(env);
   const channelAllowedSenders = channelAllowedSendersFromEnv(env);
   const bundlesOff = bundlesOffFromEnv(env);
+  const hooksPath = env.OPENOMNI_HOOKS_PATH?.trim() || undefined;
   return {
     ...resolveClusterStorage(
       {
@@ -701,5 +708,6 @@ export function loadConfig(
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
     ...(channelAllowedSenders === undefined ? {} : { channelAllowedSenders }),
     ...(bundlesOff === undefined ? {} : { bundlesOff }),
+    ...(hooksPath === undefined ? {} : { hooksPath }),
   };
 }

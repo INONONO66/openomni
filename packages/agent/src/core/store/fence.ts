@@ -4,6 +4,7 @@ import {
   type ConsumptionSettings,
   Inbox,
   PlainObjectSchema,
+  type PlainValue,
   type LedgerAction,
   type LedgerSession,
   L0Observation,
@@ -377,6 +378,16 @@ const ReceivedEffect = z.object({
  * chain — there is no inbox table.
  */
 /**
+ * The `after` cursor a deferred `action` input's intent carries (#1256 H-3),
+ * if any — the ONE typed owner of this projection (r3 L-1).
+ */
+const AfterCursorIntent = z.looseObject({ after: z.number().int().nonnegative().optional() });
+function afterCursorOf(intent: PlainValue): number | undefined {
+  const parsed = AfterCursorIntent.safeParse(intent);
+  return parsed.success ? parsed.data.after : undefined;
+}
+
+/**
  * Every input row, consumed or pending (#1257): the SQL projection that
  * replaced the retired whole-history received-message chain fold. Status
  * comes from the
@@ -413,6 +424,7 @@ function pendingMessagesIn(context: SessionKernelContext, sessionId: string): In
     .pendingMessages(sessionId)
     .map((action, index) => {
       const effect = ReceivedEffect.parse(action.effect.value);
+      const after = afterCursorOf(action.intent.value);
       return Inbox.Row.parse({
         id: action.id,
         sessionId: action.sessionId,
@@ -420,6 +432,7 @@ function pendingMessagesIn(context: SessionKernelContext, sessionId: string): In
         content: effect.content,
         origin: action.intent,
         ...(effect.delivery === undefined ? {} : { delivery: effect.delivery }),
+        ...(after === undefined ? {} : { after }),
         status: "pending",
         consumedBy: null,
         consumedAt: null,
@@ -909,6 +922,9 @@ function makeSessionKernel(context: SessionKernelContext) {
       sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
     commit: (input: LedgerSession.Commit) => commitIn(context, input),
     pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
+    /** Ordinal of the latest executed compaction, else 0 — the staleness horizon for `action` inputs (#1256 H-3). */
+    compactionHead: (sessionId: string): number =>
+      requiredActionsIn(context).latestCompaction(sessionId)?.ordinal ?? 0,
     inputMessages: (sessionId: string): Inbox.Row[] => inputMessagesIn(context, sessionId),
     latestAction: (
       sessionId: string,
