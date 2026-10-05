@@ -1292,6 +1292,8 @@ The archive CLI creates a native SQLite image plus a v2 all-table receipt at exp
 
 Band b4 (`epic1260/1259-b4-channels`, commit `c1420c6e`) cleans packages/channels per the #1259 inventory: duplicated normalizer guards deleted from the telegram/discord surfaces, handler casts replaced by `requireHandler` binding, the floating telegram poll-loop promise annotated with `void`, the stale `DeliveringSurface` comment pruned, `verifyGitHubSignature` moved into `src/authn/` beside its only consumer, and a duplicate file-level `beforeEach` removed from the send suite — net LOC negative, zero behavior change; full per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
 
+Band b7a (`epic1260/1259-b7a-xc`) sweeps the cross-cutting items outside `packages/agent`: knip.json stale ignore lists and eight redundant entry patterns deleted, `productionConsumerFindings` merged into `censusConsumerFindings`, the schema-only `runtime.workspace_lock` policy effect deleted, codemode's `decodeCodeFailure` rewritten as a plain instanceof dispatch, the provisioning `reconcile` pass-through inlined, cluster fixture clocks made deterministic, and stale H13 barrel claims corrected — 8 fixed, 14 already resolved upstream, 24 kept with rationale, net LOC negative; per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
+
 ## Census and final quality: current versus required
 
 **#1116 lean PR gate (2026-09-20):** the per-PR Quality ratchet stack (census
