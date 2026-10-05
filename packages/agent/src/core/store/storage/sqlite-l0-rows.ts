@@ -31,9 +31,10 @@ export const ActionSqlRow = z.object({
 export type ActionSqlRow = z.infer<typeof ActionSqlRow>;
 
 /**
- * Cold migration/verification boundary: archive tooling opens databases with
- * safeIntegers, so INTEGER columns may arrive as bigint and are folded to the
- * same admitted numbers the hot schema accepts.
+ * Chain-verification boundary (session-file `verifyChain` is the only
+ * consumer): connections may run with safeIntegers, so INTEGER columns can
+ * arrive as bigint and are folded to the same admitted numbers the hot
+ * schema accepts.
  */
 export const ActionSqlRowSafeIntegers = ActionSqlRow.extend({
   irreversible: SqliteCount.pipe(z.union([z.literal(0), z.literal(1)])),

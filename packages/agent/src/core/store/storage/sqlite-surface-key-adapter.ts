@@ -1,6 +1,10 @@
 import type { Database } from "bun:sqlite";
+import { z } from "zod";
 import { LedgerInvariant } from "../errors";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
+
+const SessionIdRow = z.object({ session_id: z.string() }).nullable();
+const KeyRows = z.array(z.object({ key: z.string() }));
 
 type SurfaceKeyAdapter = ProtocolStorage.SurfaceKeySubAdapter;
 
@@ -26,9 +30,9 @@ export function createSqliteSurfaceKeyAdapter(db: Database, now: () => number): 
              VALUES (?, ?, ?)`,
           ).run(key, sessionId, at);
 
-          const row = db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key) as {
-            session_id: string;
-          } | null;
+          const row = SessionIdRow.parse(
+            db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key),
+          );
           if (row === null) {
             // Impossible state: the INSERT OR IGNORE above ran inside this
             // same immediate transaction, so the key MUST exist here. Falling
@@ -45,18 +49,16 @@ export function createSqliteSurfaceKeyAdapter(db: Database, now: () => number): 
     },
 
     lookup: (key: string): string | undefined => {
-      const row = db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key) as {
-        session_id: string;
-      } | null;
+      const row = SessionIdRow.parse(
+        db.query("SELECT session_id FROM surface_key WHERE key = ?").get(key),
+      );
       return row?.session_id;
     },
 
     listBySession: (sessionId: string): string[] => {
-      const rows = db
-        .query("SELECT key FROM surface_key WHERE session_id = ?")
-        .all(sessionId) as Array<{
-        key: string;
-      }>;
+      const rows = KeyRows.parse(
+        db.query("SELECT key FROM surface_key WHERE session_id = ?").all(sessionId),
+      );
       return rows.map((r) => r.key);
     },
   };

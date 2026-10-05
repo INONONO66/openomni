@@ -39,7 +39,7 @@ function executeOperation(
   cell: Cell,
   operation: Operation,
   sessionId: string,
-  signal: AbortSignal | undefined,
+  signal: AbortSignal,
 ): Promise<Machine.CellState> {
   return cellOperation(cell, operation, sessionId, signal).catch((error: Error) => {
     if (error instanceof CodemodeError && error.reason === "unknown_cell_id")
@@ -53,7 +53,7 @@ async function cellOperation(
   cell: Cell,
   operation: Operation,
   sessionId: string,
-  signal: AbortSignal | undefined,
+  signal: AbortSignal,
 ): Promise<Machine.CellState> {
   if (operation.op === "run")
     return await cell.run(operation.code, sessionId, {

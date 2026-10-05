@@ -7,7 +7,7 @@ type ExecutionApprovalRequest = Core.ExecutionApprovalRequest;
 import { Bus, newTraceId } from "./helpers/bus";
 import { Effect } from "effect";
 const CommitRefused = Core.CommitRefused;
-import { type Alarm, canonicalDigest, L0Observation, type PlainObject } from "@openomni/protocol";
+import { type Alarm, canonicalDigest, L0Observation, Operational, type PlainObject } from "@openomni/protocol";
 import type { AppSessionHandle } from "../src";
 import {
   assistantMessage,
@@ -379,8 +379,8 @@ test("a deadline-bearing external send opens and arms its live request", async (
   ]);
   const question = nextFrame(peer, (frame) => frame.type === "message");
   const terminal = nextResidentTurn(plane, 5000);
-  const deadlineFailure = spyOn(console, "error").mockImplementation(() => undefined);
-  suite.defer(() => deadlineFailure.mockRestore());
+  const deadlineFailure = Promise.withResolvers<void>();
+  suite.defer(Bus.subscribe(Operational.Events.Error, () => deadlineFailure.resolve()));
 
   owner.send(JSON.stringify({ eventId: newTraceId(), text: "send with deadline" }));
 
@@ -410,7 +410,7 @@ test("a deadline-bearing external send opens and arms its live request", async (
   expect(await receipt).toMatchObject({ status: "accepted" });
   releaseModel.resolve();
   await terminal;
-  expect(deadlineFailure).toHaveBeenCalled();
+  await bounded(deadlineFailure.promise);
   const source = plane.listSessions().find((row) => row.id !== "gateway-ingress");
   if (source === undefined) throw new Error("missing source session");
   expect(
@@ -796,11 +796,10 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
   const okStale = Promise.withResolvers<void>();
   const rescanLogged = Promise.withResolvers<void>();
   const resendLogged = Promise.withResolvers<void>();
-  const errors = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
-    const line = args.map(String).join(" ");
-    if (line.includes("fault-rescan")) rescanLogged.resolve();
-  });
-  suite.defer(() => errors.mockRestore());
+  const rescanFailures: string[] = [];
+  suite.defer(Bus.subscribe(Operational.Events.Error, (event) => {
+    if (event.msg.includes("fault-rescan")) { rescanFailures.push(event.msg); rescanLogged.resolve(); }
+  }));
   // #1254 H2 / r2 M4: a transient resend failure is a defect the ENTITY logs
   // (the armed row stands); Effect's default logger writes through
   // console.log. The log is identified by the injected error's own sentinel
@@ -837,8 +836,7 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
   expect(resendKernel.actionById(`${resendDue.occurrenceId}:stale`)).toBeUndefined();
   expect(resendKernel.actionById(`${resendDue.occurrenceId}:delivered`)).toBeUndefined();
   // Secondary: each injected fault surfaced exactly one failure report.
-  const errorLines = errors.mock.calls.map((call) => call.map(String).join(" "));
-  expect(errorLines.filter((line) => line.includes("fault-rescan"))).toHaveLength(1);
+  expect(rescanFailures).toHaveLength(1);
   const logLines = logs.mock.calls.map((call) => call.map(String).join(" "));
   expect(logLines.filter((line) => line.includes(INJECTED_RESEND))).toHaveLength(1);
 });

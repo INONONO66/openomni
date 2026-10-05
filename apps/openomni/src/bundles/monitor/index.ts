@@ -78,7 +78,7 @@ const operation = z.discriminatedUnion("op", [
 // Like provision: an object root preserves the framework's model ABI.
 const input = z.object({ operation }).strict();
 
-export function createMonitorTool(ports?: MonitorPorts) {
+export function createMonitorTool(ports: MonitorPorts | undefined) {
   return defineTool({
     name: "monitor",
     category: "mutation",
@@ -163,7 +163,7 @@ export function monitorBundle(
     requires: [Bundle.AlarmSeam],
     // The declaration face; execution ports stay composition-wired until
     // compose (#1255 S2) derives the generation tool table from the manifest.
-    tools: [Core.eraseTool(createMonitorTool())],
+    tools: [Core.eraseTool(createMonitorTool(undefined))],
     rows: [MONITOR_WAKE_BUDGET_ROW],
     purposes: Object.fromEntries(
       Bundle.watchPurposes(deps).map((purpose) => [purpose.name, purpose.handler]),

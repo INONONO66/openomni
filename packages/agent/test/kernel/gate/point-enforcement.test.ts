@@ -341,7 +341,6 @@ describe("policy row compiler enforcement", () => {
     expect(snapshot.evaluate(input)).toMatchObject({
       verdict: "deny",
       matchedRuleIds: ["highest-allow", "middle-deny", "low-allow"],
-      evaluatedRuleCount: 3,
       reason: "blocked",
     });
   });

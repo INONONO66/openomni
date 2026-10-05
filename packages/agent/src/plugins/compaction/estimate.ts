@@ -7,7 +7,7 @@ export const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 const BASE64_RUN_RE = /[A-Za-z0-9+/=_-]{512,}/g;
 
-export function userTextChars(message: Message.WithParts): number {
+export function messageContentChars(message: Message.WithParts): number {
   // All content weighs against the budget (review #721 M4): a user-role
   // message bulked by a tool output must not ride through a 10-char budget
   // as if free.
@@ -28,7 +28,7 @@ export function userTextChars(message: Message.WithParts): number {
 export function estimateContentChars(span: readonly Message.WithParts[]): number {
   let chars = 0;
   for (const message of span) {
-    chars += userTextChars(message);
+    chars += messageContentChars(message);
   }
   return chars;
 }

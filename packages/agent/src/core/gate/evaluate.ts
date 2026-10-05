@@ -59,8 +59,6 @@ export interface PolicyEvaluation {
   readonly value: PlainValue;
   readonly effects: readonly Policy.PolicyEffect[];
   readonly obligations: readonly CompiledObligation[];
-  readonly bucket: string;
-  readonly evaluatedRuleCount: number;
   /** The gate's replayable decision: recorded responses, rewrite output, facts. */
   readonly gate?: GateDecision;
   /** True when `recorded` was replayed verbatim instead of re-evaluated. */
@@ -83,10 +81,6 @@ export interface CompiledPolicySnapshot {
    * fail-closed.
    */
   evaluateEffect?(input: PolicyEvaluationInput): Effect.Effect<PolicyEvaluation>;
-}
-
-function publicBucket(kind: string, phase: PolicyRow.Phase, op: string | undefined): string {
-  return `${kind}/${phase}/${op ?? "*"}`;
 }
 
 function innerOperation(value: PlainValue): string | undefined {
@@ -178,8 +172,6 @@ export function evaluateProjected(
       value: clonePlain(input.value),
       effects: Object.freeze([]),
       obligations: Object.freeze([]),
-      bucket: publicBucket(input.kind, input.phase, input.op),
-      evaluatedRuleCount: 0,
     });
   const point = legacyPointOf(input.kind, input.phase);
   if (point === undefined || !table.has(point)) return refused("unknown_point");
@@ -236,8 +228,6 @@ export function evaluateProjected(
     value: outcome.value,
     effects: Object.freeze(effects),
     obligations: Object.freeze(obligations),
-    bucket: publicBucket(input.kind, input.phase, input.op),
-    evaluatedRuleCount: matched.length,
     gate: outcome.decision,
     replayed: outcome.replayed,
   });
@@ -297,8 +287,6 @@ export function failedSnapshot(error: PolicyCompileError, table: GatePointTable)
         value: clonePlain(input.value),
         effects: Object.freeze([]),
         obligations: Object.freeze([]),
-        bucket: publicBucket(input.kind, input.phase, input.op),
-        evaluatedRuleCount: 0,
         error: Object.freeze(error.data),
       });
     },

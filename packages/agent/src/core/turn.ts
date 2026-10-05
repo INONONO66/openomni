@@ -385,10 +385,8 @@ function emitErrorRetry(
   },
   now: () => number,
 ): void {
-  const sessionId = agentBase.sessionId;
   events.publish(RunEvents.ErrorRetry, {
     ...agentBase,
-    sessionId,
     time: now(),
     attempt: options.attempt,
     maxAttempts: options.maxAttempts,
@@ -428,21 +426,12 @@ function emitRunFailed(
   });
 }
 
-function runResult(
-  state: RunState,
-  options?: {
-    text?: string;
-    steps?: AgentStep[];
-    finishReason?: "stop" | "stalled" | "max-steps";
-    guardAborted?: boolean;
-  },
-): AgentResult {
+function runResult(state: RunState, options?: { text?: string }): AgentResult {
   return {
     text: options?.text ?? state.lastAssistantText,
-    steps: options?.steps ?? state.steps,
+    steps: state.steps,
     usage: state.totalUsage,
-    finishReason: options?.finishReason ?? "stop",
-    ...(options?.guardAborted !== undefined && { guardAborted: options.guardAborted }),
+    finishReason: "stop",
     compactionCount: getCompactionCount(state),
   };
 }
@@ -656,6 +645,7 @@ function turnYield(
 function handleStop(
   state: RunState,
   config: ObservedChatAgentConfig,
+  execution: NonNullable<ObservedChatAgentConfig["execution"]>,
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
   compaction: CompactionSession | undefined,
@@ -705,8 +695,7 @@ function handleStop(
     openIntent: [],
     alarmIds: [],
   }));
-  if (config.execution === undefined) return yield* Effect.die(new Error("missing stop authority"));
-  const judgment = yield* config.execution.judgeStop(state.stop, {
+  const judgment = yield* execution.judgeStop(state.stop, {
     ...evidence,
     text: turnText,
     toolCalls,
@@ -790,6 +779,7 @@ export function runAgent(
   const durableExecutor = config.executor;
   if (durableExecutor === undefined || config.execution === undefined)
     return Effect.die(new Error("agent run requires session execution authority"));
+  const execution = config.execution;
   const state = createRunState({ ...input, traceContext: trace }, source);
   const base = {
     traceId: trace.traceId,
@@ -816,7 +806,7 @@ export function runAgent(
       ) {
         return yield* new AgentStopError({ reason: "budget" });
       }
-      const result = yield* runModelStep(state, config, sink, trace, base, compaction, durableExecutor, llm, source, entropy);
+      const result = yield* runModelStep(state, config, execution, sink, trace, base, compaction, durableExecutor, llm, source, entropy);
       if (result !== undefined) return finish(result);
     }
   }).pipe(Effect.provide(runContext), Effect.onError((cause) => Effect.sync(() => {
@@ -842,6 +832,7 @@ export function runAgent(
 function runModelStep(
   state: RunState,
   config: ObservedChatAgentConfig,
+  execution: NonNullable<ObservedChatAgentConfig["execution"]>,
   sink: Sink | undefined,
   trace: RunTrace,
   base: AgentRunBase,
@@ -853,8 +844,6 @@ function runModelStep(
 ): Effect.Effect<AgentResult | undefined, ExecutionError, Scope.Scope | Entropy> {
   return Effect.gen(function* () {
   const executor = durableExecutor;
-  const execution = config.execution;
-  if (execution === undefined) return yield* new AgentFailure({ operation: "agent.execution", cause: "missing" });
   let turn: TurnArtifacts | undefined;
   const priorFailures = [...state.modelFailureReasons];
   let provider = config.model.provider;
@@ -973,7 +962,7 @@ function runModelStep(
     yield* prepareCompactionAfterContinue(state, config, compaction);
     return undefined;
   }
-  const result = yield* handleStop(state, config, base, turn, compaction);
+  const result = yield* handleStop(state, config, execution, base, turn, compaction);
   return result === "continue" ? undefined : result;
   });
 }

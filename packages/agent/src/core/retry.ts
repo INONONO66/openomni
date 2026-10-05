@@ -1,12 +1,14 @@
 import { LlmRunFailure } from "../model";
 import { z } from "zod";
 
-export type RetryReason =
-  | "timeout"
-  | "tool_error"
-  | "transient_error"
-  | "validation_error"
-  | "context_overflow";
+export const RetryReason = z.enum([
+  "timeout",
+  "tool_error",
+  "transient_error",
+  "validation_error",
+  "context_overflow",
+]);
+export type RetryReason = z.infer<typeof RetryReason>;
 
 /**
  * What a terminal record may report. `aborted` is not a {@link RetryReason}:
@@ -54,14 +56,7 @@ function asLlmFailure(error: Error): LlmRunFailure | undefined {
  * the closed vocabulary exists to avoid.
  */
 const AgentFailureFacts = z.object({
-  reason: z.enum([
-    "timeout",
-    "tool_error",
-    "transient_error",
-    "validation_error",
-    "context_overflow",
-    "aborted",
-  ]),
+  reason: z.enum([...RetryReason.options, "aborted"]),
   attempt: z.number(),
   maxAttempts: z.number(),
   llm: z.literal(true),

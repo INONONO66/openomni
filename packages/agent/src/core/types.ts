@@ -158,11 +158,9 @@ export interface AgentResult {
   text: string;
   steps: AgentStep[];
   usage: TokenUsage;
-  // Every member has a producer: runResult emits stop|stalled|max-steps.
   // The phantom "tool-calls"/"handoff" members (and handoffTarget) forced
   // every consumer to handle states that could not occur (#606 audit).
   finishReason: "stop" | "max-steps" | "stalled";
   waiting?: { readonly reason: "live_wait"; readonly alarmIds: readonly string[] };
   compactionCount?: number;
-  guardAborted?: boolean;
 }

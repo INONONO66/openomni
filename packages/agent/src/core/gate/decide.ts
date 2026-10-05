@@ -1169,8 +1169,7 @@ function* operationRecords(
 }
 
 // ─── from executor.ts (#1247) ───
-/** Raw-slot settlement grace after body exit: an explicit executor-owned
- * default (W5.2), decoupled from the deleted lease plane's TTL. */
+/** Raw-slot settlement grace after body exit: an explicit executor-owned default (W5.2). */
 const DEFAULT_CLOSE_GRACE_MS = 30_000;
 const CORE_KINDS = new Set(["prompt", "turn", "llm", "tool", "compaction", "message"]);
 type Decision = PolicyEvaluation & { readonly receipt: LedgerAction.Receipt };

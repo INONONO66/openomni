@@ -1,28 +1,7 @@
 import { Effect } from "effect";
-import { Message, PlainValueSchema, type LedgerAction, type PlainValue } from "@openomni/protocol";
-import { z } from "zod";
+import { PlainValueSchema, type Message, type LedgerAction, type PlainValue } from "@openomni/protocol";
 import { type ExecutionRequest, ContextRestoreError } from "../../core/api";
-import { type CompactionRecord, restoreCompactionProjection } from "./durable";
-
-const DiscardedRange = z
-  .object({
-    firstEntryId: z.string(),
-    lastEntryId: z.string(),
-    count: z.number().int(),
-    sha256: z.string(),
-  })
-  .strict();
-const RevertRecipe = z
-  .object({ removedEntries: z.array(Message.WithParts), priorAnchorEntryId: z.string().nullable() })
-  .strict();
-/** The evidence one executed compaction left behind, including its reconstruction recipe. */
-const RecordedCompaction: z.ZodType<CompactionRecord> = z.object({
-  summary: z.string(),
-  firstKeptEntryId: z.string(),
-  tokensBefore: z.number(),
-  discarded: DiscardedRange,
-  revert: RevertRecipe,
-});
+import { CompactionRecord, restoreCompactionProjection } from "./durable";
 
 /** The typed compensation of one compaction; a distinct recorded action, never a mutation of the original. */
 export function restoreContextRequest(
@@ -60,7 +39,7 @@ export function recordedCompaction(
     field(result.effect.value, "terminal") !== "executed"
   )
     return Effect.fail(new ContextRestoreError({ reason: "not_executed" }));
-  return Effect.succeed(RecordedCompaction.parse(field(result.effect.value, "result")));
+  return Effect.succeed(CompactionRecord.parse(field(result.effect.value, "result")));
 }
 
 /**
