@@ -19,8 +19,20 @@ test("gate rows project onto the legacy seed shape: obligation, constant verdict
     row({ id: "probe/tool.pre#2", how: {} }),
     row({ id: "probe/tool.pre#3", how: { verdict: "require_approval" } }),
     row({ id: "probe/tool.pre#4", do: "rewrite", how: { ref: "probe/redact" } }),
-    row({ id: "probe/tool.pre#5", do: "rewrite", how: { ref: "probe/redact", params: { keys: ["token"] } } }),
+    row({
+      id: "probe/tool.pre#5",
+      do: "rewrite",
+      how: { ref: "probe/redact", params: { keys: ["token"] } },
+    }),
     row({ id: "probe/alarm.fired#1", on: "alarm.fired", when: {}, how: { verdict: "deny" } }),
+    // #1256: hook rows — a consulted gate guard and the audit-only observe.
+    row({ id: "probe/tool.pre#6", how: { ref: "hook/process", params: { event: "PreToolUse" } } }),
+    row({
+      id: "probe/tool.post#1",
+      on: "tool.post",
+      do: "observe",
+      how: { ref: "hook/process", params: { event: "PostToolUse" } },
+    }),
   ]);
   expect(seeds.map((seed) => [seed.name, seed.kind, seed.phase, seed.priority])).toEqual([
     ["probe/tool.pre#1", "tool", "pre", 7],
@@ -29,6 +41,8 @@ test("gate rows project onto the legacy seed shape: obligation, constant verdict
     ["probe/tool.pre#4", "tool", "pre", 7],
     ["probe/tool.pre#5", "tool", "pre", 7],
     ["probe/alarm.fired#1", "alarm.fired", "post", 7],
+    ["probe/tool.pre#6", "tool", "pre", 7],
+    ["probe/tool.post#1", "tool", "post", 7],
   ]);
   expect(seeds.map((seed) => seed.verdict.value)).toEqual([
     { type: "obligation", ref: "kernel/budget-clamp", metric: "notifications", limit: 8 },
@@ -37,16 +51,20 @@ test("gate rows project onto the legacy seed shape: obligation, constant verdict
     { type: "transform", ref: "probe/redact" },
     { type: "transform", ref: "probe/redact", config: { keys: ["token"] } },
     { type: "deny" },
+    { type: "consult", ref: "hook/process", config: { event: "PreToolUse" } },
+    { type: "consult", ref: "hook/process", observe: true, config: { event: "PostToolUse" } },
   ]);
   expect(seeds[0]?.match).toEqual({ encodingVersion: 1, value: { op: "monitor" } });
 });
 
 test("a row the live plane cannot seed is an invariant failure, never a silent default", () => {
-  expect(() => gateRowPolicySeeds([row({ how: { ref: "kernel/budget-clamp" } })])).toThrow(AppInvariantError);
+  expect(() => gateRowPolicySeeds([row({ how: { ref: "kernel/budget-clamp" } })])).toThrow(
+    AppInvariantError,
+  );
   expect(() => gateRowPolicySeeds([row({ do: "emit", how: { emit: "message" } })])).toThrow(
     "has no live policy-plane seed shape",
   );
-  expect(() => gateRowPolicySeeds([row({ on: "ghost.pre" as Bundle.BundleGateRow["on"] })])).toThrow(
-    "has no legacy policy address",
-  );
+  expect(() =>
+    gateRowPolicySeeds([row({ on: "ghost.pre" as Bundle.BundleGateRow["on"] })]),
+  ).toThrow("has no legacy policy address");
 });
