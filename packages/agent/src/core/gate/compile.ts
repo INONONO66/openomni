@@ -12,7 +12,8 @@ import {
 } from "./legacy-rows";
 import { createHandlerTable, wrapTransformer, type HandlerTable } from "./registry";
 import { projectGeneration, type ProjectedGeneration } from "./project";
-import { evaluateProjected, failedSnapshot, projectedConsultPlan, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
+import { evaluateProjected, failedSnapshot, nextProjectedConsult, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
+import type { GateHandlerResult } from "./compose";
 
 export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer, type NamedConsultant, type ConsultInput } from "./registry";
 export { PolicyCompileError } from "./legacy-rows";
@@ -86,27 +87,39 @@ export function compilePolicySnapshot(
     contentHash,
     pointTable: table,
     evaluate: (input: PolicyEvaluationInput) => evaluate(input),
-    // #1256: resolve the matched rows' async consultants, then fold sync with
-    // their settled results prepared. No consultant registered or matched =
-    // exactly the sync evaluation.
+    // #1256 r5 H-1: async consultants resolve IN ROW ORDER through the probe
+    // fold — each receives the value every earlier row (sync or prepared
+    // async) already folded, so a later guard judges the value an earlier
+    // rewrite sends to the executor. The final fold runs with every settled
+    // result prepared; inputHash stays the input's identity, so replay is
+    // untouched. No consultant registered or matched = exactly the sync
+    // evaluation.
     evaluateEffect: (input: PolicyEvaluationInput) =>
       Effect.suspend(() => {
-        const pending = projectedConsultPlan(projected, table, input).filter((consult) =>
-          consultants.has(consult.ref),
-        );
-        if (pending.length === 0) return Effect.sync(() => evaluate(input));
-        return Effect.forEach(pending, (consult) => {
-          const consultant = consultants.get(consult.ref);
-          if (consultant === undefined) return Effect.die(`unregistered consultant ${consult.ref}`);
+        if (consultants.size === 0) return Effect.sync(() => evaluate(input));
+        const asyncRefs = new Set(consultants.keys());
+        const prepared = new Map<string, GateHandlerResult>();
+        const step: Effect.Effect<ReturnType<typeof evaluate>> = Effect.suspend(() => {
+          const pending = nextProjectedConsult(projected, handlers, table, input, asyncRefs, prepared);
+          if (pending === undefined)
+            return Effect.sync(() => evaluate(input, prepared.size === 0 ? undefined : prepared));
+          const consultant = consultants.get(pending.ref);
+          if (consultant === undefined) return Effect.die(`unregistered consultant ${pending.ref}`);
           return consultant
             .consult({
-              rowId: consult.rowId,
-              point: consult.point,
-              params: consult.params,
-              value: input.value,
+              rowId: pending.rowId,
+              point: pending.point,
+              params: pending.params,
+              value: pending.value,
             })
-            .pipe(Effect.map((result) => [consult.rowId, result] as const));
-        }).pipe(Effect.map((entries) => evaluate(input, new Map(entries))));
+            .pipe(
+              Effect.flatMap((result) => {
+                prepared.set(pending.rowId, result);
+                return step;
+              }),
+            );
+        });
+        return step;
       }),
   });
 }

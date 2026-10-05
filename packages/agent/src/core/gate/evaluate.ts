@@ -76,9 +76,11 @@ export interface CompiledPolicySnapshot {
   evaluate(input: PolicyEvaluationInput): PolicyEvaluation;
   /**
    * Effectful evaluation (#1256): resolves the matched rows' asynchronous
-   * consultants (the hook process) first, then runs the synchronous fold with
-   * their settled results prepared. The sync `evaluate` on a consult row has
-   * no prepared result and folds `handler_unavailable` -> deny fail-closed.
+   * consultants (the hook process) IN ROW ORDER — each consultant receives
+   * the fold's value as of its position (r5 H-1) — then runs the synchronous
+   * fold with every settled result prepared. The sync `evaluate` on a consult
+   * row has no prepared result and folds `handler_unavailable` -> deny
+   * fail-closed.
    */
   evaluateEffect?(input: PolicyEvaluationInput): Effect.Effect<PolicyEvaluation>;
 }
@@ -113,32 +115,43 @@ function projectedWhenOf(input: PolicyEvaluationInput): Record<string, PlainValu
 }
 
 /**
- * The async consultations a fresh decision for this input would make (#1256):
- * empty when the input refuses before the gate or the recorded decision would
- * replay. `evaluateEffect` resolves these through the registered consultants
- * and passes the settled results to `evaluateProjected` as `prepared`.
+ * The next async consultation a fresh decision for this input would make
+ * (#1256 r5 H-1): the ordered fold runs — sync rows included — up to the
+ * first matched consult row whose async ref has no `prepared` result yet, and
+ * that row surfaces here CARRYING THE FOLD'S VALUE AT ITS POSITION. Undefined
+ * when the input refuses before the gate, the recorded decision would replay,
+ * or every async row is prepared. `evaluateEffect` resolves consultations one
+ * at a time through this probe so a later guard judges the value an earlier
+ * rewrite actually sends to the executor.
  */
 export interface PlannedConsult extends PendingConsult {
   /** The projected gate point the consultation addresses. */
   readonly point: string;
 }
 
-export function projectedConsultPlan(
+export function nextProjectedConsult(
   projected: ProjectedGeneration,
+  handlers: ReadonlyMap<string, GateHandler>,
   table: GatePointTable,
   input: PolicyEvaluationInput,
-): readonly PlannedConsult[] {
+  asyncRefs: ReadonlySet<string>,
+  prepared: PreparedResults,
+): PlannedConsult | undefined {
   const point = legacyPointOf(input.kind, input.phase);
-  if (point === undefined || !table.has(point)) return [];
+  if (point === undefined || !table.has(point)) return undefined;
   if (input.kind === "message" && input.op === "send_message" && input.message === undefined)
-    return [];
-  return projected.gate
-    .consults(
-      point,
-      { when: projectedWhenOf(input), value: clonePlain(input.value), context: input.message },
-      input.recorded === undefined ? {} : { recorded: input.recorded },
-    )
-    .map((consult) => ({ ...consult, point }));
+    return undefined;
+  const outcome = projected.gate.decide(
+    point,
+    { when: projectedWhenOf(input), value: clonePlain(input.value), context: input.message },
+    {
+      handlers: (ref) => handlers.get(ref),
+      ...(input.recorded === undefined ? {} : { recorded: input.recorded }),
+      prepared,
+      pendingAsync: asyncRefs,
+    },
+  );
+  return outcome.pending === undefined ? undefined : { ...outcome.pending, point };
 }
 
 export function evaluateProjected(

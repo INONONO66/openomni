@@ -42,8 +42,9 @@ export interface GateHandlerResult {
 
 /**
  * Pre-consulted handler results keyed by row id (#1256): an asynchronous
- * consultant (the hook process) runs BEFORE the synchronous fold, and its
- * settled result folds here exactly like a sync handler response would.
+ * consultant (the hook process) runs at ITS ROW'S POSITION in the ordered
+ * fold (r5 H-1: the probe fold pauses there and hands it the folded value),
+ * and its settled result folds here exactly like a sync handler response.
  */
 export type PreparedResults = ReadonlyMap<string, GateHandlerResult>;
 

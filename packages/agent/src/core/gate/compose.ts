@@ -15,6 +15,7 @@ import {
   type GateHandler,
   type PreparedResults,
 } from "./fold";
+import { clonePlain } from "./match";
 
 export type { GateHandler, GateHandlerResult, PreparedResults } from "./fold";
 
@@ -37,15 +38,25 @@ interface GateDecideOptions {
   readonly handlers?: (ref: string) => GateHandler | undefined;
   /** A persisted decision for this point; same input hash replays it verbatim. */
   readonly recorded?: GateDecision;
-  /** Pre-consulted async handler results keyed by row id (#1256). */
+  /** Already-consulted async handler results keyed by row id (#1256). */
   readonly prepared?: PreparedResults;
+  /**
+   * Refs resolved asynchronously (#1256 r5 H-1): the fold STOPS at the first
+   * matched consult row whose ref is listed here without a prepared result
+   * and surfaces it as `GateOutcome.pending`, carrying the fold's value AT
+   * THAT ROW'S POSITION — so an async consultant sees every earlier row's
+   * rewrite, exactly like a synchronous handler would.
+   */
+  readonly pendingAsync?: ReadonlySet<string>;
 }
 
-/** One matched handler row an asynchronous consultant must answer before the fold. */
+/** One matched handler row an asynchronous consultant must answer before the fold proceeds. */
 export interface PendingConsult {
   readonly rowId: string;
   readonly ref: string;
   readonly params: PlainValue;
+  /** The decision value as folded by every row BEFORE this one (isolated copy). */
+  readonly value: PlainValue;
 }
 
 interface GateOutcome {
@@ -53,23 +64,19 @@ interface GateOutcome {
   readonly value: PlainValue;
   readonly emissions: readonly GateEmission[];
   readonly replayed: boolean;
+  /**
+   * The first unresolved async consult row (#1256 r5 H-1); present only when
+   * `pendingAsync` was supplied. A pending outcome is a PARTIAL fold: the
+   * caller must resolve the consultant, add it to `prepared` and decide again
+   * — never commit this outcome's decision.
+   */
+  readonly pending?: PendingConsult;
 }
 
 export interface CompiledGate<Context = never> {
   readonly generation: number;
   rowsAt(point: PointId): readonly GateRow[];
   decide(point: PointId, input: GateDecideInput<Context>, options?: GateDecideOptions): GateOutcome;
-  /**
-   * The matched handler rows a fresh decision would consult at this point
-   * (#1256): empty when the recorded decision would replay verbatim. The
-   * caller resolves the asynchronous ones and passes their settled results
-   * back through `options.prepared`.
-   */
-  consults(
-    point: PointId,
-    input: GateDecideInput<Context>,
-    options?: Pick<GateDecideOptions, "recorded">,
-  ): readonly PendingConsult[];
 }
 
 export interface CompileGateRowsOptions<Context = never> {
@@ -144,22 +151,24 @@ export function compileGateRows<Context = never>(
     );
   }
 
-  function consults(
-    point: PointId,
-    input: GateDecideInput<Context>,
-    consultOptions: Pick<GateDecideOptions, "recorded"> = {},
-  ): readonly PendingConsult[] {
-    const inputHash = canonicalDigest({ point, when: { ...input.when }, value: input.value });
-    const entries = byPoint.get(point) ?? [];
-    if (replays(point, input, entries, inputHash, consultOptions.recorded)) return [];
-    return entries.flatMap((entry) =>
+  /**
+   * The ref a consult-shaped row (handler ref, no fixed verdict, no emission)
+   * still awaits an async result for; undefined when the row folds inline.
+   */
+  function awaitedConsultRef(
+    entry: CompiledGateRow<Context>,
+    pendingAsync: ReadonlySet<string> | undefined,
+    prepared: PreparedResults | undefined,
+  ): string | undefined {
+    const ref = entry.row.how.ref;
+    return pendingAsync !== undefined &&
+      ref !== undefined &&
       entry.emit === undefined &&
-      entry.row.how.ref !== undefined &&
       entry.row.how.verdict === undefined &&
-      matches(entry, input)
-        ? [{ rowId: entry.row.id, ref: entry.row.how.ref, params: entry.row.how.params ?? null }]
-        : [],
-    );
+      pendingAsync.has(ref) &&
+      prepared?.has(entry.row.id) !== true
+      ? ref
+      : undefined;
   }
 
   function decide(
@@ -176,8 +185,36 @@ export function compileGateRows<Context = never>(
     }
     const state = initialFoldState(input.value);
     for (const entry of entries) {
-      if (matches(entry, input))
-        applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers, decideOptions.prepared);
+      if (!matches(entry, input)) continue;
+      // #1256 r5 H-1: an async consult row pauses the ordered fold HERE, so
+      // its consultant receives the value every earlier row already folded.
+      const awaited = awaitedConsultRef(entry, decideOptions.pendingAsync, decideOptions.prepared);
+      if (awaited !== undefined) {
+        return {
+          decision: {
+            point,
+            verdict: state.verdict,
+            rowIds: state.rowIds,
+            obligations: state.obligations,
+            consulted: state.consulted,
+            annotations: state.annotations,
+            facts: state.facts,
+            output: state.value,
+            inputHash,
+            generation: options.generation,
+          },
+          value: state.value,
+          emissions: state.emissions,
+          replayed: false,
+          pending: {
+            rowId: entry.row.id,
+            ref: awaited,
+            params: entry.row.how.params ?? null,
+            value: clonePlain(state.value),
+          },
+        };
+      }
+      applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers, decideOptions.prepared);
     }
     const decision: GateDecision = {
       point,
@@ -198,6 +235,5 @@ export function compileGateRows<Context = never>(
     generation: options.generation,
     rowsAt: (point) => (byPoint.get(point) ?? []).map((entry) => entry.row),
     decide,
-    consults,
   };
 }
