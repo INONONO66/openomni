@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { canonicalDigest, type PlainValue, RowVerdict, RowVerdictRead, PolicyRow, type Storage } from "@openomni/protocol";
 import { compilePolicySnapshot, createHandlerTable, createPolicyCompiler, KERNEL_POLICY_REGISTRY, HandlerTableError, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
 import { atGeneration, compaction, draft, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
+import { runTestPromise } from "../../helpers/isolated";
 
 const input = {
   kind: "tool",
@@ -97,7 +98,7 @@ describe("immutable named policy registry", () => {
       ],
     });
     if (snapshot.evaluateEffect === undefined) throw new Error("effectful evaluation missing");
-    const evaluation = await Effect.runPromise(snapshot.evaluateEffect(input));
+    const evaluation = await runTestPromise(snapshot.evaluateEffect(input));
     // The executor-bound value carries the consultant's rewrite of ONLY the
     // declared field; the untouched field survives.
     expect(evaluation.verdict).toBe("allow");
@@ -134,7 +135,7 @@ describe("immutable named policy registry", () => {
       ],
     });
     if (gated.evaluateEffect === undefined) throw new Error("effectful evaluation missing");
-    const gateEvaluation = await Effect.runPromise(gated.evaluateEffect(input));
+    const gateEvaluation = await runTestPromise(gated.evaluateEffect(input));
     expect(gateEvaluation.verdict).toBe("allow");
     expect(gateEvaluation.value).toEqual(input.value);
   });
