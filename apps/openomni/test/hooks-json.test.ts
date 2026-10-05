@@ -221,7 +221,7 @@ test("H-2: a command entry with do:rewrite compiles the consulted rewrite row an
 
 test("no hooks config composes the bundle with zero rows and the action input admitted", async () => {
   const generation = await composed();
-  expect(generation.bundles).toEqual(["monitor", "cron", "hooks-json"]);
+  expect(generation.bundles).toEqual(["monitor", "cron", "hooks-json", "send-message", "delegation-policy"]);
   expect(generation.rows.filter((row) => row.id.startsWith("hooks-json/"))).toEqual([]);
   expect(generation.inputs).toEqual(["action"]);
   expect(Object.keys(generation.kinds)).toEqual(["action"]);
@@ -290,6 +290,8 @@ test("off cascades: action roots hook and hooks-json off; hook roots hooks-json 
     { name: "action", because: "action" },
     { name: "hook", because: "action" },
     { name: "hooks-json", because: "action" },
+    // #1258: delegation-policy requires the action seam, so it cascades too.
+    { name: "delegation-policy", because: "action" },
   ]);
   expect(offAction.inputs).toEqual([]);
   const offHook = await composed({ off: ["hook"] });
@@ -297,7 +299,7 @@ test("off cascades: action roots hook and hooks-json off; hook roots hooks-json 
     { name: "hook", because: "hook" },
     { name: "hooks-json", because: "hook" },
   ]);
-  expect(offHook.bundles).toEqual(["monitor", "cron"]);
+  expect(offHook.bundles).toEqual(["monitor", "cron", "send-message", "delegation-policy"]);
 });
 
 test("without the hook capability the bundle refuses at compose as seam_missing", () => {
@@ -476,7 +478,7 @@ async function offCascadeConfigureRows(prefix: string) {
   const sessionId = sessions[0]?.id ?? "";
   // The adopted generation dropped the cascaded bundle.
   const adopted = plane.openKernel(sessionId).latestGenerationFor(sessionId);
-  expect([...adopted.bundles].sort()).toEqual(["cron", "monitor"]);
+  expect([...adopted.bundles].sort()).toEqual(["cron", "delegation-policy", "monitor", "send-message"]);
   if (config.sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
   const database = new Database(join(config.sessionsDir, `${sessionId}.sqlite`), {
     readonly: true,
