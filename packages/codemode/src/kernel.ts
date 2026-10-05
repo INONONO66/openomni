@@ -690,6 +690,7 @@ while True:
     _cell_context.cell_id = None
     _emit({"kind": "result", "result": _result})
 _browser_close_all()
+_emit({"kind": "lifecycle", "event": "browser-cleanup-complete"})
 `;
 
 const ToolCallFrame = Machine.ToolCall.extend({
@@ -711,8 +712,20 @@ const Frame = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict(),
 ]);
 
-/** EOF-first close grace (#1275): time the driver gets to run its cleanup before SIGKILL. */
+/**
+ * EOF-first close grace (#1275): bounded wait for the driver's explicit
+ * browser-cleanup acknowledgement after stdin EOF. The normal path resolves
+ * at the ack (milliseconds); expiry is NOT success - close() SIGKILLs the
+ * driver and fails typed (#1293 r1), because elapsed time proves nothing
+ * about whether the cleanup actually ran.
+ */
 const DRIVER_EXIT_GRACE_MS = 2_000;
+/**
+ * Exact stdout line the driver emits once `_browser_close_all()` finished:
+ * the machine-observable cleanup outcome close() waits on. Must match
+ * `json.dumps({"kind": "lifecycle", "event": "browser-cleanup-complete"})`.
+ */
+const CLEANUP_COMPLETE_FRAME = '{"kind": "lifecycle", "event": "browser-cleanup-complete"}';
 
 /** Answers a call made from inside a cell. */
 type CellToolCaller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
@@ -733,6 +746,14 @@ export class PythonKernel {
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Deferred.Deferred<void>>();
   private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
+  private readonly cleanups = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
+  /**
+   * Drivers whose stdin was ended by close() (#1293 r3): the mark is set in
+   * the same synchronous step as stdin.end(), and write() checks it in the
+   * same synchronous step as stdin.write(), so no answer or request delivery
+   * can ever write after EOF.
+   */
+  private readonly closing = new WeakSet<ChildProcessWithoutNullStreams>();
 
   run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Effect.Effect<Machine.CellResult, CodeError> {
     return Effect.suspend(() => {
@@ -754,18 +775,52 @@ export class PythonKernel {
 
   close(): Effect.Effect<void, CodeError> {
     return Effect.gen({ self: this }, function* () {
-      this.lifetime.abort();
+      // Cleanup is requested from the live driver BEFORE the lifetime abort
+      // (#1293 r2): aborting first lets an active cell's ensuring block
+      // discard the interpreter, and close() would then observe no process
+      // and resolve without any cleanup witness. EOF-first close: the driver
+      // loop breaks on stdin EOF once the current cell (if any) returns, runs
+      // its browser cleanup (#1275) and acknowledges it with the lifecycle
+      // frame before exiting; a wedged cell never lets that ack arrive, so
+      // the bounded grace below expires and close() fails typed exactly like
+      // the idle path. stdin.end on a torn-down pipe is ignored because the
+      // discard SIGKILL is the authoritative teardown.
       const process = this.process;
-      if (process) {
-        // EOF-first close: the driver loop breaks on stdin EOF and runs its
-        // browser cleanup (#1275) before exiting; stdin.end on a torn-down pipe
-        // is ignored because the SIGKILL below is the authoritative teardown.
-        yield* Effect.try({ try: () => { process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
-        const exited = this.processExits.get(process);
-        if (exited !== undefined) yield* Deferred.await(exited).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS));
-        yield* this.discard(process);
+      let unconfirmed: DriverFailure | undefined;
+      if (process !== undefined) {
+        yield* Effect.try({ try: () => { this.closing.add(process); process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
+        const cleanup = this.cleanups.get(process);
+        const acked =
+          cleanup !== undefined &&
+          (yield* Deferred.await(cleanup).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS)))._tag === "Some";
+        if (acked) {
+          const exited = this.processExits.get(process);
+          if (exited !== undefined) yield* Deferred.await(exited).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS));
+        } else {
+          // Grace expiry is an explicit outcome, not silent success (#1293
+          // r1): the browser cleanup was never confirmed, so the SIGKILL
+          // below may leak Chromium and the caller must see that.
+          unconfirmed = new DriverFailure({
+            operation: "driver.cleanup",
+            message: `browser cleanup unacknowledged within the ${DRIVER_EXIT_GRACE_MS}ms close grace; driver SIGKILLed with teardown unconfirmed`,
+            cause: "cleanup-complete frame not observed before grace expiry",
+          });
+        }
       }
+      this.lifetime.abort();
+      // The permit serializes close with a just-cancelled cell: that cell's
+      // ensuring block discards the driver first, so this discard only fires
+      // when the driver is still live (idle expiry, or an acked exit whose
+      // process record lingers) and is otherwise a no-op.
+      yield* this.lock.withPermits(1)(Effect.suspend(() => {
+        const live = this.process;
+        return live === undefined ? Effect.void : this.discard(live);
+      }));
       yield* Effect.forEach([...this.exits], Deferred.await, { discard: true });
+      if (unconfirmed !== undefined) {
+        yield* Effect.logWarning(unconfirmed.message);
+        return yield* unconfirmed;
+      }
     });
   }
 
@@ -813,27 +868,59 @@ export class PythonKernel {
       yield* Effect.forkScoped(Effect.suspend(() => callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments })).pipe(
         Effect.catchCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
         Effect.flatMap((answer) => this.pending === pending ? this.write(pending.process, { ...answer, callId: frame.callId }) : Effect.void),
-        Effect.catch((error) => Effect.sync(() => { Queue.offerUnsafe(pending.frames, new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
+        Effect.catch((error) => Effect.sync(() => {
+          // The post-EOF refusal is the designed typed outcome (#1293 r3):
+          // close() already failed the driver-side call via EOF, so a late
+          // answer is dropped here instead of failing the cell.
+          if (error instanceof DriverFailure && error.operation === "driver.closing") return;
+          Queue.offerUnsafe(pending.frames, new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) }));
+        })),
         Effect.ensuring(Effect.sync(() => { pending.inFlight.delete(frame.callId); })),
       ));
     });
   }
 
+  /**
+   * Delivers a cell request or tool answer to the driver's stdin. The closing
+   * check and the write share one synchronous step, mirroring close()'s
+   * mark-then-EOF step, so a delivery racing close() becomes a typed refusal
+   * instead of a stream write whose asynchronous ERR_STREAM_WRITE_AFTER_END
+   * would escape every Effect boundary (#1293 r3).
+   */
   private write(process: ChildProcessWithoutNullStreams, value: Machine.CellRequest | (Machine.ToolCallResult & { callId: string })): Effect.Effect<void, CodeError> {
-    return Effect.try({ try: () => { process.stdin.write(`${JSON.stringify(value)}\n`); }, catch: decodeCodeFailure("driver.write") });
+    return Effect.try({
+      try: () => {
+        if (this.closing.has(process)) return false;
+        process.stdin.write(`${JSON.stringify(value)}\n`);
+        return true;
+      },
+      catch: decodeCodeFailure("driver.write"),
+    }).pipe(Effect.flatMap((written) => written ? Effect.void : new DriverFailure({
+      operation: "driver.closing",
+      message: "driver delivery refused: close() already ended stdin",
+      cause: "write after EOF refused",
+    })));
   }
 
   private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
     return Effect.gen({ self: this }, function* () {
       const exited = yield* Deferred.make<void>();
+      const cleanup = yield* Deferred.make<void>();
       const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
       this.exits.add(exited);
       this.processExits.set(process, exited);
+      this.cleanups.set(process, cleanup);
       process.once("close", () => { this.exits.delete(exited); Deferred.doneUnsafe(exited, Exit.void); });
       const lines = createInterface({ input: process.stdout });
       this.process = process;
       this.lines = lines;
       lines.on("line", (line) => {
+        // The cleanup ack is close()'s signal, never a cell frame: consume it
+        // here so a pending cell's frame loop never sees an unknown kind.
+        if (line === CLEANUP_COMPLETE_FRAME) {
+          Deferred.doneUnsafe(cleanup, Exit.void);
+          return;
+        }
         if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, line);
       });
       const fail = (message: string) => {
@@ -841,6 +928,9 @@ export class PythonKernel {
         if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, new DriverFailure({ operation: "driver.process", message, cause: message }));
       };
       process.once("error", (error) => fail(error.message));
+      // Asynchronous writable-stream failures must land in the typed driver
+      // failure path, never escape as an unhandled 'error' event (#1293 r3).
+      process.stdin.on("error", (error) => fail(`driver stdin error: ${error.message}`));
       process.once("exit", (code, signal) => fail(`python3 exited before replying (code=${String(code)}, signal=${signal})`));
       return process;
     });
