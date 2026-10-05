@@ -293,7 +293,6 @@ import {
 } from "./helpers/cluster-runtime";
 import { runAgent } from "./helpers/executor";
 import { parentReply } from "./helpers/composition-fixtures";
-import { seedPolicy } from "./helpers/seed-policy";
 
 const cluster = clusterTempDir("stale-entity-deliver-");
 afterAll(() => rmSync(cluster.dir, { recursive: true, force: true }));
@@ -384,14 +383,19 @@ test("H-3(a): a stale late-hook action through the REAL entity deliver door clos
       capabilityKinds: ["tool", "compaction", "action"],
       wrapStore: (id, store) => {
         if (id !== sessionId) return store;
-        return {
-          ...store,
-          sessions: {
-            ...store.sessions,
-            commit: (input) =>
-              store.sessions.commit(input).pipe(Effect.tap(() => Effect.sync(resolveOnTerminal))),
-          },
+        const sessions: typeof store.sessions = {
+          ...store.sessions,
+          commit: (input) =>
+            store.sessions.commit(input).pipe(Effect.tap(() => Effect.sync(resolveOnTerminal))),
         };
+        // SessionStore is a class handle: proxy the one adapter, delegate the rest.
+        return new Proxy(store, {
+          get: (target, prop) => {
+            if (prop === "sessions") return sessions;
+            const value = Reflect.get(target, prop, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
       },
       runTurnPort: (input) =>
         Effect.suspend(() => {

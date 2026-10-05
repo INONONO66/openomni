@@ -19,11 +19,12 @@ import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { appManifest } from "../src/manifest";
 import { gateRowPolicySeeds } from "../src/policy-seed";
 import { AppInvariantError } from "../src/invariant";
-import { assistantMessage } from "./helpers/assistant-message";
+import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { planeOf } from "./helpers/ledger";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { Bus } from "./helpers/bus";
+import { nextFrame } from "./helpers/ws";
 import { z } from "zod";
 import { executionReads } from "../../../packages/agent/test/helpers/execution-reads";
 import { isolated, isolatedLedger } from "../../../packages/agent/test/helpers/isolated";
@@ -1322,3 +1323,204 @@ test("H-2 e2e: an external PreToolUse rewrite reaches the REAL dispatched execut
     database.close();
   }
 }, 30_000);
+
+// ─── H-3(b) e2e: manifest rotation while a captured old turn is live ────────
+
+/** Logs `<pid> <request-json>` per consulted request, then answers allow. */
+const PID_REQUEST_LOG_SCRIPT = `
+const fs = require("node:fs");
+const decoder = new TextDecoder();
+let buffer = "";
+for await (const chunk of Bun.stdin.stream()) {
+  buffer += decoder.decode(chunk, { stream: true });
+  let cut;
+  while ((cut = buffer.indexOf("\\n")) >= 0) {
+    const line = buffer.slice(0, cut);
+    buffer = buffer.slice(cut + 1);
+    if (line.length === 0) continue;
+    const request = JSON.parse(line);
+    fs.appendFileSync(process.argv[2], process.pid + " " + line + "\\n");
+    console.log(JSON.stringify({ id: request.id, result: { type: "gate", verdict: "allow" } }));
+  }
+}
+`;
+
+/** Awaits a committed-state predicate: subscribe first, then re-check, never sleep. */
+async function untilCommitted(check: () => boolean, label: string, timeoutMs = 20_000) {
+  if (check()) return;
+  const settled = Promise.withResolvers<void>();
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, () => {
+    if (check()) settled.resolve();
+  });
+  const timer = setTimeout(() => settled.reject(new Error(label)), timeoutMs);
+  try {
+    if (check()) return;
+    await settled.promise;
+  } finally {
+    clearTimeout(timer);
+    unsubscribe();
+  }
+}
+
+/**
+ * Bounded OS-reap observation: process death has NO committed fact to
+ * subscribe to, so `kill(pid, 0)` is probed until ESRCH (the issue's one
+ * sanctioned poll). Timeout is a failure guard, never a synchronizer.
+ */
+async function untilReaped(pid: number, label: string, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    if (Date.now() > deadline) throw new Error(label);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+test("H-3(b) e2e: a real generation rotation mid-turn — the old turn keeps its captured hook PID, the next turn uses the new one, the old PID is reclaimed", async () => {
+  const dir = suite.tempDir("hooks-json-rotate-");
+  const script = join(dir, "rotate-hook.js");
+  writeFileSync(script, PID_REQUEST_LOG_SCRIPT);
+  const requestLog = join(dir, "requests.log");
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({
+      PreToolUse: [{ command: [process.execPath, script, requestLog], timeoutMs: 30_000 }],
+    }),
+  );
+  const TOKEN = "hooks-rotate";
+  const config = suite.config("hooks-json-rotate-state-", {
+    hooksPath,
+    wsToken: TOKEN,
+    compactionSummarizer: false,
+  });
+  const probeTool = Core.eraseTool(
+    Core.defineTool({
+      name: "probe",
+      description: "test probe executor",
+      category: "query",
+      visibility: { model: ["resident"], cell: [] },
+      input: z.object({ note: z.string() }),
+      output: z.string(),
+      execute: (input) => Promise.resolve(input.note),
+      render: (_input, result) => result,
+    }),
+  );
+  let calls = 0;
+  const app = await suite.boot({
+    config,
+    toolDefinitions: [probeTool],
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          calls += 1;
+          if (calls === 1)
+            requestToolStep(input, sink, {
+              id: "rotate-disable",
+              tool: "provision",
+              input: { operation: { op: "bundle_disable", args: { name: "monitor" } } },
+            });
+          else if (calls === 2)
+            requestToolStep(input, sink, {
+              id: "rotate-old-probe",
+              tool: "probe",
+              input: { note: "old-turn-probe" },
+            });
+          else if (calls === 3)
+            sink.onMessage(
+              assistantMessage(input, { id: "rotate-t1", text: "turn one done", createdAt: Date.now() }),
+            );
+          else if (calls === 4)
+            requestToolStep(input, sink, {
+              id: "rotate-new-probe",
+              tool: "probe",
+              input: { note: "new-turn-probe" },
+            });
+          else
+            sink.onMessage(
+              assistantMessage(input, { id: "rotate-t2", text: "turn two done", createdAt: Date.now() }),
+            );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", TOKEN]);
+  const residentId = () => plane.listSessions().find((row) => row.id !== "gateway-ingress")?.id;
+  const lastTerminal = (sessionId: string) =>
+    plane.openKernel(sessionId).getSnapshot(sessionId).turns.at(-1)?.terminal?.kind;
+  // Turn 1: the provision call consults the OLD generation's hook PID, then
+  // suspends on Owner consent.
+  ws.send(JSON.stringify({ type: "message", eventId: "rotate-turn-1", text: "disable monitor" }));
+  const openRequest = () => {
+    const sessionId = residentId();
+    if (sessionId === undefined) return undefined;
+    return plane
+      .openKernel(sessionId)
+      .requestRows(sessionId)
+      .find((request) => request.state === "open");
+  };
+  await untilCommitted(() => openRequest() !== undefined, "bundle_disable consent never opened");
+  const sessionId = residentId();
+  if (sessionId === undefined) throw new Error("no resident session");
+  const generationBefore = plane.openKernel(sessionId).latestGenerationFor(sessionId).generation;
+  const request = openRequest();
+  if (request === undefined) throw new Error("missing consent request");
+  // Owner approval: the app recomposes; the RUNNING turn keeps its captured
+  // generation (and with it the captured hook consultant process).
+  const receipt = nextFrame(ws, (frame) => frame.type === "receipt" && frame.inputId === "rotate-answer");
+  ws.send(
+    JSON.stringify({
+      type: "request_answer",
+      inputId: "rotate-answer",
+      request,
+      decision: "approve",
+      credential: TOKEN,
+    }),
+  );
+  await receipt;
+  await untilCommitted(() => lastTerminal(sessionId) === "result", "turn one never finished");
+  expect(calls).toBe(3);
+  // The old turn ran BOTH its consults (pre- and post-rotation) on ONE pid:
+  // the captured consultant, not the recomposed generation's new process.
+  const lines = () =>
+    readFileSync(requestLog, "utf8")
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const cut = line.indexOf(" ");
+        return { pid: Number(line.slice(0, cut)), request: line.slice(cut + 1) };
+      });
+  const pidFor = (needle: string) => {
+    const hits = lines().filter((entry) => entry.request.includes(needle));
+    expect(hits.length).toBeGreaterThan(0);
+    const pids = new Set(hits.map((entry) => entry.pid));
+    expect(pids.size).toBe(1);
+    const [pid] = pids;
+    if (pid === undefined || !Number.isInteger(pid)) throw new Error(`bad pid for ${needle}`);
+    return pid;
+  };
+  const oldPid = pidFor("bundle_disable");
+  expect(pidFor("old-turn-probe")).toBe(oldPid);
+  // The old turn ended, releasing its capture; the swap itself commits at the
+  // NEXT adoption (the compose configure rides turn 2's start), and THAT
+  // closes the old generation Scope — the rotation finalizer kills the
+  // captured hook process.
+  ws.send(JSON.stringify({ type: "message", eventId: "rotate-turn-2", text: "probe again" }));
+  await untilCommitted(() => calls >= 5, "turn two never ran");
+  await untilCommitted(() => lastTerminal(sessionId) === "result", "turn two never finished");
+  await untilReaped(oldPid, "old generation hook PID never reclaimed");
+  // Turn 2 ran on the recomposed generation: a NEW hook process served it.
+  const newPid = pidFor("new-turn-probe");
+  expect(newPid).not.toBe(oldPid);
+  expect(() => process.kill(newPid, 0)).not.toThrow();
+  expect(plane.openKernel(sessionId).latestGenerationFor(sessionId).generation).toBe(
+    generationBefore + 1,
+  );
+}, 40_000);
