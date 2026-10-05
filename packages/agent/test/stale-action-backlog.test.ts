@@ -268,3 +268,228 @@ test("a stale action delivered DURING a turn closes via turn.consumed.stale at t
       expect(kernel.pendingMessages("S").map((item) => item.id)).toEqual([]);
     }),
   ));
+
+// ---------------------------------------------------------------------------
+// #1256 H-3(a) (r4): the SAME closure, but the stale action travels the REAL
+// entity `deliver{kind: "action"}` door (the late hook re-entry path) into the
+// production run loop — entity Deliver RPC → run boundary → turn.consumed.stale.
+// ---------------------------------------------------------------------------
+
+import { Database } from "bun:sqlite";
+import { rmSync } from "node:fs";
+import { afterAll } from "bun:test";
+import { createSessionEntityRunTurn, type SessionKernel } from "../src/core/entity";
+import { resolveSessionRuntime, type SessionRuntime } from "../src/core/run";
+import type { SessionEntityPorts } from "../src/core/run";
+import { openCatalogStore } from "../src/core/store/catalog";
+import { openSessionStore } from "../src/core/store/session-file";
+import * as FenceStore from "../src/core/store/fence";
+import {
+  clusterTempDir,
+  runCluster,
+  sendDeliver,
+  sendPrompt,
+  sessionFileFor,
+} from "./helpers/cluster-runtime";
+import { runAgent } from "./helpers/executor";
+import { parentReply } from "./helpers/composition-fixtures";
+import { seedPolicy } from "./helpers/seed-policy";
+
+const cluster = clusterTempDir("stale-entity-deliver-");
+afterAll(() => rmSync(cluster.dir, { recursive: true, force: true }));
+
+test("H-3(a): a stale late-hook action through the REAL entity deliver door closes via turn.consumed.stale at the run boundary", async () => {
+  const sessionId = "stale-entity";
+  const file = sessionFileFor(cluster.sessionsDir, sessionId);
+  const now = () => Date.now();
+  // Provision BEFORE the cluster boots: materialize, seed policy rows, and
+  // commit the EXECUTED compaction every later `after` cursor is measured
+  // against (head > 1, so after:1 is stale by construction).
+  await runAgent(
+    Effect.gen(function* () {
+      const catalog = openCatalogStore(cluster.catalogFile, { now });
+      const store = openSessionStore(file, { now });
+      const kernel = FenceStore.createSessionKernel(store, catalog);
+      seedPolicy([], catalog.policies);
+      yield* kernel.materialize({
+        id: sessionId,
+        parentId: null,
+        role: "resident",
+        tools: [],
+        system: { preset: "", blocks: [] },
+        policyGeneration: 1,
+        actionId: `${sessionId}:materialize`,
+        at: now(),
+      });
+      catalog.indexSession({ id: sessionId, parentId: null, role: "resident", createdAt: now() });
+      // Rotate THROUGH the catalog so the entity's own activation rotation
+      // (file fence CAS accepts only strictly newer) still wins later.
+      const fence = catalog.rotateFence(sessionId);
+      yield* kernel.adoptFence({ sessionId, owner: "provisioner", fence });
+      yield* kernel.commit({
+        sessionId,
+        owner: "provisioner",
+        fence,
+        now: now(),
+        expectedRevision: kernel.row(sessionId).revision,
+        actions: [
+          {
+            id: "compaction-1",
+            parentId: kernel.latestAction(sessionId)?.id ?? null,
+            sessionId,
+            kind: "compaction",
+            intent: { encodingVersion: 1, value: { reason: "threshold" } },
+            effect: {
+              encodingVersion: 1,
+              value: { phase: "result", terminal: "executed", result: { projection: [] } },
+            },
+            irreversible: true,
+            ts: now(),
+          },
+        ],
+        state: kernel.row(sessionId).state,
+      });
+      expect(kernel.compactionHead(sessionId)).toBeGreaterThan(1);
+      store.close();
+      catalog.close();
+    }),
+  );
+  // The committed-terminal barrier: the activation's OUTER commit transaction
+  // is wrapped (wrapStore below); after each committed batch the wrapper reads
+  // the file and resolves once the turn TERMINAL row is durable. A push on the
+  // exact committed fact — no polling, no sleeps.
+  const terminal = Promise.withResolvers<void>();
+  const resolveOnTerminal = () => {
+    const db = new Database(file, { readonly: true });
+    try {
+      const row = db
+        .query(
+          "SELECT id FROM action WHERE kind = 'turn' AND json_extract(intent, '$.phase') = 'terminal' LIMIT 1",
+        )
+        .get();
+      if (row !== null) terminal.resolve();
+    } finally {
+      db.close();
+    }
+  };
+  // The production turn port is built INSIDE the scoped program (it needs the
+  // resolved session services); the entity reaches it through this cell.
+  const port: { current?: SessionEntityPorts["runTurn"] } = {};
+  const drained: string[][] = [];
+  await runCluster(
+    {
+      sessionsDir: cluster.sessionsDir,
+      catalogFile: cluster.catalogFile,
+      inputRegistrations: ["prompt", "signal", "action"],
+      capabilityKinds: ["tool", "compaction", "action"],
+      wrapStore: (id, store) => {
+        if (id !== sessionId) return store;
+        return {
+          ...store,
+          sessions: {
+            ...store.sessions,
+            commit: (input) =>
+              store.sessions.commit(input).pipe(Effect.tap(() => Effect.sync(resolveOnTerminal))),
+          },
+        };
+      },
+      runTurnPort: (input) =>
+        Effect.suspend(() => {
+          const live = port.current;
+          if (live === undefined) return Effect.die(new Error("turn port not installed"));
+          return live(input);
+        }),
+    },
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope;
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const runner: SessionRunner = (input) =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(entered, undefined);
+          yield* Deferred.await(release);
+          const batch = yield* input.boundary("after_tools");
+          drained.push(batch.messages.map((message) => message.text));
+          return { kind: "result", text: "done" };
+        });
+      // A read-plane kernel per session over the SAME files the entity owns:
+      // services (policy compiler, generation capture) read through it; every
+      // turn COMMIT rides the activation's own kernel and fence.
+      const catalog = openCatalogStore(cluster.catalogFile, { now });
+      yield* Effect.addFinalizer(() => Effect.sync(() => catalog.close()));
+      const kernels = new Map<string, SessionKernel>();
+      const openKernel = (id: string): SessionKernel => {
+        let kernel = kernels.get(id);
+        if (kernel === undefined) {
+          kernel = FenceStore.createSessionKernel(
+            openSessionStore(sessionFileFor(cluster.sessionsDir, id), { now }),
+            catalog,
+          );
+          kernels.set(id, kernel);
+        }
+        return kernel;
+      };
+      const runtime: SessionRuntime = {
+        authorizeConfigure: allowConfigure,
+        openKernel,
+        listSessions: () => [],
+        parentReply,
+      };
+      const fixture = {
+        ...runtime,
+        observations: { publish: () => undefined, subscribe: () => () => undefined },
+      };
+      const resolved = yield* withSessionServices(resolveSessionRuntime(runtime), fixture);
+      port.current = createSessionEntityRunTurn(runner, resolved, scope);
+      // Turn start through the entity's own deliver door.
+      yield* sendPrompt(sessionId, "p-start", "start");
+      yield* bounded(Deferred.await(entered));
+      // Mid-turn, the late hook reply re-enters through deliver{kind:action}
+      // with its CALL-time after cursor pointing BEFORE the compaction head.
+      const receipt = yield* sendDeliver(sessionId, {
+        kind: "action",
+        idempotencyKey: "stale-action",
+        content: "{}",
+        delivery: "steer",
+        after: 1,
+        source: JSON.stringify({ kind: "hook.late", after: 1 }),
+      });
+      expect(receipt.existed).toBe(false);
+      yield* Deferred.succeed(release, undefined);
+      yield* Effect.promise(() => terminal.promise).pipe(Effect.timeout("10 seconds"));
+    }),
+  );
+  // The live boundary did NOT deliver the stale action...
+  expect(drained[0]).toEqual([]);
+  const db = new Database(file, { readonly: true });
+  try {
+    const actions = db
+      .query<{ id: string; kind: string; intent: string }, []>(
+        "SELECT id, kind, intent FROM action ORDER BY ordinal ASC",
+      )
+      .all();
+    const deliveries = actions.filter(
+      (action) => (JSON.parse(action.intent) as { inboxId?: string }).inboxId === "stale-action",
+    );
+    expect(deliveries).toEqual([]);
+    // ...it closed durably via the turn chain's consumedStale list...
+    const closures = actions
+      .filter((action) => action.kind === "turn")
+      .map((action) => (JSON.parse(action.intent) as { consumedStale?: string[] }).consumedStale)
+      .filter((value) => value !== undefined);
+    expect(closures).toContainEqual(["stale-action"]);
+  } finally {
+    db.close();
+  }
+  // ...and the pending fold never surfaces it again.
+  await runAgent(
+    Effect.sync(() => {
+      const catalog = openCatalogStore(cluster.catalogFile, { now });
+      const store = openSessionStore(file, { now });
+      const kernel = FenceStore.createSessionKernel(store, catalog);
+      expect(kernel.pendingMessages(sessionId)).toEqual([]);
+      store.close();
+      catalog.close();
+    }),
+  );
+});
