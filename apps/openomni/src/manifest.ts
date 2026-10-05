@@ -1,9 +1,8 @@
 import { Bundle } from "@openomni/agent";
 import { cronBundle } from "./bundles/cron";
 import { monitorBundle } from "./bundles/monitor";
-
-/** The tool capability's seam; no bundle requires it yet, `Capability.define` needs one. */
-const ToolCapabilitySeam = Bundle.seam("@openomni/openomni/ToolCapabilitySeam");
+import { sendMessageBundle } from "./bundles/send-message";
+import { ToolCapabilitySeam } from "./bundles/seams";
 
 /**
  * The thin tool-capability contract (#1255 P3): the dispatcher stays the
@@ -41,7 +40,7 @@ export interface AppManifestInput {
 export function appManifest(input: AppManifestInput): Bundle.ManifestDefinition {
   return Bundle.Manifest.define({
     capabilities: [toolCapability, input.alarm],
-    bundles: [monitorBundle(input.wake), cronBundle()],
+    bundles: [monitorBundle(input.wake), cronBundle(), sendMessageBundle()],
     off: input.off ?? [],
   });
 }
