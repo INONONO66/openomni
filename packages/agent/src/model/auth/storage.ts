@@ -1,4 +1,5 @@
 import z from "zod";
+import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { Effect } from "effect";
@@ -50,7 +51,7 @@ export namespace Auth {
   }
 
   export function reference(info: Info): { readonly type: Info["type"]; readonly fingerprint: string } {
-    const digest = new Bun.CryptoHasher("sha256").update(JSON.stringify(info)).digest("hex");
+    const digest = createHash("sha256").update(JSON.stringify(info)).digest("hex");
     return { type: info.type, fingerprint: digest.slice(0, 16) };
   }
 

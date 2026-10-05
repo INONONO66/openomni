@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { Effect } from "effect";
 import { decodeLlmFailure } from "../error";
@@ -24,7 +25,7 @@ function normalizeModelsURL(baseURL: string): string {
 }
 
 function credentialFingerprint(apiKey: string | undefined): string {
-  return new Bun.CryptoHasher("sha256")
+  return createHash("sha256")
     .update(apiKey === undefined ? "no-api-key" : `api-key:${apiKey}`)
     .digest("hex");
 }
