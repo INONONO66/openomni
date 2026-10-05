@@ -10,6 +10,8 @@ export {
   HookGateVerdict,
   HookSpawnError,
   type HookCallInput,
+  type HookChildProcess,
+  type HookLateResult,
   type HookOutcome,
   type HookProcess,
   type HookProcessConfig,

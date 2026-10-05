@@ -103,6 +103,19 @@ export interface HookProcessConfig {
   readonly onLate?: (late: HookLateResult) => void;
 }
 
+/**
+ * The child-process surface the service drives (#1256 r2 C-1): exactly what
+ * `Bun.spawn` returns, narrowed to the used members so a test can inject a
+ * child whose pipe fails — the ONE seam for the write-failure path.
+ */
+export interface HookChildProcess {
+  readonly pid: number;
+  readonly stdout: AsyncIterable<Uint8Array>;
+  readonly stdin: { write(data: string): unknown; flush(): unknown };
+  kill(): void;
+  readonly exited: Promise<number>;
+}
+
 /** The scoped service face: one live PID, one bounded call at a time semantics-free. */
 export interface HookProcess {
   readonly pid: number;
@@ -150,16 +163,12 @@ function outcomeOf(result: z.infer<typeof HookResult>): HookOutcome {
  */
 export function acquireHookProcess(
   config: HookProcessConfig,
+  spawn: (command: readonly string[]) => HookChildProcess = (command) =>
+    Bun.spawn({ cmd: [...command], stdin: "pipe", stdout: "pipe", stderr: "ignore" }),
 ): Effect.Effect<HookProcess, HookSpawnError, Scope.Scope> {
   return Effect.gen(function* () {
     const child = yield* Effect.try({
-      try: () =>
-        Bun.spawn({
-          cmd: [...config.command],
-          stdin: "pipe",
-          stdout: "pipe",
-          stderr: "ignore",
-        }),
+      try: () => spawn(config.command),
       catch: (cause) => new HookSpawnError({ command: config.command, cause: String(cause) }),
     });
 

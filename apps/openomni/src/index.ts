@@ -1157,7 +1157,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         },
       };
     };
-    let stopping: Promise<void> | undefined;
     const stop = async () => {
       await boundServer.stop(true);
       await supervisor.stopAll();
@@ -1203,13 +1202,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // declared row did or did not mount (provision_status reads this later).
       channels: { source: liveSupervisor().source(), statuses: liveSupervisor().status() },
       runtime,
-      stop: () => {
-        stopping ??= stop().catch((error: Error) => {
-          stopping = undefined;
-          throw error;
-        });
-        return stopping;
-      },
+      stop: retryableOnce(stop),
     };
   };
   const outcome = await boot().then(
@@ -1223,6 +1216,22 @@ export async function startOpenOmni(options: StartOptions = {}) {
     throw outcome.failure;
   }
   return outcome.success;
+}
+
+/**
+ * One shared in-flight run (#1256 r2 C-1): concurrent callers join the same
+ * promise, a rejection clears the memo so the NEXT call retries, and a
+ * success is permanent — a stopped app never stops twice.
+ */
+export function retryableOnce(run: () => Promise<void>): () => Promise<void> {
+  let inFlight: Promise<void> | undefined;
+  return () => {
+    inFlight ??= run().catch((error: Error) => {
+      inFlight = undefined;
+      throw error;
+    });
+    return inFlight;
+  };
 }
 
 /**

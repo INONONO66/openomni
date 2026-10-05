@@ -15,7 +15,7 @@ import {
 } from "../src/bundles/hooks-json";
 import { composedHolderOf } from "../src/composition/composed";
 import { createWatchPlane } from "../src/composition/watch-plane";
-import { gatewayRuntime } from "../src/gateway";
+import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { appManifest } from "../src/manifest";
 import { gateRowPolicySeeds } from "../src/policy-seed";
 import { AppInvariantError } from "../src/invariant";
@@ -394,8 +394,9 @@ test("capability-removed one-turn gate: the cascade is journaled in session.conf
   expect(second).toEqual(first);
 });
 
-/** The scripted prompt hook: denies any decision input containing "forbidden". */
+/** The scripted hook: denies any decision input containing the argv trigger (default "forbidden"). */
 const PROMPT_HOOK_SCRIPT = `
+const trigger = process.argv[2] ?? "forbidden";
 const decoder = new TextDecoder();
 let buffer = "";
 for await (const chunk of Bun.stdin.stream()) {
@@ -406,8 +407,8 @@ for await (const chunk of Bun.stdin.stream()) {
     buffer = buffer.slice(cut + 1);
     if (line.length === 0) continue;
     const request = JSON.parse(line);
-    const result = JSON.stringify(request.decisionInput).includes("forbidden")
-      ? { type: "gate", verdict: "deny", reason: "forbidden_prompt" }
+    const result = JSON.stringify(request.decisionInput).includes(trigger)
+      ? { type: "gate", verdict: "deny", reason: "hook_refused" }
       : { type: "gate", verdict: "allow" };
     console.log(JSON.stringify({ id: request.id, result }));
   }
@@ -483,7 +484,7 @@ test("H-1/M-2 e2e: a UserPromptSubmit command hook gates the REAL prompt path an
       expect(denyGate?.consulted).toEqual([
         expect.objectContaining({
           ref: Bundle.HOOK_PROCESS_REF,
-          payload: expect.objectContaining({ verdict: "deny", reason: "forbidden_prompt" }),
+          payload: expect.objectContaining({ verdict: "deny", reason: "hook_refused" }),
         }),
       ]);
       const allowGate = decisions[1]?.gate;
@@ -499,4 +500,61 @@ test("H-1/M-2 e2e: a UserPromptSubmit command hook gates the REAL prompt path an
   } finally {
     unsubscribe();
   }
+});
+
+test("C-1: a SessionStart hook denying tools.add fails the facade configure op fail-closed", async () => {
+  const dir = suite.tempDir("hooks-json-configure-");
+  const script = join(dir, "configure-hook.js");
+  writeFileSync(script, PROMPT_HOOK_SCRIPT);
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({
+      SessionStart: [{ command: [process.execPath, script, "tools.add"], timeoutMs: 30_000 }],
+    }),
+  );
+  const config = suite.config("hooks-json-configure-state-", { hooksPath });
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      // The turn HOLDS at the model boundary: the session facade (tools.add)
+      // exists only while a live turn is registered.
+      run: (input: RunInput, sink: Sink) =>
+        Effect.promise(async () => {
+          entered.resolve();
+          await release.promise;
+          sink.onMessage(
+            assistantMessage(input, { id: "cfg-1", text: "ok 1", createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  const reply = nextResidentTurn(plane);
+  ws.send(JSON.stringify({ type: "message", eventId: "cfg-1", text: "hello" }));
+  await entered.promise;
+  try {
+    const row = plane.listSessions().find((session) => session.id !== "gateway-ingress");
+    if (row === undefined) throw new Error("missing resident session");
+    const handle = app.sessions.get(row.id);
+    if (handle === undefined) throw new Error("missing live session");
+    const before = plane.openKernel(row.id).latestGenerationFor(row.id).generation;
+    // The hook consults on session.open and denies the tools.add op: the
+    // facade configure fails typed, and NO generation advance is committed.
+    const refusal = await runAppEffect(app.runtime, handle.tools.add([])).then(
+      () => undefined,
+      (error: unknown) => String(error),
+    );
+    expect(refusal).toContain("session.configure");
+    expect(refusal).toContain("denied");
+    expect(plane.openKernel(row.id).latestGenerationFor(row.id).generation).toBe(before);
+  } finally {
+    release.resolve();
+  }
+  expect(await reply).toMatchObject({ text: "ok 1" });
 });

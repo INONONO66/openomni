@@ -385,3 +385,40 @@ test("H-3: the consultant routes a late result to seed.late with its CALL-time a
       }),
     ),
   ));
+
+test("C-1: a stdin write failure settles the call as a typed exit failure, nothing in flight", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        // Bun's FileSink swallows EPIPE, so the broken pipe is injected at the
+        // one spawn seam: a live child whose stdin write throws.
+        let exited!: (code: number) => void;
+        const child = {
+          pid: 4242,
+          stdout: (async function* (): AsyncGenerator<Uint8Array> {
+            await new Promise<void>(() => undefined);
+          })(),
+          stdin: {
+            write(): never {
+              throw new Error("EPIPE: broken pipe");
+            },
+            flush: (): undefined => undefined,
+          },
+          kill: () => exited(0),
+          exited: new Promise<number>((resolve) => {
+            exited = resolve;
+          }),
+        };
+        const hook = yield* acquireHookProcess(
+          { command: ["./hook.sh"], timeoutMs: 60_000 },
+          () => child,
+        ).pipe(Scope.provide(scope));
+        expect(yield* hook.call(request("allow"))).toEqual({
+          kind: "failure",
+          code: "hook_timeout",
+          cause: "exit",
+        });
+        expect(hook.inFlight()).toBe(0);
+      }),
+    ),
+  ));
