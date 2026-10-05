@@ -26,7 +26,7 @@ export const toolCapability = Bundle.Capability.define({
  * a wake or reply rides into a session. `bundles/delegation-policy` requires
  * its seam, so composing `action` off cascades delegation policy off too.
  */
-export const actionCapability = Bundle.Capability.define({
+const actionCapability = Bundle.Capability.define({
   name: "action",
   requires: [],
   inputs: ["action"],

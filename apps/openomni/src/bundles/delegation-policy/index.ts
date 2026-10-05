@@ -149,7 +149,7 @@ export function delegationRows(): readonly Bundle.BundleGateRow[] {
 export const DELEGATION_DEADLINE = "delegation.deadline";
 
 /** Armed alongside a `to.new` send carrying `deadline_ms`. */
-export const DeadlinePayload = z
+const DeadlinePayload = z
   .object({
     /** The child session the deadline bounds. */
     child: z.string().min(1),
@@ -157,7 +157,6 @@ export const DeadlinePayload = z
     contact: z.string().min(1),
   })
   .strict();
-export type DeadlinePayload = z.infer<typeof DeadlinePayload>;
 
 /** Composition wires this to the entity deliver door: `signal{control: cancel}` to the child. */
 export interface DelegationDeadlineDeps {
