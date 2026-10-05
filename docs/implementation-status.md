@@ -4,9 +4,10 @@
 
 On `epic1260/1257-fork-chains` (2026-10-05, base `3ccafed1`). `Core.forkSession`
 (`packages/agent/src/core/fork.ts`) forks a parent session at a verifiable
-boundary — a `turn{terminal}` row, a `prompt`/`signal` delivery row, or a
-`compaction` row; any other anchor refuses `anchor_not_boundary`, an unknown
-hash `anchor_not_found` — into a NEW session file with its own hash chain. The
+boundary — exactly a `turn{terminal}` row, a `prompt` row, or a `compaction`
+row (`signal` rows are NOT boundaries); any other anchor refuses
+`anchor_not_boundary`, an unknown hash `anchor_not_found` — into a NEW session
+file with its own hash chain. The
 child genesis is `session.configure{operation: "fork", forkedFrom: {session,
 anchor, parentSeq, parentHead, copied}}` (schema in
 `packages/protocol/src/journal/core/session-configure.ts`), pinning the parent
@@ -22,23 +23,28 @@ the parent occurrence still runs, and a copied orphan `alarm{fired}` folds to
 so a child re-arm can never collide). The parent file's schema stamp
 (`SESSION_FILE_SCHEMA_VERSION` via `PRAGMA user_version`,
 `packages/agent/src/core/store/session-file/`) is probed read-only first; a
-mismatch refuses `schema_version` with zero child writes. The copy is bounded
-(`DEFAULT_FORK_COPY_BYTE_CAP` 4 MiB, `byteCap` override — an Owner-visible
-deviation: the issue named no cap) and `SessionStore.fork` appends genesis plus
-copies in one transaction; an existing child id refuses `child_exists` leaving
-the first chain intact.
+mismatch refuses `schema_version` with zero child writes. The copy cap is generation
+configuration per the issue's "cap copied bytes in generation configuration":
+`session.configure{settings.forkCopyByteCap}` is folded off the parent
+generation like the consumption widths (`DEFAULT_FORK_COPY_BYTE_CAP` 4 MiB when
+unset), and the app's resolved startup value (env `OPENOMNI_FORK_COPY_BYTE_CAP`)
+is the input written into each new session's genesis settings.
+`SessionStore.fork` appends genesis plus copies in one transaction; an existing
+child id refuses `child_exists` leaving the first chain intact.
 
 Ancestry and the aside are inspect projections only.
 `packages/agent/src/inspect/tree.ts` exposes `forkAncestryOf` (reads the child
 genesis pin), `forkAside` (the "Forked from session …" text), and `inspectTree`
 (depth-3/limit-64 bounded tree over catalog `parentId` edges with continuation
 cursors). `session_read` pages carry optional `ancestry {parentId, forkedFrom,
-aside}`, the `session_fork` gateway method + websocket frame land in
+aside}` plus the optional fork `children` list (id + anchor + title where
+known) the desktop renders as a clickable Forks list opening each child as a
+bound local session, the `session_fork` gateway method + websocket frame land in
 `packages/protocol/src/gateway/session-read.ts` / `packages/channels` /
 `apps/openomni/src/composition/session-fork.ts`, and the desktop session header
 renders the aside. `foldSessionHistory` never reads `session.configure`
 intents, so the aside cannot reach model context or compaction; the only
-promotion path is `forkAsideRewrite`, an opt-in `prompt.pre` gate handler
+promotion path is `forkAsideTransformer`, an opt-in `prompt.pre` gate handler
 registered nowhere by default.
 
 `receivedMessages` and its fold state (`foldReceivedAction`, `ReceivedEntry`,
