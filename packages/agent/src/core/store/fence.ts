@@ -66,12 +66,11 @@ export interface SessionKernelStores {
 /**
  * Handle-scoped storage access (W5.2 review F1). `stores()` throws when
  * storage is unreachable — read paths fail closed exactly like the previous
- * process-global reads; `writable()` gates write paths, which refuse with a
- * typed `StorageUnavailable` instead of throwing.
+ * process-global reads; write paths refuse with a typed `StorageUnavailable`
+ * when a required store is absent.
  */
 export interface SessionKernelContext {
   stores(): SessionKernelStores;
-  writable(): boolean;
   readonly childSessionsPage: CatalogStore["childSessionsPage"];
   /** #1254 S3: the catalog `has_armed` flag write (ordering law in `commitIn`). */
   readonly markArmed?: (sessionId: string, armed: boolean) => void;
@@ -890,7 +889,6 @@ function assertUniqueBlocks(blocks: readonly SessionGeneration.SystemBlock[]): v
 
 function sessionWritesIn(context: SessionKernelContext) {
   return writeEffect("storage.sessions", (refuse) => {
-    if (!context.writable()) return refuse(new StorageUnavailable({ capability: "storage" }));
     const sessions = context.stores().sessions;
     if (sessions === undefined) return refuse(new StorageUnavailable({ capability: "sessions" }));
     return sessions;
@@ -1038,7 +1036,6 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
       policies: catalog.policies,
       armed: { armedAlarms: session.armedAlarms, armedCount: session.armedCount },
     }),
-    writable: () => true,
     childSessionsPage: (parentId, afterId, limit) =>
       catalog.childSessionsPage(parentId, afterId, limit),
     markArmed: (sessionId, armed) => catalog.markArmed(sessionId, armed),
