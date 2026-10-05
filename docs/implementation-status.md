@@ -1253,4 +1253,4 @@ claim about it.
 
 ## #1259 slop cleanup
 
-Band b6 (`epic1260/1259-b6-ui-script-gates`) fixed item 171 (the quality-native-process excerpt-size comment now matches `ERROR_LIMIT`, 20 kB), recorded items 167/173/174/179 as resolved by #1241/#1037/#1015/#989, and kept the remaining 11 ui and script-gates items with one-line rationales in the §L table of [SLOP.md](SLOP.md).
+Band b6 (`epic1260/1259-b6-ui-script-gates`) fixed item 171 (the quality-native-process excerpt-size comment now matches `ERROR_LIMIT`, 20 kB), and kept the remaining 15 ui and script-gates items with one-line rationales in the §L table of [SLOP.md](SLOP.md); the mechanical triage had labelled items 167/173/174/179 as resolved by #1241/#1037/#1015/#989, and review r1 disproved each against origin/main `79649f3c` (the symbols and concerns still exist), so the row records them as keeps with the inventory's own rationales.
