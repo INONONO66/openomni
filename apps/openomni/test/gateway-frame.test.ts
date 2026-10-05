@@ -103,6 +103,10 @@ test("attemptUsage in the read frame is byte-equal to the llm attempt fold DTO",
 test("session_bound keeps its fields and the page frame keeps its field set", () => {
   expect(Object.keys(SessionRead.Bound.shape)).toEqual(["type", "result"]);
   expect(Object.keys(SessionRead.Receipt.shape)).toEqual(["type", "status"]);
+  // #1257 adds exactly one OPTIONAL field: `ancestry`, the fork projection the
+  // issue requires on the gateway read DTO ("gateway DTO show parent and
+  // anchor"). Every pre-#1257 field keeps its position; a page without a fork
+  // still parses with no ancestry key on the wire.
   expect(Object.keys(SessionRead.Page.shape)).toEqual([
     "type",
     "sessionId",
@@ -116,7 +120,9 @@ test("session_bound keeps its fields and the page frame keeps its field set", ()
     "actions",
     "usage",
     "toolWallMs",
+    "ancestry",
   ]);
+  expect(SessionRead.Page.shape.ancestry.safeParse(undefined).success).toBeTrue();
   const bound = SessionRead.Bound.parse({
     type: "session_bound",
     result: {
