@@ -48,6 +48,7 @@ import {
 } from "@openomni/machines";
 import {
   Alarm,
+  Operational,
   traceIdFromUuid,
   type BusEvent,
   type Channel,
@@ -359,6 +360,15 @@ export async function startOpenOmni(options: StartOptions = {}) {
       release: (value: A) => Effect.Effect<void, E2>,
     ) => runAppBoot(runtime, bootResource(resource, release));
     const plane = services.plane;
+    // #1259: composition incidents ride the observation plane, never bare stderr.
+    const incident = (msg: string, error: unknown): void =>
+      services.observations.publish(Operational.Events.Error, {
+        traceId: traceIdFromUuid(services.entropy.id()),
+        time: services.now(),
+        component: "app",
+        msg,
+        error: String(error),
+      });
     // #1255 P3: compose owns the generation row tables — the composed
     // generation's gate rows seed the live policy plane, bundle-neutrally.
     seedKernelPolicyRows(
@@ -634,7 +644,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       },
       {
         clock: services.now,
-        failure: (watchId, error) => console.error(`watch ${watchId} send failed`, error),
+        failure: (watchId, error) => incident(`watch ${watchId} send failed`, error),
         ...(tools.machines === undefined ? {} : { machines: tools.machines }),
       },
     );
@@ -699,7 +709,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           source: JSON.stringify({ kind: "hook.late" }),
           idempotencyKey: `hook-late:${services.entropy.id()}`,
         }),
-      ).catch((error) => console.error(`late hook result for ${sessionId} dropped`, error));
+      ).catch((error) => incident(`late hook result for ${sessionId} dropped`, error));
     };
     const generationDefinitions: GenerationDefinitions = { ...resident.definitions, deliverLate };
     await runAppBoot(runtime, services.generations.initialize(generationDefinitions));
@@ -785,9 +795,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // sessions (external child transport) still take an app-side wake.
     const wake = (id: string): Promise<void> => {
       if (sessionRunner(id) !== "process") return Promise.resolve();
-      return processSessions.wake(id).catch((error: Error) => {
-        console.error("process session wake failed", error);
-      });
+      return processSessions.wake(id).catch((error: Error) => incident("process session wake failed", error));
     };
     const commitInbox = createMessageInboxCommit({
       plane,
@@ -829,11 +837,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
                   payload: JSON.stringify({ requestId: request.requestId }),
                   fireAt: request.deadline,
                 }).pipe(
-                  Effect.catch((error) =>
-                    Effect.sync(() => {
-                      console.error(`deadline arm failed: ${request.requestId}`, error);
-                    }),
-                  ),
+                  Effect.catch((error) => Effect.sync(() => incident(`deadline arm failed: ${request.requestId}`, error))),
                   Effect.forkIn(appScope),
                   Effect.asVoid,
                 ),
@@ -988,11 +992,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         await runAppBoot(
           runtime,
           sendAlarm(rescan.sessionId, rescan.occurrence).pipe(
-            Effect.catchCause((cause) =>
-              Effect.sync(() => {
-                console.error(`boot alarm rescan failed: ${rescan.sessionId}`, cause);
-              }),
-            ),
+            Effect.catchCause((cause) => Effect.sync(() => incident(`boot alarm rescan failed: ${rescan.sessionId}`, cause))),
             Effect.forkIn(appScope),
             Effect.asVoid,
           ),
