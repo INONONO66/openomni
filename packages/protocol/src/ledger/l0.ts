@@ -6,7 +6,7 @@ import { EpochMs } from "../time.js";
 import { Message as ModelMessage } from "../message/index.js";
 import { Journal } from "../journal/index.js";
 import { Delivery, EncodedPayload } from "../journal/declaration.js";
-import { Settings as ConsumptionSettings } from "../journal/core/session-configure.js";
+import { ForkedFrom, Settings as ConsumptionSettings } from "../journal/core/session-configure.js";
 
 export { SessionTransition } from "./session-transition.js";
 
@@ -220,6 +220,10 @@ export namespace LedgerSession {
 }
 
 export namespace SessionGeneration {
+  /** Fork ancestry pinned at child genesis (#1257); declared with the journal kind. */
+  export const ForkAncestry = ForkedFrom;
+  export type ForkAncestry = z.infer<typeof ForkedFrom>;
+
   export const Id = z
     .object({
       sessionId: Identifier,
@@ -279,9 +283,19 @@ export namespace SessionGeneration {
 
   export const ConfigureIntent = z
     .object({
-      operation: z.enum(["create", "tools.add", "tools.remove", "system.blocks.set", "revert", "compose"]),
+      operation: z.enum([
+        "create",
+        "tools.add",
+        "tools.remove",
+        "system.blocks.set",
+        "revert",
+        "compose",
+        "fork",
+      ]),
       /** `all|one` consumption widths (#1253); present only when this configure pins them. */
       settings: ConsumptionSettings.optional(),
+      /** Fork ancestry (#1257); present only on a forked child's genesis configure. */
+      forkedFrom: ForkedFrom.optional(),
     })
     .strict();
   export type ConfigureIntent = z.infer<typeof ConfigureIntent>;

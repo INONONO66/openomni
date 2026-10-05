@@ -50,6 +50,12 @@ export interface ResidentOptions {
   readonly sessionRuntime: SessionRuntime;
   /** The catalog's current policy generation; new sessions pin it at creation. */
   readonly policyGeneration: () => number;
+  /**
+   * Copied-bytes cap written into each new session's genesis
+   * `session.configure{settings.forkCopyByteCap}` (#1257); absent (tests)
+   * leaves the core default.
+   */
+  readonly forkCopyByteCap?: number;
 }
 
 /** Resident and worker use the same session-owned runner and dispatcher. */
@@ -160,6 +166,17 @@ export function createResident(options: ResidentOptions) {
         preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : WORKER_PRESET),
         at: ports.clock(),
         ...(composed === undefined ? {} : { manifestHash: composed.generation.hash }),
+        ...(options.forkCopyByteCap === undefined
+          ? {}
+          : {
+              // Default widths plus the app-resolved fork copy cap: the cap is
+              // generation configuration from genesis on (#1257).
+              settings: {
+                steering: "all" as const,
+                followUp: "all" as const,
+                forkCopyByteCap: options.forkCopyByteCap,
+              },
+            }),
       });
     },
     /**

@@ -1,6 +1,62 @@
 # Implementation Status
 
-## #1255 declarative capabilities and bundles (epic #1260, PR #1289)
+## #1257 fork sessions into verifiable chains (epic #1260, draft PR #1291)
+
+On `epic1260/1257-fork-chains` (2026-10-05, base `3ccafed1`). `Core.forkSession`
+(`packages/agent/src/core/fork.ts`) forks a parent session at a verifiable
+boundary — exactly a `turn{terminal}` row, a `prompt` row, or a `compaction`
+row (`signal` rows are NOT boundaries); any other anchor refuses
+`anchor_not_boundary`, an unknown hash `anchor_not_found` — into a NEW session
+file with its own hash chain. The
+child genesis is `session.configure{operation: "fork", forkedFrom: {session,
+anchor, parentSeq, parentHead, copied}}` (schema in
+`packages/protocol/src/journal/core/session-configure.ts`), pinning the parent
+head hash at fork time so both chains verify independently forever; a later
+parent append never perturbs the child (`verifyChain` on both stays `intact`).
+Copied rows keep their original ids except input rows and their
+`<inboxId>:delivery` rows, which rename to `fork:<parentSessionId>:<id>` with
+`inboxId`/`turnId` payload references remapped: consumed inputs stay consumed,
+and replaying a pre-fork idempotency key against the child admits fresh. Exclusions: `alarm{arm}` rows and
+`fold.checkpoint` are never copied — the child re-registers zero alarms while
+the parent occurrence still runs, and a copied orphan `alarm{fired}` folds to
+#1254's `skip{unknown}` (occurrence ids are minted from the parent session id,
+so a child re-arm can never collide). The parent file's schema stamp
+(`SESSION_FILE_SCHEMA_VERSION` via `PRAGMA user_version`,
+`packages/agent/src/core/store/session-file/`) is probed read-only first; a
+mismatch refuses `schema_version` with zero child writes. The copy cap is generation
+configuration per the issue's "cap copied bytes in generation configuration":
+`session.configure{settings.forkCopyByteCap}` is folded off the parent
+generation like the consumption widths (`DEFAULT_FORK_COPY_BYTE_CAP` 4 MiB when
+unset), and the app's resolved startup value (env `OPENOMNI_FORK_COPY_BYTE_CAP`)
+is the input written into each new session's genesis settings.
+`SessionStore.fork` appends genesis plus copies in one transaction; an existing
+child id refuses `child_exists` leaving the first chain intact.
+
+Ancestry and the aside are inspect projections only.
+`packages/agent/src/inspect/tree.ts` exposes `forkAncestryOf` (reads the child
+genesis pin), `forkAside` (the "Forked from session …" text), and `inspectTree`
+(depth-3/limit-64 bounded tree over catalog `parentId` edges with continuation
+cursors). `session_read` pages carry optional `ancestry {parentId, forkedFrom,
+aside}` plus the optional fork `children` list (id + anchor + title where
+known) the desktop renders as a clickable Forks list opening each child as a
+bound local session, the `session_fork` gateway method + websocket frame land in
+`packages/protocol/src/gateway/session-read.ts` / `packages/channels` /
+`apps/openomni/src/composition/session-fork.ts`, and the desktop session header
+renders the aside. `foldSessionHistory` never reads `session.configure`
+intents, so the aside cannot reach model context or compaction; the only
+promotion path is `forkAsideTransformer`, an opt-in `prompt.pre` gate handler
+registered nowhere by default.
+
+`receivedMessages` and its fold state (`foldReceivedAction`, `ReceivedEntry`,
+`DeliverIntent`) are deleted — `rg -c 'receivedMessages' packages/agent/src`
+returns nothing. The kernel reads inputs by SQL (`inputMessages` on
+`Storage.ActionSubAdapter` and `SessionKernel`), and `run.ts` resolves a
+prompt's origin by `actionById` point read. No new journal kind exists:
+`rg -c 'kind: "session\.fork"' packages apps` returns nothing. Tests:
+`packages/agent/test/store/session/{session-fork,fork-exclusions,inspect-tree,inspect-aside}.test.ts`
+and the wire roundtrip `apps/openomni/test/session-fork.test.ts`.
+
+## #1255 declarative capabilities and bundles (epic #1260, PR #1289, merged `5362b3bd`)
 
 Branch `epic1260/1255-declarative-bundles`, base `77e1375b` (#1254). Shipped: the three declaration contracts `Capability.define` / `Bundle.define` (the `Bundle` namespace barrel's `define` = `defineBundle`) / `Manifest.define` in `packages/agent/src/core/capability.ts`, surfaced through `core/api.ts` and the root `Bundle` namespace (`packages/agent/src/bundle.ts` is now a 19-line re-export barrel); `compose(manifest) → Generation` in `packages/agent/src/core/compose.ts` is the one loader path and rejects exactly the closed six codes `requires_cycle | duplicate | product_declares_kind | seam_missing | unknown_handler | unknown_point` (the former `BundleError.namespace` refusal moved to define time); the `off` cascade (`requires` fan-out) is recorded on the existing writer as `session.configure{disabled: [{name, because}]}` with `ConfigureIntent.operation: "compose"` and no new journal kind; generations are recomputed from empty state on every manifest change and adopted by each session at its next turn start (`manifestHash` stamped on the configure row); the handler table of a composed generation is built once at compose and provided as the `GenerationHandlers` Context tag (`HandlerTable`/`createHandlerTable` in `core/gate/`; the `NamedPolicyRegistry` name greps zero); the three tool projections (`Tool.Spec`, `SessionGeneration.Tool`, the dispatch table) are derived once from the composed generation and `sessionTool()`/`toolSpec()` are deleted from `packages/agent/src`. App side: `apps/openomni/src/manifest.ts` declares the product manifest, `composition/composed.ts` holds the `ComposedGeneration` service the generation Layers read, boot composes the manifest and fails closed on a typed `ComposeRefused`, product bundles live under `apps/openomni/src/bundles/{monitor,cron}` (replacing `tools/monitor.ts` and the composition bundles, both grep zero), `provision{bundle_enable | bundle_disable}` recomposes the manifest with the four consent rows pinned, and `apps/openomni/test/monitor-bundle.test.ts` proves the monitor bundle end to end through `index.ts` wiring (restart fire, mid-turn disable, off at boot). D5: the tool-result split `content / details / structuredContent` lands as protocol owner fields in `packages/protocol/src/tool/result.ts` (`toolResultJsonSchema` bounded at 262,144 bytes, `toolResultText` the one fallback reader) and is consumed by eval and code mode (`composition/codemode.ts` maps `structuredContent` onto `ToolCallResult.value`; the cell door is typed-only). `script/check-deps.test.ts` ratchets the deletion tokens (`#1255 T5` records `@openomni/llm` at 0, already met by #1246). Recorded deviations: adoption bypasses `authorizeConfigure` (the manifest change is the authorized act; the per-session append is mechanical); `Generation` carries `inputs/capabilities/bundles/disabled` beyond the body's seven fields (needed by rotation and admission); protocol `Disabled` is `.readonly()`; `compose.ts` helpers split under the lint complexity cap; desktop/ui rendering of `details` and the gate `ToolBodyOutcome.output` name are follow-ups, not D5 consumers. Sweeps on the merged head: `rg --files apps/openomni/src | rg 'tools/monitor\.ts|composition/monitor-ports\.ts'` → empty; `sessionTool\(|toolSpec\(` in `packages/*/src` and `apps/*/src` → 0 (two app tests keep a local `toolSpec` helper); `BundlesLive|BundleDefinitions|bundlePolicyTag|NamedPolicyRegistry` → 0; `Bun\.cron\(` → 0; `Effect.succeed(true)` fail-open in `packages/agent/src` → 0; `approvalBindings` → 0. Lane-measured suites before the final gate: protocol 526/0, agent 1685/0, apps 658/0; the final gate chain is recorded in the PR.
 

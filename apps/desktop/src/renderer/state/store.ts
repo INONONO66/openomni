@@ -37,6 +37,14 @@ export interface LocalSession {
 export interface Session extends LocalSession {
   readonly phase: SessionPhase | null;
   readonly phaseSince: number;
+  /** Fork aside (#1257): history-only ancestry text from the read page; never sent to the model. */
+  readonly forkAside?: string;
+  /** Fork ancestry (#1257): the parent edge and fork pin off the read page. */
+  readonly ancestry?: NonNullable<SessionRead.Page["ancestry"]>;
+  /** Fork children (#1257): the read page's inspect-tree child projection. */
+  readonly forkChildren?: NonNullable<SessionRead.Page["children"]>;
+  /** The newest boundary anchor on the cached page: where a fork would cut (#1257). */
+  readonly latestForkAnchor?: string;
 }
 
 export type Route = "sessions" | "inbox" | "automations";

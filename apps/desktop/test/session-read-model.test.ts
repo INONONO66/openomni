@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { ServerWebSocket } from "bun";
-import { SessionRead } from "@openomni/protocol";
+import { SessionFork, SessionRead } from "@openomni/protocol";
 import { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { attentionKind } from "../src/renderer/attention/order";
@@ -13,9 +13,9 @@ import {
   sessionReadOptions,
   subscribeSessionReads,
 } from "../src/renderer/state/queries";
-import { bindDurableSession } from "../src/renderer/state/session-actions";
+import { adoptForkedSession, bindDurableSession } from "../src/renderer/state/session-actions";
 import {
-  consoleStore, createSession, INITIAL_CLIENT_STATE, openTab, setDraft,
+  activeTab, consoleStore, createSession, INITIAL_CLIENT_STATE, openTab, setDraft,
 } from "../src/renderer/state/store";
 import { upgradeWebSocket } from "./helpers/chat-server";
 import { testId } from "./helpers/platform";
@@ -204,4 +204,67 @@ test("an empty same-epoch same-head continuation keeps the authoritative activit
   expect(requests.map((request) => request.cursor)).toEqual([undefined, { revision: 1, epoch: 2 }]);
   expect(second.actions.map((action) => action.at)).toEqual([900]);
   expect(sessionReadModel(local, second).lastActivityAt).toBe(900);
+});
+
+test("forkSession resolves the gateway's typed answer and the read model exposes anchor and ancestry", async () => {
+  const pin = { session: "parent", anchor: "hash-0", parentSeq: 3, parentHead: "head-3", copied: 4 };
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: upgradeWebSocket,
+    websocket: {
+      message(socket: ServerWebSocket<undefined>, raw) {
+        const frame = z.record(z.string(), z.json()).parse(JSON.parse(String(raw)));
+        if (frame.type === "session_read") {
+          socket.send(JSON.stringify({
+            type: "session_snapshot", sessionId: "durable", state: "idle", phase: "completed",
+            phaseSince: 100, epoch: 1, afterRevision: 0, headRevision: 3, nextRevision: null,
+            actions: [
+              { revision: 1, actionId: "prompt-1", kind: "prompt", at: 100, forkAnchor: "hash-1" },
+              { revision: 2, actionId: "tool-1", kind: "tool", at: 110 },
+              { revision: 3, actionId: "turn-1", kind: "turn", at: 120, forkAnchor: "hash-2" },
+            ],
+            usage: [], toolWallMs: 0,
+            ancestry: { parentId: "parent", forkedFrom: pin, aside: "aside text" },
+          }));
+          return;
+        }
+        const request = SessionFork.Request.parse(frame);
+        socket.send(JSON.stringify(request.at === "bad"
+          ? { type: "session_fork_refused", sessionId: request.sessionId,
+              reason: "anchor_not_found", detail: "no such anchor" }
+          : { type: "session_forked", sessionId: request.childId ?? "minted",
+              parentId: request.sessionId, forkedFrom: { ...pin, anchor: request.at }, head: "child-head" }));
+      },
+    },
+  });
+  cleanups.push(() => server.stop(true));
+  const transport = createGatewayChatTransport({ id: testId, url: `ws://127.0.0.1:${server.port}` });
+
+  const localId = createSession(5);
+  bindDurableSession(localId, "durable");
+  const local = consoleStore.state.sessions[0];
+  if (local === undefined) throw new Error("local session missing");
+  const page = await transport.readSession("durable");
+  const model = sessionReadModel(local, page);
+  // The NEWEST boundary row's anchor is where the desktop fork would cut.
+  expect(model.latestForkAnchor).toBe("hash-2");
+  expect(model.ancestry).toEqual({ parentId: "parent", forkedFrom: pin, aside: "aside text" });
+  expect(model.forkAside).toBe("aside text");
+
+  const refused = await transport.forkSession({ sessionId: "durable", at: "bad" });
+  expect(refused).toMatchObject({ type: "session_fork_refused", reason: "anchor_not_found" });
+  const forked = await transport.forkSession({ sessionId: "durable", at: "hash-2", childId: "child" });
+  expect(forked).toMatchObject({
+    type: "session_forked",
+    sessionId: "child",
+    parentId: "durable",
+    forkedFrom: { ...pin, anchor: "hash-2" },
+  });
+  // Adoption gives the child its own bound local handle and an open tab.
+  const childLocalId = adoptForkedSession("child", "Fork of durable", 9);
+  const child = consoleStore.state.sessions.find((entry) => entry.id === childLocalId);
+  expect(child?.durableSessionId).toBe("child");
+  expect(child?.title).toBe("Fork of durable");
+  expect(activeTab(consoleStore.state)?.place).toEqual({ kind: "session", sessionId: childLocalId });
 });

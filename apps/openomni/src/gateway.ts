@@ -12,7 +12,7 @@ import {
 import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
 import { Core, type Bundle, Inspect } from "@openomni/agent";
 import type { ChannelGrantStore } from "@openomni/channels";
-import type { Actor, Gateway } from "@openomni/protocol";
+import type { Actor, Gateway, LedgerAction } from "@openomni/protocol";
 const Entropy = Core.Entropy;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -24,7 +24,7 @@ const AgentFailure = Core.AgentFailure;
 const scopeObservation = Core.scopeObservation;
 const attemptUsage = Inspect.attemptUsage;
 const toolWallMs = Inspect.toolWallMs;
-import { Gateway as GatewayProtocol, L0Observation, SessionRead } from "@openomni/protocol";
+import { Gateway as GatewayProtocol, L0Observation, SessionGeneration, type SessionFork, SessionRead } from "@openomni/protocol";
 import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
@@ -218,6 +218,7 @@ function phaseFacts(
 export function readSessionCursor(
   kernel: Core.SessionHandleStore.SessionKernel,
   input: SessionRead.Request,
+  openKernel?: (sessionId: string) => Core.SessionHandleStore.SessionKernel | undefined,
 ): SessionRead.Response {
   const frame = SessionRead.Request.parse(input);
   const before = kernel.row(frame.sessionId);
@@ -270,8 +271,18 @@ export function readSessionCursor(
       actionId: action.id,
       kind: action.kind,
       at: action.ts,
+      // Fork boundary anchors (#1257): the hashes a session_fork.at may cite.
+      ...(Core.isForkBoundary(action) ? { forkAnchor: action.actionHash } : {}),
     })),
     usage: attemptUsage(page.actions),
+    // Fork ancestry projection (#1257): read off the genesis configure this
+    // page already captured; inspect surface only, never model context. A
+    // session with no ancestry facts (no parent edge, no fork pin) omits the
+    // key entirely, keeping pre-#1257 pages byte-identical on the wire.
+    ...ancestryField(after.parentId, genesis),
+    // Fork children projection (#1257): the inspect tree's direct children
+    // (catalog parent edges + each child genesis pin); inspect surface only.
+    ...childrenField(kernel, frame.sessionId, openKernel),
     toolWallMs: toolWallMs(page.actions.flatMap((action) => {
       if (action.kind !== "tool" || action.parentId === null) return [];
       const effect = action.effect.value;
@@ -283,14 +294,57 @@ export function readSessionCursor(
   });
 }
 
+/**
+ * Fork children projection for one page (#1257): the same parent->child edges
+ * `Inspect.inspectTree` renders, flattened to one depth level. A child whose
+ * kernel cannot open is skipped rather than failing the parent's read; a
+ * commissioned (non-fork) child carries no anchor. Absent `openKernel`
+ * (direct reader callers) omits the key.
+ */
+function childrenField(
+  kernel: Core.SessionHandleStore.SessionKernel,
+  sessionId: string,
+  openKernel?: (childId: string) => Core.SessionHandleStore.SessionKernel | undefined,
+): { children?: NonNullable<SessionRead.Page["children"]> } {
+  if (openKernel === undefined) return {};
+  const children = kernel.childSessionsPage(sessionId, "", 64).flatMap((row) => {
+    const child = openKernel(row.id);
+    if (child === undefined) return [];
+    const forkedFrom = Inspect.forkAncestryOf(child, row.id);
+    return [{ sessionId: row.id, ...(forkedFrom === null ? {} : { anchor: forkedFrom.anchor }) }];
+  });
+  return children.length === 0 ? {} : { children };
+}
+
+/** Fork ancestry projection for one page (#1257): genesis pin plus aside text. */
+function ancestryField(
+  parentId: string | null,
+  genesis: LedgerAction.Node | undefined,
+): { ancestry?: NonNullable<SessionRead.Page["ancestry"]> } {
+  const value = genesis?.kind === "session.configure" ? genesis.intent.value : undefined;
+  const holder = value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
+  const parsed = SessionGeneration.ForkAncestry.safeParse(holder?.forkedFrom);
+  const forkedFrom = parsed.success ? parsed.data : null;
+  if (parentId === null && forkedFrom === null) return {};
+  return {
+    ancestry: { parentId, forkedFrom, aside: forkedFrom === null ? null : Inspect.forkAside(forkedFrom) },
+  };
+}
+
 export function webSocketCallbacks(
   runtime: AppRuntime,
   handler: WebSocketHandler,
   sink: Context.Service.Shape<typeof ObservationSink>,
   openSession?: (sessionId: string) => Core.SessionHandleStore.SessionKernel | undefined,
+  fork?: (request: SessionFork.Request) => Effect.Effect<SessionFork.Response>,
 ) {
   const inflight = new Set<Promise<void>>();
   const readers = new Map<WsConnection, Map<string, () => void>>();
+  // Session-indexed re-send hooks (#1257 r4 H-1): a fork writes no parent
+  // action, so no ActionCommittedEvent ever refreshes a subscribed parent.
+  // A successful fork re-sends every parent subscriber's page instead; the
+  // same-head page carries the new catalog child in `children`.
+  const refreshers = new Map<string, Set<() => void>>();
   function read(ws: WsConnection, request: SessionRead.Request): void {
     const subscriptions = readers.get(ws) ?? new Map<string, () => void>();
     readers.set(ws, subscriptions);
@@ -304,7 +358,7 @@ export function webSocketCallbacks(
           ws.send(JSON.stringify({ type: "error", reason: "session_not_found", sessionId: request.sessionId }));
           return;
         }
-        const response = readSessionCursor(kernel, { ...request, cursor });
+        const response = readSessionCursor(kernel, { ...request, cursor }, openSession);
         if (response.type !== "session_gap") {
           sentRevision = response.actions.at(-1)?.revision ?? response.afterRevision;
           cursor = { revision: sentRevision, epoch: response.epoch };
@@ -314,10 +368,18 @@ export function webSocketCallbacks(
         ws.send(JSON.stringify({ type: "error", reason: "session_read_failed", sessionId: request.sessionId }));
       }
     };
+    const pool = refreshers.get(request.sessionId) ?? new Set<() => void>();
+    refreshers.set(request.sessionId, pool);
+    pool.add(send);
     // Register before capture; notifications only hint at authoritative reads.
-    subscriptions.set(request.sessionId, sink.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    const unsubscribe = sink.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.revision > sentRevision) send();
-    }, { match: { sessionId: request.sessionId } }));
+    }, { match: { sessionId: request.sessionId } });
+    subscriptions.set(request.sessionId, () => {
+      unsubscribe();
+      pool.delete(send);
+      if (pool.size === 0) refreshers.delete(request.sessionId);
+    });
     send();
   }
   return {
@@ -331,14 +393,36 @@ export function webSocketCallbacks(
       message(ws: WsConnection, data: string | Buffer): Promise<void> {
         const settled = runtime.runPromise(
           handler.handleFrame(ws.data, data).pipe(
-            Effect.match({
+            Effect.matchEffect({
               onSuccess: (outcome) => {
-                // A keyless frame is a perimeter refusal (#1245) — report it verbatim.
-                if ("admitted" in outcome) ws.send(JSON.stringify(outcome));
-                else if (outcome.type === "session_read") read(ws, outcome);
-                else ws.send(JSON.stringify(outcome));
+                // #1257: the fork program runs on this edge's app runtime (W5.3
+                // effect boundary); unavailability is a typed refusal.
+                if (!("admitted" in outcome) && outcome.type === "session_fork") {
+                  const response =
+                    fork?.(outcome) ??
+                    Effect.succeed<SessionFork.Response>({
+                      type: "session_fork_refused",
+                      sessionId: outcome.sessionId,
+                      reason: "storage",
+                      detail: "fork is not available on this gateway",
+                    } satisfies SessionFork.Refused);
+                  return Effect.map(response, (frame) => {
+                    ws.send(JSON.stringify(frame));
+                    // #1257 r4 H-1: the parent chain did not grow, so push the
+                    // refreshed parent page (new `children`) to its subscribers.
+                    if (frame.type !== "session_forked") return;
+                    for (const refresh of refreshers.get(frame.parentId) ?? []) refresh();
+                  });
+                }
+                return Effect.sync(() => {
+                  // A keyless frame is a perimeter refusal (#1245) — report it verbatim.
+                  if ("admitted" in outcome) ws.send(JSON.stringify(outcome));
+                  else if (outcome.type === "session_read") read(ws, outcome);
+                  else ws.send(JSON.stringify(outcome));
+                });
               },
-              onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
+              onFailure: (error) =>
+                Effect.sync(() => void ws.send(JSON.stringify({ type: "error", reason: error._tag }))),
             }),
           ),
         );
