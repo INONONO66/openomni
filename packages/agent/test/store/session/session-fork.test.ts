@@ -1,16 +1,25 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LedgerAction } from "@openomni/protocol";
+import { PlainValueSchema, type LedgerAction } from "@openomni/protocol";
 import { useMemoryStores, testNow } from "../helpers/storage";
 import { CHILD, PARENT, forkFixture } from "../helpers/fork-fixture";
 import * as SessionHandleStore from "../../../src/core/store/fence";
 import { openSessionStore, readSessionFileSchemaVersion, SESSION_FILE_SCHEMA_VERSION, type SessionStore } from "../../../src/core/store/session-file";
 import { receivedMessageAction } from "../../../src/core/commit";
 import { isForkBoundary } from "../../../src/core/fork";
+import { createAssistantMessage } from "../../../src/core/message-factory";
+import { foldSessionHistory } from "../../../src/inspect/history";
+import { createCompactionPlan } from "../../../src/plugins/compaction/durable";
+import { allowAllPolicy } from "../../helpers/compiled-policy";
+import { testExecutor } from "../../helpers/executor";
+import { messageSource } from "../../helpers/message-source";
+import { sessionTree } from "../../helpers/session-tree";
+import { runLedgerSync } from "../helpers/effect";
 
 const stores = useMemoryStores();
 let childStore: SessionStore | undefined;
@@ -114,6 +123,72 @@ describe("Session.fork", () => {
     };
     expect(isForkBoundary(compaction)).toBeTrue();
     expect(isForkBoundary({ ...compaction, kind: "alarm" })).toBeFalse();
+  });
+
+  test("forks at a real compaction journal row written by the compaction writer", () => {
+    const parent = fixture.buildParent();
+    // The real compaction writer: the durable executor committing onto the
+    // parent chain through the fixture's fenced kernel commit.
+    let sequence = 0;
+    const executor = testExecutor({
+      policy: allowAllPolicy,
+      retryAlarm: { arm: () => Effect.void, wait: () => Effect.void, settle: () => Effect.void },
+      ledger: {
+        commit: (action: LedgerAction.Append) =>
+          Effect.sync(() => {
+            const receipt = fixture.commit(parent.authority, [action]).receipts.at(-1);
+            if (receipt === undefined) throw new Error("kernel commit returned no receipt");
+            return receipt;
+          }),
+      },
+      observations: { publish: () => undefined },
+      identity: { sessionId: PARENT, role: "resident", parentActionId: "turn-1:terminal" },
+      clock: () => 7,
+      entropy: () => `exec-${(sequence += 1)}`,
+      random: () => 0,
+    });
+    runLedgerSync(
+      Effect.gen(function* () {
+        const answer = createAssistantMessage("compact summary", "", PARENT, messageSource);
+        yield* executor.run(
+          { kind: "message", op: "assistant", intent: { messageId: answer.info.id }, effect: {} },
+          () => Effect.sync(() => PlainValueSchema.parse(answer)),
+        );
+        const prior = foldSessionHistory(PARENT, sessionTree(stores.kernel, PARENT));
+        const plan = createCompactionPlan(prior, [answer], 100);
+        yield* executor.run(
+          {
+            kind: "compaction",
+            op: "compact",
+            intent: { trigger: "threshold" },
+            effect: {},
+            revertData: () => PlainValueSchema.parse(plan.record.revert),
+          },
+          () =>
+            Effect.sync(() => PlainValueSchema.parse({ ...plan.record, projection: plan.projection })),
+        );
+      }),
+    );
+    // The executed compaction result row is a boundary anchor by rule.
+    const compactionRow = sessionTree(stores.kernel, PARENT).find((node) => {
+      const effect = node.effect.value;
+      return node.kind === "compaction" && effect !== null && typeof effect === "object" &&
+        !Array.isArray(effect) && effect.terminal === "executed";
+    });
+    if (compactionRow === undefined) throw new Error("no executed compaction row on the parent chain");
+    expect(isForkBoundary(compactionRow)).toBeTrue();
+
+    const receipt = fixture.forked(compactionRow.actionHash);
+    expect(receipt.forkedFrom.anchor).toBe(compactionRow.actionHash);
+    const childKernel = SessionHandleStore.createSessionKernel(child(), stores.catalog);
+    const verdict = childKernel.verifyChain(CHILD);
+    if (verdict.kind !== "intact") throw new Error("child chain not intact");
+    expect(verdict.head).toBe(receipt.head);
+    // The anchor compaction row itself was copied and closes the child chain.
+    const nodes = childKernel.historyPage(CHILD, { afterRevision: 0, limit: 50 }).actions;
+    expect(nodes.at(-1)?.id).toBe(compactionRow.id);
+    expect(nodes.filter((node) => node.kind === "compaction").length).toBeGreaterThanOrEqual(2);
+    expect(nodes.some((node) => node.kind === "alarm")).toBeFalse();
   });
 
   test("refuses a mid-turn anchor, an unknown anchor and an over-cap copy", () => {
