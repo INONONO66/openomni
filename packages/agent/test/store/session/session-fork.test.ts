@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PlainValueSchema, type LedgerAction } from "@openomni/protocol";
+import { z } from "zod";
+import { PlainValueSchema, SessionGeneration, type LedgerAction } from "@openomni/protocol";
 import { useMemoryStores, testNow } from "../helpers/storage";
 import { CHILD, PARENT, forkFixture } from "../helpers/fork-fixture";
 import * as SessionHandleStore from "../../../src/core/store/fence";
@@ -40,6 +41,13 @@ function child(): SessionStore {
 
 const fixture = forkFixture(stores, child);
 
+/** The child genesis pin, parsed with the protocol's `ForkAncestry` schema. */
+const ForkGenesisIntent = z.looseObject({
+  operation: z.literal("fork"),
+  forkedFrom: SessionGeneration.ForkAncestry,
+});
+const DeliveryIntent = z.looseObject({ inboxId: z.string() });
+
 describe("Session.fork", () => {
   test("forks at a turn terminal into an independently verifiable child chain", () => {
     const parent = fixture.buildParent();
@@ -58,16 +66,17 @@ describe("Session.fork", () => {
     if (genesis === undefined) throw new Error("child genesis missing");
     expect(genesis.kind).toBe("session.configure");
     expect(genesis.parentId).toBeNull();
-    const intent = genesis.intent.value as { operation: string; forkedFrom: unknown };
+    // Parsed through the protocol's fork pin schema — no type assertions.
+    const intent = ForkGenesisIntent.parse(genesis.intent.value);
     expect(intent.operation).toBe("fork");
-    expect(intent.forkedFrom as Record<string, unknown>).toEqual({
+    expect(intent.forkedFrom).toEqual({
       session: PARENT,
       anchor: parent.hashOf("turn-1:terminal"),
       parentSeq: 4,
       parentHead: parent.head,
       copied: 4,
     });
-    expect(receipt.forkedFrom).toEqual(intent.forkedFrom as typeof receipt.forkedFrom);
+    expect(receipt.forkedFrom).toEqual(intent.forkedFrom);
 
     // Copied rows: parent genesis + input + delivery + terminal; arm and msg-2 (post-anchor) absent.
     expect(nodes.map((node) => node.id)).toEqual([
@@ -80,7 +89,7 @@ describe("Session.fork", () => {
 
     // The delivery marker's references were remapped with the renamed input.
     const delivery = nodes.find((node) => node.id === "msg-1:delivery");
-    expect((delivery?.intent.value as { inboxId: string }).inboxId).toBe(`fork:${PARENT}:msg-1`);
+    expect(DeliveryIntent.parse(delivery?.intent.value).inboxId).toBe(`fork:${PARENT}:msg-1`);
     // Consumption still folds: the copied, delivered input is not pending again.
     expect(childKernel.pendingMessages(CHILD)).toEqual([]);
 
@@ -144,7 +153,10 @@ describe("Session.fork", () => {
       observations: { publish: () => undefined },
       identity: { sessionId: PARENT, role: "resident", parentActionId: "turn-1:terminal" },
       clock: () => 7,
-      entropy: () => `exec-${(sequence += 1)}`,
+      entropy: () => {
+        sequence += 1;
+        return `exec-${sequence}`;
+      },
       random: () => 0,
     });
     runLedgerSync(
