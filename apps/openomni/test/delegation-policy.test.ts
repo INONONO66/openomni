@@ -7,7 +7,7 @@
  * programs, so no clock is involved beyond the fired occurrence's own stamp.
  */
 import { expect, test } from "bun:test";
-import { Bundle } from "@openomni/agent";
+import type { Bundle } from "@openomni/agent";
 import { Effect } from "effect";
 import {
   catalogDelegationReads,
