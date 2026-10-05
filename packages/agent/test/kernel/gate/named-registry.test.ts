@@ -106,6 +106,37 @@ describe("immutable named policy registry", () => {
     // The SYNC path has no prepared consultant result: fail-closed deny.
     expect(snapshot.evaluate(input).verdict).toBe("deny");
     expect(snapshot.evaluate(input).reason).toBe("handler_unavailable");
+    // Without the rewrite flag the same ref projects the plain consulted
+    // GATE row: the consultant's payload is recorded, the value untouched.
+    const gateRegistry = {
+      ...KERNEL_POLICY_REGISTRY,
+      consultants: [
+        {
+          name: "hook/process",
+          consult: () =>
+            Effect.succeed({ verdict: "allow" as const, payload: { ref: "hook/process" } }),
+        },
+      ],
+    };
+    const gated = compilePolicySnapshot({
+      generation: 8,
+      registry: gateRegistry,
+      rows: [
+        atGeneration(compaction, 8),
+        atGeneration(
+          draft("gate", "tool", "pre", {
+            type: "consult",
+            ref: "hook/process",
+            config: { event: "PreToolUse" },
+          }),
+          8,
+        ),
+      ],
+    });
+    if (gated.evaluateEffect === undefined) throw new Error("effectful evaluation missing");
+    const gateEvaluation = await Effect.runPromise(gated.evaluateEffect(input));
+    expect(gateEvaluation.verdict).toBe("allow");
+    expect(gateEvaluation.value).toEqual(input.value);
   });
 
   test("consult{rewrite} misdeclarations refuse the generation: observe+rewrite and missing fields (#1256 r4 H-2)", () => {
