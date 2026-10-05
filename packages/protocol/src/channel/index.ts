@@ -61,7 +61,7 @@ export namespace Channel {
    *   - Group:   slack:workspaceA:group:C123
    *   - Thread:  slack:workspaceA:group:C123:thread:171000
    *   - Channel: slack:workspaceA:channel:C123
-   *   - TUI:     tui:/Users/ino/Develop/OpenOmni
+   *   - TUI:     tui:/srv/workspaces/example
    *   - Chat:    telegram:botId:chat:chatId
    */
   export namespace SurfaceKey {

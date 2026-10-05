@@ -8,15 +8,6 @@ describe("LlmCall BusEvents", () => {
     return LlmCall.Events.Completed.schema.parse(input);
   }
 
-  function completedParseFails<Input>(input: Input): boolean {
-    try {
-      parseCompleted(input);
-      return false;
-    } catch {
-      return true;
-    }
-  }
-
   test("Completed refuses missing token lanes — the producer states them", () => {
     const completed = {
       ...base,
@@ -68,7 +59,7 @@ describe("LlmCall BusEvents", () => {
       finishReason: "stop",
     };
 
-    expect(completedParseFails({ ...valid, inputTokens: -1 })).toBe(true);
-    expect(completedParseFails({ ...valid, inputTokens: 1.5 })).toBe(true);
+    expect(() => parseCompleted({ ...valid, inputTokens: -1 })).toThrow();
+    expect(() => parseCompleted({ ...valid, inputTokens: 1.5 })).toThrow();
   });
 });

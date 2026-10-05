@@ -30,9 +30,8 @@ type NamedErrorInstance<Name extends string, Data extends NamedErrorData> = Name
 };
 
 // Explicit static shape of a generated class. Annotating create's return type
-// breaks the inference cycle through NamedError.Unknown (a static initializer
-// that calls NamedError.create inside the class body), which otherwise
-// resolves to an implicit any.
+// keeps the generated class fully typed; left to inference it resolves to an
+// implicit any through the class expression in buildNamedErrorClass.
 export type NamedErrorClass<Name extends string, Data extends NamedErrorData> = {
   new (
     data: z.input<Data>,
@@ -47,9 +46,8 @@ export type NamedErrorClass<Name extends string, Data extends NamedErrorData> = 
 // expression declared inside a generic function carries the outer type
 // parameters, and TypeScript instantiates its `prototype` with `any` — an
 // owned implicit-any reachable from every factory result. The base class is a
-// parameter (not a captured binding) because NamedError.Unknown invokes the
-// builder while the module-scope class binding is still in its temporal dead
-// zone.
+// parameter (not a captured binding) so the builder has no dependency on the
+// module-scope class binding.
 function buildNamedErrorClass(
   base: typeof NamedError,
   name: string,
@@ -134,16 +132,11 @@ export abstract class NamedError extends Error {
     return refineNamedErrorClass<Name, Data>(buildNamedErrorClass(NamedError, name, data));
   }
 
-  public static readonly Unknown = NamedError.create(
-    "UnknownError",
-    z.object({
-      message: z.string(),
-    }),
-  );
 }
 
 // #500 C3: NamedError STAYS here — it is consumed by protocol's own schemas
-// (ledger/schema.ts AdoptError, wait/schema.ts StoreError). The concrete errors that
-// lived beside it moved to their caller-proven owners: APIError →
-// the agent model plane (model/error.ts — model-only callers). The removed local-process
-// worker stack owned its own delivery error rather than exporting it here.
+// (json.ts CanonicalJsonError, channel/index.ts SurfaceKeyError,
+// provisioning/schema.ts StoreError/VaultError, ledger/l0.ts ConfigureError).
+// The concrete errors that lived beside it moved to their caller-proven
+// owners: APIError → the agent model plane (model/error.ts — model-only
+// callers).

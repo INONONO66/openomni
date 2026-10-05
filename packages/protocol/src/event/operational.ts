@@ -26,14 +26,6 @@ export namespace Operational {
     readonly error?: string;
   }
 
-  /** Attaches the producer's timestamp to log fields (no validation here — the bus event schema validates on publish). */
-  export function envelope<Fields extends LogFields>(
-    fields: Fields,
-    time: number,
-  ): Fields & { readonly time: number } {
-    return { ...fields, time };
-  }
-
   export namespace Events {
     export const Debug = BusEvent.define("operational.debug", LogBase, { visibility: "ephemeral" });
 
