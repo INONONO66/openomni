@@ -12,7 +12,7 @@ import { FIXTURE_BASE, awaitScheduled, scheduledAt, withEntityAlarmPorts } from 
 import { activeInvocation } from "../../../packages/agent/src/core/gate/decide";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
-  const monitorTool = createMonitorTool();
+  const monitorTool = createMonitorTool(undefined);
   for (const input of [
     {
       op: "create",

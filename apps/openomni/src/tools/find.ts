@@ -1,5 +1,6 @@
 import { Core } from "@openomni/agent";
 const defineTool = Core.defineTool;
+const ToolRefused = Core.ToolRefused;
 import { z } from "zod";
 import { fileOperation, walker, type FilePorts } from "./core/filesystem";
 
@@ -48,9 +49,10 @@ function admit(paths: string[], path: string, limit: number | undefined): boolea
   return true;
 }
 
-/** The walked path minus the search root, so globs read like `**\/*.ts` from the root. */
+/** The walked path minus the search root; a walk outside the root is an impossible state, refused. */
 function relativeTo(root: string, path: string): string {
   if (path === root) return "";
   const prefix = root.endsWith("/") ? root : `${root}/`;
-  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+  if (!path.startsWith(prefix)) throw new ToolRefused("find", `walked path ${path} escaped search root ${root}`);
+  return path.slice(prefix.length);
 }
