@@ -8,16 +8,10 @@ export function machinesFallback(operation: string) {
 
 export function decodeMachineFailure(operation: string) {
   return (error: unknown): MachineError =>
-    error instanceof MachinesFailure || error instanceof MachineCellError || error instanceof MachineRefusalError
-      || error instanceof SpawnFailure || error instanceof FilesystemFailure || error instanceof TransportFailure
-      ? error
-      : machinesFallback(operation)(error);
+    error instanceof MachinesFailure || error instanceof MachineCellError || error instanceof MachineRefusalError || error instanceof SpawnFailure || error instanceof FilesystemFailure || error instanceof TransportFailure ? error : machinesFallback(operation)(error);
 }
 
 export function decodeIpcFailure(operation: string) {
   return (error: unknown): IpcError =>
-    error instanceof MachinesFailure || error instanceof IpcConnectionError || error instanceof IpcProtocolError
-      || error instanceof IpcRemoteError || error instanceof IpcTimeoutError || error instanceof IpcPeerKeyMismatchError
-      ? error
-      : machinesFallback(operation)(error);
+    error instanceof MachinesFailure || error instanceof IpcConnectionError || error instanceof IpcProtocolError || error instanceof IpcRemoteError || error instanceof IpcTimeoutError || error instanceof IpcPeerKeyMismatchError ? error : machinesFallback(operation)(error);
 }
