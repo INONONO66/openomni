@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { Inbox, type LedgerAction, type PlainValue } from "@openomni/protocol";
+import { Inbox, type LedgerAction, type PlainValue, SessionGeneration } from "@openomni/protocol";
 import { staleActionBacklog, turnIntentAction } from "../src/core/commit";
 import type * as SessionHandleStore from "../src/core/store/fence";
 import { materializeSession } from "./store/helpers/session";
@@ -43,13 +43,17 @@ test("staleActionBacklog: only action inputs with after < compaction head fold s
 });
 
 test("turnIntentAction journals consumedStale on the turn intent; an empty list stays absent", () => {
-  const generation = {
+  const generation = SessionGeneration.Snapshot.parse({
     generation: 1,
+    revertTo: 0,
+    tools: [],
     toolsHash: "t",
+    systemPreset: "",
+    systemBlocks: [],
+    systemValue: "",
     systemHash: "s",
     policyGeneration: 1,
-    tools: [],
-  };
+  });
   const base = {
     id: "turn-1",
     parentId: null,
