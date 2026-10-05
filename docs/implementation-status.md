@@ -182,7 +182,11 @@ sends stdin EOF and waits on the driver's explicit `browser-cleanup-complete`
 ack (bounded 2s) before cancelling any active cell, so an in-flight cell can
 no longer bypass the witness through the cancellation discard path; an
 unacknowledged teardown (idle or wedged-cell) fails typed instead of
-resolving as success. Caveat: `BrowserClient.close()`
+resolving as success. Nothing writes to the driver after that EOF: a tool
+answer or request racing close() becomes a typed refusal instead of a stream
+write, and asynchronous stdin errors land in the typed driver-failure path,
+so a normally resolving tool callback can no longer crash the process with
+`ERR_STREAM_WRITE_AFTER_END`. Caveat: `BrowserClient.close()`
 itself still swallows pty `ToolError`, so its successful return alone does not
 prove the session record is gone on failure paths - the listing guarantee
 belongs to `pty_close`'s `ok`. The interpreter-close test awaits the shell's

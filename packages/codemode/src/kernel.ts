@@ -747,6 +747,13 @@ export class PythonKernel {
   private readonly exits = new Set<Deferred.Deferred<void>>();
   private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
   private readonly cleanups = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
+  /**
+   * Drivers whose stdin was ended by close() (#1293 r3): the mark is set in
+   * the same synchronous step as stdin.end(), and write() checks it in the
+   * same synchronous step as stdin.write(), so no answer or request delivery
+   * can ever write after EOF.
+   */
+  private readonly closing = new WeakSet<ChildProcessWithoutNullStreams>();
 
   run(request: Machine.CellRequest, callTool: CellToolCaller, signal?: AbortSignal): Effect.Effect<Machine.CellResult, CodeError> {
     return Effect.suspend(() => {
@@ -781,7 +788,7 @@ export class PythonKernel {
       const process = this.process;
       let unconfirmed: DriverFailure | undefined;
       if (process !== undefined) {
-        yield* Effect.try({ try: () => { process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
+        yield* Effect.try({ try: () => { this.closing.add(process); process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
         const cleanup = this.cleanups.get(process);
         const acked =
           cleanup !== undefined &&
@@ -861,14 +868,38 @@ export class PythonKernel {
       yield* Effect.forkScoped(Effect.suspend(() => callTool({ cellId: pending.cellId, name: frame.name, arguments: frame.arguments })).pipe(
         Effect.catchCause((cause) => Effect.succeed({ status: "failed", error: Cause.pretty(cause) } as const)),
         Effect.flatMap((answer) => this.pending === pending ? this.write(pending.process, { ...answer, callId: frame.callId }) : Effect.void),
-        Effect.catch((error) => Effect.sync(() => { Queue.offerUnsafe(pending.frames, new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) })); })),
+        Effect.catch((error) => Effect.sync(() => {
+          // The post-EOF refusal is the designed typed outcome (#1293 r3):
+          // close() already failed the driver-side call via EOF, so a late
+          // answer is dropped here instead of failing the cell.
+          if (error instanceof DriverFailure && error.operation === "driver.closing") return;
+          Queue.offerUnsafe(pending.frames, new DriverFailure({ operation: "driver.write", message: "driver write failed", cause: String(error) }));
+        })),
         Effect.ensuring(Effect.sync(() => { pending.inFlight.delete(frame.callId); })),
       ));
     });
   }
 
+  /**
+   * Delivers a cell request or tool answer to the driver's stdin. The closing
+   * check and the write share one synchronous step, mirroring close()'s
+   * mark-then-EOF step, so a delivery racing close() becomes a typed refusal
+   * instead of a stream write whose asynchronous ERR_STREAM_WRITE_AFTER_END
+   * would escape every Effect boundary (#1293 r3).
+   */
   private write(process: ChildProcessWithoutNullStreams, value: Machine.CellRequest | (Machine.ToolCallResult & { callId: string })): Effect.Effect<void, CodeError> {
-    return Effect.try({ try: () => { process.stdin.write(`${JSON.stringify(value)}\n`); }, catch: decodeCodeFailure("driver.write") });
+    return Effect.try({
+      try: () => {
+        if (this.closing.has(process)) return false;
+        process.stdin.write(`${JSON.stringify(value)}\n`);
+        return true;
+      },
+      catch: decodeCodeFailure("driver.write"),
+    }).pipe(Effect.flatMap((written) => written ? Effect.void : new DriverFailure({
+      operation: "driver.closing",
+      message: "driver delivery refused: close() already ended stdin",
+      cause: "write after EOF refused",
+    })));
   }
 
   private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
@@ -897,6 +928,9 @@ export class PythonKernel {
         if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, new DriverFailure({ operation: "driver.process", message, cause: message }));
       };
       process.once("error", (error) => fail(error.message));
+      // Asynchronous writable-stream failures must land in the typed driver
+      // failure path, never escape as an unhandled 'error' event (#1293 r3).
+      process.stdin.on("error", (error) => fail(`driver stdin error: ${error.message}`));
       process.once("exit", (code, signal) => fail(`python3 exited before replying (code=${String(code)}, signal=${signal})`));
       return process;
     });

@@ -224,6 +224,77 @@ describe("code-mode kernel substrate", () => {
     });
   });
 
+  test("a normally resolving tool callback racing close() settles through the ack with the cell completed (#1293 r3)", async () => {
+    const kernel = new PythonKernel();
+    // r3 HIGH regression: while close() awaits the cleanup ack the cell is
+    // still pending, so a host tool callback that resolves NORMALLY after
+    // close()'s stdin EOF previously reached stdin.write() on the ended
+    // stream - the asynchronous ERR_STREAM_WRITE_AFTER_END escaped every
+    // Effect boundary as an unhandled error (process exit 1) even though
+    // close() and the cell both settled fine. Event synchronization, no
+    // sleeps: the ready tool_call frame proves the cell is blocked on the
+    // host before close() is invoked; the answer is released only after
+    // close() is in flight, so its delivery races the EOF. Under the fixed
+    // contract the late delivery is a typed refusal, never a stream write:
+    // Bun's unhandled-error detection stays intact, so a write-after-end
+    // fails this run. Both orderings converge on the same observables - the
+    // driver-side call fails via EOF (or is answered just before it), the
+    // cell catches ToolError and completes, the drained driver runs its
+    // cleanup and acks - so close() resolving undefined is the ack witness.
+    let armed!: () => void;
+    const toolCalled = new Promise<void>((resolve) => {
+      armed = resolve;
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const running = kernel.run(
+      {
+        cellId: "active-close-normal-answer",
+        code: ["try:", "    tool.ready()", "except ToolError:", "    pass", "'answered'"].join("\n"),
+        timeoutMs: 15_000,
+      },
+      () => {
+        armed();
+        return released.then(() => ({ status: "completed", value: null }) as const);
+      },
+    );
+    await toolCalled;
+    const closing = kernel.close();
+    release();
+    await expect(closing).resolves.toBeUndefined();
+    await expect(running).resolves.toMatchObject({
+      status: "completed",
+      cellId: "active-close-normal-answer",
+      value: "'answered'",
+    });
+  });
+
+  test("the close race with a normally resolving tool callback never crashes the process with write-after-end (#1293 r3)", () => {
+    // The pre-fix failure mode is an UNHANDLED asynchronous stream error:
+    // inside the test harness Bun's scheduling lets the ended stdin finish and
+    // destroy before the late answer lands, where Bun drops the write
+    // silently - the crash window (ended, not yet finished) is only hit under
+    // plain process scheduling. So the race runs in a real child bun process
+    // whose exit code carries the runtime's intact unhandled-error detection:
+    // before the fix this deterministically exited 1 with
+    // ERR_STREAM_WRITE_AFTER_END; under the fixed contract the late delivery
+    // is a typed refusal that never touches the stream, so the child prints
+    // both contract markers and exits 0. Bounded by the child's own cell
+    // timeout; no sleeps.
+    const child = Bun.spawnSync({
+      cmd: [process.execPath, join(import.meta.dir, "helpers", "close-race-normal-answer.ts")],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = child.stdout.toString();
+    expect(child.stderr.toString()).not.toContain("write after end");
+    expect(stdout).toContain("CLOSE_OK");
+    expect(stdout).toContain("CELL completed");
+    expect(child.exitCode).toBe(0);
+  });
+
   test("invalid driver output replaces the interpreter", async () => {
     const kernel = new PythonKernel();
     try {
