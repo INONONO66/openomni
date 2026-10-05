@@ -36,6 +36,13 @@ export namespace SessionRead {
       actionId: Id,
       kind: LedgerAction.Kind,
       at: z.number().nonnegative(),
+      /**
+       * Fork boundary anchor (#1257): the action hash a `session_fork.at`
+       * request may cite. Present only on boundary rows (turn terminals,
+       * prompts, compactions); every other row is byte-identical to the
+       * pre-#1257 frame.
+       */
+      forkAnchor: z.string().min(1).optional(),
     }).strict()).max(256),
     usage: z.array(z.object({
       attemptId: Id,

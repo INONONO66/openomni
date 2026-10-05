@@ -63,11 +63,14 @@ export function subscribeSessionReads(client: QueryClient, transport: GatewayCha
 
 export function sessionReadModel(session: LocalSession, page: SessionRead.Page | undefined): Session {
   const authoritative = page?.sessionId === session.durableSessionId ? page : undefined;
+  const latestForkAnchor = authoritative?.actions.findLast((action) => action.forkAnchor !== undefined)?.forkAnchor;
   return {
     ...session,
     phase: authoritative?.phase ?? null,
     phaseSince: authoritative?.phaseSince ?? session.createdAt,
     ...(authoritative?.ancestry?.aside == null ? {} : { forkAside: authoritative.ancestry.aside }),
+    ...(authoritative?.ancestry === undefined ? {} : { ancestry: authoritative.ancestry }),
+    ...(latestForkAnchor === undefined ? {} : { latestForkAnchor }),
     lastActivityAt: authoritative?.actions[authoritative.actions.length - 1]?.at ?? session.lastActivityAt,
   };
 }

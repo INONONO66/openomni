@@ -25,6 +25,7 @@ import { SessionTree } from "./shell/session-tree";
 import { shellShortcut } from "./shell/shortcuts";
 import { desktopBridge } from "./state/desktop-bridge";
 import { queryKeys, sessionReadModel, useGatewayEndpoint, useSessionReadModels } from "./state/queries";
+import { adoptForkedSession } from "./state/session-actions";
 import { historyMenuEntries, listedSessions, placeTitle, sessionIndex } from "./state/selectors";
 import { readShellPreferences, writeShellPreferences } from "./state/shell-preferences";
 import {
@@ -68,6 +69,28 @@ export function App({ platform, storage, host }: AppEnvironment) {
 
   useShellLifecycle(storage);
   const chatFor = useSessionChats(transport);
+  const [forkNotice, setForkNotice] = useState<string | undefined>(undefined);
+  // Boundary fork (#1257): ask the gateway, adopt the durable child on success,
+  // surface the typed refusal on the composer otherwise.
+  const onFork = useCallback(
+    (sessionId: string, anchor: string) => {
+      if (transport === null || !("forkSession" in transport)) return;
+      void transport
+        .forkSession({ sessionId, at: anchor })
+        .then((response) => {
+          if (response.type === "session_forked") {
+            setForkNotice(undefined);
+            adoptForkedSession(response.sessionId, `Fork of ${sessionId}`, host.now());
+            return;
+          }
+          setForkNotice(`fork refused: ${response.reason} (${response.detail})`);
+        })
+        .catch((error: unknown) =>
+          setForkNotice(error instanceof Error ? error.message : String(error)),
+        );
+    },
+    [host, transport],
+  );
 
   const arrive = useCallback((boundary: Boundary | null = "selection") => {
     const searching = search.current.searching;
@@ -245,7 +268,8 @@ export function App({ platform, storage, host }: AppEnvironment) {
       <SessionContent
         chat={chatFor(session.id)}
         key={tab?.id}
-        notice={notice}
+        notice={forkNotice ?? notice}
+        onFork={onFork}
         session={session}
         transport={transport}
       />

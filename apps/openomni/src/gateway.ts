@@ -270,6 +270,8 @@ export function readSessionCursor(
       actionId: action.id,
       kind: action.kind,
       at: action.ts,
+      // Fork boundary anchors (#1257): the hashes a session_fork.at may cite.
+      ...(Core.isForkBoundary(action) ? { forkAnchor: action.actionHash } : {}),
     })),
     usage: attemptUsage(page.actions),
     // Fork ancestry projection (#1257): read off the genesis configure this

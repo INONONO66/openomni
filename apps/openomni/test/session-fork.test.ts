@@ -5,7 +5,8 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { Bus, newTraceId } from "./helpers/bus";
-import { L0Observation } from "@openomni/protocol";
+import { L0Observation, SessionRead } from "@openomni/protocol";
+import { Core } from "@openomni/agent";
 import { planeOf } from "./helpers/ledger";
 import { bounded } from "./helpers/protected-dispatch";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -93,6 +94,16 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
   socket.send(JSON.stringify({ type: "session_read", sessionId, limit: 256 }));
   const parent = await parentPage;
   expect("ancestry" in parent).toBeFalse();
+  // Boundary rows (and only boundary rows) advertise their fork anchor, so a
+  // desktop reader can cite one without reconstructing hashes (#1257 M-3).
+  const rows = SessionRead.Page.parse(parent).actions;
+  const anchorRow = rows.find((row) => row.actionId === anchor.id);
+  expect(anchorRow?.forkAnchor).toBe(anchor.actionHash);
+  for (const row of rows) {
+    if (row.forkAnchor === undefined) continue;
+    const node = kernel.actionById(row.actionId);
+    expect(node !== undefined && Core.isForkBoundary(node)).toBeTrue();
+  }
   await closeSocket(socket);
 });
 
