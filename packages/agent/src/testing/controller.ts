@@ -15,7 +15,7 @@ import type { SessionControllerState } from "../core/run";
 import type { SessionKernel } from "../core/entity";
 
 const SEAL_RESCAN_BUDGET = 8;
-/** Shutdown grace for settling raw slots; the lease TTL it once mirrored is gone. */
+/** Shutdown grace for settling raw slots; an explicit controller-owned default. */
 const DEFAULT_CLOSE_GRACE_MS = 30_000;
 
 export function createController(

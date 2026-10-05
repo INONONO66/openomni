@@ -3,7 +3,7 @@ import { AgentFailure, type ExecutionError, Entropy } from "../../core/api";
 import type { Message } from "@openomni/protocol";
 import type { CompactionOptions, AnchoredCutAttempt } from "./contract";
 import { latestAnchorBody, isAnchorMessage } from "./candidate";
-import { prepareSummarizerInput, estimateContentChars, userTextChars } from "./estimate";
+import { prepareSummarizerInput, estimateContentChars, messageContentChars } from "./estimate";
 
 const DEFAULT_SUMMARIZER_DEADLINE_MS = 60_000;
 
@@ -211,7 +211,7 @@ function selectPreservedUsers(
   for (let index = users.length - 1; index >= 0; index -= 1) {
     const candidate = users[index];
     if (candidate === undefined) continue;
-    const size = userTextChars(candidate);
+    const size = messageContentChars(candidate);
     if (kept.length > 0 && total + size > budgetChars) break;
     kept.unshift(candidate);
     total += size;

@@ -61,7 +61,7 @@ export class SchemaRefused extends Data.TaggedError("SchemaRefused")<{
 }
 
 export class StorageUnavailable extends Data.TaggedError("StorageUnavailable")<{
-  readonly capability: "storage" | "sessions" | "actions" | "policies" | "armed_alarms";
+  readonly capability: "sessions" | "actions" | "policies" | "armed_alarms";
 }> {
   override get message(): string {
     return `L0 storage capability is unavailable: ${this.capability}`;

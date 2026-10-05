@@ -7,7 +7,7 @@ import { useMemoryStores } from "./helpers/storage";
 
 test("ledger error contracts are runtime values", () => {
   expect(new SessionNotFound({ sessionId: "missing" })._tag).toBe("SessionNotFound");
-  expect(new StorageUnavailable({ capability: "storage" })._tag).toBe("StorageUnavailable");
+  expect(new StorageUnavailable({ capability: "sessions" })._tag).toBe("StorageUnavailable");
 });
 
 // The pure string codec (create/fromChannel/parse) lives in the protocol
