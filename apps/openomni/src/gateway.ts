@@ -303,7 +303,7 @@ export function webSocketCallbacks(
   handler: WebSocketHandler,
   sink: Context.Service.Shape<typeof ObservationSink>,
   openSession?: (sessionId: string) => Core.SessionHandleStore.SessionKernel | undefined,
-  fork?: (request: SessionFork.Request) => SessionFork.Response,
+  fork?: (request: SessionFork.Request) => Effect.Effect<SessionFork.Response>,
 ) {
   const inflight = new Set<Promise<void>>();
   const readers = new Map<WsConnection, Map<string, () => void>>();
@@ -347,24 +347,30 @@ export function webSocketCallbacks(
       message(ws: WsConnection, data: string | Buffer): Promise<void> {
         const settled = runtime.runPromise(
           handler.handleFrame(ws.data, data).pipe(
-            Effect.match({
+            Effect.matchEffect({
               onSuccess: (outcome) => {
-                // A keyless frame is a perimeter refusal (#1245) — report it verbatim.
-                if ("admitted" in outcome) ws.send(JSON.stringify(outcome));
-                else if (outcome.type === "session_read") read(ws, outcome);
-                else if (outcome.type === "session_fork") {
-                  // #1257: fork executes app-side; unavailability is a typed refusal.
-                  ws.send(JSON.stringify(
-                    fork?.(outcome) ?? {
+                // #1257: the fork program runs on this edge's app runtime (W5.3
+                // effect boundary); unavailability is a typed refusal.
+                if (!("admitted" in outcome) && outcome.type === "session_fork") {
+                  const response =
+                    fork?.(outcome) ??
+                    Effect.succeed<SessionFork.Response>({
                       type: "session_fork_refused",
                       sessionId: outcome.sessionId,
                       reason: "storage",
                       detail: "fork is not available on this gateway",
-                    } satisfies SessionFork.Refused,
-                  ));
-                } else ws.send(JSON.stringify(outcome));
+                    } satisfies SessionFork.Refused);
+                  return Effect.map(response, (frame) => void ws.send(JSON.stringify(frame)));
+                }
+                return Effect.sync(() => {
+                  // A keyless frame is a perimeter refusal (#1245) — report it verbatim.
+                  if ("admitted" in outcome) ws.send(JSON.stringify(outcome));
+                  else if (outcome.type === "session_read") read(ws, outcome);
+                  else ws.send(JSON.stringify(outcome));
+                });
               },
-              onFailure: (error) => ws.send(JSON.stringify({ type: "error", reason: error._tag })),
+              onFailure: (error) =>
+                Effect.sync(() => void ws.send(JSON.stringify({ type: "error", reason: error._tag }))),
             }),
           ),
         );
