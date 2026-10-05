@@ -36,6 +36,9 @@ function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
     const verdict = row.how.verdict ?? "allow";
     return verdict === "require_approval" ? { type: verdict, reason: row.id } : { type: verdict };
   }
+  // #1256: an observe hook row (PostToolUse) seeds the audit-only consult.
+  if (row.do === "observe" && row.how.ref !== undefined)
+    return { type: "consult", ref: row.how.ref, observe: true, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
   if (row.do === "rewrite" && row.how.ref !== undefined)
     return { type: "transform", ref: row.how.ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
   throw new AppInvariantError(`gate row ${row.id} (${row.do}) has no live policy-plane seed shape`);

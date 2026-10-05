@@ -129,7 +129,10 @@ function compileRows(config: HooksJsonInput): readonly Bundle.BundleGateRow[] {
               id: `hooks-json/${on}#${ordinal}`,
               on,
               when: {},
-              do: "gate",
+              // PostToolUse cannot retroactively block a finished tool call:
+              // it compiles audit-only (#1256 — observe rows annotate, every
+              // other event gates through the consulted hook process).
+              do: event === "PostToolUse" ? "observe" : "gate",
               how: {
                 ref: Bundle.HOOK_PROCESS_REF,
                 params: { event, command: entry.command, timeoutMs: entry.timeoutMs },

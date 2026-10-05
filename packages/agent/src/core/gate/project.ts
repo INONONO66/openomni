@@ -69,9 +69,11 @@ function projectedDoHow(row: CompiledRow): Pick<GateRow, "do" | "how"> {
         },
       };
     case "consult":
-      // A consulted guard: the named service decides, never a constant verdict.
+      // A consulted guard: the named service decides, never a constant
+      // verdict; `observe: true` projects the audit-only row (#1256 — a
+      // PostToolUse hook annotates, it cannot retroactively block).
       return {
-        do: "gate",
+        do: row.verdict.observe === true ? "observe" : "gate",
         how: {
           ref: row.verdict.ref,
           ...(row.verdict.config === undefined ? {} : { params: row.verdict.config }),

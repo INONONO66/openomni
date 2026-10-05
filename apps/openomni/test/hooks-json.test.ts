@@ -99,7 +99,8 @@ test("the four mapped events compile to rows on their points over hook/process",
       id: "hooks-json/tool.post#1",
       on: "tool.post",
       when: {},
-      do: "gate",
+      // PostToolUse is audit-only: it annotates, it cannot block (#1256).
+      do: "observe",
       how: {
         ref: Bundle.HOOK_PROCESS_REF,
         params: { event: "PostToolUse", command: ["./audit.sh"], timeoutMs: 2_000 },
