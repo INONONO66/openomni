@@ -203,14 +203,22 @@ describe("Session.fork", () => {
     expect(nodes.some((node) => node.kind === "alarm")).toBeFalse();
   });
 
-  test("refuses a mid-turn anchor, an unknown anchor and an over-cap copy", () => {
+  test("refuses a mid-turn anchor and an unknown anchor", () => {
     const parent = fixture.buildParent();
     const armHash = parent.hashOf("alarm-1:arm:1");
     expect(fixture.refusalOf(fixture.fork(armHash)).reason).toBe("anchor_not_boundary");
     expect(fixture.refusalOf(fixture.fork("no-such-hash")).reason).toBe("anchor_not_found");
-    const overCap = fixture.refusalOf(
-      fixture.fork(parent.hashOf("turn-1:terminal"), {}, { byteCap: 16 }),
-    );
+  });
+
+  test("the copy cap is generation configuration: a pinned 16-byte cap refuses, the default accepts", () => {
+    const parent = fixture.buildParent();
+    const anchor = parent.hashOf("turn-1:terminal");
+    // Under the default generation (no pinned cap) the same fork is accepted.
+    expect(fixture.forked(anchor).childId).toBe(CHILD);
+    // Pin a 16-byte cap on the parent generation: a real configure row, the
+    // same way the composition root's resolved startup value arrives.
+    fixture.pinForkCap(parent.authority, 16);
+    const overCap = fixture.refusalOf(fixture.fork(anchor, {}, { childId: "child-capped" }));
     expect(overCap.reason).toBe("byte_cap");
     // The typed refusal renders a complete operator-facing message.
     expect(overCap.message).toBe(`fork of session ${PARENT} refused (byte_cap): ${overCap.detail}`);

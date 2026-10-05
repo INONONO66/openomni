@@ -3,7 +3,7 @@ import { Core } from "@openomni/agent";
 const AgentFailure = Core.AgentFailure;
 type AgentFailure = Core.AgentFailure;
 const SessionEntity = Core.SessionEntity;
-import { Inbox, Gateway, SessionGeneration, type LedgerSession } from "@openomni/protocol";
+import { Inbox, Gateway, SessionGeneration, type ConsumptionSettings, type LedgerSession } from "@openomni/protocol";
 import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
 import type { AppLedgerPlane } from "./cluster-runtime";
 import { outboundMessage } from "./terminal-message";
@@ -78,6 +78,10 @@ export function materializeInboxTarget(
       const snapshot = SessionGeneration.ConfigureEffect.parse(
         create.initialAction.effect.value,
       ).snapshot;
+      // The prepared genesis settings (#1257 fork copy cap, #1253 widths)
+      // survive into the written configure row.
+      const prepared = SessionGeneration.ConfigureIntent.safeParse(create.initialAction.intent.value);
+      const settings = prepared.success ? prepared.data.settings : undefined;
       yield* kernel
         .materialize({
           id: create.row.id,
@@ -88,6 +92,7 @@ export function materializeInboxTarget(
           system: { preset: snapshot.systemPreset, blocks: snapshot.systemBlocks },
           policyGeneration: snapshot.policyGeneration,
           ...(snapshot.manifestHash === undefined ? {} : { manifestHash: snapshot.manifestHash }),
+          ...(settings === undefined ? {} : { settings }),
           actionId: create.initialAction.id,
           at: clock(),
         })
@@ -166,6 +171,8 @@ export function messageMaterialization(
   readonly preset: string;
   readonly runner: string;
   readonly at: number;
+  /** Generation settings pinned at genesis (#1253/#1257): widths and fork copy cap. */
+  readonly settings?: ConsumptionSettings;
 }) => LedgerSession.Materialize {
   return (input) => {
     const snapshot = Core.SessionHandleStore.generationSnapshot({
@@ -187,6 +194,7 @@ export function messageMaterialization(
         role: input.role,
         actionId: id(),
         at: input.at,
+        ...(input.settings === undefined ? {} : { settings: input.settings }),
       },
       snapshot,
     );

@@ -108,8 +108,10 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
 });
 
 /**
- * Generation-configured copy cap (#1257 M-5): the composition root's
- * `forkCopyByteCap` threads through the SHIPPED gateway fork path. An
+ * Generation-configured copy cap (#1257): the app's resolved startup value
+ * (env `OPENOMNI_FORK_COPY_BYTE_CAP` / 4 MiB default) is written into every
+ * new session's genesis `session.configure{settings.forkCopyByteCap}`, and
+ * the SHIPPED gateway fork path reads the cap off that parent generation. An
  * override smaller than the parent's copied bytes turns the same
  * otherwise-valid boundary fork into the typed `byte_cap` refusal.
  */

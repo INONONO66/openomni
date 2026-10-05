@@ -1,7 +1,7 @@
 /**
  * `session.configure` — generation change: manifest hash, role, parent,
- * bundles and `settings{steering, followUp}` holding the `all|one`
- * consumption width. Single writer: the entity configure constructor
+ * bundles and `settings{steering, followUp, forkCopyByteCap}` holding the
+ * `all|one` consumption widths and the fork copy cap. Single writer: the entity configure constructor
  * (`packages/agent/src/core/store/fence.ts`), also used at genesis by the app
  * cluster runtime and by `Session.fork` (#1257), whose child genesis pins the
  * fork boundary in `forkedFrom`.
@@ -14,7 +14,16 @@ export const ConsumptionWidth = z.enum(["all", "one"]);
 export type ConsumptionWidth = z.infer<typeof ConsumptionWidth>;
 
 export const Settings = z
-  .object({ steering: ConsumptionWidth, followUp: ConsumptionWidth })
+  .object({
+    steering: ConsumptionWidth,
+    followUp: ConsumptionWidth,
+    /**
+     * Copied-bytes cap for forking THIS session (#1257): generation
+     * configuration folded like the widths; absent falls back to the core
+     * default. The composition root writes its resolved startup value here.
+     */
+    forkCopyByteCap: z.number().int().positive().optional(),
+  })
   .strict();
 export type Settings = z.infer<typeof Settings>;
 

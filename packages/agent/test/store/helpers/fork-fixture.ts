@@ -7,6 +7,7 @@ import { SESSION_FILE_SCHEMA_VERSION, type SessionStore } from "../../../src/cor
 import { deliveryActions, receivedMessageAction, turnTerminalAction } from "../../../src/core/commit";
 import { armAction } from "../../../src/core/alarm";
 import { forkSession, type ForkPorts, ForkRefused, type ForkReceipt } from "../../../src/core/fork";
+import { configureAction } from "../../../src/core/store/fence";
 import type { LedgerError } from "../../../src/core/store/errors";
 
 export const PARENT = "parent";
@@ -134,7 +135,7 @@ export function forkFixture(stores: LedgerStores, child: () => ChildStore) {
   function fork(
     anchor: string,
     overrides: Partial<ForkPorts> = {},
-    input: { byteCap?: number; childId?: string } = {},
+    input: { childId?: string } = {},
   ): Result.Result<ForkReceipt, ForkRefused | LedgerError> {
     return runLedgerSync(
       Effect.result(
@@ -144,10 +145,31 @@ export function forkFixture(stores: LedgerStores, child: () => ChildStore) {
           childId: input.childId ?? CHILD,
           genesisActionId: `${input.childId ?? CHILD}:genesis`,
           now: 100,
-          ...(input.byteCap === undefined ? {} : { byteCap: input.byteCap }),
         }),
       ),
     );
+  }
+
+  /**
+   * Pins the parent generation's copy cap (#1257): a real
+   * `session.configure{settings.forkCopyByteCap}` row on the parent chain,
+   * exactly how the composition root's resolved value arrives.
+   */
+  function pinForkCap(
+    authority: { sessionId: string; owner: string; fence: number },
+    forkCopyByteCap: number,
+  ): void {
+    commit(authority, [
+      configureAction({
+        id: `${PARENT}:configure-cap-${forkCopyByteCap}`,
+        sessionId: PARENT,
+        parentId: stores.kernel.latestAction(PARENT)?.id ?? null,
+        operation: "compose",
+        snapshot: stores.kernel.latestGenerationFor(PARENT),
+        settings: { steering: "all", followUp: "all", forkCopyByteCap },
+        at: 13,
+      }),
+    ]);
   }
 
   function forked(anchor: string): ForkReceipt {
@@ -161,5 +183,5 @@ export function forkFixture(stores: LedgerStores, child: () => ChildStore) {
     return error;
   }
 
-  return { commit, buildParent, ports, fork, forked, refusalOf };
+  return { commit, buildParent, ports, fork, forked, refusalOf, pinForkCap };
 }

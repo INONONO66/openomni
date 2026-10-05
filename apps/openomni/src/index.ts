@@ -593,6 +593,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     watchPlane.bind(watchSources);
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
+      // #1257: the app's resolved cap is the input the composition writes
+      // into every new session's genesis generation settings.
+      forkCopyByteCap: resolveSessionFork(config).copyByteCap,
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, { now: services.now, id: services.entropy.id }),
       composed: { current: services.composed.current },
@@ -943,7 +946,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
         sessionsDir: config.sessionsDir,
         now: services.now,
         id: services.entropy.id,
-        copyByteCap: resolveSessionFork(config).copyByteCap,
       }));
     const server = Bun.serve({
       hostname: config.host,

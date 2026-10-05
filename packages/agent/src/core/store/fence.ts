@@ -89,6 +89,8 @@ export interface MaterializeInput {
   readonly policyGeneration: number;
   /** The composed manifest's `Generation.hash` this session adopts at creation (#1255). */
   readonly manifestHash?: string;
+  /** Generation settings pinned at genesis (#1253/#1257): widths and fork copy cap. */
+  readonly settings?: ConsumptionSettings;
   readonly actionId: string;
   readonly at: number;
 }
@@ -131,6 +133,8 @@ export function materializationSeed(
     readonly role: LedgerSession.Role;
     readonly actionId: string;
     readonly at: number;
+    /** Generation settings pinned at genesis (#1253/#1257). */
+    readonly settings?: ConsumptionSettings;
   },
   snapshot: SessionGeneration.Snapshot,
 ): LedgerSession.Materialize {
@@ -153,6 +157,7 @@ export function materializationSeed(
       parentId: null,
       operation: "create",
       snapshot,
+      ...(input.settings === undefined ? {} : { settings: input.settings }),
       at: input.at,
     }),
   };

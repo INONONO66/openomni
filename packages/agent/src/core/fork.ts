@@ -25,12 +25,18 @@ import { Data, Effect } from "effect";
 import type { LedgerAction, LedgerSession, PlainValue, SessionGeneration } from "@openomni/protocol";
 import type { SessionKernel } from "./store/fence";
 import { configureAction } from "./store/fence";
+import { consumptionSettings } from "./commit";
 import type { LedgerError } from "./store/errors";
 import type { SessionForkReceipt, SessionStore } from "./store/session-file/index.js";
 import { SESSION_FILE_SCHEMA_VERSION } from "./store/session-file/index.js";
 import type { SessionIndexInsert } from "./store/catalog";
 
-/** Default cap on copied journal bytes; override per fork via `byteCap`. */
+/**
+ * Default cap on copied journal bytes. A session generation overrides it by
+ * pinning `session.configure{settings.forkCopyByteCap}` (#1257); the fork
+ * path reads the cap off the parent generation it runs under, never a
+ * caller-supplied constant.
+ */
 export const DEFAULT_FORK_COPY_BYTE_CAP = 4 * 1024 * 1024;
 
 export type ForkRefusalReason =
@@ -64,8 +70,6 @@ export interface ForkInput {
   readonly genesisActionId: string;
   /** Injected wall-clock timestamp of the fork. */
   readonly now: number;
-  /** Copied-bytes cap; defaults to `DEFAULT_FORK_COPY_BYTE_CAP`. */
-  readonly byteCap?: number;
 }
 
 export interface ForkPorts {
@@ -211,7 +215,9 @@ function planFork(ports: ForkPorts, input: ForkInput): ForkPlan | ForkRefused {
       `anchor ${anchor.id} is a mid-turn ${anchor.kind} row, not a turn{terminal}, prompt or compaction boundary`,
     );
   const eligible = prefix.filter((node) => node.kind !== "fold.checkpoint" && !isArmRow(node));
-  const cap = input.byteCap ?? DEFAULT_FORK_COPY_BYTE_CAP;
+  // Generation-configured cap (#1257): folded off the parent's latest
+  // `session.configure{settings}` row, exactly like the consumption widths.
+  const cap = consumptionSettings(ports.parent, input.from).forkCopyByteCap ?? DEFAULT_FORK_COPY_BYTE_CAP;
   const bytes = eligible.reduce((total, node) => total + copiedBytes(node), 0);
   if (bytes > cap) return refuse("byte_cap", `copied bytes ${bytes} exceed the cap ${cap}`);
   const renames = new Map<string, string>();
