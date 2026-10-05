@@ -34,10 +34,15 @@ import { captureNow } from "./platform";
  * generation's `kernel/*` registrations are declarations of intent to use
  * them, not replacements.
  */
-function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTable {
+function composedPolicyRegistry(
+  generation: Bundle.Generation,
+  consultants: readonly Core.NamedConsultant[],
+): Core.HandlerTable {
   const transformers = [...Core.KERNEL_POLICY_REGISTRY.transformers];
   const obligations = [...Core.KERNEL_POLICY_REGISTRY.obligations];
-  const known = new Set([...transformers, ...obligations].map((entry) => entry.name));
+  const known = new Set(
+    [...transformers, ...obligations, ...consultants].map((entry) => entry.name),
+  );
   for (const [name, handler] of generation.handlers) {
     if (known.has(name)) continue;
     known.add(name);
@@ -45,7 +50,35 @@ function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTabl
       transformers.push({ name, apply: handler.apply as Core.NamedTransformer["apply"] });
     else obligations.push({ name });
   }
-  return { transformers, obligations };
+  return { transformers, obligations, consultants };
+}
+
+/**
+ * The generation's asynchronous consultants (#1256 r2 H-1): each registered
+ * `ConsultantHandler` (the hook capability's `hook/process`) acquires inside
+ * the generation Layer's Scope — the PID lifetime — with the rows that name
+ * it. A factory failure (e.g. a hook command that cannot spawn) is the typed
+ * candidate failure that refuses the generation.
+ */
+function acquireConsultants(
+  generation: Bundle.Generation,
+): Effect.Effect<readonly Core.NamedConsultant[], Core.SessionError, Scope.Scope> {
+  return Effect.gen(function* () {
+    const consultants: Core.NamedConsultant[] = [];
+    for (const [name, handler] of generation.handlers) {
+      if (!Bundle.isConsultantHandler(handler)) continue;
+      const rows = generation.rows.filter((row) => row.how.ref === name);
+      const consult = yield* handler
+        .consultant({ name, rows })
+        .pipe(
+          Effect.mapError(
+            (cause) => new AgentFailure({ operation: "generation.consultant", cause: String(cause) }),
+          ),
+        );
+      consultants.push({ name, consult });
+    }
+    return consultants;
+  });
 }
 
 export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
@@ -129,7 +162,15 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         return sink;
       }));
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
-      const seeded = Layer.succeed(GenerationHandlers, composedPolicyRegistry(generation)).pipe(Layer.provideMerge(seed));
+      // #1256 r2 H-1: consultants (the hook PIDs) acquire in THIS generation
+      // Layer's Scope; rotation drains and kills them with the generation.
+      const seeded = Layer.effect(
+        GenerationHandlers,
+        Effect.gen(function* () {
+          const consultants = yield* acquireConsultants(generation);
+          return composedPolicyRegistry(generation, consultants);
+        }),
+      ).pipe(Layer.provideMerge(seed));
       // #1255 P3: the composed ON bundles' Layers acquire INSIDE this
       // generation's Scope in composition order, each provided the seed plus
       // every earlier bundle's outputs — the per-generation resource semantics
@@ -203,10 +244,16 @@ export function configureAuthority(
       generation: openKernel(input.sessionId).latestGenerationFor(input.sessionId).generation,
     });
     const { policy } = yield* captured.provide(SessionLayer);
-    return policy.evaluate({
-      kind: "session.configure", phase: "pre", op: input.operation,
+    const evaluationInput = {
+      kind: "session.configure", phase: "pre" as const, op: input.operation,
       role: input.role, sessionId: input.sessionId,
       value: { op: input.operation, generation: input.generation },
-    }).verdict === "allow";
+    };
+    // #1256 r2: session.open hook rows consult asynchronously; a snapshot
+    // without the effectful path evaluates synchronously as before.
+    const evaluated = policy.evaluateEffect === undefined
+      ? policy.evaluate(evaluationInput)
+      : yield* policy.evaluateEffect(evaluationInput);
+    return evaluated.verdict === "allow";
   }));
 }

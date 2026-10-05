@@ -1,5 +1,8 @@
 import { Capability, seam, type CapabilityDefinition, type SeamTag } from "../../core/api";
+import { hookProcessConsultant } from "./consultant";
 import { acquireHookProcess, HOOK_PROCESS_REF } from "./process";
+
+export { hookProcessConsultant } from "./consultant";
 
 export {
   acquireHookProcess,
@@ -37,7 +40,9 @@ export function hookCapability(): CapabilityDefinition<"hook", SeamTag, HookVerb
   return Capability.define({
     name: "hook",
     requires: ["action"],
-    handlers: { [HOOK_PROCESS_REF]: {} },
+    // #1256 r2 H-1: the registration IS the consultant — compiled rows naming
+    // `hook/process` consult the scoped process the composition acquires here.
+    handlers: { [HOOK_PROCESS_REF]: { consultant: hookProcessConsultant } },
     verbs: { acquire: acquireHookProcess },
     seam: HookSeam,
   });

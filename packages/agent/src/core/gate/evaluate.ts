@@ -7,10 +7,11 @@ import {
   type PolicyRow,
   type RowVerdict,
 } from "@openomni/protocol";
+import type { Effect } from "effect";
 import type { z } from "zod";
 import { clonePlain, type MessagePolicyContext } from "./match";
 import type { GatePointTable } from "../points";
-import type { GateHandler } from "./compose";
+import type { GateHandler, PendingConsult, PreparedResults } from "./compose";
 import { legacyPointOf } from "./migrate";
 import type { CompileErrorData, CompiledRow, PolicyCompileError } from "./legacy-rows";
 import type { ProjectedGeneration } from "./project";
@@ -73,6 +74,13 @@ export interface CompiledPolicySnapshot {
   /** The merged point registration table this snapshot compiled against (#1251). */
   readonly pointTable: GatePointTable;
   evaluate(input: PolicyEvaluationInput): PolicyEvaluation;
+  /**
+   * Effectful evaluation (#1256): resolves the matched rows' asynchronous
+   * consultants (the hook process) first, then runs the synchronous fold with
+   * their settled results prepared. The sync `evaluate` on a consult row has
+   * no prepared result and folds `handler_unavailable` -> deny fail-closed.
+   */
+  evaluateEffect?(input: PolicyEvaluationInput): Effect.Effect<PolicyEvaluation>;
 }
 
 function publicBucket(kind: string, phase: PolicyRow.Phase, op: string | undefined): string {
@@ -93,6 +101,46 @@ const VERDICT_PRECEDENCE: Record<"deny" | "require_approval" | "allow", readonly
   allow: ["allow"],
 };
 
+/** The projected gate's `when` record for one legacy evaluation input. */
+function projectedWhenOf(input: PolicyEvaluationInput): Record<string, PlainValue> {
+  const when: Record<string, PlainValue> = {};
+  if (input.op !== undefined) when.op = input.op;
+  const operation = innerOperation(input.value);
+  if (operation !== undefined) when.operation = operation;
+  if (input.role !== undefined) when.role = input.role;
+  if (input.sessionId !== undefined) when.sessionId = input.sessionId;
+  return when;
+}
+
+/**
+ * The async consultations a fresh decision for this input would make (#1256):
+ * empty when the input refuses before the gate or the recorded decision would
+ * replay. `evaluateEffect` resolves these through the registered consultants
+ * and passes the settled results to `evaluateProjected` as `prepared`.
+ */
+export interface PlannedConsult extends PendingConsult {
+  /** The projected gate point the consultation addresses. */
+  readonly point: string;
+}
+
+export function projectedConsultPlan(
+  projected: ProjectedGeneration,
+  table: GatePointTable,
+  input: PolicyEvaluationInput,
+): readonly PlannedConsult[] {
+  const point = legacyPointOf(input.kind, input.phase);
+  if (point === undefined || !table.has(point)) return [];
+  if (input.kind === "message" && input.op === "send_message" && input.message === undefined)
+    return [];
+  return projected.gate
+    .consults(
+      point,
+      { when: projectedWhenOf(input), value: clonePlain(input.value), context: input.message },
+      input.recorded === undefined ? {} : { recorded: input.recorded },
+    )
+    .map((consult) => ({ ...consult, point }));
+}
+
 export function evaluateProjected(
   projected: ProjectedGeneration,
   handlers: ReadonlyMap<string, GateHandler>,
@@ -100,6 +148,7 @@ export function evaluateProjected(
   contentHash: string,
   table: GatePointTable,
   input: PolicyEvaluationInput,
+  prepared?: PreparedResults,
 ): PolicyEvaluation {
   // The recorded decision is replay input, never part of the input identity.
   const { recorded, ...identity } = input;
@@ -124,17 +173,16 @@ export function evaluateProjected(
   if (input.kind === "message" && input.op === "send_message" && input.message === undefined)
     return refused("message_context_missing");
 
-  const when: Record<string, PlainValue> = {};
-  if (input.op !== undefined) when.op = input.op;
-  const operation = innerOperation(input.value);
-  if (operation !== undefined) when.operation = operation;
-  if (input.role !== undefined) when.role = input.role;
-  if (input.sessionId !== undefined) when.sessionId = input.sessionId;
+  const when = projectedWhenOf(input);
 
   const outcome = projected.gate.decide(
     point,
     { when, value: clonePlain(input.value), context: input.message },
-    { handlers: (ref) => handlers.get(ref), ...(recorded === undefined ? {} : { recorded }) },
+    {
+      handlers: (ref) => handlers.get(ref),
+      ...(recorded === undefined ? {} : { recorded }),
+      ...(prepared === undefined ? {} : { prepared }),
+    },
   );
   const matched = outcome.decision.rowIds.flatMap((id) => {
     const row = projected.rowById.get(id);
@@ -159,7 +207,9 @@ export function evaluateProjected(
         : obligations.length > 0
           ? "obligation"
           : "allow";
-  const reason = projectedReason(outcome.decision.verdict, matched);
+  const reason =
+    projectedReason(outcome.decision.verdict, matched) ??
+    consultedReason(outcome.decision);
 
   return Object.freeze({
     generation,
@@ -195,6 +245,23 @@ function projectedReason(
       if (reason !== undefined) return reason;
     }
   }
+  return undefined;
+}
+
+/**
+ * A consulted guard's reason (#1256): the first consulted payload carrying a
+ * string `reason`, else — on a deny — the first recorded fact's code (e.g.
+ * `handler_unavailable` on the sync path of an async consultant row).
+ */
+function consultedReason(decision: GateDecision): string | undefined {
+  for (const entry of decision.consulted) {
+    const payload = entry.payload;
+    if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+      const reason = payload.reason;
+      if (typeof reason === "string" && reason.length > 0) return reason;
+    }
+  }
+  if (decision.verdict === "deny") return decision.facts[0]?.code;
   return undefined;
 }
 

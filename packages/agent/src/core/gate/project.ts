@@ -68,6 +68,15 @@ function projectedDoHow(row: CompiledRow): Pick<GateRow, "do" | "how"> {
           limit: row.verdict.limit,
         },
       };
+    case "consult":
+      // A consulted guard: the named service decides, never a constant verdict.
+      return {
+        do: "gate",
+        how: {
+          ref: row.verdict.ref,
+          ...(row.verdict.config === undefined ? {} : { params: row.verdict.config }),
+        },
+      };
     default:
       return { do: "gate", how: { verdict: row.verdict.type } };
   }
@@ -125,7 +134,11 @@ export function projectGeneration(
   const gate = compileGateRows<MessagePolicyContext>({
     table,
     rows: gateRows,
-    handlers: [...registry.transformers, ...registry.obligations].map(({ name }) => name),
+    handlers: [
+      ...registry.transformers,
+      ...registry.obligations,
+      ...(registry.consultants ?? []),
+    ].map(({ name }) => name),
     generation,
     matchers,
   });

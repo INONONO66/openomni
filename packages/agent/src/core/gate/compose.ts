@@ -8,9 +8,15 @@ import {
 } from "@openomni/protocol";
 import { GateComposeError, type GatePointTable } from "../points";
 import { admitRow } from "./admit";
-import { applyRow, initialFoldState, type GateEmission, type GateHandler } from "./fold";
+import {
+  applyRow,
+  initialFoldState,
+  type GateEmission,
+  type GateHandler,
+  type PreparedResults,
+} from "./fold";
 
-export type { GateHandler } from "./fold";
+export type { GateHandler, GateHandlerResult, PreparedResults } from "./fold";
 
 /**
  * Gate-row compiler and evaluator (#1251): compiles the single row contract
@@ -31,6 +37,15 @@ interface GateDecideOptions {
   readonly handlers?: (ref: string) => GateHandler | undefined;
   /** A persisted decision for this point; same input hash replays it verbatim. */
   readonly recorded?: GateDecision;
+  /** Pre-consulted async handler results keyed by row id (#1256). */
+  readonly prepared?: PreparedResults;
+}
+
+/** One matched handler row an asynchronous consultant must answer before the fold. */
+export interface PendingConsult {
+  readonly rowId: string;
+  readonly ref: string;
+  readonly params: PlainValue;
 }
 
 interface GateOutcome {
@@ -44,6 +59,17 @@ export interface CompiledGate<Context = never> {
   readonly generation: number;
   rowsAt(point: PointId): readonly GateRow[];
   decide(point: PointId, input: GateDecideInput<Context>, options?: GateDecideOptions): GateOutcome;
+  /**
+   * The matched handler rows a fresh decision would consult at this point
+   * (#1256): empty when the recorded decision would replay verbatim. The
+   * caller resolves the asynchronous ones and passes their settled results
+   * back through `options.prepared`.
+   */
+  consults(
+    point: PointId,
+    input: GateDecideInput<Context>,
+    options?: Pick<GateDecideOptions, "recorded">,
+  ): readonly PendingConsult[];
 }
 
 export interface CompileGateRowsOptions<Context = never> {
@@ -94,6 +120,48 @@ export function compileGateRows<Context = never>(
     return whenMatch && (entry.matcher === undefined || entry.matcher(input.context));
   }
 
+  function replays(
+    point: PointId,
+    input: GateDecideInput<Context>,
+    entries: readonly CompiledGateRow<Context>[],
+    inputHash: string,
+    recorded: GateDecision | undefined,
+  ): boolean {
+    // Matcher context is a decision input: a recorded decision replays only
+    // when every context-dependent row still matches exactly as recorded.
+    // A decision is bound to its policy generation (#1251 r4): a record from
+    // another generation never replays — the current rows decide fresh.
+    return (
+      recorded !== undefined &&
+      recorded.generation === options.generation &&
+      recorded.point === point &&
+      recorded.inputHash === inputHash &&
+      entries.every(
+        (entry) =>
+          entry.matcher === undefined ||
+          matches(entry, input) === recorded.rowIds.includes(entry.row.id),
+      )
+    );
+  }
+
+  function consults(
+    point: PointId,
+    input: GateDecideInput<Context>,
+    consultOptions: Pick<GateDecideOptions, "recorded"> = {},
+  ): readonly PendingConsult[] {
+    const inputHash = canonicalDigest({ point, when: { ...input.when }, value: input.value });
+    const entries = byPoint.get(point) ?? [];
+    if (replays(point, input, entries, inputHash, consultOptions.recorded)) return [];
+    return entries.flatMap((entry) =>
+      entry.emit === undefined &&
+      entry.row.how.ref !== undefined &&
+      entry.row.how.verdict === undefined &&
+      matches(entry, input)
+        ? [{ rowId: entry.row.id, ref: entry.row.how.ref, params: entry.row.how.params ?? null }]
+        : [],
+    );
+  }
+
   function decide(
     point: PointId,
     input: GateDecideInput<Context>,
@@ -102,29 +170,14 @@ export function compileGateRows<Context = never>(
     const inputHash = canonicalDigest({ point, when: { ...input.when }, value: input.value });
     const entries = byPoint.get(point) ?? [];
     const recorded = decideOptions.recorded;
-    // Matcher context is a decision input: a recorded decision replays only
-    // when every context-dependent row still matches exactly as recorded.
-    const matchersUnchanged = (record: GateDecision): boolean =>
-      entries.every(
-        (entry) =>
-          entry.matcher === undefined ||
-          matches(entry, input) === record.rowIds.includes(entry.row.id),
-      );
-    // A decision is bound to its policy generation (#1251 r4): a record from
-    // another generation never replays — the current rows decide fresh.
-    if (
-      recorded !== undefined &&
-      recorded.generation === options.generation &&
-      recorded.point === point &&
-      recorded.inputHash === inputHash &&
-      matchersUnchanged(recorded)
-    ) {
+    if (recorded !== undefined && replays(point, input, entries, inputHash, recorded)) {
       // Replay restores the recorded rewrite output without invoking handlers.
       return { decision: recorded, value: recorded.output, emissions: [], replayed: true };
     }
     const state = initialFoldState(input.value);
     for (const entry of entries) {
-      if (matches(entry, input)) applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers);
+      if (matches(entry, input))
+        applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers, decideOptions.prepared);
     }
     const decision: GateDecision = {
       point,
@@ -145,5 +198,6 @@ export function compileGateRows<Context = never>(
     generation: options.generation,
     rowsAt: (point) => (byPoint.get(point) ?? []).map((entry) => entry.row),
     decide,
+    consults,
   };
 }

@@ -34,6 +34,10 @@ export const RowVerdict = PlainValueSchema.pipe(
       .object({ type: z.literal("transform"), ref: PolicyRef, config: PlainValueSchema.optional() })
       .strict(),
     z.object({ type: z.literal("obligation"), ref: PolicyRef, ...BudgetFields }).strict(),
+    /** Consulted gate guard (#1256): the named service decides at evaluation time. */
+    z
+      .object({ type: z.literal("consult"), ref: PolicyRef, config: PlainValueSchema.optional() })
+      .strict(),
   ]),
 );
 export type RowVerdict = z.infer<typeof RowVerdict>;

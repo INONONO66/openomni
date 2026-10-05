@@ -33,12 +33,19 @@ interface GateHandlerInput {
   readonly service: (ref: string) => GateHandler;
 }
 
-interface GateHandlerResult {
+export interface GateHandlerResult {
   readonly verdict?: GateVerdict;
   readonly value?: PlainValue;
   /** Recorded as the consulted payload; an undefined payload is observe-only. */
   readonly payload?: PlainValue;
 }
+
+/**
+ * Pre-consulted handler results keyed by row id (#1256): an asynchronous
+ * consultant (the hook process) runs BEFORE the synchronous fold, and its
+ * settled result folds here exactly like a sync handler response would.
+ */
+export type PreparedResults = ReadonlyMap<string, GateHandlerResult>;
 
 export type GateHandler = (input: GateHandlerInput) => GateHandlerResult;
 
@@ -107,10 +114,11 @@ export function applyRow(
   state: FoldState,
   inputHash: string,
   handlers: HandlerResolver,
+  prepared?: PreparedResults,
 ): void {
   state.rowIds.push(row.id);
   if (row.do === "observe") {
-    observeRow(row, state, handlers);
+    observeRow(row, state, handlers, prepared);
     return;
   }
   if (row.how.metric !== undefined && row.how.limit !== undefined)
@@ -131,7 +139,7 @@ export function applyRow(
     state.verdict = foldVerdict(state.verdict, row.how.verdict);
     return;
   }
-  if (row.how.ref !== undefined) consultRow(row, row.how.ref, state, handlers);
+  if (row.how.ref !== undefined) consultRow(row, row.how.ref, state, handlers, prepared);
 }
 
 /**
@@ -164,15 +172,29 @@ function invokeGuarded(
  * but nothing an observer returns, mutates, or throws can change the verdict
  * or value — a failure is recorded as a fact and the decision stands.
  */
-function observeRow(row: GateRow, state: FoldState, handlers: HandlerResolver): void {
+function observeRow(
+  row: GateRow,
+  state: FoldState,
+  handlers: HandlerResolver,
+  prepared?: PreparedResults,
+): void {
   const ref = row.how.ref;
   if (ref === undefined) return;
+  let result: GateHandlerResult;
+  const consulted = prepared?.get(row.id);
+  if (consulted !== undefined) {
+    if (consulted.payload === undefined) {
+      state.facts.push({ rowId: row.id, ref, code: "unrecorded_response" });
+      return;
+    }
+    state.annotations.push({ rowId: row.id, ref, payload: consulted.payload });
+    return;
+  }
   const handler = handlers?.(ref);
   if (handler === undefined) {
     state.facts.push({ rowId: row.id, ref, code: "handler_unavailable" });
     return;
   }
-  let result: GateHandlerResult;
   try {
     result = invokeGuarded(row, handler, state.value, handlers);
   } catch (cause) {
@@ -194,21 +216,28 @@ function consultRow(
   ref: string,
   state: FoldState,
   handlers: HandlerResolver,
+  prepared?: PreparedResults,
 ): void {
-  const handler = handlers?.(ref);
-  if (handler === undefined) {
-    state.facts.push({ rowId: row.id, ref, code: "handler_unavailable" });
-    state.verdict = foldVerdict(state.verdict, "deny");
-    return;
-  }
   let result: GateHandlerResult;
-  try {
-    result = invokeGuarded(row, handler, state.value, handlers);
-  } catch (cause) {
-    if (!GateRequirementError.isInstance(cause)) throw cause;
-    state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });
-    state.verdict = foldVerdict(state.verdict, "deny");
-    return;
+  const consulted = prepared?.get(row.id);
+  if (consulted !== undefined) {
+    // The asynchronous consultant already ran; fold its settled result.
+    result = consulted;
+  } else {
+    const handler = handlers?.(ref);
+    if (handler === undefined) {
+      state.facts.push({ rowId: row.id, ref, code: "handler_unavailable" });
+      state.verdict = foldVerdict(state.verdict, "deny");
+      return;
+    }
+    try {
+      result = invokeGuarded(row, handler, state.value, handlers);
+    } catch (cause) {
+      if (!GateRequirementError.isInstance(cause)) throw cause;
+      state.facts.push({ rowId: row.id, ref: cause.data.ref, code: "requirement_escape" });
+      state.verdict = foldVerdict(state.verdict, "deny");
+      return;
+    }
   }
   if (result.payload === undefined) {
     // Unrecorded response: observe-only; it cannot change the decision.

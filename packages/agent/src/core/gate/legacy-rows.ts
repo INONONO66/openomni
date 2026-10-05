@@ -242,6 +242,18 @@ function resolveVerdict(
           ref: verdict.ref,
         });
       return Object.freeze(verdict);
+    case "consult":
+      // The named async service must be registered or the generation refuses.
+      if (!(registry.consultants ?? []).some(({ name }) => name === verdict.ref))
+        throw new PolicyCompileError({
+          code: "unknown_ref",
+          generation,
+          ruleName: row.name,
+          kind: row.kind,
+          phase: row.phase,
+          ref: verdict.ref,
+        });
+      return Object.freeze(verdict);
     case "allow":
     case "deny":
     case "require_approval":

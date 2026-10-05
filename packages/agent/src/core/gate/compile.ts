@@ -1,4 +1,5 @@
 import { canonicalDigest, type PolicyRow, type PlainValue, type Storage } from "@openomni/protocol";
+import { Effect } from "effect";
 import { composePointTable, GateComposeError, KERNEL_CAPABILITY_POINTS, type GatePointTable } from "../points";
 import { translateLegacyPolicyRow } from "./migrate";
 import {
@@ -11,9 +12,9 @@ import {
 } from "./legacy-rows";
 import { createHandlerTable, wrapTransformer, type HandlerTable } from "./registry";
 import { projectGeneration, type ProjectedGeneration } from "./project";
-import { evaluateProjected, failedSnapshot, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
+import { evaluateProjected, failedSnapshot, projectedConsultPlan, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
 
-export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer } from "./registry";
+export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer, type NamedConsultant, type ConsultInput } from "./registry";
 export { PolicyCompileError } from "./legacy-rows";
 export type { CompiledPolicySnapshot, PolicyEvaluation, PolicyEvaluationInput } from "./evaluate";
 
@@ -76,13 +77,37 @@ export function compilePolicySnapshot(
   const handlers = new Map(
     registry.transformers.map((transformer) => [transformer.name, wrapTransformer(transformer)]),
   );
+  const consultants = new Map((registry.consultants ?? []).map((entry) => [entry.name, entry]));
   const contentHash = canonicalDigest(contentIdentity(options.rows));
+  const evaluate = (input: PolicyEvaluationInput, prepared?: Parameters<typeof evaluateProjected>[6]) =>
+    evaluateProjected(projected, handlers, options.generation, contentHash, table, input, prepared);
   return Object.freeze({
     generation: options.generation,
     contentHash,
     pointTable: table,
-    evaluate: (input: PolicyEvaluationInput) =>
-      evaluateProjected(projected, handlers, options.generation, contentHash, table, input),
+    evaluate: (input: PolicyEvaluationInput) => evaluate(input),
+    // #1256: resolve the matched rows' async consultants, then fold sync with
+    // their settled results prepared. No consultant registered or matched =
+    // exactly the sync evaluation.
+    evaluateEffect: (input: PolicyEvaluationInput) =>
+      Effect.suspend(() => {
+        const pending = projectedConsultPlan(projected, table, input).filter((consult) =>
+          consultants.has(consult.ref),
+        );
+        if (pending.length === 0) return Effect.sync(() => evaluate(input));
+        return Effect.forEach(pending, (consult) => {
+          const consultant = consultants.get(consult.ref);
+          if (consultant === undefined) return Effect.die(`unregistered consultant ${consult.ref}`);
+          return consultant
+            .consult({
+              rowId: consult.rowId,
+              point: consult.point,
+              params: consult.params,
+              value: input.value,
+            })
+            .pipe(Effect.map((result) => [consult.rowId, result] as const));
+        }).pipe(Effect.map((entries) => evaluate(input, new Map(entries))));
+      }),
   });
 }
 

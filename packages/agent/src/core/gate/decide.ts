@@ -1231,10 +1231,16 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   function decide(request: ExecutionRequest, phase: "pre" | "post", value: PlainValue,
     parentId = options.identity.parentActionId): Effect.Effect<Decision, CommitFailed> {
     return Effect.suspend(() => {
-      const evaluated = options.policy.evaluate({
+      const input = {
         kind: request.kind, phase, op: request.op, role: options.identity.role, sessionId: options.identity.sessionId,
         ...(request.message === undefined ? {} : { message: request.message }), value,
-      });
+      };
+      // #1256: async consultants (hook rows) resolve through evaluateEffect;
+      // a snapshot without one evaluates synchronously as before.
+      const evaluatedEffect = options.policy.evaluateEffect === undefined
+        ? Effect.sync(() => options.policy.evaluate(input))
+        : options.policy.evaluateEffect(input);
+      return evaluatedEffect.pipe(Effect.flatMap((evaluated) => {
       const decision = gatedByRegistry(evaluated, request, phase);
       return record.commit({
         id: options.entropy(), parentId, sessionId: options.identity.sessionId, kind: "policy.decision",
@@ -1248,6 +1254,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         } },
         ts: options.clock(), irreversible: true,
       }).pipe(Effect.map((receipt) => ({ ...decision, receipt })));
+      }));
     });
   }
 
@@ -1663,7 +1670,9 @@ function replayRecordedValue(
 }
 
 function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["verdict"] {
-  const parsed = RowVerdictType.safeParse(verdict);
+  // "consult" is row vocabulary, never an evaluation outcome: a consulted row
+  // records the folded allow/deny/require_approval, so it is excluded here.
+  const parsed = RowVerdictType.exclude(["consult"]).safeParse(verdict);
   if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
   return parsed.data;
 }

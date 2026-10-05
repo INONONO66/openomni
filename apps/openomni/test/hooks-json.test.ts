@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Bundle, Core, Model } from "@openomni/agent";
+import { L0Observation } from "@openomni/protocol";
 type RunInput = Model.RunInput;
 type Sink = Model.Sink;
 import { Context, Effect, Layer } from "effect";
@@ -24,6 +25,7 @@ import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { Bus } from "./helpers/bus";
 import { runEffect } from "./helpers/effect";
+import { eventSignal } from "./helpers/event-signal";
 import { testEntropy } from "./helpers/test-entropy";
 
 /**
@@ -208,7 +210,7 @@ test("without the hook capability the bundle refuses at compose as seam_missing"
   }
 });
 
-test("a guard rewrite row seeds the live transform; a command gate row refuses fail-closed (no consulted-gate channel yet)", async () => {
+test("a guard rewrite row seeds the live transform; a command gate row seeds the consult verdict (H-1)", async () => {
   const guarded = await composed({ hooks: { PreToolUse: [{ guard: "secrets-guard" }] } });
   const seeds = gateRowPolicySeeds(guarded.rows.filter((row) => row.id.startsWith("hooks-json/")));
   expect(seeds).toEqual([
@@ -227,12 +229,27 @@ test("a guard rewrite row seeds the live transform; a command gate row refuses f
   const command = await composed({
     hooks: { PreToolUse: [{ command: ["./guard.sh"], timeoutMs: 1_000 }] },
   });
-  // Deliberate fail-closed deviation (D2): the live plane has no consulted-gate
-  // channel, so a configured command gate refuses the boot rather than seeding
-  // a row that would never consult the hook.
-  expect(() =>
+  // #1256 r2 H-1: the command gate row seeds the consult verdict — the named
+  // async service the compiled snapshot resolves through `hook/process`.
+  expect(
     gateRowPolicySeeds(command.rows.filter((row) => row.id.startsWith("hooks-json/"))),
-  ).toThrow(AppInvariantError);
+  ).toEqual([
+    {
+      name: "hooks-json/tool.pre#1",
+      kind: "tool",
+      phase: "pre",
+      priority: 500,
+      match: { encodingVersion: 1, value: {} },
+      verdict: {
+        encodingVersion: 1,
+        value: {
+          type: "consult",
+          ref: Bundle.HOOK_PROCESS_REF,
+          config: { event: "PreToolUse", command: ["./guard.sh"], timeoutMs: 1_000 },
+        },
+      },
+    },
+  ]);
 });
 
 test("startOpenOmni compiles the Owner's hooks file at boot and seeds its row into the catalog", async () => {
@@ -375,3 +392,4 @@ test("capability-removed one-turn gate: the cascade is journaled in session.conf
   // Golden-stable: two runs from pinned clock/entropy journal identical bytes.
   expect(second).toEqual(first);
 });
+
