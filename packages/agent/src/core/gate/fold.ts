@@ -71,7 +71,11 @@ function plainRecord(value: PlainValue): Readonly<Record<string, PlainValue>> | 
  * Only the declared rewritable fields flow from the handler's output into the
  * prior value; a declared field absent from the output is removed (redaction).
  */
-function applyRewrite(prior: PlainValue, fields: readonly string[], output: PlainValue): PlainValue {
+function applyRewrite(
+  prior: PlainValue,
+  fields: readonly string[],
+  output: PlainValue,
+): PlainValue {
   const base = plainRecord(prior);
   if (base === undefined) return prior;
   const source = plainRecord(output) ?? {};

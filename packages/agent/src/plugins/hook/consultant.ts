@@ -142,10 +142,7 @@ export function hookProcessConsultant(
       if (!params.success) continue; // the row denies at consult time
       const key = processKey(params.data);
       if (pool.has(key)) continue;
-      pool.set(
-        key,
-        yield* acquireHookProcess({ command: params.data.command, onLate: routeLate }),
-      );
+      pool.set(key, yield* acquireHookProcess({ command: params.data.command, onLate: routeLate }));
     }
     let calls = 0;
     return (input: ConsultInput): Effect.Effect<GateHandlerResult> =>

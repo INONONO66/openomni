@@ -2,7 +2,20 @@ import type { CommitReceipt } from "./store/services";
 import type { LedgerError } from "./store/errors";
 import { Effect } from "effect";
 import type { SessionKernel } from "./entity";
-import { canonicalDigest, ConsumptionSettings, type ConsumptionWidth, JournalKind, PlainValueSchema, SessionTurn, FoldCheckpoint, type LedgerAction, type LedgerSession, SessionGeneration, Inbox, type PlainValue } from "@openomni/protocol";
+import {
+  canonicalDigest,
+  ConsumptionSettings,
+  type ConsumptionWidth,
+  JournalKind,
+  PlainValueSchema,
+  SessionTurn,
+  FoldCheckpoint,
+  type LedgerAction,
+  type LedgerSession,
+  SessionGeneration,
+  Inbox,
+  type PlainValue,
+} from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
 import { pinCompactionAction } from "../plugins/compaction/successor";
 import type * as SessionHandleStore from "./store/fence";
@@ -69,8 +82,7 @@ export function commitFoldBatch(
       actions.push(
         foldCheckpointAction({
           sessionId: input.sessionId,
-          parentId:
-            kernel.latestAction(input.sessionId, input.expectedRevision)?.id ?? null,
+          parentId: kernel.latestAction(input.sessionId, input.expectedRevision)?.id ?? null,
           revision: input.expectedRevision,
           at: input.now,
           reason: "interval",
@@ -180,7 +192,6 @@ export function toolSnapshot(tool: SessionTool): SessionGeneration.Tool {
 export function internalOrigin(sessionId: string): Inbox.Origin {
   return { encodingVersion: 1, value: { kind: "session", id: sessionId } };
 }
-
 
 interface TurnEnvelopeActionInput {
   readonly id: string;
@@ -333,9 +344,7 @@ export function inputRowKind(kind: Inbox.Kind): "prompt" | "signal" | "action" {
 
 export function deliveryActions(
   items: readonly Inbox.Row[],
-  target:
-    | { readonly kind: "turn"; readonly turnId: string }
-    | { readonly kind: "inbox" },
+  target: { readonly kind: "turn"; readonly turnId: string } | { readonly kind: "inbox" },
   boundary: SessionTurn.Boundary,
   parentId: string | null,
 ): LedgerAction.Append[] {
@@ -532,9 +541,12 @@ export function generationForOpen(
   return Effect.succeed(snapshot);
 }
 
-
 /** The chain effect one received message commits; the pending fold reads it back. */
-const ReceivedEffect = z.object({ inboxKind: Inbox.Kind, content: z.string(), delivery: z.enum(["steer", "followUp"]).optional() });
+const ReceivedEffect = z.object({
+  inboxKind: Inbox.Kind,
+  content: z.string(),
+  delivery: z.enum(["steer", "followUp"]).optional(),
+});
 const DeliverIntent = z.object({ inboxId: z.string() });
 
 /** The durable chain action for one received message (the inbox table is gone; the chain is the inbox). */
@@ -622,7 +634,9 @@ export function receivedMessages(
         content: entry.content,
         origin: entry.action.intent,
         ...(entry.delivery === undefined ? {} : { delivery: entry.delivery }),
-        ...(afterCursorOf(entry.action.intent.value) === undefined ? {} : { after: afterCursorOf(entry.action.intent.value) }),
+        ...(afterCursorOf(entry.action.intent.value) === undefined
+          ? {}
+          : { after: afterCursorOf(entry.action.intent.value) }),
         status: delivered.has(entry.action.id) ? "consumed" : "pending",
         consumedBy: null,
         consumedAt: null,
@@ -702,12 +716,18 @@ export function boundaryConsumption(
   const width = (rows: readonly Inbox.Row[], mode: ConsumptionWidth) =>
     mode === "one" ? rows.slice(0, 1) : rows;
   const inputs = live.filter((item) => item.kind === "prompt" || item.kind === "action");
-  const steer = inputs.filter((item) => (item.delivery ?? JournalKind.DEFAULT_DELIVERY) === "steer");
-  const followUp = inputs.filter((item) => (item.delivery ?? JournalKind.DEFAULT_DELIVERY) === "followUp");
+  const steer = inputs.filter(
+    (item) => (item.delivery ?? JournalKind.DEFAULT_DELIVERY) === "steer",
+  );
+  const followUp = inputs.filter(
+    (item) => (item.delivery ?? JournalKind.DEFAULT_DELIVERY) === "followUp",
+  );
   const chosen = new Set(
     [
       ...live.filter((item) => item.kind === "interrupt" || item.kind === "resume"),
-      ...(boundary === "after_tools" || boundary === "turn_end" ? width(steer, settings.steering) : []),
+      ...(boundary === "after_tools" || boundary === "turn_end"
+        ? width(steer, settings.steering)
+        : []),
       ...(boundary === "turn_end" ? width(followUp, settings.followUp) : []),
     ].map((item) => item.id),
   );
