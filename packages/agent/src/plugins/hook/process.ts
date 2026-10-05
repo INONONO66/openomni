@@ -92,10 +92,13 @@ export class HookSpawnError extends Schema.TaggedError<HookSpawnError>(
   cause: Schema.String,
 }) {}
 
+/** A late line is always a DECODED result; failures settle calls, they are never late. */
+export type HookLateOutcome = Exclude<HookOutcome, { readonly kind: "failure" }>;
+
 /** A well-formed response line that arrived AFTER its call settled (#1256 H-3). */
 export interface HookLateResult {
   readonly id: string;
-  readonly outcome: HookOutcome;
+  readonly outcome: HookLateOutcome;
 }
 
 export interface HookProcessConfig {
@@ -155,7 +158,7 @@ function decodeLine(line: string): z.infer<typeof HookResponseLine> | undefined 
   }
 }
 
-function outcomeOf(result: z.infer<typeof HookResult>): HookOutcome {
+function outcomeOf(result: z.infer<typeof HookResult>): HookLateOutcome {
   switch (result.type) {
     case "gate":
       return {

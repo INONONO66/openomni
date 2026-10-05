@@ -39,11 +39,13 @@ describe("immutable named policy registry", () => {
   test.each([
     "transform",
     "obligation",
-  ] as const)("missing %s refs fail typed before execution", (type: "transform" | "obligation") => {
+    // #1256 r3 G-5: an unregistered CONSULT ref refuses the generation too.
+    "consult",
+  ] as const)("missing %s refs fail typed before execution", (type: "transform" | "obligation" | "consult") => {
     const verdict: PlainValue =
-      type === "transform"
-        ? { type, ref: "demo/missing" }
-        : { type, ref: "demo/missing", metric: "fanout", limit: 2 };
+      type === "obligation"
+        ? { type, ref: "demo/missing", metric: "fanout", limit: 2 }
+        : { type, ref: "demo/missing" };
     expect(() =>
       compilePolicySnapshot({
         generation: 7,

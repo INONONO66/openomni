@@ -39,6 +39,11 @@ export interface ConsultantSeed {
    * compaction head folds to `turn.consumed.stale` instead of a prompt.
    */
   readonly cursor?: () => number;
+  /**
+   * How many timed-out calls stay correlatable for a late result (#1256 r3);
+   * older entries evict first. Default 256.
+   */
+  readonly lateWindow?: number;
 }
 
 /**

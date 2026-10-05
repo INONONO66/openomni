@@ -11,7 +11,7 @@ import {
   type HookOutcome,
   type HookProcess,
 } from "../src/plugins/hook";
-import type { PlainValue } from "@openomni/protocol";
+import { canonicalDigest, type PlainValue } from "@openomni/protocol";
 import { runTestPromise } from "./helpers/isolated";
 
 /**
@@ -23,9 +23,14 @@ import { runTestPromise } from "./helpers/isolated";
 /** The scripted echo child: behavior is keyed by the request's `event` field. */
 const CHILD_SCRIPT = `
 const held = [];
-process.on("SIGUSR2", () => {
-  for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
-});
+const heldResult = (event) =>
+  event === "hold-rewrite" ? { type: "rewrite", fields: { input: { redacted: true } } }
+  : event === "hold-observe" ? { type: "observe", payload: { note: "late" } }
+  : { type: "gate", verdict: "allow" };
+const flushHeld = () => {
+  for (const entry of held.splice(0)) console.log(JSON.stringify({ id: entry.id, result: heldResult(entry.event) }));
+};
+process.on("SIGUSR2", flushHeld);
 const decoder = new TextDecoder();
 let buffer = "";
 for await (const chunk of Bun.stdin.stream()) {
@@ -44,16 +49,14 @@ for await (const chunk of Bun.stdin.stream()) {
       case "observe": reply({ type: "observe", payload: { note: "seen" } }); break;
       case "garbage": console.log("not a json line"); break;
       case "bad-verdict": reply({ type: "gate", verdict: "maybe" }); break;
-      case "hold": held.push(request.id); break;
+      case "hold":
+      case "hold-rewrite":
+      case "hold-observe": held.push({ id: request.id, event: request.event }); break;
       case "die": process.exit(7);
       case "silent": break;
       case "oversize": reply({ type: "gate", verdict: "allow", reason: "r".repeat(4096) }); break;
       case "unterminated": process.stdout.write("y".repeat(4096)); break;
-      case "flush-held": {
-        for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
-        reply({ type: "gate", verdict: "allow" });
-        break;
-      }
+      case "flush-held": flushHeld(); reply({ type: "gate", verdict: "allow" }); break;
     }
   }
 }
@@ -434,6 +437,123 @@ test("H-3: the consultant routes a late result to seed.late with its CALL-time a
           result: { type: "gate", verdict: "allow" },
           after: 41,
         });
+      }),
+    ).pipe(Effect.provide(TestClock.layer())),
+  ));
+
+test("G-5: a rewrite answer on a consulted row folds to a prepared value with its output digest", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        const params = { event: "rewrite", command: [...COMMAND], timeoutMs: 60_000 };
+        const rowId = "hooks-json/tool.pre#1";
+        const consult = yield* hookProcessConsultant({
+          name: HOOK_PROCESS_REF,
+          rows: [{ id: rowId, on: "tool.pre", when: {}, do: "rewrite", how: { ref: HOOK_PROCESS_REF, params }, order: 0 }],
+        }).pipe(Scope.provide(scope));
+        const result = yield* consult({ rowId, point: "tool.pre", params, value: { op: "bash" } });
+        expect(result).toEqual({
+          value: { input: { redacted: true } },
+          payload: { ref: HOOK_PROCESS_REF, output: canonicalDigest({ input: { redacted: true } }) },
+        });
+      }),
+    ),
+  ));
+
+test("G-5: late rewrite and observe results route through seed.late as typed payloads", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        const late: PlainValue[] = [];
+        let resolveBoth!: () => void;
+        const both = new Promise<void>((resolve) => {
+          resolveBoth = resolve;
+        });
+        const params = { event: "hold-rewrite", command: [...COMMAND], timeoutMs: 250 };
+        const rowId = "hooks-json/tool.pre#1";
+        const consult = yield* hookProcessConsultant({
+          name: HOOK_PROCESS_REF,
+          rows: [{ id: rowId, on: "tool.pre", when: {}, do: "gate", how: { ref: HOOK_PROCESS_REF, params }, order: 0 }],
+          late: (payload) => {
+            late.push(payload);
+            if (late.length === 2) resolveBoth();
+          },
+          cursor: () => 7,
+        }).pipe(Scope.provide(scope));
+        const timeOut = (event: string) =>
+          Effect.gen(function* () {
+            const fiber = yield* Effect.forkChild(
+              consult({ rowId, point: "tool.pre", params: { ...params, event }, value: { op: "bash" } }),
+            );
+            let settled = false;
+            yield* Effect.forkChild(
+              Fiber.join(fiber).pipe(Effect.ensuring(Effect.sync(() => { settled = true; }))),
+            );
+            while (!settled) {
+              yield* Effect.yieldNow;
+              yield* TestClock.adjust(251);
+            }
+            return yield* Fiber.join(fiber);
+          });
+        expect(yield* timeOut("hold-rewrite")).toMatchObject({ verdict: "deny" });
+        expect(yield* timeOut("hold-observe")).toMatchObject({ verdict: "deny" });
+        const flushed = yield* consult({ rowId, point: "tool.pre", params: { ...params, event: "flush-held" }, value: { op: "bash" } });
+        expect(flushed).toMatchObject({ verdict: "allow" });
+        yield* Effect.promise(() => both);
+        expect(late).toEqual([
+          { hook: HOOK_PROCESS_REF, id: `${rowId}#1`, result: { type: "rewrite", fields: { input: { redacted: true } } }, after: 7 },
+          { hook: HOOK_PROCESS_REF, id: `${rowId}#2`, result: { type: "observe", payload: { note: "late" } }, after: 7 },
+        ]);
+      }),
+    ).pipe(Effect.provide(TestClock.layer())),
+  ));
+
+test("G-5: the late window evicts the oldest timed-out call; an evicted late reply is dropped", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        const late: PlainValue[] = [];
+        let resolveOne!: () => void;
+        const one = new Promise<void>((resolve) => {
+          resolveOne = resolve;
+        });
+        const params = { event: "hold", command: [...COMMAND], timeoutMs: 250 };
+        const rowId = "hooks-json/tool.pre#1";
+        const consult = yield* hookProcessConsultant({
+          name: HOOK_PROCESS_REF,
+          rows: [{ id: rowId, on: "tool.pre", when: {}, do: "gate", how: { ref: HOOK_PROCESS_REF, params }, order: 0 }],
+          late: (payload) => {
+            late.push(payload);
+            resolveOne();
+          },
+          cursor: () => 7,
+          lateWindow: 1,
+        }).pipe(Scope.provide(scope));
+        const timeOut = () =>
+          Effect.gen(function* () {
+            const fiber = yield* Effect.forkChild(
+              consult({ rowId, point: "tool.pre", params, value: { op: "bash" } }),
+            );
+            let settled = false;
+            yield* Effect.forkChild(
+              Fiber.join(fiber).pipe(Effect.ensuring(Effect.sync(() => { settled = true; }))),
+            );
+            while (!settled) {
+              yield* Effect.yieldNow;
+              yield* TestClock.adjust(251);
+            }
+            return yield* Fiber.join(fiber);
+          });
+        expect(yield* timeOut()).toMatchObject({ verdict: "deny" });
+        expect(yield* timeOut()).toMatchObject({ verdict: "deny" });
+        // The flush emits BOTH held replies in order; only the remembered
+        // SECOND id routes late — the first was evicted (window = 1).
+        const flushed = yield* consult({ rowId, point: "tool.pre", params: { ...params, event: "flush-held" }, value: { op: "bash" } });
+        expect(flushed).toMatchObject({ verdict: "allow" });
+        yield* Effect.promise(() => one);
+        expect(late).toEqual([
+          { hook: HOOK_PROCESS_REF, id: `${rowId}#2`, result: { type: "gate", verdict: "allow" }, after: 7 },
+        ]);
       }),
     ).pipe(Effect.provide(TestClock.layer())),
   ));

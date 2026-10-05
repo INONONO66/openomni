@@ -10,6 +10,8 @@ import type {
 import {
   acquireHookProcess,
   HOOK_PROCESS_REF,
+  type HookLateOutcome,
+  type HookLateResult,
   type HookOutcome,
   type HookProcess,
   type HookSpawnError,
@@ -90,7 +92,7 @@ function resultOf(outcome: HookOutcome): GateHandlerResult {
 const LATE_WINDOW = 256;
 
 /** The PlainValue rendering of a late outcome; failures are never late (they WERE the fold). */
-function latePayloadOf(outcome: HookOutcome): PlainValue | undefined {
+function latePayloadOf(outcome: HookLateOutcome): PlainValue {
   switch (outcome.kind) {
     case "gate":
       return {
@@ -102,8 +104,6 @@ function latePayloadOf(outcome: HookOutcome): PlainValue | undefined {
       return { type: "rewrite", fields: outcome.fields };
     case "observe":
       return { type: "observe", payload: outcome.payload };
-    case "failure":
-      return undefined;
   }
 }
 
@@ -115,23 +115,22 @@ export function hookProcessConsultant(
     // cursor captured at CALL time — a late line re-enters the session as an
     // `action` row carrying that `after` cursor through `seed.late`.
     const timedOut = new Map<string, number | null>();
+    const lateWindow = seed.lateWindow ?? LATE_WINDOW;
     const rememberTimeout = (id: string, after: number | null): void => {
       timedOut.set(id, after);
       for (const key of timedOut.keys()) {
-        if (timedOut.size <= LATE_WINDOW) break;
+        if (timedOut.size <= lateWindow) break;
         timedOut.delete(key);
       }
     };
-    const routeLate = (late: { id: string; outcome: HookOutcome }): void => {
+    const routeLate = (late: HookLateResult): void => {
       if (!timedOut.has(late.id)) return;
       const after = timedOut.get(late.id);
       timedOut.delete(late.id);
-      const result = latePayloadOf(late.outcome);
-      if (result === undefined) return;
       seed.late?.({
         hook: HOOK_PROCESS_REF,
         id: late.id,
-        result,
+        result: latePayloadOf(late.outcome),
         ...(after === null ? {} : { after }),
       });
     };

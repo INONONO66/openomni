@@ -372,6 +372,35 @@ describe("gate decision fold (#1251)", () => {
     expect(outcome.value).toEqual({ body: "original" });
   });
 
+  it("a prepared observe-row result annotates with its payload; one without a payload is an unrecorded fact", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.post", { id: "hooks/tool.post#1", do: "observe", how: { ref: "hook/process" } }),
+        gateRow("tool.post", { id: "hooks/tool.post#2", do: "observe", how: { ref: "hook/process" } }),
+      ],
+      handlers: ["hook/process"],
+      generation: 1,
+    });
+    const prepared = new Map([
+      ["hooks/tool.post#1", { payload: { note: "audited" } }],
+      ["hooks/tool.post#2", {}],
+    ]);
+    const { decision } = gate.decide(
+      "tool.post",
+      { when: {}, value: { op: "bash" } },
+      { handlers: () => undefined, prepared },
+    );
+    // Audit-only either way: the verdict never moves off allow.
+    expect(decision.verdict).toBe("allow");
+    expect(decision.annotations).toEqual([
+      { rowId: "hooks/tool.post#1", ref: "hook/process", payload: { note: "audited" } },
+    ]);
+    expect(decision.facts).toEqual([
+      { rowId: "hooks/tool.post#2", ref: "hook/process", code: "unrecorded_response" },
+    ]);
+  });
+
   it("a sync gate handler answering without a verdict is equally fail-closed", () => {
     const handler: GateHandler = () => ({ payload: { note: "observed" } });
     const gate = compileGateRows({

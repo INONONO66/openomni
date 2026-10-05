@@ -800,6 +800,109 @@ test("H-3 e2e: a PreToolUse secrets-guard rewrite of bash.command reaches the ex
   }));
 });
 
+/** Holds its FIRST request past the deadline; flushes the held (late) reply on the next one. */
+const LATE_SCRIPT = `
+const fs = require("node:fs");
+const log = (note) => fs.appendFileSync(process.argv[2], Date.now() + " pid=" + process.pid + " " + note + "\\n");
+log("start");
+const held = [];
+let first = true;
+const decoder = new TextDecoder();
+let buffer = "";
+for await (const chunk of Bun.stdin.stream()) {
+  buffer += decoder.decode(chunk, { stream: true });
+  let cut;
+  while ((cut = buffer.indexOf("\\n")) >= 0) {
+    const line = buffer.slice(0, cut);
+    buffer = buffer.slice(cut + 1);
+    if (line.length === 0) continue;
+    const request = JSON.parse(line);
+    log("request " + request.id);
+    if (first) {
+      first = false;
+      held.push(request.id);
+      continue;
+    }
+    for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
+    console.log(JSON.stringify({ id: request.id, result: { type: "gate", verdict: "allow" } }));
+    log("replied " + request.id);
+  }
+}
+`;
+
+test("H-3 e2e: a hook reply that lands after its call timed out re-enters the session as a hook.late action row", async () => {
+  const dir = suite.tempDir("hooks-json-late-");
+  const script = join(dir, "late-hook.js");
+  writeFileSync(script, LATE_SCRIPT);
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({
+      UserPromptSubmit: [{ command: [process.execPath, script, join(dir, "late.log")], timeoutMs: 250 }],
+    }),
+  );
+  const config = suite.config("hooks-json-late-state-", { hooksPath });
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          sink.onMessage(
+            assistantMessage(input, { id: "late-1", text: "pong", createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  // Subscribe BEFORE acting: the late reply must surface as a committed row
+  // sourced hook.late — the one `deliver` door, never this turn's decision.
+  const lateRow = eventSignal<{ sessionId: string; id: string }>("hook.late action row", 15_000);
+  const denied = eventSignal<void>("timed-out prompt denial", 15_000);
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    const node = plane.openKernel(event.sessionId).actionById(event.id);
+    const rendered = JSON.stringify({ intent: node?.intent.value ?? null, effect: node?.effect?.value ?? null });
+    if (rendered.includes("hook.late")) lateRow.resolve({ sessionId: event.sessionId, id: event.id });
+    if (event.kind === "policy.decision" && rendered.includes('"verdict":"deny"')) denied.resolve();
+  });
+  try {
+    // Turn 1: the hook HOLDS the call past its 250ms deadline — fail-closed deny.
+    ws.send(JSON.stringify({ type: "message", eventId: "late-hold", text: "hold me please" }));
+    await denied.promise;
+    // The child's receipt log proves it HOLDS request #1 (its boot can outlast
+    // the 250ms deadline); only then does turn 2 trigger the flush, so call #2
+    // is answered by a live child while call #1's reply is genuinely late.
+    const logPath = join(dir, "late.log");
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      try {
+        if (readFileSync(logPath, "utf8").includes("request ")) break;
+      } catch {
+        // not spawned yet
+      }
+      if (Date.now() > deadline) throw new Error("hook child never logged request #1");
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    // Turn 2: the next call makes the child flush the held (now late) reply.
+    const reply = nextResidentTurn(plane);
+    ws.send(JSON.stringify({ type: "message", eventId: "late-flush", text: "hello" }));
+    expect(await reply).toMatchObject({ text: "pong" });
+    const row = await lateRow.promise;
+    const node = plane.openKernel(row.sessionId).actionById(row.id);
+    const rendered = JSON.stringify({ intent: node?.intent.value ?? null, effect: node?.effect?.value ?? null });
+    // The row is sourced hook.late; its content carries the hook ref, the
+    // typed late result and the CALL-time after cursor.
+    expect(rendered).toContain("hook.late");
+    expect(rendered).toContain(Bundle.HOOK_PROCESS_REF);
+    expect(rendered).toContain('\\"type\\":\\"gate\\"');
+    expect(rendered).toContain("after");
+  } finally {
+    unsubscribe();
+  }
+});
+
 /** Logs its PID at startup, then answers allow to every request. */
 const PID_LOG_SCRIPT = `
 const fs = require("node:fs");
