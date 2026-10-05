@@ -21,7 +21,9 @@ purpose for the created child.
 action + alarm — composing `action` off cascades the bundle off) owns the
 delegation policy as generation data: three consulted gate rows at `tool.pre`
 (`spawn_depth` limit 3 from catalog parent links, `spawn_children` limit 4
-from the parent's live children, spend-cap refusal when `spend_cap` is unset —
+from the parent's ACTIVE children — a child counts while it has an open turn
+or an undelivered inbox message, so a finished child frees the slot —
+spend-cap refusal when `spend_cap` is unset —
 `DEFAULT_DELEGATION_CAPS`, row params, never code constants), the
 `delegation.deadline` alarm purpose (its wake cancels the silent child through
 the injected entity door — the new `cancel` control riding the `signal`

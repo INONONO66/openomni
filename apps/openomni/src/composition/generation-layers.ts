@@ -148,7 +148,16 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
       const seeded = Layer.succeed(
         GenerationHandlers,
-        composedPolicyRegistry(generation, delegationGuardHandlers(catalogDelegationReads(plane.listSessions))),
+        composedPolicyRegistry(generation, delegationGuardHandlers(catalogDelegationReads(
+          plane.listSessions,
+          // #1258 M-4: a child is active while work is in flight — an open
+          // turn or an undelivered inbox message, both durable journal facts.
+          (childId) => {
+            const kernel = plane.openKernel(childId);
+            return kernel.latestOpenTurn(childId) !== undefined ||
+              kernel.pendingMessages(childId).length > 0;
+          },
+        ))),
       ).pipe(Layer.provideMerge(seed));
       // #1255 P3: the composed ON bundles' Layers acquire INSIDE this
       // generation's Scope in composition order, each provided the seed plus

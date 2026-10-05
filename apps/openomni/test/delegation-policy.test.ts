@@ -110,6 +110,42 @@ test("catalog reads: depth walks parent links, activeChildren counts live rows, 
   expect(catalog.activeChildren("ghost")).toBeUndefined();
 });
 
+test("a finished child frees a spawn_children slot; a liveness read failure counts the child", () => {
+  const rows = [
+    { id: "parent", parentId: null },
+    ...["a", "b", "c", "d"].map((id) => ({ id, parentId: "parent" })),
+  ];
+  const finished = new Set<string>();
+  const catalog = catalogDelegationReads(
+    () => rows,
+    (childId) => {
+      if (childId === "d") throw new Error("session store unreachable");
+      return !finished.has(childId);
+    },
+  );
+  const guard = spawnChildrenGuard(catalog);
+  const decide = () =>
+    guard.decide({ value: NEW_SESSION, params: null, when, service });
+  // Four active children exhaust the cap.
+  expect(decide()).toEqual({
+    verdict: "deny",
+    payload: { cap: "spawn_children", limit: 4, observed: 4 },
+  });
+  // One child finishes -> the next request succeeds (issue edge case).
+  finished.add("a");
+  expect(decide()).toEqual({
+    verdict: "allow",
+    payload: { cap: "spawn_children", limit: 4, observed: 3 },
+  });
+  // An unreadable child stays counted (conservative, cap stays tight).
+  finished.add("b");
+  finished.add("d");
+  expect(decide()).toEqual({
+    verdict: "allow",
+    payload: { cap: "spawn_children", limit: 4, observed: 2 },
+  });
+});
+
 test("the bundle contract carries the three tool.pre rows, their guards, and the deadline purpose", () => {
   const bundle = delegationPolicyBundle();
   expect(bundle.requires.map((seam) => seam.key)).toEqual([

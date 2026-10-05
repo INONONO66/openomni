@@ -238,10 +238,26 @@ export function parentReply(
   return SessionTransition.OutboundMessage.parse({ ...message, digest: canonicalDigest(message) });
 }
 
-/** Catalog-backed reads over the ledger's session rows (parent links = depth, children = live rows). */
+/**
+ * Catalog-backed reads over the ledger's session rows (parent links = depth,
+ * children = live rows). `isActiveChild` is the composition-bound liveness
+ * fact (#1258 M-4): a child counts against `spawn_children` only while it
+ * still has work in flight — an open turn or an undelivered inbox message.
+ * When the read is absent or throws, the child counts (conservative: the cap
+ * stays tight rather than leaking).
+ */
 export function catalogDelegationReads(
   listSessions: () => readonly { readonly id: string; readonly parentId: string | null }[],
+  isActiveChild?: (childId: string) => boolean,
 ): DelegationReads {
+  const active = (childId: string): boolean => {
+    if (isActiveChild === undefined) return true;
+    try {
+      return isActiveChild(childId);
+    } catch {
+      return true;
+    }
+  };
   return {
     depth: (id) => {
       const rows = listSessions();
@@ -257,7 +273,7 @@ export function catalogDelegationReads(
     activeChildren: (id) => {
       const rows = listSessions();
       if (!rows.some((row) => row.id === id)) return undefined;
-      return rows.filter((row) => row.parentId === id).length;
+      return rows.filter((row) => row.parentId === id && active(row.id)).length;
     },
   };
 }
