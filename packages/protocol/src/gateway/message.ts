@@ -61,7 +61,7 @@ const Sender = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), id: Id }).strict(),
 ]);
 
-// Driver envelope: only observable platform facts. Sender is a separate ingest
+// Driver-reported facts: only observable platform facts. Sender is a separate ingest
 // argument; tier and the bot/owner/ambient axis are resolved in gateway policy.
 const IngressFacts = z
   .object({
@@ -136,7 +136,7 @@ const RuleTableB = RuleBase.extend({
 });
 
 // Six observation families (admission has admitted/rejected arms). Timing is
-// required only where measurable. Bus metadata is an observation envelope
+// required only where measurable. Bus metadata is observation context
 // stamped by the sink after the action commit.
 const ObservationBase = z.object({ messageId: Id }).extend(BusEvent.Metadata.shape).strict();
 const AdmissionBase = ObservationBase.extend({ matchedRuleIds: z.array(Id), ingestMs: DurationMs });

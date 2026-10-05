@@ -2,11 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { ZodError } from "zod";
 import { Policy, PolicyDecision } from "../src/policy";
 
-const it = test;
 
 describe("Policy schemas", () => {
   describe("InputRule", () => {
-    it("parses a basic rule", () => {
+    test("parses a basic rule", () => {
       const result = Policy.Permission.shape.inputRules.unwrap().element.parse({
         toolPattern: "bash",
         field: "command",
@@ -18,7 +17,7 @@ describe("Policy schemas", () => {
       expect(result.priority).toBe(0);
     });
 
-    it("parses a rule with reason and priority", () => {
+    test("parses a rule with reason and priority", () => {
       const result = Policy.Permission.shape.inputRules.unwrap().element.parse({
         toolPattern: "bash",
         field: "command",
@@ -34,13 +33,13 @@ describe("Policy schemas", () => {
   });
 
   describe("Permission", () => {
-    it("parses action-only permission", () => {
+    test("parses action-only permission", () => {
       const result = Policy.Permission.parse({ action: "tool.call" });
 
       expect(result.action).toBe("tool.call");
     });
 
-    it("parses with allowlist", () => {
+    test("parses with allowlist", () => {
       const result = Policy.Permission.parse({
         action: "tool.call",
         allowlist: ["tool_a", "tool_b"],
@@ -48,7 +47,7 @@ describe("Policy schemas", () => {
       expect(result.allowlist).toEqual(["tool_a", "tool_b"]);
     });
 
-    it("parses with denylist", () => {
+    test("parses with denylist", () => {
       const result = Policy.Permission.parse({
         action: "tool.call",
         denylist: ["dangerous"],
@@ -56,7 +55,7 @@ describe("Policy schemas", () => {
       expect(result.denylist).toEqual(["dangerous"]);
     });
 
-    it("parses with requireApproval", () => {
+    test("parses with requireApproval", () => {
       const result = Policy.Permission.parse({
         action: "tool.call",
         requireApproval: ["sensitive"],
@@ -64,7 +63,7 @@ describe("Policy schemas", () => {
       expect(result.requireApproval).toEqual(["sensitive"]);
     });
 
-    it("parses with inputRules", () => {
+    test("parses with inputRules", () => {
       const result = Policy.Permission.parse({
         action: "tool.call",
         inputRules: [
@@ -88,7 +87,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("rejects unsafe regex patterns", () => {
+    test("rejects unsafe regex patterns", () => {
       for (const pattern of [
         "(a+)+b",
         "^(a|aa)+$",
@@ -113,7 +112,7 @@ describe("Policy schemas", () => {
       }
     });
 
-    it("accepts linear regex patterns used by policy callsites", () => {
+    test("accepts linear regex patterns used by policy callsites", () => {
       for (const pattern of [
         String.raw`rm\s+-rf`,
         "^/safe/.*",
@@ -140,20 +139,20 @@ describe("Policy schemas", () => {
       reasonCodes: ["matched"],
     };
 
-    it("accepts canonical allow, deny, and pending verdicts", () => {
+    test("accepts canonical allow, deny, and pending verdicts", () => {
       for (const verdict of ["allow", "deny", "pending"] as const) {
         const result = Policy.PolicyDecision.parse({ ...baseDecision, verdict });
         expect(result.verdict).toBe(verdict);
       }
     });
 
-    it("rejects legacy evaluator and effect verdict strings", () => {
+    test("rejects legacy evaluator and effect verdict strings", () => {
       for (const verdict of ["continue", "abort", "transform", "inject"] as const) {
         expect(Policy.PolicyDecision.safeParse({ ...baseDecision, verdict }).success).toBe(false);
       }
     });
 
-    it("rejects hybrid canonical decisions carrying legacy verdict keys", () => {
+    test("rejects hybrid canonical decisions carrying legacy verdict keys", () => {
       expect(
         Policy.PolicyDecision.safeParse({
           ...baseDecision,
@@ -164,7 +163,7 @@ describe("Policy schemas", () => {
       ).toBe(false);
     });
 
-    it("creates allow decisions with helper defaults", () => {
+    test("creates allow decisions with helper defaults", () => {
       const result = PolicyDecision.allow({ policyId: "test.policy" });
       expect(result).toEqual({
         policyId: "test.policy",
@@ -174,7 +173,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("creates deny and pending decisions as blocking", () => {
+    test("creates deny and pending decisions as blocking", () => {
       const deny = PolicyDecision.deny({ policyId: "deny.policy", reasonCodes: ["denied"] });
       const pending = PolicyDecision.pending({
         policyId: "pending.policy",
@@ -189,7 +188,7 @@ describe("Policy schemas", () => {
   });
 
   describe("Policy.PolicyEffect", () => {
-    it("parses prompt.append_context effect", () => {
+    test("parses prompt.append_context effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "prompt.append_context",
         context: "additional context",
@@ -200,7 +199,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses prompt.inject_message effect", () => {
+    test("parses prompt.inject_message effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "prompt.inject_message",
         message: "injected",
@@ -213,7 +212,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses tool.filter effect", () => {
+    test("parses tool.filter effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "tool.filter",
         toolPattern: "dangerous.*",
@@ -221,7 +220,7 @@ describe("Policy schemas", () => {
       expect(result).toMatchObject({ type: "tool.filter", toolPattern: "dangerous.*" });
     });
 
-    it("parses tool.rewrite_input effect", () => {
+    test("parses tool.rewrite_input effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "tool.rewrite_input",
         input: { sanitized: true },
@@ -232,7 +231,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses run.replace_messages carrying a JSON-plain array", () => {
+    test("parses run.replace_messages carrying a JSON-plain array", () => {
       const result = Policy.PolicyEffect.parse({
         type: "run.replace_messages",
         messages: [{ role: "user", content: "rewritten" }, "plain"],
@@ -243,7 +242,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses model.override effect (#753) — connection-scoped model routing", () => {
+    test("parses model.override effect (#753) — connection-scoped model routing", () => {
       const result = Policy.PolicyEffect.parse({
         type: "model.override",
         provider: "anthropic",
@@ -256,7 +255,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("refuses a model.override with empty coordinates, naming the offending field", () => {
+    test("refuses a model.override with empty coordinates, naming the offending field", () => {
       const emptyProvider = Policy.PolicyEffect.safeParse({
         type: "model.override",
         provider: "",
@@ -280,7 +279,7 @@ describe("Policy schemas", () => {
       }
     });
 
-    it("parses tool.require_approval effect", () => {
+    test("parses tool.require_approval effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "tool.require_approval",
         reason: "sensitive operation",
@@ -291,7 +290,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses run.abort effect", () => {
+    test("parses run.abort effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "run.abort",
         reason: "aborted",
@@ -299,7 +298,7 @@ describe("Policy schemas", () => {
       expect(result).toMatchObject({ type: "run.abort", reason: "aborted" });
     });
 
-    it("parses run.continue_with_prompt effect", () => {
+    test("parses run.continue_with_prompt effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "run.continue_with_prompt",
         prompt: "continue with this",
@@ -310,7 +309,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses run.retry_after effect", () => {
+    test("parses run.retry_after effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "run.retry_after",
         delayMs: 1000,
@@ -323,7 +322,7 @@ describe("Policy schemas", () => {
       });
     });
 
-    it("parses audit.annotate effect", () => {
+    test("parses audit.annotate effect", () => {
       const result = Policy.PolicyEffect.parse({
         type: "audit.annotate",
         annotation: "audit note",

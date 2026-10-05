@@ -114,7 +114,7 @@ const MessageOperationSchema = z.enum(["fire_and_forget", "awaited"]);
  * Policy-intent axis of a send (#219), coherent with — but not collapsed into
  * — the request axis (`operation`). `converse` intends a reply loop (⟺ awaited);
  * `notify` is a one-way ping (⟺ fire_and_forget). Kept a SEPARATE field so the
- * active-egress gate can reason about intent (class caps, future 봉수 rungs)
+ * active-egress gate can reason about intent (class caps, future escalation rungs)
  * without overloading `operation`, whose only job is whether a request opens.
  */
 const MessageClassSchema = z.enum(["notify", "converse"]);

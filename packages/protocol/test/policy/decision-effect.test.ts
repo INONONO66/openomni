@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
 import { Policy } from "../../src/policy";
 
-const it = test;
 
 describe("Policy decision and effect schemas", () => {
   const effects: z.input<typeof Policy.PolicyEffect>[] = [
@@ -22,13 +21,13 @@ describe("Policy decision and effect schemas", () => {
     { type: "runtime.workspace_lock", required: true },
   ];
 
-  it("parses every supported PolicyEffect variant", () => {
+  test("parses every supported PolicyEffect variant", () => {
     for (const effect of effects) {
       expect(Policy.PolicyEffect.parse(effect)).toEqual(effect);
     }
   });
 
-  it("rejects unknown effect types", () => {
+  test("rejects unknown effect types", () => {
     expect(
       Policy.PolicyEffect.safeParse({
         type: "tool.invoke",
@@ -37,7 +36,7 @@ describe("Policy decision and effect schemas", () => {
     ).toBe(false);
   });
 
-  it("parses PolicyDecision with effects", () => {
+  test("parses PolicyDecision with effects", () => {
     const decision = Policy.PolicyDecision.parse({
       policyId: "policy.workspace-safety",
       policyVersion: "2026-05-14",
@@ -52,7 +51,7 @@ describe("Policy decision and effect schemas", () => {
     expect(decision.effects.length).toBe(2);
   });
 
-  it("requires reason codes on PolicyDecision", () => {
+  test("requires reason codes on PolicyDecision", () => {
     expect(
       Policy.PolicyDecision.safeParse({
         policyId: "policy.workspace-safety",
