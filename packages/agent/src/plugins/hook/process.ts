@@ -207,12 +207,25 @@ export function acquireHookProcess(
       settleDrained();
     };
 
+    // H-2 / M-1 (r4): ANY framing violation poisons the PID fail-closed —
+    // settle everything as a framing failure, kill the child, accept no new
+    // calls. Oversize lines, invalid JSON and out-of-vocabulary verdicts all
+    // share this disposition: garbage cannot be attributed to a request, so
+    // no later call may trust this process either.
+    const maxLineBytes = config.maxLineBytes ?? HOOK_MAX_LINE_BYTES;
+    const poisonFraming = (): void => {
+      dead = true;
+      settleAll(failure("framing"));
+      child.kill();
+    };
+
     const settleLine = (line: string): void => {
       const decoded = decodeLine(line);
       if (decoded === undefined) {
-        // A malformed line poisons every in-flight call fail-closed: nothing
-        // downstream can tell which request the garbage answered.
-        settleAll(failure("framing"));
+        // M-1 (r4): a malformed line (invalid JSON or a verdict outside the
+        // vocabulary) poisons the PID, not just the in-flight calls — the
+        // child is killed and every later call refuses (`exit`).
+        poisonFraming();
         return;
       }
       const entry = pending.get(decoded.id);
@@ -240,15 +253,6 @@ export function acquireHookProcess(
         await child.exited;
       }),
     );
-
-    // H-2: a framing-bound violation poisons the PID fail-closed — settle
-    // everything as a framing failure, kill the child, accept no new calls.
-    const maxLineBytes = config.maxLineBytes ?? HOOK_MAX_LINE_BYTES;
-    const poisonFraming = (): void => {
-      dead = true;
-      settleAll(failure("framing"));
-      child.kill();
-    };
 
     // The stdout reader: one fiber per PID, interrupted after the drain.
     yield* Effect.forkScoped(

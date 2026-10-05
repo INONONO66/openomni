@@ -118,26 +118,41 @@ test("allow, deny, rewrite and observe results round-trip over JSON lines", () =
     ),
   ));
 
-test("a non-JSON line and a verdict outside the vocabulary both fail as framing", () =>
+/**
+ * M-1 (r4): malformed framing POISONS the PID — the garbage cannot be
+ * attributed to a request, so the child dies and no later call on that PID
+ * can ever obtain allow. Each malformed shape gets its own acquisition.
+ */
+const poisonedByFraming = (event: string) =>
   runTestPromise(
     scoped((scope) =>
       Effect.gen(function* () {
         const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
           Scope.provide(scope),
         );
-        expect(yield* hook.call(request("garbage"))).toEqual({
+        expect(yield* hook.call(request(event))).toEqual({
           kind: "failure",
           code: "hook_timeout",
           cause: "framing",
         });
-        expect(yield* hook.call(request("bad-verdict"))).toEqual({
+        // The poison killed the child; its exit settles without any new input.
+        yield* hook.exited;
+        // A subsequent call CANNOT obtain allow from the poisoned PID.
+        expect(yield* hook.call(request("allow"))).toEqual({
           kind: "failure",
           code: "hook_timeout",
-          cause: "framing",
+          cause: "exit",
         });
+        expect(hook.inFlight()).toBe(0);
       }),
     ),
-  ));
+  );
+
+test("a non-JSON line poisons the PID: framing failure, dead child, no later allow", () =>
+  poisonedByFraming("garbage"));
+
+test("a verdict outside the vocabulary poisons the PID the same way", () =>
+  poisonedByFraming("bad-verdict"));
 
 test("the process dying during a call settles the call as an exit failure", () =>
   runTestPromise(
