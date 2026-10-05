@@ -123,17 +123,12 @@ function adoptFence(kernel: SessionKernel, authority: SessionEntityAuthority): E
  * `AdmissionFailure{code: revision}` — never an unbounded in-process spin.
  */
 function retryRevision<A, E>(attempt: () => Effect.Effect<A, E>): Effect.Effect<A, E | AdmissionFailure> {
-  const go = (attemptsLeft: number): Effect.Effect<A, E | AdmissionFailure> =>
-    attempt().pipe(
-      Effect.catchIf(
-        (error): error is E & CommitRefused => error instanceof CommitRefused && error.reason === "revision",
-        () =>
-          attemptsLeft > 1
-            ? go(attemptsLeft - 1)
-            : Effect.fail(new AdmissionFailure({ code: "revision" })),
-      ),
-    );
-  return go(3);
+  const refused = (error: unknown): error is CommitRefused =>
+    error instanceof CommitRefused && error.reason === "revision";
+  return Effect.suspend(attempt).pipe(
+    Effect.retry({ while: refused, times: 2 }),
+    Effect.catchIf(refused, () => Effect.fail(new AdmissionFailure({ code: "revision" }))),
+  );
 }
 
 /** Idempotent receive (F4): a redelivered envelope resolves to its existing chain action. */
@@ -856,12 +851,12 @@ function requestSnapshot(
 ): Parameters<typeof decideRequestTransition>[1] {
   const { kernel, authority, env } = handle;
   const request = kernel.requestById(requestId);
+  const inputRecord = kernel.requestInputById(authority.sessionId, inputId);
+  const invocation = kernel.actionById(requestId);
   return {
     row,
-    ...(kernel.requestInputById(authority.sessionId, inputId) === undefined
-      ? {}
-      : { inputRecord: kernel.requestInputById(authority.sessionId, inputId) }),
-    ...(kernel.actionById(requestId) === undefined ? {} : { invocation: kernel.actionById(requestId) }),
+    ...(inputRecord === undefined ? {} : { inputRecord }),
+    ...(invocation === undefined ? {} : { invocation }),
     ...(request === undefined ? {} : { request }),
     requests: kernel.requestRows(authority.sessionId),
     ...(request === undefined || env.ports.requestDomainRevisions === undefined
