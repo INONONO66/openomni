@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791154448468,
+  "lastUpdate": 1791189796270,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -78295,6 +78295,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 152992,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ab62ca9838b60460d1a51c57da4e77a6cc0f03a7",
+          "message": "Fork sessions into verifiable chains and project ancestry and asides in inspect (#1257) (#1291)\n\n* chore(#1257): open the fork-chains branch on main 3ccafed1\n\n* feat(agent): fork sessions at verifiable boundaries into child chains (#1257)\n\n* test(agent): fork boundary, exclusion, dedup and refusal coverage (#1257)\n\n* feat(app,desktop,protocol): project fork ancestry and aside; session_fork wire frame (#1257)\n\n* test(app,agent): fork projection folds and session_fork wire roundtrip (#1257)\n\n* refactor(agent,app): retire receivedMessages chain fold for SQL inputMessages reads (#1257)\n\n* test(agent): split fork coverage into the four issue-named test files (#1257)\n\n* docs: stamp #1257 fork chains in AGENTS.md and implementation-status (#1257)\n\n* refactor(agent): extract planFork and satisfy lint on fork surfaces (#1257)\n\n* fix(openomni): probe parent schemaVersion before any open on fork (H-1, #1257)\n\nA legacy parent is now refused by the read-only PRAGMA user_version probe\nbefore plane.openKernel can open-for-write or stamp the file. New wire test\nproves zero writes: refusal frame, sha256 byte identity, no WAL/SHM.\n\n* test(agent): old-schema fork refusal uses a real fixture file with byte identity (M-1, #1257)\n\nReplaces the mocked parentSchemaVersion with a real on-disk legacy sqlite\nfixture: read-only probe, schema_version refusal, sha256 before/after byte\nidentity, no WAL/SHM, no child materialization.\n\n* test(agent): fork at a real executor-written compaction journal row (M-2, #1257)\n\nAdds a store-level fork test that commits real compaction intent/result rows\nonto the parent chain through the durable executor (the compaction writer),\nforks at the executed row's hash, and verifies the copied child chain.\n\n* refactor(agent): un-export unused SessionForkReceipt/SessionForkWrite (G-1, #1257)\n\nfork.ts imports them from session-file directly; the store index re-export\ngrew the dead-export baseline. check-dead-exports: 0 known, none new.\n\n* refactor(openomni): route session fork through the gateway's app runtime (G-2, #1257)\n\ncreateSessionForkExecutor now returns an Effect program and never runs it;\nthe gateway edge's runtime executes it inside the existing handleFrame\npromise (W5.3 effect boundary, runner-site allowlist stays empty).\ncheck-effect-boundaries passes; wire fork tests 2/2.\n\n* test(openomni): frozen page frame admits the #1257 optional ancestry field (G-3, #1257)\n\nExplicit contract change, not a silent edit: #1257 requires the gateway read\nDTO to show parent and anchor, so SessionRead.Page gains exactly one OPTIONAL\nfield (ancestry). Receipt and session_bound field sets are unchanged; a page\nwithout a fork still omits the key on the wire (asserted).\n\n* test(agent): M-1 prove fork alarm exclusion through the real entity plane\n\nThe 'parent fires once / child registers zero' claim is now driven through\nreal activations: a pre-anchor arm, a fork at the boundary, then live\nentity activation and alarm delivery under the injected entity clock.\nExactly one parent wake and fired{delivered} fact; the forked child's\nactivation rescan resends nothing and its chain holds zero alarm rows.\nThe store-level exclusion test now anchors AFTER the arm and no longer\npresents a disposition predicate as a firing test.\n\n* test(agent): M-2 parse fork journal payloads with protocol schemas\n\nThe genesis configure pin and the delivery marker are now parsed with\nzod (SessionGeneration.ForkAncestry via a loose genesis-intent schema;\na loose inboxId schema for the delivery) instead of written 'as unknown'\ntype assertions. Also clears the gate-1257-r2 lint warning\n(noAssignInExpressions) by moving the executor entropy increment out of\nthe template expression.\n\n* test(agent): M-4 promote the fork aside through a REGISTERED prompt.pre row\n\nforkAsideRewrite becomes forkAsideTransformer — the registration-ready\nNamedTransformer (ref inspect/fork-aside) a composition can actually put\nin its handler table — rewriting the prompt.pre point's declared 'body'\nfield. The opt-in test now compiles a real policy snapshot (seeded rows\nplus the transform row with config.fields=[body]) and executes the\nprompt.pre point: the registered row promotes, a root session and a\nbodyless value pass through, and without the row the handler is inert.\nThe context-exclusion test drops the prose pin and asserts structural\nexclusion by ancestry identity (anchor, parentHead, projected aside).\n\n* feat(openomni): M-5 fork copy byte cap declared at the composition root\n\nThe copied-bytes cap joins the #1254 generation-configuration surface in\nconfig.ts: resolveSessionFork owns the composed 4 MiB default, an\noptional forkCopyByteCap (env OPENOMNI_FORK_COPY_BYTE_CAP, fail-closed\npositive-integer validation) overrides it, and startOpenOmni threads the\nresolved value through the shipped gateway fork executor into\nCore.forkSession's byteCap. New wire test: a 16-byte override turns the\nsame valid terminal-anchor fork into the typed byte_cap refusal with no\nchild materialized.\n\n* fix(openomni): populate page ancestry only when ancestry facts exist\n\nReview r3 'Also (b)': the gateway attached an ancestry object to every\npage while the G-3 frame note claimed non-fork pages omit the key. The\nprojection now omits ancestry entirely when the session has neither a\nparent edge nor a fork pin, making root-session pages byte-identical to\npre-#1257 frames and the frozen-frame note true. Wire test updated: the\nroot parent's page has no ancestry key; forked-child projection\nunchanged.\n\n* feat(desktop): M-3 boundary fork and parent-child inspection in the desktop\n\nThe desktop can now exercise the issue's manual scenario end to end.\nPage action rows gain an optional forkAnchor (the action hash a\nsession_fork.at may cite), populated by the gateway only on real\nboundary rows via Core.isForkBoundary — every other row stays\nbyte-identical. The renderer transport speaks the SessionFork frames\n(FIFO waiters per parent, drained with the socket); the read model\nderives ancestry and the newest boundary anchor; SessionContent renders\nthe parent edge and anchor as data and offers a fork control; App asks\nthe gateway, adopts the durable child into a bound local session and\nopen tab, and surfaces typed refusals on the composer. Tests: wire\nroundtrip + model derivation, renderer fork control and its absence\nwithout an anchor, gateway boundary-anchor projection.\n\n* test: cover the M-3 app fork flow and the M-5 env cap branches\n\nPatch-coverage audit before gate r3: app.tsx's onFork (adopt / typed\nrefusal / transport failure) is now exercised through the mounted App\nagainst a real ws double — refusal reaches the composer, the adopted\nchild is bound+titled+tabbed, and a socket closed mid-fork surfaces the\ndrain rejection. The dead-gateway leg closes the socket server-side on\nthe third fork so the pending waiter's rejection is deterministic, and\nevery wait flushes React's act queue until the exact observable\ncondition (12/12 repeat runs green). config.test.ts adds the\nOPENOMNI_FORK_COPY_BYTE_CAP default/override/typed-refusal cases.\n\n* fix(desktop): select the newest fork anchor without Array.findLast (#1257)\n\n[H-1] queries.ts:66 used Array.prototype.findLast, which the desktop\ntsconfig lib target does not declare (TS2550 + TS7006). A spread-reverse\nscan keeps the inferred types with no lib bump and no cast. Also clears\ngate r3 [G-1] and the scripts-tooling-2 mutation-baseline red.\n\n* fix(desktop): narrow the fork transport failure without a written unknown (#1257)\n\n[M-2] app.tsx:88 annotated the promise-catch parameter 'unknown',\ntripping the written-types gate. The fork flow is now an async block\nwhose catch variable needs no annotation; the error is still narrowed\nstructurally (instanceof Error) before reaching the composer. Clears\ngate r3 [G-2] and the CI Dependency Rules red.\n\n* feat: fork copy cap is per-session generation configuration (#1257)\n\n[H-3] The cap is now a field of the session generation settings\n(session.configure{settings.forkCopyByteCap}, protocol Settings schema),\nfolded by the fork path off the parent generation it runs under exactly\nlike the consumption widths — never a process-start constant captured by\nthe executor. The app's resolved value (4 MiB default /\nOPENOMNI_FORK_COPY_BYTE_CAP override via resolveSessionFork) is the\nINPUT the composition writes into every new session's genesis configure\nsettings (createResident -> messageMaterialization -> materializationSeed).\nForkInput.byteCap and SessionForkOptions.copyByteCap are deleted.\nGeneration-level test added: a session pinned to a 16-byte cap refuses\nbyte_cap, the default generation accepts; env tests kept.\n\n* test(desktop): event-driven fork flow waits, no timed polling (#1257)\n\n[M-1] flushUntil polled 200x5ms. Each wait is now an exact pre-subscribed\nsignal awaited inside act with one bounded failure timeout: the query\ncache write for a read page, the client socket's received frame/close\n(ObservedWebSocket wrapper), and the console store's adoption commit.\nnotifyManager runs synchronously inside the test so cache -> setState ->\nact-queue land in one frame (library setTimeout-0 default restored in\nfinally). 10x single-file runs pass in ~0.4s each.\n\n* feat: parent pages list fork children; desktop opens them (#1257)\n\n[H-2] The smallest reachable parent->children surface: SessionRead.Page\ngains an optional children projection (id + fork anchor + title where\nknown; absent when childless so pre-#1257 pages stay byte-identical),\nthe gateway fills it from the same catalog parent edges and genesis pins\nInspect.inspectTree renders (childrenField, fail-closed per child), and\nthe desktop renders a clickable Forks list on the parent - an entry\nreuses the already-bound local session's tab or adopts the durable\nchild via the existing adoption path. Wire test asserts the parent page\nlists the forked child with its anchor and the child page lists none;\na desktop test drives list rendering and both click branches.\n\n* test: cover the executor's storage and defect refusal mappings (#1257)\n\n[G-3] apps/openomni/src/composition/session-fork.ts residual branches\n(typed non-ForkRefused ledger failure -> refused(storage), thrown defect\n-> catchDefect refused(storage)) now exercised through the shipped wire\nsurface: a broken child store's fork fails with a CorruptRecord and a\nthrowing openKernel defects, each answered as session_fork_refused.\nPer-file coverage on composition/session-fork.ts is 100/100.\n\n* docs: true up the #1257 stamps (#1257)\n\n[L-1] AGENTS.md top stamp + docs/implementation-status.md: forkAsideRewrite\n-> forkAsideTransformer (the shipped name), the copy cap described as\ngeneration configuration (settings.forkCopyByteCap fed by the app's\nresolved startup value) instead of a byteCap override deviation, and the\nexact anchor set stated: turn{terminal} / prompt / compaction; signals\nare NOT boundaries. Children list surface noted. No prose test.\n\n* docs: config cap comment names the generation-settings flow (#1257)\n\n[H-3 residue] resolveSessionFork's comment still said the cap is typed\nin core as ForkInput.byteCap; that field is deleted. The comment now\nstates the shipped flow: the resolved startup value is the input written\ninto genesis session.configure settings.\n\n* fix: fork refreshes subscribed parents with their new child\n\n[H-1] A fork writes the child chain and the catalog edge but no parent\naction, so no ActionCommittedEvent ever refreshed an already-subscribed\nparent. The gateway now re-sends every parent subscriber's session_read\npage on a successful fork (session_read stays the single read model);\nthe same-head, action-free page carries the new catalog child. The\ndesktop's newerPage merges children from such a refresh instead of\ndropping the empty continuation. Wire test covers an already-subscribed\nparent through the real gateway with no synthetic parent journal\ngrowth; the desktop double's fabricated parent push and headRevision\nbump are deleted in favor of the faithful same-head refresh. (#1257)\n\n* test: gateway page compatibility asserted as wire behavior\n\n[M-1] The frozen-field Object.keys mirror omitted the new optional\nchildren key and failed (1 pass / 1 fail); it also broke on every\npermitted additive DTO field without any real wire regression. Replaced\nwith behavior: a pre-#1257 legacy page (no ancestry/children) parses\nand round-trips byte-identical, and the optional ancestry/children\nprojections parse when present. Receipt/bound compatibility coverage\nretained. (#1257)\n\n* test: subscribed reader follows committed revisions on the real callbacks surface\n\n[H-1] coverage companion: the restructured subscription wiring in\nwebSocketCallbacks (unsubscribe + refresh-pool bookkeeping) is driven\nend to end — a session_read subscribes, a real kernel commit publishes\nits ActionCommittedEvent, and the gateway re-sends the authoritative\npage with the committed row. Covers the event-driven re-send line the\nfork wire test cannot reach (a fork never grows the parent). (#1257)\n\n* fix: fork remaps copied delivery rows so a pre-fork key completes a child turn\n\n[H-1] Copied delivery rows kept their deterministic ids (msg-1:delivery),\nso a re-admitted pre-fork idempotency key passed admission but its\nconsumption re-minted the same delivery id and the commit refused —\nthe child turn could never complete. Delivery rows now rename into the\nsame fork:<parent>: namespace as inputs, inside the one fork transaction,\nwith parent pointers and inboxId/turnId references remapped alongside.\nNew fork-delivery-replay.test.ts drives the live entity: real child\nadmission of the parent's old key, consumption, committed terminal;\nmsg-1:delivery belongs to the child's new input, the copy at its\nremapped id. (#1257)\n\n* test: drop the prose pin on the byte_cap refusal message\n\n[M-1] The cap test pinned the full operator-facing sentence by\ninterpolating the error's own detail back into its template — a prose\nguard adding zero coverage over the typed ForkRefused/byte_cap\nassertion, which stays. (#1257)\n\n* test(agent): cover the ForkRefused message tokens; docs: delivery rows rename on fork too\n\nReview r6 [L-1]: AGENTS.md and docs/implementation-status.md now name the `<inboxId>:delivery` rows alongside input rows as the ones renamed to `fork:<parent>:<id>` by forkSession. Gate r6 patch coverage: fork.ts:58-59 (the ForkRefused message getter) is exercised by asserting the typed reason and parent id tokens surface in the Error message, without pinning the sentence.\n\n* ci: retrigger after the codemode browser-close race (fixed separately in #1293)",
+          "timestamp": "2026-10-05T08:40:15Z",
+          "tree_id": "31d183f8b52abae7cae75e84900e5aa2ba77dbb1",
+          "url": "https://github.com/INONONO66/openomni/commit/ab62ca9838b60460d1a51c57da4e77a6cc0f03a7"
+        },
+        "date": 1791189795442,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1092,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1758,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1459,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1544525,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 408834,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6648337,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1129,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 729,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 207484,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 823795,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 508379,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3478,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11922066,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1474563,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19160,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 176306,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 888472,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 282699,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 17072127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 95,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 203373,
             "unit": "ns/op"
           }
         ]
