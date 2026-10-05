@@ -158,19 +158,41 @@ test("no hooks config composes the bundle with zero rows and the action input ad
   expect(Object.keys(generation.kinds)).toEqual(["action"]);
 });
 
+/** Runs the refusing thunk and returns the TYPED refusal (#1256 r3 M-4). */
+function refusalOf(run: () => unknown): AppInvariantError {
+  try {
+    run();
+  } catch (error) {
+    expect(error).toBeInstanceOf(AppInvariantError);
+    return error as AppInvariantError;
+  }
+  throw new Error("expected an AppInvariantError refusal");
+}
+
 test("readHooksJson refuses an unmapped event, non-JSON bytes and an unreadable path, each typed", () => {
   const dir = suite.tempDir("hooks-json-read-");
   const unmapped = join(dir, "unmapped.json");
   writeFileSync(unmapped, JSON.stringify({ Notification: [{ command: ["./x"] }] }));
-  expect(() => readHooksJson(unmapped)).toThrow(AppInvariantError);
-  expect(() => readHooksJson(unmapped)).toThrow(/unmapped_event Notification/);
+  // M-4: the failure class and its machine-consumed code, plus the offending
+  // datum (the event name) — never a prose-only match.
+  const unmappedRefusal = refusalOf(() => readHooksJson(unmapped));
+  expect(unmappedRefusal.code).toBe("unmapped_event");
+  expect(unmappedRefusal.message).toContain("Notification");
   const invalid = join(dir, "invalid.json");
   writeFileSync(invalid, "not json");
-  expect(() => readHooksJson(invalid)).toThrow(/is not JSON/);
-  expect(() => readHooksJson(join(dir, "absent.json"))).toThrow(/cannot read/);
+  expect(refusalOf(() => readHooksJson(invalid)).code).toBe("not_json");
+  expect(refusalOf(() => readHooksJson(join(dir, "absent.json"))).code).toBe("unreadable_path");
   const badShape = join(dir, "bad-shape.json");
   writeFileSync(badShape, JSON.stringify({ PreToolUse: [{ command: [] }] }));
-  expect(() => readHooksJson(badShape)).toThrow(/invalid config/);
+  expect(refusalOf(() => readHooksJson(badShape)).code).toBe("invalid_config");
+  // A guard entry on a tool event without declared fields, and any guard on
+  // the no-rewrite SessionStart point, each refuse typed at bundle compile.
+  expect(refusalOf(() => hooksJsonBundle({ PreToolUse: [{ guard: "secrets-guard" }] })).code).toBe(
+    "missing_rewrite_fields",
+  );
+  expect(refusalOf(() => hooksJsonBundle({ SessionStart: [{ guard: "secrets-guard" }] })).code).toBe(
+    "session_start_rewrite",
+  );
   // The default call bound applies when the file omits timeoutMs.
   const defaults = join(dir, "defaults.json");
   writeFileSync(defaults, JSON.stringify({ PreToolUse: [{ command: ["./guard.sh"] }] }));
@@ -302,9 +324,15 @@ test("a hooks file with an unmapped event refuses the boot before any listener e
   const hooksPath = join(dir, "hooks.json");
   writeFileSync(hooksPath, JSON.stringify({ Stop: [{ command: ["./x"] }] }));
   const config = suite.config("hooks-json-refuse-state-", { hooksPath });
-  await expect(suite.boot({ config, llm: { resolveModel: fakeProviderModel } })).rejects.toThrow(
-    /unmapped_event Stop/,
-  );
+  // M-4: the TYPED refusal object crosses the boot boundary — class, code and
+  // the offending event name, not a prose match.
+  const refusal = await suite
+    .boot({ config, llm: { resolveModel: fakeProviderModel } })
+    .then(() => undefined, (error: unknown) => error);
+  expect(refusal).toBeInstanceOf(AppInvariantError);
+  if (!(refusal instanceof AppInvariantError)) throw new Error("expected AppInvariantError");
+  expect(refusal.code).toBe("unmapped_event");
+  expect(refusal.message).toContain("Stop");
 });
 
 /**
@@ -569,12 +597,14 @@ test("C-1: a SessionStart hook denying tools.add fails the facade configure op f
     const before = plane.openKernel(row.id).latestGenerationFor(row.id).generation;
     // The hook consults on session.open and denies the tools.add op: the
     // facade configure fails typed, and NO generation advance is committed.
-    const refusal = await runAppEffect(app.runtime, handle.tools.add([])).then(
-      () => undefined,
-      (error: unknown) => String(error),
-    );
-    expect(refusal).toContain("session.configure");
-    expect(refusal).toContain("denied");
+    // M-4: assert the typed failure's _tag and machine fields via Effect.flip,
+    // never String(rejection).
+    const refusal = await runAppEffect(app.runtime, Effect.flip(handle.tools.add([])));
+    expect(refusal).toMatchObject({
+      _tag: "AgentFailure",
+      operation: "session.configure",
+      cause: "denied",
+    });
     expect(plane.openKernel(row.id).latestGenerationFor(row.id).generation).toBe(before);
   } finally {
     release.resolve();

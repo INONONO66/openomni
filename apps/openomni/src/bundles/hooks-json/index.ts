@@ -55,11 +55,13 @@ function guardFields(event: HookEvent, entry: z.infer<typeof GuardEntry>): reado
   if (event === "SessionStart")
     throw new AppInvariantError(
       "hooks-json: SessionStart allows no rewrite row; a secrets-guard entry cannot compile there",
+      "session_start_rewrite",
     );
   const fields = entry.fields ?? GUARD_DEFAULT_FIELDS[event];
   if (fields === undefined || fields.length === 0)
     throw new AppInvariantError(
       `hooks-json: a ${event} guard entry must declare the fields it rewrites (e.g. {"guard":"secrets-guard","fields":["command"]})`,
+      "missing_rewrite_fields",
     );
   return fields;
 }
@@ -90,13 +92,13 @@ export function readHooksJson(path: string): HooksJsonInput {
   try {
     raw = readFileSync(path, "utf8");
   } catch (cause) {
-    throw new AppInvariantError(`hooks-json: cannot read ${path}: ${String(cause)}`);
+    throw new AppInvariantError(`hooks-json: cannot read ${path}: ${String(cause)}`, "unreadable_path");
   }
   let parsed: PlainValue;
   try {
     parsed = JSON.parse(raw) as PlainValue;
   } catch (cause) {
-    throw new AppInvariantError(`hooks-json: ${path} is not JSON: ${String(cause)}`);
+    throw new AppInvariantError(`hooks-json: ${path} is not JSON: ${String(cause)}`, "not_json");
   }
   const result = HooksJson.safeParse(parsed);
   if (!result.success) {
@@ -104,8 +106,9 @@ export function readHooksJson(path: string): HooksJsonInput {
     if (unrecognized !== undefined && unrecognized.code === "unrecognized_keys")
       throw new AppInvariantError(
         `hooks-json: unmapped_event ${unrecognized.keys.join(", ")} in ${path}; mapped events are ${Object.keys(EVENT_POINTS).join(", ")}`,
+        "unmapped_event",
       );
-    throw new AppInvariantError(`hooks-json: invalid config in ${path}: ${result.error.message}`);
+    throw new AppInvariantError(`hooks-json: invalid config in ${path}: ${result.error.message}`, "invalid_config");
   }
   return result.data;
 }
