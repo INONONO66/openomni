@@ -13,10 +13,10 @@ anchor, parentSeq, parentHead, copied}}` (schema in
 `packages/protocol/src/journal/core/session-configure.ts`), pinning the parent
 head hash at fork time so both chains verify independently forever; a later
 parent append never perturbs the child (`verifyChain` on both stays `intact`).
-Copied rows keep their original ids except input rows, which rename to
-`fork:<parentSessionId>:<id>` with `inboxId`/`turnId` payload references
-remapped: consumed inputs stay consumed, and replaying a pre-fork idempotency
-key against the child admits fresh. Exclusions: `alarm{arm}` rows and
+Copied rows keep their original ids except input rows and their
+`<inboxId>:delivery` rows, which rename to `fork:<parentSessionId>:<id>` with
+`inboxId`/`turnId` payload references remapped: consumed inputs stay consumed,
+and replaying a pre-fork idempotency key against the child admits fresh. Exclusions: `alarm{arm}` rows and
 `fold.checkpoint` are never copied — the child re-registers zero alarms while
 the parent occurrence still runs, and a copied orphan `alarm{fired}` folds to
 #1254's `skip{unknown}` (occurrence ids are minted from the parent session id,
