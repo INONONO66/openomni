@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791223294803,
+  "lastUpdate": 1791242022090,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -79367,6 +79367,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 84939,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "01983bae5cee977d1bbd46d4f0f90758f68e2bc2",
+          "message": "#1259 band 2: packages/agent slop cleanup (core, entity, compaction, tests, model, store, gate) (#1300)\n\n* chore(#1259): open epic1260/1259-b2-agent-llm on main cd8d64172 (band b2)\n\n* chore(agent): #1259 b2 group 1 — core turn/retry slop (items 15, 20, 22, 24)\n\n* chore(agent): #1259 b2 group 2 — session entity slop (items 34, 35, 38)\n\n* chore(agent): #1259 b2 group 3 — compaction plugin slop (items 9, 11)\n\n* chore(agent): #1259 b2 group 4 — test slop (items 88, 104)\n\n* chore(agent): #1259 b2 group 5 — model slop (item 90)\n\n* chore(agent): #1259 b2 group 6 — store slop (items 81, 85, 86)\n\n* chore(agent): #1259 b2 group 7 — gate slop (items 137, 138)\n\n* chore(agent): #1259 b2 — SLOP/status rows; drop now-unused provider ModelResolutionError re-exports (dead-exports gate)\n\n* fix(agent): #1259 b2 review r1 — typed revision guard, drop producer-less StorageUnavailable{storage}, exact LOC split\n\nH-1: retryRevision's guard is typed (error: E): error is E & CommitRefused — no written unknown (check-written-types 0).\nM-1: StorageUnavailable.capability loses the \"storage\" member item 86's writable() deletion left without a producer; the one test constructor pins \"sessions\".\nL-4: SLOP/implementation-status LOC split corrected to the measured +195/−264 (net −69 unchanged).\n\n* fix(script): #1259 b2 review r2 H-2 — effect-error-contract fixture pins a surviving StorageUnavailable member\n\nThe item-86 knock-on narrowed StorageUnavailable.capability; the _tag-keyed fixture in script/effect-error-contract.test.ts:59 still constructed \"storage\" and broke root check-types. One-token edit to \"sessions\" (behavior-free: the map is keyed by _tag exhaustiveness), recorded in the SLOP row as a forced boundary exception outside packages/agent.",
+          "timestamp": "2026-10-05T23:11:01Z",
+          "tree_id": "bf9f3c689ebb09d652671af8105ffdb6a0de1292",
+          "url": "https://github.com/INONONO66/openomni/commit/01983bae5cee977d1bbd46d4f0f90758f68e2bc2"
+        },
+        "date": 1791242021595,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 618,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1068,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 855,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 925018,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 257498,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4615665,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 77,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 645,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 95632,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 475184,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 282199,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 7016303,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 809447,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12052,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 108300,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 529006,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 117955,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 9750727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 59,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 85476,
             "unit": "ns/op"
           }
         ]
