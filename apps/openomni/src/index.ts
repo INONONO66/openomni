@@ -1,4 +1,4 @@
-import { Effect, Result } from "effect";
+import { type Cause, Effect, Result } from "effect";
 import { ThrownError } from "./thrown";
 import { AppInvariantError } from "./invariant";
 import { retryableOnce } from "./retryable-once";
@@ -360,7 +360,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       release: (value: A) => Effect.Effect<void, E2>,
     ) => runAppBoot(runtime, bootResource(resource, release));
     const plane = services.plane;
-    const incident = (msg: string, error: unknown): void =>
+    const incident = (msg: string, error: Error | Cause.Cause<Error>): void =>
       services.observations.publish(Operational.Events.Error, {
         traceId: traceIdFromUuid(services.entropy.id()),
         time: services.now(),
