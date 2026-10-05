@@ -34,6 +34,21 @@ export const RowVerdict = PlainValueSchema.pipe(
       .object({ type: z.literal("transform"), ref: PolicyRef, config: PlainValueSchema.optional() })
       .strict(),
     z.object({ type: z.literal("obligation"), ref: PolicyRef, ...BudgetFields }).strict(),
+    /**
+     * Consulted guard (#1256): the named service decides at evaluation time;
+     * `observe: true` makes it audit-only. `rewrite: true` (#1256 r4 H-2)
+     * makes the fold apply the consultant's response as a rewrite of the
+     * fields declared in `config.fields` — never both flags on one row.
+     */
+    z
+      .object({
+        type: z.literal("consult"),
+        ref: PolicyRef,
+        config: PlainValueSchema.optional(),
+        observe: z.literal(true).optional(),
+        rewrite: z.literal(true).optional(),
+      })
+      .strict(),
   ]),
 );
 export type RowVerdict = z.infer<typeof RowVerdict>;

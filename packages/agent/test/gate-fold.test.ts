@@ -344,4 +344,170 @@ describe("gate decision fold (#1251)", () => {
       },
     ]);
   });
+
+  it("a consulted gate row is fail-closed: a prepared response without a verdict denies with one recorded fact (#1256 r3 H-3)", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [gateRow("prompt.pre", { id: "hooks/prompt.pre#1", how: { ref: "hook/process" } })],
+      handlers: ["hook/process"],
+      generation: 1,
+    });
+    // A rewrite-shaped hook response on a command (gate) row: value + payload,
+    // no verdict. "Missing verdict => allow" is forbidden.
+    const prepared = new Map([
+      ["hooks/prompt.pre#1", { value: { body: "zap" }, payload: { ref: "hook/process", output: "digest" } }],
+    ]);
+    const outcome = gate.decide(
+      "prompt.pre",
+      { when: {}, value: { body: "original" } },
+      { handlers: () => undefined, prepared },
+    );
+    expect(outcome.decision.verdict).toBe("deny");
+    expect(outcome.decision.facts).toEqual([
+      { rowId: "hooks/prompt.pre#1", ref: "hook/process", code: "incompatible_response" },
+    ]);
+    // The response IS recorded (durable evidence) but rewrites nothing: a gate
+    // row allows no rewrite fields.
+    expect(outcome.decision.consulted).toHaveLength(1);
+    expect(outcome.value).toEqual({ body: "original" });
+  });
+
+  it("a prepared observe-row result annotates with its payload; one without a payload is an unrecorded fact", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.post", { id: "hooks/tool.post#1", do: "observe", how: { ref: "hook/process" } }),
+        gateRow("tool.post", { id: "hooks/tool.post#2", do: "observe", how: { ref: "hook/process" } }),
+      ],
+      handlers: ["hook/process"],
+      generation: 1,
+    });
+    const prepared = new Map([
+      ["hooks/tool.post#1", { payload: { note: "audited" } }],
+      ["hooks/tool.post#2", {}],
+    ]);
+    const { decision } = gate.decide(
+      "tool.post",
+      { when: {}, value: { op: "bash" } },
+      { handlers: () => undefined, prepared },
+    );
+    // Audit-only either way: the verdict never moves off allow.
+    expect(decision.verdict).toBe("allow");
+    expect(decision.annotations).toEqual([
+      { rowId: "hooks/tool.post#1", ref: "hook/process", payload: { note: "audited" } },
+    ]);
+    expect(decision.facts).toEqual([
+      { rowId: "hooks/tool.post#2", ref: "hook/process", code: "unrecorded_response" },
+    ]);
+  });
+
+  it("a prepared consultant rewrite is contained to the declared fields (#1256 r4 H-2)", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", {
+          id: "hooks/tool.pre#1",
+          do: "rewrite",
+          how: { ref: "hook/process", fields: ["command"] },
+        }),
+      ],
+      handlers: ["hook/process"],
+      generation: 1,
+    });
+    const prepared = new Map([
+      [
+        "hooks/tool.pre#1",
+        { value: { command: "echo masked" }, payload: { ref: "hook/process", output: "digest" } },
+      ],
+    ]);
+    const outcome = gate.decide(
+      "tool.pre",
+      { when: {}, value: { command: "echo sk-123", cwd: "/tmp" } },
+      { handlers: () => undefined, prepared },
+    );
+    expect(outcome.decision.verdict).toBe("allow");
+    expect(outcome.value).toEqual({ command: "echo masked", cwd: "/tmp" });
+    expect(outcome.decision.facts).toEqual([]);
+    expect(outcome.decision.consulted).toHaveLength(1);
+  });
+
+  it("a prepared rewrite touching an undeclared field denies fail-closed with one incompatible_response fact (#1256 r4 H-2)", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", {
+          id: "hooks/tool.pre#1",
+          do: "rewrite",
+          how: { ref: "hook/process", fields: ["command"] },
+        }),
+      ],
+      handlers: ["hook/process"],
+      generation: 1,
+    });
+    // The consultant answers with a field OUTSIDE the declared rewrite set.
+    const prepared = new Map([
+      [
+        "hooks/tool.pre#1",
+        { value: { command: "ok", cwd: "/etc" }, payload: { ref: "hook/process", output: "digest" } },
+      ],
+    ]);
+    const outcome = gate.decide(
+      "tool.pre",
+      { when: {}, value: { command: "echo hi", cwd: "/tmp" } },
+      { handlers: () => undefined, prepared },
+    );
+    expect(outcome.decision.verdict).toBe("deny");
+    expect(outcome.decision.facts).toEqual([
+      { rowId: "hooks/tool.pre#1", ref: "hook/process", code: "incompatible_response" },
+    ]);
+    // Nothing of the contained response reaches the value.
+    expect(outcome.value).toEqual({ command: "echo hi", cwd: "/tmp" });
+  });
+
+  it("a verdict-shaped consultant reply on a rewrite row is incompatible, never applied (#1256 r4 H-2)", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [
+        gateRow("tool.pre", {
+          id: "hooks/tool.pre#1",
+          do: "rewrite",
+          how: { ref: "hook/process", fields: ["command"] },
+        }),
+      ],
+      handlers: ["hook/process"],
+      generation: 1,
+    });
+    const prepared = new Map([
+      ["hooks/tool.pre#1", { verdict: "allow" as const, payload: { ref: "hook/process", verdict: "allow" } }],
+    ]);
+    const outcome = gate.decide(
+      "tool.pre",
+      { when: {}, value: { command: "echo hi" } },
+      { handlers: () => undefined, prepared },
+    );
+    expect(outcome.decision.verdict).toBe("deny");
+    expect(outcome.decision.facts).toEqual([
+      { rowId: "hooks/tool.pre#1", ref: "hook/process", code: "incompatible_response" },
+    ]);
+    expect(outcome.value).toEqual({ command: "echo hi" });
+  });
+
+  it("a sync gate handler answering without a verdict is equally fail-closed", () => {
+    const handler: GateHandler = () => ({ payload: { note: "observed" } });
+    const gate = compileGateRows({
+      table,
+      rows: [gateRow("tool.pre", { id: "probe/tool.pre#1", how: { ref: "guard/mute" } })],
+      handlers: ["guard/mute"],
+      generation: 1,
+    });
+    const { decision } = gate.decide(
+      "tool.pre",
+      { when: {}, value: { op: "read" } },
+      { handlers: () => handler },
+    );
+    expect(decision.verdict).toBe("deny");
+    expect(decision.facts).toEqual([
+      { rowId: "probe/tool.pre#1", ref: "guard/mute", code: "incompatible_response" },
+    ]);
+  });
 });

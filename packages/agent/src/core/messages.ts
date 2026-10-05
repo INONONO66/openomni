@@ -166,6 +166,8 @@ export const DeliverBody = Schema.Struct({
   content: Schema.String,
   control: Schema.optional(Schema.Literals(["interrupt", "resume"])),
   delivery: Schema.optional(Schema.Literals(["steer", "followUp"])),
+  /** #1256 H-3 (`action` inputs): the journal ordinal the deferred payload was computed against; older than the compaction head is closed stale. */
+  after: Schema.optional(Schema.Number),
 });
 export type DeliverBody = typeof DeliverBody.Type;
 

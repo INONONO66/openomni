@@ -950,7 +950,7 @@ export function createSessionTurn(
   scope: Scope.Scope,
   ports: {
     readonly createExecutionLedger: (turnId?: string) => SessionActionCommitPort;
-    readonly evaluatePromptPolicies: (items: readonly Inbox.Row[]) => Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError, RunnerServices>;
+    readonly evaluatePromptPolicies: (items: readonly Inbox.Row[]) => Effect.Effect<{ readonly refusal: SessionPolicyRefusal | undefined; readonly contents: ReadonlyMap<string, string> }, ExecutionError, RunnerServices>;
     readonly consumePolicyBlockedInbox: (items: readonly Inbox.Row[]) => Effect.Effect<void, ExecutionError>;
     readonly hibernate: (current: LedgerSession.Row) => Effect.Effect<void, SessionError>;
   },
@@ -1063,19 +1063,28 @@ export function createSessionTurn(
       const observations = yield* ObservationService;
       // #1253 boundary rule: steer rows drain at tool.post boundaries, followUp
       // rows wait for turn end; widths are session.configure settings data.
-      const pending = boundaryConsumption(
+      // #1256 H-1 (r3): EVERY boundary applies the stale split — a late
+      // `action` with `after` behind the compaction head is closed durably
+      // here, never delivered mid-turn.
+      const { consumed: pending, stale } = boundaryConsumption(
         pendingBacklog(kernel, sessionId),
         boundary,
         consumptionSettings(kernel, sessionId),
+        kernel.compactionHead(sessionId),
       );
-      const refusal = yield* ports.evaluatePromptPolicies(pending);
-      if (refusal !== undefined) {
+      const evaluated = yield* ports.evaluatePromptPolicies(pending);
+      if (evaluated.refusal !== undefined) {
         yield* ports.consumePolicyBlockedInbox(pending);
-        return yield* new AgentFailure({ operation: "session.prompt", cause: refusal.reason });
+        return yield* new AgentFailure({ operation: "session.prompt", cause: evaluated.refusal.reason });
       }
+      // #1256 r3 H-3: deliver the rewritten body, not the original.
+      const delivered = pending.map((item) => {
+        const body = evaluated.contents.get(item.id);
+        return body === undefined ? item : { ...item, content: body };
+      });
       const checkpointId = entropy();
       const deliveries = deliveryActions(
-        pending,
+        delivered,
         { kind: "turn", turnId: input.turnId },
         boundary,
         checkpointId,
@@ -1083,7 +1092,7 @@ export function createSessionTurn(
       const checkpoint = turnCheckpointAction({
         id: checkpointId, parentId: parentActionId, sessionId, turnId: input.turnId, resultId: input.resultId,
         resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary,
-        inboxIds: pending.map((item) => item.id), at: clock(),
+        inboxIds: pending.map((item) => item.id), consumedStale: stale.map((item) => item.id), at: clock(),
       });
       const current = kernel.row(sessionId);
       yield* commitFoldBatch(kernel, {
@@ -1091,10 +1100,10 @@ export function createSessionTurn(
         actions: [checkpoint, ...deliveries],
         state: current.state === "interrupted" ? "interrupted" : "running",
       }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
-      observeDrained(pending, input.turnId, boundary, clock(), observations, entropy);
+      observeDrained(delivered, input.turnId, boundary, clock(), observations, entropy);
       return {
-        messages: pending.filter((item) => item.kind === "prompt").map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
-        interrupted: pending.some((item) => item.kind === "interrupt"),
+        messages: delivered.filter((item) => item.kind === "prompt").map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
+        interrupted: delivered.some((item) => item.kind === "interrupt"),
         parentActionId: deliveries.at(-1)?.id ?? checkpointId, boundaryActionId: checkpointId,
       };
     });

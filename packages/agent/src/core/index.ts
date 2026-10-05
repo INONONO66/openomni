@@ -12,7 +12,7 @@ export {
   currentInvocation, forkInvocation,
   type InvocationFrame, type ExecutionApprovalRequest, type Executor,
 } from "./gate/decide";
-export { compilePolicySnapshot, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, type HandlerTable, type NamedTransformer, type PolicyEvaluationInput } from "./gate/compile";
+export { compilePolicySnapshot, createPolicyCompiler, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS, type HandlerTable, type NamedTransformer, type NamedConsultant, type ConsultInput, type PolicyEvaluationInput } from "./gate/compile";
 export { decisionFromEvaluation, evaluatePermission } from "./gate/match";
 export {
   composePointTable, executionPoint, GateComposeError, KERNEL_CAPABILITY_POINTS,
@@ -34,7 +34,7 @@ export {
 } from "./run";
 export { decideSessionAdmission, requestAuthorityKernel, commitSessionRequest } from "./mailbox";
 export { createSessionRequests, decideRequestTransition, requestBindingDigest } from "./request";
-export { receivedMessageAction } from "./commit";
+export { receivedMessageAction, staleActionBacklog } from "./commit";
 export { armAction, firedAction, alarmDisposition, composeAlarmPurposes, AlarmComposeError, AlarmSendRefused, ArmRefused, AlarmWakeError, type AlarmCapability, type AlarmArmNotice, type AlarmChainReads, type AlarmDisposition, type AlarmDrainConfig, type AlarmFired, type AlarmPurposeRegistry, type AlarmSweepConfig, type AlarmWakeContext, type AlarmWakeOutcome, type ArmVerb } from "./alarm";
 export { SessionEntity, SessionEntityContext, createSessionEntityLayer, createSessionEntityRunTurn, type SessionKernel } from "./entity";
 export { makeObservationBus, observationBusLayer, scopeObservation } from "./bus";

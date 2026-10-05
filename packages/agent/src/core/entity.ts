@@ -142,6 +142,7 @@ function appendReceived(
   kind: Inbox.Kind,
   message: { readonly messageId: string; readonly content: string; readonly origin: string },
   delivery?: "steer" | "followUp",
+  after?: number,
 ): Effect.Effect<{ readonly ordinal: number; readonly actionHash: string; readonly deduped: boolean }, LedgerError | AdmissionFailure> {
   return retryRevision(() => Effect.gen(function* () {
     const { kernel, authority, env } = handle;
@@ -150,12 +151,19 @@ function appendReceived(
       return { ordinal: existing.ordinal, actionHash: existing.actionHash, deduped: true };
     const row = kernel.row(authority.sessionId);
     const now = env.clock();
+    // #1256 H-3: a deferred input's `after` cursor rides the row INTENT (the
+    // protocol `action` declaration); it merges into the origin object here.
+    const source = PlainValueSchema.parse(JSON.parse(message.origin));
+    const origin =
+      after === undefined || source === null || typeof source !== "object" || Array.isArray(source)
+        ? source
+        : { ...source, after };
     const action = receivedMessageAction({
       id: message.messageId,
       sessionId: authority.sessionId,
       kind,
       content: message.content,
-      origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(message.origin)) },
+      origin: { encodingVersion: 1, value: origin },
       parentActionId: null,
       at: now,
       ...(delivery === undefined ? {} : { delivery }),
@@ -415,6 +423,30 @@ const CORE_INPUT_REGISTRATIONS: readonly string[] = Object.freeze(["prompt", "si
 const decodeDeliverBody = Schema.decodeUnknownSync(DeliverBody);
 const decodeDeadlineBody = Schema.decodeUnknownSync(DeadlineAlarmBody);
 
+/** The admission-shaped row one `deliver` proposes; never persisted as-is. */
+function deliverCandidate(
+  handle: ActivationHandle,
+  payload: { readonly source: string; readonly idempotencyKey: string },
+  body: DeliverBody,
+  inboxKind: Inbox.Kind,
+): Inbox.Row {
+  const { kernel, authority, env } = handle;
+  return InboxSchema.Row.parse({
+    id: payload.idempotencyKey,
+    sessionId: authority.sessionId,
+    kind: inboxKind,
+    content: body.content,
+    origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(payload.source)) },
+    ...(body.delivery === undefined ? {} : { delivery: body.delivery }),
+    ...(body.after === undefined ? {} : { after: body.after }),
+    status: "pending",
+    consumedBy: null,
+    consumedAt: null,
+    createdAt: env.clock(),
+    ordinal: pendingBacklog(kernel, authority.sessionId).length + 1,
+  });
+}
+
 /**
  * `deliver` (#1253): the one input door. The kind is checked against the
  * activation's input registration table, a replayed `idempotencyKey` resolves
@@ -455,19 +487,7 @@ function deliver(
             (yield* Effect.die(new Error("signal delivery without a control op"))));
     const existing = kernel.actionById(payload.idempotencyKey);
     if (existing !== undefined) return { seq: existing.ordinal, existed: true };
-    const candidate = InboxSchema.Row.parse({
-      id: payload.idempotencyKey,
-      sessionId: authority.sessionId,
-      kind: inboxKind,
-      content: body.content,
-      origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(payload.source)) },
-      ...(body.delivery === undefined ? {} : { delivery: body.delivery }),
-      status: "pending",
-      consumedBy: null,
-      consumedAt: null,
-      createdAt: env.clock(),
-      ordinal: pendingBacklog(kernel, authority.sessionId).length + 1,
-    });
+    const candidate = deliverCandidate(handle, payload, body, inboxKind);
     const snapshot = admissionSnapshot(handle);
     const decision = decideSessionAdmission({
       ...snapshot,
@@ -487,6 +507,7 @@ function deliver(
         origin: payload.source,
       },
       body.delivery,
+      body.after,
     ).pipe(Effect.catchIf(
       (error): error is LedgerError => !(error instanceof AdmissionFailure),
       (error) => Effect.die(error),
