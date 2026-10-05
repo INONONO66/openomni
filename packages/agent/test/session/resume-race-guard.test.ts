@@ -10,7 +10,6 @@ import { Effect } from "effect";
 import { createRawSlots } from "../../src/core/gate/decide";
 import {
   internalOrigin,
-  pendingBacklog,
   receivedMessageAction,
   turnTerminalAction,
 } from "../../src/core/commit";
@@ -71,7 +70,7 @@ test("a resume admitted against a settled turn is consumed as a no-op delivery",
             }),
           ],
         });
-        const item = pendingBacklog(kernel, "race")[0];
+        const item = kernel.pendingMessages("race")[0];
         if (item === undefined) throw new Error("resume item fixture");
         expect(item.kind).toBe("resume");
         const state: SessionControllerState = {
@@ -99,7 +98,7 @@ test("a resume admitted against a settled turn is consumed as a no-op delivery",
       }),
     );
     // The item was consumed by an inbox.deliver no-op, not left pending.
-    expect(pendingBacklog(kernel, "race")).toHaveLength(0);
+    expect(kernel.pendingMessages("race")).toHaveLength(0);
     expect(kernel.row("race").state).toBe("idle");
   } finally {
     stores.close();
