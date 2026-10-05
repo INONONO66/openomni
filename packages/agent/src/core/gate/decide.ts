@@ -207,7 +207,7 @@ export interface DurableExecutor extends Executor {
   }, ExecutionError>;
   runExisting<T extends PlainValue, R>(
     request: ExecutionRequest,
-    body: () => Effect.Effect<T, ExecutionError, R>,
+    body: (pre: PolicyEvaluation) => Effect.Effect<T, ExecutionError, R>,
   ): Effect.Effect<ExecutionResult, ExecutionError, R>;
   runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
@@ -1569,11 +1569,15 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     );
   }
 
-  function runExisting<T extends PlainValue, R>(request: ExecutionRequest, body: () => Effect.Effect<T, ExecutionError, R>) {
+  function runExisting<T extends PlainValue, R>(request: ExecutionRequest, body: (pre: PolicyEvaluation) => Effect.Effect<T, ExecutionError, R>) {
     return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
       const pre = yield* decide(request, "pre", request.intent);
-      if (pre.verdict !== "allow") return { terminal: "blocked_pre", reason: pre.reason ?? "denied" } as const;
-      const exit = yield* Effect.exit(restore(Effect.scoped(body())));
+      // #1256 r3 H-3: transform/obligation are allow-shaped effective verdicts
+      // (a prompt.pre rewrite must flow, not block); only deny and
+      // require_approval refuse here.
+      if (pre.verdict === "deny" || pre.verdict === "require_approval")
+        return { terminal: "blocked_pre", reason: pre.reason ?? "denied" } as const;
+      const exit = yield* Effect.exit(restore(Effect.scoped(body(pre))));
       if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
       const value = clonePlainValue(exit.value);
       if (!consulted(request.kind, "post")) return { terminal: "executed", value } as const;

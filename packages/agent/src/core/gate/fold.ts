@@ -249,5 +249,15 @@ function consultRow(
     state.value = applyRewrite(state.value, row.how.fields ?? [], result.value ?? null);
     return;
   }
-  state.verdict = foldVerdict(state.verdict, result.verdict ?? "allow");
+  // #1256 r3 H-3: a consulted gate row is FAIL-CLOSED. A response without a
+  // verdict (a rewrite or observe result on a command row) is incompatible
+  // with its row: one recorded fact, deny — mirroring the #1251
+  // "escape -> recorded fact + deny" pattern. Missing verdict NEVER folds
+  // to allow.
+  if (result.verdict === undefined) {
+    state.facts.push({ rowId: row.id, ref, code: "incompatible_response" });
+    state.verdict = foldVerdict(state.verdict, "deny");
+    return;
+  }
+  state.verdict = foldVerdict(state.verdict, result.verdict);
 }

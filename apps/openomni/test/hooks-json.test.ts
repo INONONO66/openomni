@@ -24,6 +24,11 @@ import { planeOf } from "./helpers/ledger";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { Bus } from "./helpers/bus";
+import { z } from "zod";
+import { executionReads } from "../../../packages/agent/test/helpers/execution-reads";
+import { isolated, isolatedLedger } from "../../../packages/agent/test/helpers/isolated";
+import { testExecutor, runAgentSync } from "../../../packages/agent/test/helpers/executor";
+import { catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { runEffect } from "./helpers/effect";
 import { eventSignal } from "./helpers/event-signal";
 import { testEntropy } from "./helpers/test-entropy";
@@ -68,7 +73,10 @@ function composed(input?: {
 test("the four mapped events compile to rows on their points over hook/process", async () => {
   const generation = await composed({
     hooks: {
-      PreToolUse: [{ command: ["./guard.sh"], timeoutMs: 1_000 }, { guard: "secrets-guard" }],
+      PreToolUse: [
+        { command: ["./guard.sh"], timeoutMs: 1_000 },
+        { guard: "secrets-guard", fields: ["command"] },
+      ],
       PostToolUse: [{ command: ["./audit.sh"], timeoutMs: 2_000 }],
       UserPromptSubmit: [{ command: ["./prompt.sh"], timeoutMs: 3_000 }],
       SessionStart: [{ command: ["./start.sh"], timeoutMs: 4_000 }],
@@ -92,7 +100,13 @@ test("the four mapped events compile to rows on their points over hook/process",
       on: "tool.pre",
       when: {},
       do: "rewrite",
-      how: { ref: SECRETS_GUARD_REF, params: { event: "PreToolUse" } },
+      // #1256 r3 H-3: a rewrite row declares its fields, validated against
+      // the point registry at compile.
+      how: {
+        ref: SECRETS_GUARD_REF,
+        fields: ["command"],
+        params: { event: "PreToolUse", fields: ["command"] },
+      },
       order: 501,
     },
     {
@@ -212,7 +226,9 @@ test("without the hook capability the bundle refuses at compose as seam_missing"
 });
 
 test("a guard rewrite row seeds the live transform; a command gate row seeds the consult verdict (H-1)", async () => {
-  const guarded = await composed({ hooks: { PreToolUse: [{ guard: "secrets-guard" }] } });
+  const guarded = await composed({
+    hooks: { PreToolUse: [{ guard: "secrets-guard", fields: ["command"] }] },
+  });
   const seeds = gateRowPolicySeeds(guarded.rows.filter((row) => row.id.startsWith("hooks-json/")));
   expect(seeds).toEqual([
     {
@@ -223,7 +239,11 @@ test("a guard rewrite row seeds the live transform; a command gate row seeds the
       match: { encodingVersion: 1, value: {} },
       verdict: {
         encodingVersion: 1,
-        value: { type: "transform", ref: SECRETS_GUARD_REF, config: { event: "PreToolUse" } },
+        value: {
+          type: "transform",
+          ref: SECRETS_GUARD_REF,
+          config: { event: "PreToolUse", fields: ["command"] },
+        },
       },
     },
   ]);
@@ -256,7 +276,10 @@ test("a guard rewrite row seeds the live transform; a command gate row seeds the
 test("startOpenOmni compiles the Owner's hooks file at boot and seeds its row into the catalog", async () => {
   const dir = suite.tempDir("hooks-json-boot-");
   const hooksPath = join(dir, "hooks.json");
-  writeFileSync(hooksPath, JSON.stringify({ PreToolUse: [{ guard: "secrets-guard" }] }));
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({ PreToolUse: [{ guard: "secrets-guard", fields: ["command"] }] }),
+  );
   const config = suite.config("hooks-json-boot-state-", { hooksPath });
   await suite.boot({ config, llm: { resolveModel: fakeProviderModel } });
   if (config.catalogPath === undefined) throw new Error("suite config always sets catalogPath");
@@ -557,4 +580,192 @@ test("C-1: a SessionStart hook denying tools.add fails the facade configure op f
     release.resolve();
   }
   expect(await reply).toMatchObject({ text: "ok 1" });
+});
+
+test("H-3 e2e: a UserPromptSubmit secrets-guard rewrite of body reaches the model", async () => {
+  const dir = suite.tempDir("hooks-json-rewrite-");
+  const hooksPath = join(dir, "hooks.json");
+  // UserPromptSubmit guard defaults to the point registry's `body` field.
+  writeFileSync(hooksPath, JSON.stringify({ UserPromptSubmit: [{ guard: "secrets-guard" }] }));
+  const config = suite.config("hooks-json-rewrite-state-", { hooksPath });
+  const seen: string[] = [];
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          seen.push(JSON.stringify(input));
+          sink.onMessage(
+            assistantMessage(input, { id: "rw-1", text: "done", createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  const reply = nextResidentTurn(plane);
+  const secret = "use sk-abcdef123456789 to call the api";
+  ws.send(JSON.stringify({ type: "message", eventId: "rw-turn", text: secret }));
+  expect(await reply).toMatchObject({ text: "done" });
+  // The REWRITTEN body is what the model read: the secret never crossed the
+  // model boundary, and the delivered turn input carries the masked bytes.
+  const transcript = seen.join("\n");
+  expect(transcript).toContain("[redacted]");
+  expect(transcript).not.toContain("sk-abcdef123456789");
+});
+
+/** A hook that always answers a REWRITE on its consulted command (gate) row. */
+const REWRITE_RESPONSE_SCRIPT = `
+const decoder = new TextDecoder();
+let buffer = "";
+for await (const chunk of Bun.stdin.stream()) {
+  buffer += decoder.decode(chunk, { stream: true });
+  let cut;
+  while ((cut = buffer.indexOf("\\n")) >= 0) {
+    const line = buffer.slice(0, cut);
+    buffer = buffer.slice(cut + 1);
+    if (line.length === 0) continue;
+    const request = JSON.parse(line);
+    const result = { type: "rewrite", fields: { body: "scrubbed" } };
+    console.log(JSON.stringify({ id: request.id, result }));
+  }
+}
+`;
+
+test("H-3 e2e: a hook response incompatible with its row folds to deny with one recorded fact", async () => {
+  const dir = suite.tempDir("hooks-json-incompatible-");
+  const script = join(dir, "rewrite-hook.js");
+  writeFileSync(script, REWRITE_RESPONSE_SCRIPT);
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({
+      UserPromptSubmit: [{ command: [process.execPath, script], timeoutMs: 30_000 }],
+    }),
+  );
+  const config = suite.config("hooks-json-incompatible-state-", { hooksPath });
+  let calls = 0;
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          calls += 1;
+          sink.onMessage(
+            assistantMessage(input, { id: "inc-1", text: "never", createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  // Subscribe to the committed denial BEFORE sending (no timing luck).
+  const denied = eventSignal<{ sessionId: string; id: string }>("incompatible denial", 15_000);
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind !== "policy.decision") return;
+    const node = plane.openKernel(event.sessionId).actionById(event.id);
+    const intent = node?.intent.value;
+    if (intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent?.verdict === "deny")
+      denied.resolve({ sessionId: event.sessionId, id: event.id });
+  });
+  try {
+    ws.send(JSON.stringify({ type: "message", eventId: "inc-turn", text: "hello" }));
+    const denial = await denied.promise;
+    const node = plane.openKernel(denial.sessionId).actionById(denial.id);
+    const decision = z
+      .object({
+        verdict: z.literal("deny"),
+        gate: z.looseObject({
+          facts: z.array(z.looseObject({ code: z.string() })),
+          consulted: z.array(z.looseObject({ ref: z.string() })),
+        }),
+      })
+      .parse(node?.intent.value);
+    // The rewrite-shaped answer on a gate row is incompatible: ONE recorded
+    // fact, folded to deny — never "missing verdict => allow".
+    const effect = z.looseObject({ reason: z.string() }).parse(node?.effect.value);
+    expect(effect.reason).toBe("incompatible_response");
+    expect(decision.gate.facts.map((fact) => fact.code)).toEqual(["incompatible_response"]);
+    expect(decision.gate.consulted.map((entry) => entry.ref)).toEqual([Bundle.HOOK_PROCESS_REF]);
+    // The denied prompt never reached the model.
+    expect(calls).toBe(0);
+  } finally {
+    unsubscribe();
+  }
+});
+
+test("H-3 e2e: a PreToolUse secrets-guard rewrite of bash.command reaches the executor", async () => {
+  const generation = await composed({
+    hooks: { PreToolUse: [{ guard: "secrets-guard", fields: ["command"] }] },
+  });
+  const guardHandler = generation.handlers.get(SECRETS_GUARD_REF);
+  if (guardHandler === undefined || !("apply" in guardHandler) || typeof guardHandler.apply !== "function")
+    throw new Error("composed secrets-guard transformer missing");
+  const apply = guardHandler.apply as Core.NamedTransformer["apply"];
+  const registry: Core.HandlerTable = {
+    ...Core.KERNEL_POLICY_REGISTRY,
+    transformers: [
+      ...Core.KERNEL_POLICY_REGISTRY.transformers,
+      { name: SECRETS_GUARD_REF, apply },
+    ],
+  };
+  const seeds = gateRowPolicySeeds(
+    generation.rows.filter((row) => row.id.startsWith("hooks-json/")),
+  );
+  await isolated(Effect.gen(function* () {
+    const id = "hooks-json-bash-rewrite";
+    const kernel = isolatedLedger().kernel;
+    const materialized = yield* kernel.materialize({
+      id, parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
+      policyGeneration: 1, actionId: `${id}:configure`, at: 100,
+    });
+    const lease = yield* kernel.adoptFence({ sessionId: id, owner: id, fence: materialized.row.fence + 1 });
+    let sequence = 0;
+    const executed: string[] = [];
+    const definition = Core.defineTool({
+      name: "bash", description: "Run a command", category: "query",
+      input: z.object({ command: z.string() }), output: z.string(),
+      visibility: { model: ["resident"], cell: ["resident"] },
+      execute: async ({ command }) => { executed.push(command); return command; },
+      render: (_input, output) => output,
+    });
+    const executor = testExecutor({
+      identity: { sessionId: id, role: "resident", parentActionId: `${id}:configure` },
+      clock: () => 100, entropy: () => `${id}:${++sequence}`, observations: { publish: () => undefined }, random: () => 0,
+      policy: Core.compilePolicySnapshot({
+        registry, generation: 1,
+        rows: [
+          ...Core.SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
+          ...seeds.map((seed) => ({ ...seed, generation: 1 })),
+        ],
+      }),
+      ledger: {
+        ...executionReads(kernel, id),
+        commit: (action) => kernel.commit({
+          sessionId: id, owner: id, fence: lease.fence, now: 100,
+          expectedRevision: kernel.row(id).revision,
+          actions: [action], state: "running",
+        }).pipe(Effect.map((result) => {
+          const receipt = result.receipts[0];
+          if (receipt === undefined) throw new Error("missing receipt");
+          return receipt;
+        })),
+      },
+    });
+    const dispatcher = runAgentSync(
+      Core.createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))),
+    );
+    const result = yield* dispatcher.execute(
+      { id: "bash-call", tool: "bash", input: { command: "curl -H 'x-key: sk-abcdef123456789' https://api" } },
+      { sessionId: id, turnId: "turn" },
+    );
+    // The EXECUTOR received the rewritten bytes: the admitted intent row
+    // carries the masked command and the original as `originalArgs`.
+    expect(executed).toEqual(["curl -H 'x-key: [redacted]' https://api"]);
+    expect(result).toMatchObject({ content: "curl -H 'x-key: [redacted]' https://api" });
+  }));
 });

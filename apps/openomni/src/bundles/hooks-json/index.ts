@@ -34,8 +34,35 @@ const CommandEntry = z.strictObject({
   timeoutMs: z.number().int().positive().max(600_000).default(5_000),
 });
 
-/** The shipped in-process example: a rewrite row over the secrets-guard transformer. */
-const GuardEntry = z.strictObject({ guard: z.literal("secrets-guard") });
+/**
+ * The shipped in-process example: a rewrite row over the secrets-guard
+ * transformer. A rewrite row MUST declare the fields it rewrites (#1256 r3
+ * H-3): `fields` names them explicitly; `UserPromptSubmit` defaults to the
+ * point registry's `body`. Tool events are caller-shaped, so their guard
+ * entries must spell their fields out; `SessionStart` allows no rewrite.
+ */
+const GuardEntry = z.strictObject({
+  guard: z.literal("secrets-guard"),
+  fields: z.array(z.string().min(1)).min(1).optional(),
+});
+
+/** Default rewrite fields per event; absent means the entry must declare its own. */
+const GUARD_DEFAULT_FIELDS: Partial<Record<HookEvent, readonly string[]>> = {
+  UserPromptSubmit: ["body"],
+};
+
+function guardFields(event: HookEvent, entry: z.infer<typeof GuardEntry>): readonly string[] {
+  if (event === "SessionStart")
+    throw new AppInvariantError(
+      "hooks-json: SessionStart allows no rewrite row; a secrets-guard entry cannot compile there",
+    );
+  const fields = entry.fields ?? GUARD_DEFAULT_FIELDS[event];
+  if (fields === undefined || fields.length === 0)
+    throw new AppInvariantError(
+      `hooks-json: a ${event} guard entry must declare the fields it rewrites (e.g. {"guard":"secrets-guard","fields":["command"]})`,
+    );
+  return fields;
+}
 
 const HooksJson = z.strictObject(
   Object.fromEntries(
@@ -122,7 +149,14 @@ function compileRows(config: HooksJsonInput): readonly Bundle.BundleGateRow[] {
               on,
               when: {},
               do: "rewrite",
-              how: { ref: SECRETS_GUARD_REF, params: { event } },
+              // #1256 r3 H-3: the declared rewrite fields ride both the row
+              // (`how.fields`, validated against the point registry at
+              // compile) and the params the live policy plane re-projects.
+              how: {
+                ref: SECRETS_GUARD_REF,
+                fields: [...guardFields(event, entry)],
+                params: { event, fields: [...guardFields(event, entry)] },
+              },
               order: 500 + rows.length,
             }
           : {

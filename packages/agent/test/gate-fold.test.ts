@@ -344,4 +344,50 @@ describe("gate decision fold (#1251)", () => {
       },
     ]);
   });
+
+  it("a consulted gate row is fail-closed: a prepared response without a verdict denies with one recorded fact (#1256 r3 H-3)", () => {
+    const gate = compileGateRows({
+      table,
+      rows: [gateRow("prompt.pre", { id: "hooks/prompt.pre#1", how: { ref: "hook/process" } })],
+      handlers: ["hook/process"],
+      generation: 1,
+    });
+    // A rewrite-shaped hook response on a command (gate) row: value + payload,
+    // no verdict. "Missing verdict => allow" is forbidden.
+    const prepared = new Map([
+      ["hooks/prompt.pre#1", { value: { body: "zap" }, payload: { ref: "hook/process", output: "digest" } }],
+    ]);
+    const outcome = gate.decide(
+      "prompt.pre",
+      { when: {}, value: { body: "original" } },
+      { handlers: () => undefined, prepared },
+    );
+    expect(outcome.decision.verdict).toBe("deny");
+    expect(outcome.decision.facts).toEqual([
+      { rowId: "hooks/prompt.pre#1", ref: "hook/process", code: "incompatible_response" },
+    ]);
+    // The response IS recorded (durable evidence) but rewrites nothing: a gate
+    // row allows no rewrite fields.
+    expect(outcome.decision.consulted).toHaveLength(1);
+    expect(outcome.value).toEqual({ body: "original" });
+  });
+
+  it("a sync gate handler answering without a verdict is equally fail-closed", () => {
+    const handler: GateHandler = () => ({ payload: { note: "observed" } });
+    const gate = compileGateRows({
+      table,
+      rows: [gateRow("tool.pre", { id: "probe/tool.pre#1", how: { ref: "guard/mute" } })],
+      handlers: ["guard/mute"],
+      generation: 1,
+    });
+    const { decision } = gate.decide(
+      "tool.pre",
+      { when: {}, value: { op: "read" } },
+      { handlers: () => handler },
+    );
+    expect(decision.verdict).toBe("deny");
+    expect(decision.facts).toEqual([
+      { rowId: "probe/tool.pre#1", ref: "guard/mute", code: "incompatible_response" },
+    ]);
+  });
 });
