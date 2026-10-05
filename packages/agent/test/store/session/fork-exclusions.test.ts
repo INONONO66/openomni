@@ -131,6 +131,11 @@ describe("Session.fork exclusions", () => {
     // The copied input occupies a parent-marked id, not the original key slot.
     expect(childKernel.actionById("msg-1")).toBeUndefined();
     expect(childKernel.actionById(`fork:${PARENT}:msg-1`)?.sessionId).toBe(CHILD);
+    // The copied delivery row freed its deterministic consumption id too: a
+    // re-admitted "msg-1" can mint "msg-1:delivery" fresh (the live-entity
+    // consumption proof is test/session/fork-delivery-replay.test.ts).
+    expect(childKernel.actionById("msg-1:delivery")).toBeUndefined();
+    expect(childKernel.actionById(`fork:${PARENT}:msg-1:delivery`)?.sessionId).toBe(CHILD);
 
     // Replaying the pre-fork key "msg-1" against the child appends fresh.
     const authority = adoptWriter(childKernel, CHILD, "child-writer");

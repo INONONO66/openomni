@@ -83,12 +83,14 @@ describe("Session.fork", () => {
       `${CHILD}:genesis`,
       `${PARENT}:configure`,
       `fork:${PARENT}:msg-1`,
-      "msg-1:delivery",
+      `fork:${PARENT}:msg-1:delivery`,
       "turn-1:terminal",
     ]);
 
-    // The delivery marker's references were remapped with the renamed input.
-    const delivery = nodes.find((node) => node.id === "msg-1:delivery");
+    // The delivery row moved into the fork namespace with the renamed input
+    // (consumption re-mints `msg-1:delivery`, so the copy must free the slot),
+    // and its references were remapped alongside.
+    const delivery = nodes.find((node) => node.id === `fork:${PARENT}:msg-1:delivery`);
     expect(DeliveryIntent.parse(delivery?.intent.value).inboxId).toBe(`fork:${PARENT}:msg-1`);
     // Consumption still folds: the copied, delivered input is not pending again.
     expect(childKernel.pendingMessages(CHILD)).toEqual([]);

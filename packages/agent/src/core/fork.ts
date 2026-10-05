@@ -15,11 +15,13 @@
  *
  * Deduplication rebuilds only after genesis: copied input rows (the rows
  * carrying an `inboxKind` effect, whose ids are the deliver door's
- * idempotency keys) are renamed `fork:<parentSessionId>:<id>` — the embedded
- * parent session id marks a leaked key stale — and their delivery markers'
- * `inboxId`/`turnId` references are remapped with them, so a pre-fork
- * `idempotencyKey` delivered to the child is admitted fresh, never a false
- * duplicate.
+ * idempotency keys) AND their delivery rows (`<inboxId>:delivery`, the one
+ * deterministic id consumption re-mints — core/commit.ts `deliveryActions`)
+ * are renamed `fork:<parentSessionId>:<id>` — the embedded parent session id
+ * marks a leaked key stale — with every `inboxId`/`turnId` reference and
+ * parent pointer remapped alongside, so a pre-fork `idempotencyKey` delivered
+ * to the child is admitted fresh AND completes its turn: no copied row
+ * occupies an id the child's own admission or consumption will need.
  */
 import { Data, Effect } from "effect";
 import type { LedgerAction, LedgerSession, PlainValue, SessionGeneration } from "@openomni/protocol";
@@ -108,6 +110,16 @@ function isInputRow(action: LedgerAction.Node): boolean {
   return typeof plainObject(action.effect.value)?.inboxKind === "string";
 }
 
+/**
+ * Delivery rows: consumption deterministically re-mints `<inboxId>:delivery`
+ * (core/commit.ts `deliveryActions`) for a re-admitted key, so a copied one
+ * must never keep that id slot on the child chain.
+ */
+function isDeliveryRow(action: LedgerAction.Node): boolean {
+  if (action.kind !== "prompt" && action.kind !== "signal" && action.kind !== "action") return false;
+  return plainObject(action.effect.value)?.phase === "delivery";
+}
+
 function isArmRow(action: LedgerAction.Node): boolean {
   return action.kind === "alarm" && plainObject(action.intent.value)?.op === "arm";
 }
@@ -119,7 +131,7 @@ function copiedBytes(action: LedgerAction.Node): number {
   );
 }
 
-/** Remaps renamed input-row references (`inboxId`/`turnId`) inside one payload. */
+/** Remaps renamed-row references (`inboxId`/`turnId`) inside one payload. */
 function remapPayload(
   payload: LedgerAction.Node["intent"],
   renames: ReadonlyMap<string, string>,
@@ -222,7 +234,8 @@ function planFork(ports: ForkPorts, input: ForkInput): ForkPlan | ForkRefused {
   if (bytes > cap) return refuse("byte_cap", `copied bytes ${bytes} exceed the cap ${cap}`);
   const renames = new Map<string, string>();
   for (const node of eligible) {
-    if (isInputRow(node)) renames.set(node.id, `fork:${input.from}:${node.id}`);
+    if (isInputRow(node) || isDeliveryRow(node))
+      renames.set(node.id, `fork:${input.from}:${node.id}`);
   }
   const ids = new Map<string, string>();
   for (const node of eligible) ids.set(node.id, renames.get(node.id) ?? node.id);
