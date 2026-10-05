@@ -7,12 +7,28 @@ import { retryableOnce } from "../src";
  * permanent.
  */
 
+type Gate = {
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+};
+
+const openGate = (): Gate => {
+  let resolve: () => void = () => undefined;
+  let reject: (error: Error) => void = () => undefined;
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
 test("a rejected run clears the memo so the next call retries; success is permanent", async () => {
   let attempts = 0;
-  const gates: PromiseWithResolvers<void>[] = [];
+  const gates: Gate[] = [];
   const stop = retryableOnce(() => {
     attempts += 1;
-    const gate = Promise.withResolvers<void>();
+    const gate = openGate();
     gates.push(gate);
     return gate.promise;
   });
