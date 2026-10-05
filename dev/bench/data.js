@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791211837140,
+  "lastUpdate": 1791212212697,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -78831,6 +78831,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 83306,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79649f3c9fd9ea6e93f14a4f647201372f81bf74",
+          "message": "chore(channels): #1259 band 4 — drivers/router slop cleanup (7 fixed, 12 keep) (#1295)\n\n* chore(#1259): open epic1260/1259-b4-channels on main ab62ca98 (band b4: channels)\n\n* chore(#1259): band b4 channels cleanup — drop duplicated normalizer guards, bind handler via requireHandler, void poller promise, prune stale DeliveringSurface comment, move github signature verifier into authn, delete duplicate beforeEach\n\n* docs(#1259): band b4 SLOP account row + implementation-status sync\n\n* chore(#1259): finish items 53/54 — inline single-use chatId, drop dead botId readiness proxy\n\n* fix(channels): #1259 b4 r2 — apply item 55 to the slack surface too; correct the SLOP row grep scope (review H-1)",
+          "timestamp": "2026-10-05T14:54:04Z",
+          "tree_id": "379b1b91354575f2a0c1254a8781a6172d8ff3e6",
+          "url": "https://github.com/INONONO66/openomni/commit/79649f3c9fd9ea6e93f14a4f647201372f81bf74"
+        },
+        "date": 1791212212056,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 902,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1568,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1246,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1140814,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 355326,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5543079,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 125,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 877,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 574,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 136573,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 695254,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 386433,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2772,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9862443,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1118784,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15449,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 149322,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 707076,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 190648,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 13905372,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 73,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 151139,
             "unit": "ns/op"
           }
         ]
