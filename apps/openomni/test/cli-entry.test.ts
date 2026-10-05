@@ -69,7 +69,6 @@ esac
     HOME: home,
     PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     OPENOMNI_COMMAND_LOG: join(home, "commands.log"),
-    OPENOMNI_DB_PATH: join(home, "storage.db"),
     OPENOMNI_MEMORY_PATH: join(home, "memory.json"),
     OPENOMNI_MACHINES_SOCKET: join(home, "machines.sock"),
     // #1271: a boot without a machine plane refuses; CLI boots carry a
