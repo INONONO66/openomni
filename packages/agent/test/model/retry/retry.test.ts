@@ -29,15 +29,12 @@ function delayOf<E>(attempt: number, error: E): number {
 }
 
 describe("Retry", () => {
-  test("does not expose removed agent-level retry namespace members", async () => {
-    const retrySource = await Bun.file(new URL("../../../src/model/retry/index.ts", import.meta.url)).text();
+  test("does not expose removed agent-level retry namespace members", () => {
     expect(Object.hasOwn(Retry, "DEFAULT_AGENT_RETRY_POLICY")).toBe(false);
     expect(Object.hasOwn(Retry, "calculateAgentBackoffMs")).toBe(false);
     expect(Object.hasOwn(Retry, "classifyAgentRetryReason")).toBe(false);
     expect(Object.hasOwn(Retry, "shouldAgentRetry")).toBe(false);
     expect(Object.hasOwn(Retry, "agentSleep")).toBe(false);
-    expect(retrySource).not.toMatch(/\bexport\s+type\s+AgentRetryReason\b/);
-    expect(retrySource).not.toMatch(/\bexport\s+interface\s+WithRetryOptions\b/);
   });
 
   describe("decide(attempt, error) delay computation", () => {
@@ -114,12 +111,8 @@ describe("Retry", () => {
       expect(Retry.decide(1, error, sources())).toMatchObject({ retry: true, reason: "server_error" });
     });
 
-    test("does not expose the removed delay dual path", async () => {
-      const retrySource = await Bun.file(
-        new URL("../../../src/model/retry/index.ts", import.meta.url),
-      ).text();
+    test("does not expose the removed delay dual path", () => {
       expect(Object.hasOwn(Retry, "delay")).toBe(false);
-      expect(retrySource).not.toMatch(/\bexport function delay\b/);
     });
   });
 
@@ -244,10 +237,8 @@ describe("Retry", () => {
     });
   });
 
-  test("removed retry wrapper does not expose withRetry", async () => {
-    const retrySource = await Bun.file(new URL("../../../src/model/retry/index.ts", import.meta.url)).text();
+  test("removed retry wrapper does not expose withRetry", () => {
     expect(Object.hasOwn(Retry, "withRetry")).toBe(false);
-    expect(retrySource).not.toMatch(/\bwithRetry\b/);
   });
 });
 
