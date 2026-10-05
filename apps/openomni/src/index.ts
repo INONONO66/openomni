@@ -633,6 +633,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
         // #1258: a `to.new` send carrying `deadline_ms` arms the
         // delegation.deadline purpose through the live activation's arm verb.
         contacts: {
+          // The one Effect boundary the bundle gets (#1248): the app runtime.
+          run: (effect) => runAppEffect(runtime, effect),
           deadline: {
             arm: ({ sessionId, turnId, child, at }) =>
               watchPlane.arms

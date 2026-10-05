@@ -135,6 +135,7 @@ test("the tool routes contact targets through connectors and everything else thr
   };
   const notified: object[] = [];
   const contacts: ContactPorts = {
+    run: runEffect,
     human: { notify: (input) => Effect.sync(() => void notified.push(input)) },
   };
   const tool = createSendMessageTool(port, () => 1_000, contacts);
@@ -162,10 +163,11 @@ test("a new child with a deadline arms delegation.deadline for the created child
       }) as unknown as Gateway.IngestResult,
   };
   const tool = createSendMessageTool(port, () => 2_000, {
+    run: runEffect,
     deadline: { arm: (input) => Effect.sync(() => void armed.push(input)) },
   });
   await tool.execute(
-    { to: { kind: "new_session", role: "worker" }, message: "go", kind: "prompt", deadline_ms: 500, spend_cap: 1 },
+    { to: { kind: "new_session", role: "worker", runner: "native", parent: "me" }, message: "go", kind: "prompt", deadline_ms: 500, spend_cap: 1 },
     context,
   );
   expect(armed).toEqual([{ sessionId: "sender", turnId: "turn-1", child: "child-9", at: 2_500 }]);

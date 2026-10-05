@@ -71,11 +71,11 @@ function toGatewaySend(input: SendMessageInput, now: number): Gateway.SendMessag
 // ─── contact registry ───
 
 /** The connector-routed contact kinds; `session`/`new_session` stay on the gateway ingest door. */
-export const CONTACT_KINDS = ["telegram", "discord", "human", "cli"] as const;
+const CONTACT_KINDS = ["telegram", "discord", "human", "cli"] as const;
 export type ContactKind = (typeof CONTACT_KINDS)[number];
 
 /** The external CLI agents (#1180 absorbed): contacts, not a separate integration. */
-export const CLI_AGENTS = ["claude-code", "codex", "omp"] as const;
+const CLI_AGENTS = ["claude-code", "codex", "omp"] as const;
 
 export interface ContactAddress {
   readonly kind: ContactKind;
@@ -94,7 +94,7 @@ export function parseContactAddress(contact: string): ContactAddress | undefined
 }
 
 /** One outbound letter as a connector sees it. */
-export interface OutboundSend {
+interface OutboundSend {
   readonly sender: string;
   readonly address: ContactAddress;
   readonly message: string;
@@ -103,14 +103,14 @@ export interface OutboundSend {
 }
 
 /** The tool result for a connector-routed send: the issue's `{contact, delivered|not_sent}` fact. */
-export const ContactOutcome = z
+const ContactOutcome = z
   .object({
     contact: Id,
     status: z.enum(["delivered", "not_sent"]),
     reason: z.string().optional(),
   })
   .strict();
-export type ContactOutcome = z.infer<typeof ContactOutcome>;
+type ContactOutcome = z.infer<typeof ContactOutcome>;
 
 /** A connector never throws: failure is the journaled `not_sent` fact. */
 export type Connector = (send: OutboundSend) => Effect.Effect<ContactOutcome>;
@@ -148,7 +148,7 @@ export interface ContactReplyPort {
 }
 
 /** Arms the `delegation.deadline` purpose for a freshly created child (#1258). */
-export interface DelegationDeadlinePort {
+interface DelegationDeadlinePort {
   arm(input: {
     readonly sessionId: string;
     readonly turnId: string;
@@ -157,7 +157,11 @@ export interface DelegationDeadlinePort {
   }): Effect.Effect<void, { readonly reason: string }>;
 }
 
+/** The injected Effect boundary (#1248 pattern): composition binds `runAppEffect`; bundle code never runs effects itself. */
+type RunContactEffect = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
+
 export interface ContactPorts {
+  readonly run?: RunContactEffect;
   readonly channels?: ChannelEgressPort;
   readonly human?: HumanNotifyPort;
   readonly cli?: CliRunnerPort;
@@ -233,7 +237,7 @@ export function cliConnector(runner: CliRunnerPort | undefined, reply: ContactRe
 }
 
 /** kind → connector; composition builds it once from the injected ports. */
-export function createContactRegistry(ports: ContactPorts): ReadonlyMap<ContactKind, Connector> {
+function createContactRegistry(ports: ContactPorts): ReadonlyMap<ContactKind, Connector> {
   return new Map<ContactKind, Connector>([
     ["telegram", channelConnector("telegram", ports.channels)],
     ["discord", channelConnector("discord", ports.channels)],
@@ -245,6 +249,45 @@ export function createContactRegistry(ports: ContactPorts): ReadonlyMap<ContactK
 // ─── the tool face ───
 
 const SendMessageOutput = z.union([Gateway.SendMessageHandle, ContactOutcome]);
+
+/** Connector dispatch at the tool's Promise boundary: effects run on the injected runner only. */
+function routeContact(
+  registry: ReadonlyMap<ContactKind, Connector>,
+  contacts: ContactPorts,
+  address: ContactAddress,
+  input: SendMessageInput,
+  context: { readonly sessionId: string },
+): Promise<ContactOutcome> {
+  const connector = registry.get(address.kind);
+  if (connector === undefined)
+    throw new ToolRefused("send_message", `no connector for contact kind ${address.kind}`);
+  if (contacts.run === undefined)
+    throw new ToolRefused("send_message", "contact effect runner is not composed");
+  return contacts.run(
+    connector({
+      sender: context.sessionId,
+      address,
+      message: input.message,
+      ...(input.reply_to === undefined ? {} : { replyTo: input.reply_to }),
+      ...(input.deadline_ms === undefined ? {} : { deadlineMs: input.deadline_ms }),
+    }),
+  );
+}
+
+/** A failed arm never fails the send: the child exists; the deadline is best-effort policy. */
+function armChildDeadline(
+  contacts: ContactPorts,
+  context: { readonly sessionId: string; readonly turnId: string },
+  child: string,
+  at: number,
+): Promise<void> {
+  if (contacts.deadline === undefined || contacts.run === undefined) return Promise.resolve();
+  return contacts.run(
+    contacts.deadline
+      .arm({ sessionId: context.sessionId, turnId: context.turnId, child, at })
+      .pipe(Effect.catch(() => Effect.void)),
+  );
+}
 
 /** The catalog is static: without a composed gateway the tool exists and refuses. */
 export function createSendMessageTool(
@@ -263,20 +306,7 @@ export function createSendMessageTool(
     visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
     async execute(input, context) {
       const address = input.to.kind === "contact" ? parseContactAddress(input.to.id) : undefined;
-      if (address !== undefined) {
-        const connector = registry.get(address.kind);
-        if (connector === undefined)
-          throw new ToolRefused("send_message", `no connector for contact kind ${address.kind}`);
-        return Effect.runPromise(
-          connector({
-            sender: context.sessionId,
-            address,
-            message: input.message,
-            ...(input.reply_to === undefined ? {} : { replyTo: input.reply_to }),
-            ...(input.deadline_ms === undefined ? {} : { deadlineMs: input.deadline_ms }),
-          }),
-        );
-      }
+      if (address !== undefined) return routeContact(registry, contacts, address, input, context);
       if (port === undefined)
         throw new ToolRefused("send_message", "message gateway is not composed");
       const result = await port.ingest(
@@ -286,18 +316,8 @@ export function createSendMessageTool(
       if (result.status !== "executed") throw new ToolRefused("send_message", result.reasonCode);
       // #1258: a child created with a deadline arms the delegation.deadline
       // purpose; its handler cancels the child and prompts the parent.
-      if (input.to.kind === "new_session" && input.deadline_ms !== undefined && contacts.deadline !== undefined) {
-        await Effect.runPromise(
-          contacts.deadline
-            .arm({
-              sessionId: context.sessionId,
-              turnId: context.turnId,
-              child: result.handle.target,
-              at: now() + input.deadline_ms,
-            })
-            .pipe(Effect.catch(() => Effect.void)),
-        );
-      }
+      if (input.to.kind === "new_session" && input.deadline_ms !== undefined)
+        await armChildDeadline(contacts, context, result.handle.target, now() + input.deadline_ms);
       return result.handle;
     },
     render: (_input, result) => JSON.stringify(result),
