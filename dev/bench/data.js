@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791216312876,
+  "lastUpdate": 1791221871260,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -79099,6 +79099,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 223284,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "45524eb1ca1232da543468e3b335349ced423205",
+          "message": "chore(protocol): #1259 band 1 — protocol core + gateway test slop cleanup (13 fixed, 3 keep, 2 deferred) (#1297)\n\n* chore(#1259): open epic1260/1259-b1-protocol on main ab62ca98 (band b1: protocol)\n\n* chore(#1259): band b1 — protocol core + gateway test slop cleanup\n\nDelete dead NamedError.Unknown (and its test block), rewrite four stale/false\ndoc comments (error ownership, MetaSchemaImpl raw, json.ts barrel claim,\ngateway envelope wording), unify zod-4 code:\"custom\" spelling in\npolicy/resource.ts, drop redundant EpochMs.nonnegative(), replace hand-rolled\nparse/catch test patterns with .toThrow(), remove const it = test aliases,\nreplace the stray Hangul word in gateway/schema.ts. SLOP §L row + status note.\n\n* fix(#1259 b1): review r1 H-1 — delete surviving 141 PermissionDenied and 142 Operational.envelope, scrub the 160 personal path, re-mark 145 deferred to #1258, 157 gone",
+          "timestamp": "2026-10-05T17:35:03Z",
+          "tree_id": "7447623e7b1a099eb73cbe4dfc5e2164fc0b8c4e",
+          "url": "https://github.com/INONONO66/openomni/commit/45524eb1ca1232da543468e3b335349ced423205"
+        },
+        "date": 1791221870611,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1083,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1935,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1500,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1571946,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 386935,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6669091,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 161,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1123,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 165414,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 803524,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 471146,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3408,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 11980209,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1487318,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19325,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 173316,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 894057,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 250805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 15319583,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 91,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 174007,
             "unit": "ns/op"
           }
         ]
