@@ -922,6 +922,113 @@ for await (const chunk of Bun.stdin.stream()) {
 }
 `;
 
+test("H-1 e2e: a steering prompt denied mid-turn is refused at the RUN boundary and journals the deny", async () => {
+  const dir = suite.tempDir("hooks-json-boundary-");
+  const script = join(dir, "prompt-hook.js");
+  writeFileSync(script, PROMPT_HOOK_SCRIPT);
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({ UserPromptSubmit: [{ command: [process.execPath, script], timeoutMs: 30_000 }] }),
+  );
+  const config = suite.config("hooks-json-boundary-state-", { hooksPath });
+  let calls = 0;
+  let residentSessionId: string | undefined;
+  let steer: (sessionId: string) => Promise<unknown> = () =>
+    Promise.reject(new Error("steer door wired after boot"));
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.promise(async () => {
+          calls += 1;
+          residentSessionId = input.trace.sessionId;
+          if (calls === 1) {
+            // Mid-turn: push a steer-delivery prompt through the entity's one
+            // deliver door and AWAIT its receipt — the inbox row is journaled
+            // before this model step returns, so the after_tools boundary of
+            // THIS turn must drain it through the run's own policy port.
+            await steer(input.trace.sessionId);
+            const id = "boundary-step-1";
+            sink.onMessage(
+              assistantMessage(input, {
+                id,
+                createdAt: Date.now(),
+                reason: "tool-calls",
+                parts: [
+                  {
+                    id: `${id}-tool`,
+                    sessionID: input.trace.sessionId,
+                    messageID: id,
+                    type: "tool" as const,
+                    callID: "boundary-call-1",
+                    tool: "bash",
+                    state: { status: "pending" as const, input: { command: "echo boundary" } },
+                  },
+                ],
+              }),
+            );
+            return { type: "stop" as const };
+          }
+          sink.onMessage(
+            assistantMessage(input, { id: "boundary-step-2", text: "never reached", createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  steer = (sessionId: string) =>
+    runAppEffect(
+      app.runtime,
+      Effect.scoped(
+        Effect.gen(function* () {
+          const makeClient = yield* Core.SessionEntity.client;
+          return yield* makeClient(sessionId).Deliver({
+            kind: "prompt",
+            body: JSON.stringify({ content: "the forbidden steer", delivery: "steer" }),
+            source: JSON.stringify({ kind: "test.steer" }),
+            idempotencyKey: "boundary-steer-1",
+          });
+        }),
+      ),
+    );
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  const terminal = nextResidentTurn(plane, 15_000);
+  ws.send(JSON.stringify({ type: "message", eventId: "boundary-open", text: "hello boundary" }));
+  const outcome = await terminal;
+  // The refusal happened MID-TURN at the run boundary (#1256 r3): the model
+  // ran once; the denied steering failed the turn, step two never fired.
+  expect(calls).toBe(1);
+  expect(JSON.stringify(outcome)).toContain("hook_refused");
+  // Durable evidence: the deny decision names the consulted hook process.
+  if (config.sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
+  const sessionId = residentSessionId;
+  if (sessionId === undefined) throw new Error("the model step never ran");
+  const database = new Database(join(config.sessionsDir, `${sessionId}.sqlite`), { readonly: true });
+  try {
+    const decisions = database
+      .query<{ intent: string }, []>(
+        "SELECT intent FROM action WHERE kind = 'policy.decision' AND json_extract(intent, '$.hook') = 'prompt.pre' ORDER BY ordinal ASC",
+      )
+      .all()
+      .map((row) => JSON.parse(row.intent) as {
+        verdict: string;
+        gate?: { consulted: { ref: string; payload: { verdict?: string; reason?: string } }[] };
+      });
+    const deny = decisions.find((decision) => decision.verdict === "deny");
+    expect(deny?.gate?.consulted).toEqual([
+      expect.objectContaining({
+        ref: Bundle.HOOK_PROCESS_REF,
+        payload: expect.objectContaining({ verdict: "deny", reason: "hook_refused" }),
+      }),
+    ]);
+  } finally {
+    database.close();
+  }
+});
+
 test("M-2 e2e: two rows with the same command and different timeouts spawn ONE PID in the real boot; teardown kills it", async () => {
   const dir = suite.tempDir("hooks-json-pid-");
   const script = join(dir, "pid-hook.js");
