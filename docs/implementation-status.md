@@ -1280,3 +1280,5 @@ claim about it.
 
 ## #1259 slop cleanup ladder
 Band b3 (machines + codemode) landed on `epic1260/1259-b3-machines-codemode`: the `RootWalk` alias is deleted, the duplicated `peek`/`stop` open-check is folded into `tenantCell`, and the unexported `Options` interface is renamed `CodemodeOptions`; the zod boundary parses in `exec.ts`/`failure.ts` stay (written-types gate: the untyped thrown value is owned by the parse), item 108 is deferred to PR #1293's ownership, and item 109 was already resolved on main.
+
+Band b6 (`epic1260/1259-b6-ui-script-gates`) fixed item 171 (the quality-native-process excerpt-size comment now matches `ERROR_LIMIT`, 20 kB), and kept the remaining 15 ui and script-gates items with one-line rationales in the §L table of [SLOP.md](SLOP.md); the mechanical triage had labelled items 167/173/174/179 as resolved by #1241/#1037/#1015/#989, and review r1 disproved each against origin/main `79649f3c` (the symbols and concerns still exist), so the row records them as keeps with the inventory's own rationales.
