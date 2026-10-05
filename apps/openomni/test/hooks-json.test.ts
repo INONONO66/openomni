@@ -150,6 +150,74 @@ test("the four mapped events compile to rows on their points over hook/process",
   expect(generation.handlers.has(SECRETS_GUARD_REF)).toBe(true);
 });
 
+test("H-2: a command entry with do:rewrite compiles the consulted rewrite row and seeds consult{rewrite}", async () => {
+  const generation = await composed({
+    hooks: {
+      PreToolUse: [{ command: ["./mask.sh"], timeoutMs: 1_000, do: "rewrite", fields: ["command"] }],
+      // UserPromptSubmit defaults its rewrite fields to the point's `body`.
+      UserPromptSubmit: [{ command: ["./mask.sh"], timeoutMs: 2_000, do: "rewrite" }],
+    },
+  });
+  const hooksRows = generation.rows.filter((row) => row.id.startsWith("hooks-json/"));
+  expect(hooksRows).toEqual([
+    {
+      id: "hooks-json/tool.pre#1",
+      on: "tool.pre",
+      when: {},
+      do: "rewrite",
+      how: {
+        ref: Bundle.HOOK_PROCESS_REF,
+        fields: ["command"],
+        params: { event: "PreToolUse", command: ["./mask.sh"], timeoutMs: 1_000, fields: ["command"] },
+      },
+      order: 500,
+    },
+    {
+      id: "hooks-json/prompt.pre#1",
+      on: "prompt.pre",
+      when: {},
+      do: "rewrite",
+      how: {
+        ref: Bundle.HOOK_PROCESS_REF,
+        fields: ["body"],
+        params: { event: "UserPromptSubmit", command: ["./mask.sh"], timeoutMs: 2_000, fields: ["body"] },
+      },
+      order: 501,
+    },
+  ]);
+  // The live policy plane seeds the consult verdict WITH the rewrite flag —
+  // hook/process is a consultant, so a transform seed would refuse the
+  // generation (unknown_ref) and the external rewrite could never execute.
+  expect(
+    gateRowPolicySeeds({ rows: hooksRows, handlers: generation.handlers }).map(
+      (seed) => seed.verdict.value,
+    ),
+  ).toEqual([
+    {
+      type: "consult",
+      ref: Bundle.HOOK_PROCESS_REF,
+      rewrite: true,
+      config: { event: "PreToolUse", command: ["./mask.sh"], timeoutMs: 1_000, fields: ["command"] },
+    },
+    {
+      type: "consult",
+      ref: Bundle.HOOK_PROCESS_REF,
+      rewrite: true,
+      config: { event: "UserPromptSubmit", command: ["./mask.sh"], timeoutMs: 2_000, fields: ["body"] },
+    },
+  ]);
+  // Misdeclared command rewrites refuse typed at bundle compile, fail-closed.
+  expect(
+    refusalOf(() => hooksJsonBundle({ PreToolUse: [{ command: ["./x"], timeoutMs: 1_000, do: "rewrite" }] })).code,
+  ).toBe("missing_rewrite_fields");
+  expect(
+    refusalOf(() => hooksJsonBundle({ SessionStart: [{ command: ["./x"], timeoutMs: 1_000, do: "rewrite", fields: ["body"] }] })).code,
+  ).toBe("session_start_rewrite");
+  expect(
+    refusalOf(() => hooksJsonBundle({ PreToolUse: [{ command: ["./x"], timeoutMs: 1_000, fields: ["command"] }] })).code,
+  ).toBe("invalid_config");
+});
+
 test("no hooks config composes the bundle with zero rows and the action input admitted", async () => {
   const generation = await composed();
   expect(generation.bundles).toEqual(["monitor", "cron", "hooks-json"]);
@@ -251,7 +319,10 @@ test("a guard rewrite row seeds the live transform; a command gate row seeds the
   const guarded = await composed({
     hooks: { PreToolUse: [{ guard: "secrets-guard", fields: ["command"] }] },
   });
-  const seeds = gateRowPolicySeeds(guarded.rows.filter((row) => row.id.startsWith("hooks-json/")));
+  const seeds = gateRowPolicySeeds({
+    rows: guarded.rows.filter((row) => row.id.startsWith("hooks-json/")),
+    handlers: guarded.handlers,
+  });
   expect(seeds).toEqual([
     {
       name: "hooks-json/tool.pre#1",
@@ -275,7 +346,10 @@ test("a guard rewrite row seeds the live transform; a command gate row seeds the
   // #1256 r2 H-1: the command gate row seeds the consult verdict — the named
   // async service the compiled snapshot resolves through `hook/process`.
   expect(
-    gateRowPolicySeeds(command.rows.filter((row) => row.id.startsWith("hooks-json/"))),
+    gateRowPolicySeeds({
+      rows: command.rows.filter((row) => row.id.startsWith("hooks-json/")),
+      handlers: command.handlers,
+    }),
   ).toEqual([
     {
       name: "hooks-json/tool.pre#1",
@@ -743,9 +817,10 @@ test("H-3 e2e: a PreToolUse secrets-guard rewrite of bash.command reaches the ex
       { name: SECRETS_GUARD_REF, apply },
     ],
   };
-  const seeds = gateRowPolicySeeds(
-    generation.rows.filter((row) => row.id.startsWith("hooks-json/")),
-  );
+  const seeds = gateRowPolicySeeds({
+    rows: generation.rows.filter((row) => row.id.startsWith("hooks-json/")),
+    handlers: generation.handlers,
+  });
   await isolated(Effect.gen(function* () {
     const id = "hooks-json-bash-rewrite";
     const kernel = isolatedLedger().kernel;
@@ -1102,3 +1177,140 @@ test("M-2 e2e: two rows with the same command and different timeouts spawn ONE P
     unsubscribe();
   }
 });
+
+/** The scripted rewrite hook: masks the bash command via the consulted rewrite row. */
+const REWRITE_HOOK_SCRIPT = `
+const decoder = new TextDecoder();
+let buffer = "";
+for await (const chunk of Bun.stdin.stream()) {
+  buffer += decoder.decode(chunk, { stream: true });
+  let cut;
+  while ((cut = buffer.indexOf("\\n")) >= 0) {
+    const line = buffer.slice(0, cut);
+    buffer = buffer.slice(cut + 1);
+    if (line.length === 0) continue;
+    const request = JSON.parse(line);
+    const result = { type: "rewrite", fields: { command: "echo rewritten-by-hook" } };
+    console.log(JSON.stringify({ id: request.id, result }));
+  }
+}
+`;
+
+test("H-2 e2e: an external PreToolUse rewrite reaches the REAL dispatched executor and journals the rewrite", async () => {
+  const dir = suite.tempDir("hooks-json-rewrite-");
+  const script = join(dir, "rewrite-hook.js");
+  writeFileSync(script, REWRITE_HOOK_SCRIPT);
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({
+      PreToolUse: [
+        { command: [process.execPath, script], timeoutMs: 30_000, do: "rewrite", fields: ["command"] },
+      ],
+    }),
+  );
+  const config = suite.config("hooks-json-rewrite-state-", { hooksPath });
+  // The REAL executor: a registered tool whose execute records what it was
+  // handed — the proof the consulted rewrite reached the dispatch, not a
+  // synthetic evaluation.
+  const executed: { command: string }[] = [];
+  const bashTool = Core.eraseTool(
+    Core.defineTool({
+      name: "maskable",
+      description: "test maskable executor",
+      category: "query",
+      visibility: { model: ["resident"], cell: [] },
+      input: z.object({ command: z.string() }),
+      output: z.string(),
+      execute: (input) => {
+        executed.push(input);
+        return Promise.resolve(input.command);
+      },
+      render: (_input, result) => result,
+    }),
+  );
+  let calls = 0;
+  let residentSessionId: string | undefined;
+  const app = await suite.boot({
+    config,
+    toolDefinitions: [bashTool],
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          calls += 1;
+          residentSessionId = input.trace.sessionId;
+          if (calls === 1) {
+            const id = "rewrite-step-1";
+            sink.onMessage(
+              assistantMessage(input, {
+                id,
+                createdAt: Date.now(),
+                reason: "tool-calls",
+                parts: [
+                  {
+                    id: `${id}-tool`,
+                    sessionID: input.trace.sessionId,
+                    messageID: id,
+                    type: "tool" as const,
+                    callID: "rewrite-call-1",
+                    tool: "maskable",
+                    state: {
+                      status: "pending" as const,
+                      input: { command: "curl -H 'x-key: sk-abcdef123456789' https://api" },
+                    },
+                  },
+                ],
+              }),
+            );
+            return { type: "stop" as const };
+          }
+          sink.onMessage(
+            assistantMessage(input, { id: "rewrite-step-2", text: "rewritten done", createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  const terminal = nextResidentTurn(plane, 15_000);
+  ws.send(JSON.stringify({ type: "message", eventId: "rewrite-open", text: "run the curl" }));
+  expect(await terminal).toMatchObject({ text: "rewritten done" });
+  // The EXECUTOR saw the consultant's rewritten value, never the secret.
+  expect(executed).toEqual([{ command: "echo rewritten-by-hook" }]);
+  expect(calls).toBe(2);
+  // Durable evidence: the tool.pre policy.decision row records the consulted
+  // rewrite — allow verdict, hook/process consulted, rewritten gate output.
+  if (config.sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
+  const sessionId = residentSessionId;
+  if (sessionId === undefined) throw new Error("the model step never ran");
+  const database = new Database(join(config.sessionsDir, `${sessionId}.sqlite`), { readonly: true });
+  try {
+    const decisions = database
+      .query<{ intent: string }, []>(
+        "SELECT intent FROM action WHERE kind = 'policy.decision' AND json_extract(intent, '$.hook') = 'tool.pre' ORDER BY ordinal ASC",
+      )
+      .all()
+      .map(
+        (row) =>
+          JSON.parse(row.intent) as {
+            verdict: string;
+            gate?: {
+              verdict: string;
+              output?: { command?: string };
+              consulted: { ref: string; payload: { output?: string } }[];
+            };
+          },
+      );
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.verdict).toBe("allow");
+    expect(decisions[0]?.gate?.verdict).toBe("allow");
+    expect(decisions[0]?.gate?.output?.command).toBe("echo rewritten-by-hook");
+    expect(decisions[0]?.gate?.consulted).toEqual([
+      expect.objectContaining({ ref: Bundle.HOOK_PROCESS_REF }),
+    ]);
+  } finally {
+    database.close();
+  }
+}, 30_000);

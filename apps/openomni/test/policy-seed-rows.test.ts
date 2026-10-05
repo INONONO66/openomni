@@ -13,8 +13,14 @@ const row = (over: Partial<Bundle.BundleGateRow>): Bundle.BundleGateRow => ({
   ...over,
 });
 
+/** Seeds read the generation slice; tests fake it (#1256 r4 H-2). */
+const generationOf = (
+  rows: readonly Bundle.BundleGateRow[],
+  handlers: ReadonlyMap<string, object> = new Map(),
+) => ({ rows, handlers });
+
 test("gate rows project onto the legacy seed shape: obligation, constant verdicts and transforms", () => {
-  const seeds = gateRowPolicySeeds([
+  const seeds = gateRowPolicySeeds(generationOf([
     row({ how: { ref: "kernel/budget-clamp", metric: "notifications", limit: 8 } }),
     row({ id: "probe/tool.pre#2", how: {} }),
     row({ id: "probe/tool.pre#3", how: { verdict: "require_approval" } }),
@@ -33,7 +39,7 @@ test("gate rows project onto the legacy seed shape: obligation, constant verdict
       do: "observe",
       how: { ref: "hook/process", params: { event: "PostToolUse" } },
     }),
-  ]);
+  ]));
   expect(seeds.map((seed) => [seed.name, seed.kind, seed.phase, seed.priority])).toEqual([
     ["probe/tool.pre#1", "tool", "pre", 7],
     ["probe/tool.pre#2", "tool", "pre", 7],
@@ -57,14 +63,47 @@ test("gate rows project onto the legacy seed shape: obligation, constant verdict
   expect(seeds[0]?.match).toEqual({ encodingVersion: 1, value: { op: "monitor" } });
 });
 
+test("a rewrite row naming a registered consultant seeds consult{rewrite}; a sync ref keeps the transform seed (#1256 r4 H-2)", () => {
+  const handlers = new Map<string, object>([
+    ["hook/process", { consultant: () => undefined }],
+  ]);
+  const seeds = gateRowPolicySeeds(
+    generationOf(
+      [
+        row({
+          id: "probe/tool.pre#1",
+          do: "rewrite",
+          how: {
+            ref: "hook/process",
+            fields: ["command"],
+            params: { event: "PreToolUse", command: ["./mask.sh"], timeoutMs: 1_000, fields: ["command"] },
+          },
+        }),
+        // The same shape over a NON-consultant ref stays the sync transform seed.
+        row({ id: "probe/tool.pre#2", do: "rewrite", how: { ref: "probe/redact", fields: ["command"] } }),
+      ],
+      handlers,
+    ),
+  );
+  expect(seeds.map((seed) => seed.verdict.value)).toEqual([
+    {
+      type: "consult",
+      ref: "hook/process",
+      rewrite: true,
+      config: { event: "PreToolUse", command: ["./mask.sh"], timeoutMs: 1_000, fields: ["command"] },
+    },
+    { type: "transform", ref: "probe/redact" },
+  ]);
+});
+
 test("a row the live plane cannot seed is an invariant failure, never a silent default", () => {
-  expect(() => gateRowPolicySeeds([row({ how: { ref: "kernel/budget-clamp" } })])).toThrow(
+  expect(() => gateRowPolicySeeds(generationOf([row({ how: { ref: "kernel/budget-clamp" } })]))).toThrow(
     AppInvariantError,
   );
-  expect(() => gateRowPolicySeeds([row({ do: "emit", how: { emit: "message" } })])).toThrow(
+  expect(() => gateRowPolicySeeds(generationOf([row({ do: "emit", how: { emit: "message" } })]))).toThrow(
     "has no live policy-plane seed shape",
   );
   expect(() =>
-    gateRowPolicySeeds([row({ on: "ghost.pre" as Bundle.BundleGateRow["on"] })]),
+    gateRowPolicySeeds(generationOf([row({ on: "ghost.pre" as Bundle.BundleGateRow["on"] })])),
   ).toThrow("has no legacy policy address");
 });

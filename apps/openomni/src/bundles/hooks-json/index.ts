@@ -27,11 +27,20 @@ const EVENT_POINTS = Object.freeze({
 } as const);
 type HookEvent = keyof typeof EVENT_POINTS;
 
-/** One external command hook: a consulted gate row over `hook/process`. */
+/**
+ * One external command hook: a consulted row over `hook/process`. The default
+ * is a gate (PostToolUse: audit-only observe); `do: "rewrite"` (#1256 r4 H-2)
+ * compiles the consulted rewrite instead — the child's `{type: "rewrite"}`
+ * response rewrites ONLY the declared `fields`, which must name the point's
+ * rewritable fields (`UserPromptSubmit` defaults to `body`; tool events are
+ * caller-shaped and must spell theirs out; `SessionStart` allows none).
+ */
 const CommandEntry = z.strictObject({
   command: z.array(z.string().min(1)).min(1),
   /** Bounds one handler call via the composed clock; never an alarm. */
   timeoutMs: z.number().int().positive().max(600_000).default(5_000),
+  do: z.literal("rewrite").optional(),
+  fields: z.array(z.string().min(1)).min(1).optional(),
 });
 
 /**
@@ -51,19 +60,57 @@ const GUARD_DEFAULT_FIELDS: Partial<Record<HookEvent, readonly string[]>> = {
   UserPromptSubmit: ["body"],
 };
 
-function guardFields(event: HookEvent, entry: z.infer<typeof GuardEntry>): readonly string[] {
+function rewriteFields(
+  event: HookEvent,
+  entry: { readonly fields?: readonly string[] },
+  example: string,
+): readonly string[] {
   if (event === "SessionStart")
     throw new AppInvariantError(
-      "hooks-json: SessionStart allows no rewrite row; a secrets-guard entry cannot compile there",
+      "hooks-json: SessionStart allows no rewrite row; a rewrite entry cannot compile there",
       "session_start_rewrite",
     );
   const fields = entry.fields ?? GUARD_DEFAULT_FIELDS[event];
   if (fields === undefined || fields.length === 0)
     throw new AppInvariantError(
-      `hooks-json: a ${event} guard entry must declare the fields it rewrites (e.g. {"guard":"secrets-guard","fields":["command"]})`,
+      `hooks-json: a ${event} rewrite entry must declare the fields it rewrites (e.g. ${example})`,
       "missing_rewrite_fields",
     );
   return fields;
+}
+
+function guardFields(event: HookEvent, entry: z.infer<typeof GuardEntry>): readonly string[] {
+  return rewriteFields(event, entry, '{"guard":"secrets-guard","fields":["command"]}');
+}
+
+/** A command entry's declared fields are meaningless outside `do: "rewrite"`. */
+function commandRowShape(
+  event: HookEvent,
+  entry: z.infer<typeof CommandEntry>,
+): Pick<Bundle.BundleGateRow, "do" | "how"> {
+  const params = { event, command: entry.command, timeoutMs: entry.timeoutMs };
+  if (entry.do === "rewrite") {
+    // #1256 r4 H-2: the consulted rewrite — the declared fields ride both the
+    // row (`how.fields`, validated against the point registry at compile) and
+    // the params the live policy plane re-projects (`config.fields`).
+    const fields = rewriteFields(event, entry, '{"command":["mask"],"do":"rewrite","fields":["command"]}');
+    return {
+      do: "rewrite",
+      how: { ref: Bundle.HOOK_PROCESS_REF, fields: [...fields], params: { ...params, fields: [...fields] } },
+    };
+  }
+  if (entry.fields !== undefined)
+    throw new AppInvariantError(
+      `hooks-json: a ${event} command entry declares fields without do:"rewrite"`,
+      "invalid_config",
+    );
+  return {
+    // PostToolUse cannot retroactively block a finished tool call: it
+    // compiles audit-only (#1256 — observe rows annotate, every other event
+    // gates through the consulted hook process).
+    do: event === "PostToolUse" ? "observe" : "gate",
+    how: { ref: Bundle.HOOK_PROCESS_REF, params },
+  };
 }
 
 const HooksJson = z.strictObject(
@@ -166,14 +213,7 @@ function compileRows(config: HooksJsonInput): readonly Bundle.BundleGateRow[] {
               id: `hooks-json/${on}#${ordinal}`,
               on,
               when: {},
-              // PostToolUse cannot retroactively block a finished tool call:
-              // it compiles audit-only (#1256 — observe rows annotate, every
-              // other event gates through the consulted hook process).
-              do: event === "PostToolUse" ? "observe" : "gate",
-              how: {
-                ref: Bundle.HOOK_PROCESS_REF,
-                params: { event, command: entry.command, timeoutMs: entry.timeoutMs },
-              },
+              ...commandRowShape(event, entry),
               order: 500 + rows.length,
             },
       );

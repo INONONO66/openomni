@@ -1,4 +1,4 @@
-import { Core, type Bundle } from "@openomni/agent";
+import { Bundle, Core } from "@openomni/agent";
 const SEEDED_POLICY_ROWS = Core.SEEDED_POLICY_ROWS;
 const { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } = Core;
 import type { PlainValue, PolicyRow, Storage as ProtocolStorage } from "@openomni/protocol";
@@ -35,7 +35,21 @@ const KERNEL_SYNC_SERVICES: ReadonlySet<string> = new Set([
   ...Core.KERNEL_POLICY_REGISTRY.obligations.map((entry) => entry.name),
 ]);
 
-function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
+/** The generation's ASYNC consultant refs: handlers registered as consultants. */
+function consultantRefs(generation: SeedGeneration): ReadonlySet<string> {
+  const refs = new Set<string>();
+  for (const [name, handler] of generation.handlers)
+    if (Bundle.isConsultantHandler(handler)) refs.add(name);
+  return refs;
+}
+
+function paramsRecord(params: PlainValue | undefined): Readonly<Record<string, PlainValue>> {
+  if (params === null || params === undefined || typeof params !== "object" || Array.isArray(params))
+    return {};
+  return params;
+}
+
+function gateRowVerdict(row: Bundle.BundleGateRow, consultants: ReadonlySet<string>): PlainValue {
   if (row.do === "gate" && row.how.ref !== undefined) {
     if (row.how.metric !== undefined && row.how.limit !== undefined)
       return { type: "obligation", ref: row.how.ref, metric: row.how.metric, limit: row.how.limit };
@@ -56,8 +70,21 @@ function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
   // #1256: an observe hook row (PostToolUse) seeds the audit-only consult.
   if (row.do === "observe" && row.how.ref !== undefined)
     return { type: "consult", ref: row.how.ref, observe: true, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
-  if (row.do === "rewrite" && row.how.ref !== undefined)
+  if (row.do === "rewrite" && row.how.ref !== undefined) {
+    // #1256 r4 H-2: a rewrite row naming an ASYNC consultant (hook/process)
+    // seeds the consult verdict with the rewrite flag — a transform seed would
+    // refuse the generation (`unknown_ref`: consultants never join the sync
+    // transformer table). The declared fields ride `config.fields`, where the
+    // compiled projection recovers them.
+    if (consultants.has(row.how.ref))
+      return {
+        type: "consult",
+        ref: row.how.ref,
+        rewrite: true,
+        config: { ...paramsRecord(row.how.params), fields: [...(row.how.fields ?? [])] },
+      };
     return { type: "transform", ref: row.how.ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
+  }
   throw new AppInvariantError(`gate row ${row.id} (${row.do}) has no live policy-plane seed shape`);
 }
 
@@ -67,10 +94,14 @@ function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
  * durable name, so a recompose re-seeding the same rows is the no-op write
  * `seedKernelPolicyRows` already recognizes.
  */
+/** The slice of a composed generation the policy seeds read (#1256 r4 H-2). */
+export type SeedGeneration = Pick<Bundle.Generation, "rows" | "handlers">;
+
 export function gateRowPolicySeeds(
-  rows: readonly Bundle.BundleGateRow[],
+  generation: SeedGeneration,
 ): readonly Omit<PolicyRow.Row, "generation">[] {
-  return rows.map((row) => {
+  const consultants = consultantRefs(generation);
+  return generation.rows.map((row) => {
     const address = LEGACY_ADDRESS_BY_POINT[row.on];
     if (address === undefined)
       throw new AppInvariantError(`gate row ${row.id} targets ${row.on}, which has no legacy policy address`);
@@ -80,7 +111,7 @@ export function gateRowPolicySeeds(
       phase: address.phase,
       priority: row.order,
       match: { encodingVersion: 1 as const, value: { ...row.when } },
-      verdict: { encodingVersion: 1 as const, value: gateRowVerdict(row) },
+      verdict: { encodingVersion: 1 as const, value: gateRowVerdict(row, consultants) },
     };
   });
 }

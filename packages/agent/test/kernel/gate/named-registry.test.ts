@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import { canonicalDigest, type PlainValue, RowVerdict, RowVerdictRead, PolicyRow, type Storage } from "@openomni/protocol";
 import { compilePolicySnapshot, createHandlerTable, createPolicyCompiler, KERNEL_POLICY_REGISTRY, HandlerTableError, SEEDED_POLICY_ROWS } from "../../../src/core/gate/compile";
 import { atGeneration, compaction, draft, withPolicyRows, type PolicyRowDraft } from "./row-fixtures";
@@ -63,6 +64,77 @@ describe("immutable named policy registry", () => {
         ref: "demo/missing",
       }),
     }));
+  });
+
+  test("a consult{rewrite} row projects the consulted rewrite: evaluateEffect applies the consultant's fields (#1256 r4 H-2)", async () => {
+    const registry = {
+      ...KERNEL_POLICY_REGISTRY,
+      consultants: [
+        {
+          name: "hook/process",
+          consult: () =>
+            Effect.succeed({
+              value: { secret: "masked" },
+              payload: { ref: "hook/process", output: "digest" },
+            }),
+        },
+      ],
+    };
+    const snapshot = compilePolicySnapshot({
+      generation: 7,
+      registry,
+      rows: [
+        atGeneration(compaction, 7),
+        atGeneration(
+          draft("mask", "tool", "pre", {
+            type: "consult",
+            ref: "hook/process",
+            rewrite: true,
+            config: { event: "PreToolUse", fields: ["secret"] },
+          }),
+          7,
+        ),
+      ],
+    });
+    if (snapshot.evaluateEffect === undefined) throw new Error("effectful evaluation missing");
+    const evaluation = await Effect.runPromise(snapshot.evaluateEffect(input));
+    // The executor-bound value carries the consultant's rewrite of ONLY the
+    // declared field; the untouched field survives.
+    expect(evaluation.verdict).toBe("allow");
+    expect(evaluation.value).toEqual({ secret: "masked", keep: true });
+    expect(evaluation.gate?.consulted.map((entry) => entry.ref)).toEqual(["hook/process"]);
+    // The SYNC path has no prepared consultant result: fail-closed deny.
+    expect(snapshot.evaluate(input).verdict).toBe("deny");
+    expect(snapshot.evaluate(input).reason).toBe("handler_unavailable");
+  });
+
+  test("consult{rewrite} misdeclarations refuse the generation: observe+rewrite and missing fields (#1256 r4 H-2)", () => {
+    const registry = {
+      ...KERNEL_POLICY_REGISTRY,
+      consultants: [
+        { name: "hook/process", consult: () => Effect.succeed({ payload: null }) },
+      ],
+    };
+    const compile = (verdict: PlainValue) =>
+      compilePolicySnapshot({
+        generation: 7,
+        registry,
+        rows: [atGeneration(compaction, 7), atGeneration(draft("bad", "tool", "pre", verdict), 7)],
+      });
+    expect(() =>
+      compile({ type: "consult", ref: "hook/process", rewrite: true, observe: true, config: { fields: ["secret"] } }),
+    ).toThrow(
+      expect.objectContaining({
+        data: expect.objectContaining({ code: "compose_rejected", composeCode: "bad_action" }),
+      }),
+    );
+    expect(() =>
+      compile({ type: "consult", ref: "hook/process", rewrite: true, config: { event: "PreToolUse" } }),
+    ).toThrow(
+      expect.objectContaining({
+        data: expect.objectContaining({ code: "compose_rejected", composeCode: "bad_field" }),
+      }),
+    );
   });
 
   test("ordered transforms capture copied implementations and deeply immutable configuration", () => {

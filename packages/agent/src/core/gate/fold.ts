@@ -246,7 +246,22 @@ function consultRow(
   }
   state.consulted.push({ ref, digest: canonicalDigest(result.payload), payload: result.payload });
   if (row.do === "rewrite") {
-    state.value = applyRewrite(state.value, row.how.fields ?? [], result.value ?? null);
+    const fields = row.how.fields ?? [];
+    if (consulted !== undefined) {
+      // #1256 r4 H-2: an ASYNC consultant's rewrite is contained fail-closed.
+      // Its response must be a plain record touching ONLY the row's declared
+      // fields; anything else (a verdict-shaped reply, an array, a field
+      // outside the declaration) is incompatible with the row: one recorded
+      // fact, deny — the sync transformer path below keeps returning the full
+      // object and is clipped to the declared fields by `applyRewrite`.
+      const output = plainRecord(result.value ?? null);
+      if (output === undefined || Object.keys(output).some((key) => !fields.includes(key))) {
+        state.facts.push({ rowId: row.id, ref, code: "incompatible_response" });
+        state.verdict = foldVerdict(state.verdict, "deny");
+        return;
+      }
+    }
+    state.value = applyRewrite(state.value, fields, result.value ?? null);
     return;
   }
   // #1256 r3 H-3: a consulted gate row is FAIL-CLOSED. A response without a

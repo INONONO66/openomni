@@ -347,7 +347,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // generation's gate rows seed the live policy plane, bundle-neutrally.
     seedKernelPolicyRows(
       plane.catalog.policies,
-      gateRowPolicySeeds(services.composed.current().generation.rows),
+      gateRowPolicySeeds(services.composed.current().generation),
       services.pointTable,
     );
     // The Session entity client: THE delivery path for message and timer
@@ -530,7 +530,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           // the swap, so adopted turns evaluate the matching row tables.
           seedKernelPolicyRows(
             plane.catalog.policies,
-            gateRowPolicySeeds(generation.rows),
+            gateRowPolicySeeds(generation),
             services.pointTable,
           );
         },
