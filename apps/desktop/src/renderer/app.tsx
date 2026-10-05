@@ -93,6 +93,21 @@ export function App({ platform, storage, host }: AppEnvironment) {
     },
     [host, transport],
   );
+  // Opening a fork child (#1257): reuse the already-bound local session's tab,
+  // otherwise adopt the durable child exactly like a fresh fork result.
+  const onOpenChild = useCallback(
+    (sessionId: string, title?: string) => {
+      const existing = consoleStore.state.sessions.find(
+        (local) => local.durableSessionId === sessionId,
+      );
+      if (existing !== undefined) {
+        openTab({ kind: "session", sessionId: existing.id });
+        return;
+      }
+      adoptForkedSession(sessionId, title ?? sessionId, host.now());
+    },
+    [host],
+  );
 
   const arrive = useCallback((boundary: Boundary | null = "selection") => {
     const searching = search.current.searching;
@@ -272,6 +287,7 @@ export function App({ platform, storage, host }: AppEnvironment) {
         key={tab?.id}
         notice={forkNotice ?? notice}
         onFork={onFork}
+        onOpenChild={onOpenChild}
         session={session}
         transport={transport}
       />

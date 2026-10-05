@@ -218,6 +218,7 @@ function phaseFacts(
 export function readSessionCursor(
   kernel: Core.SessionHandleStore.SessionKernel,
   input: SessionRead.Request,
+  openKernel?: (sessionId: string) => Core.SessionHandleStore.SessionKernel | undefined,
 ): SessionRead.Response {
   const frame = SessionRead.Request.parse(input);
   const before = kernel.row(frame.sessionId);
@@ -279,6 +280,9 @@ export function readSessionCursor(
     // session with no ancestry facts (no parent edge, no fork pin) omits the
     // key entirely, keeping pre-#1257 pages byte-identical on the wire.
     ...ancestryField(after.parentId, genesis),
+    // Fork children projection (#1257): the inspect tree's direct children
+    // (catalog parent edges + each child genesis pin); inspect surface only.
+    ...childrenField(kernel, frame.sessionId, openKernel),
     toolWallMs: toolWallMs(page.actions.flatMap((action) => {
       if (action.kind !== "tool" || action.parentId === null) return [];
       const effect = action.effect.value;
@@ -288,6 +292,28 @@ export function readSessionCursor(
       return intent?.kind === "tool" ? [{ start: intent.ts, end: action.ts }] : [];
     })),
   });
+}
+
+/**
+ * Fork children projection for one page (#1257): the same parent->child edges
+ * `Inspect.inspectTree` renders, flattened to one depth level. A child whose
+ * kernel cannot open is skipped rather than failing the parent's read; a
+ * commissioned (non-fork) child carries no anchor. Absent `openKernel`
+ * (direct reader callers) omits the key.
+ */
+function childrenField(
+  kernel: Core.SessionHandleStore.SessionKernel,
+  sessionId: string,
+  openKernel?: (childId: string) => Core.SessionHandleStore.SessionKernel | undefined,
+): { children?: NonNullable<SessionRead.Page["children"]> } {
+  if (openKernel === undefined) return {};
+  const children = kernel.childSessionsPage(sessionId, "", 64).flatMap((row) => {
+    const child = openKernel(row.id);
+    if (child === undefined) return [];
+    const forkedFrom = Inspect.forkAncestryOf(child, row.id);
+    return [{ sessionId: row.id, ...(forkedFrom === null ? {} : { anchor: forkedFrom.anchor }) }];
+  });
+  return children.length === 0 ? {} : { children };
 }
 
 /** Fork ancestry projection for one page (#1257): genesis pin plus aside text. */
@@ -327,7 +353,7 @@ export function webSocketCallbacks(
           ws.send(JSON.stringify({ type: "error", reason: "session_not_found", sessionId: request.sessionId }));
           return;
         }
-        const response = readSessionCursor(kernel, { ...request, cursor });
+        const response = readSessionCursor(kernel, { ...request, cursor }, openSession);
         if (response.type !== "session_gap") {
           sentRevision = response.actions.at(-1)?.revision ?? response.afterRevision;
           cursor = { revision: sentRevision, epoch: response.epoch };

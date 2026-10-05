@@ -61,6 +61,19 @@ export namespace SessionRead {
       forkedFrom: SessionGeneration.ForkAncestry.nullable(),
       aside: z.string().nullable(),
     }).strict().optional(),
+    /**
+     * Fork children projection (#1257): the inspect tree's direct children of
+     * this session over catalog parent edges — each child id, its fork anchor
+     * (absent for a commissioned, non-fork child) and its title where known
+     * (the shipped catalog records none, so today's gateway omits it).
+     * Present only when children exist, keeping every childless page
+     * byte-identical to the pre-#1257 frame.
+     */
+    children: z.array(z.object({
+      sessionId: Id,
+      anchor: z.string().min(1).optional(),
+      title: z.string().min(1).optional(),
+    }).strict()).max(64).optional(),
   }).strict();
   export type Page = z.infer<typeof Page>;
 

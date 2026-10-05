@@ -50,6 +50,7 @@ export function SessionContent({
   transport,
   notice,
   onFork,
+  onOpenChild,
 }: {
   readonly session: Session;
   readonly chat: Chat<OpenOmniUIMessage>;
@@ -57,6 +58,8 @@ export function SessionContent({
   readonly notice: string | undefined;
   /** Fork this session's durable identity at a boundary anchor (#1257). */
   readonly onFork?: (sessionId: string, anchor: string) => void;
+  /** Open one of this session's fork children as a bound local session (#1257). */
+  readonly onOpenChild?: (sessionId: string, title?: string) => void;
 }) {
   const draft = useStore(consoleStore, (state) => state.drafts[session.id] ?? "");
   const { messages, sendMessage, status, stop, addToolApprovalResponse, error } = useChat({ chat });
@@ -102,6 +105,27 @@ export function SessionContent({
                 ? `child of ${session.ancestry.parentId}`
                 : `parent ${session.ancestry.forkedFrom.session} · anchor ${session.ancestry.forkedFrom.anchor}`}
             </p>
+          )}
+          {onOpenChild === undefined || session.forkChildren === undefined ? null : (
+            // Parent->children inspection (#1257): the read page's fork
+            // children, each opening the child as a bound local session.
+            <ul className="mt-1 text-xs opacity-60" data-ui="SessionContent.Forks">
+              {session.forkChildren.map((child) => (
+                <li key={child.sessionId}>
+                  <button
+                    className="underline hover:opacity-100"
+                    data-anchor={child.anchor}
+                    data-child={child.sessionId}
+                    data-ui="SessionContent.ForkChild"
+                    onClick={() => onOpenChild(child.sessionId, child.title)}
+                    type="button"
+                  >
+                    {child.title ?? child.sessionId}
+                    {child.anchor === undefined ? "" : ` · anchor ${child.anchor}`}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
           {onFork === undefined ||
           session.durableSessionId === undefined ||

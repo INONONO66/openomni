@@ -4,11 +4,12 @@ import { notifyManager, QueryClient } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act } from "react";
 import { z } from "zod";
+import type { SessionRead } from "@openomni/protocol";
 import { App } from "../src/renderer/app";
 import { StateProvider } from "../src/renderer/state/provider";
 import { queryKeys } from "../src/renderer/state/queries";
 import { bindDurableSession } from "../src/renderer/state/session-actions";
-import { consoleStore, INITIAL_CLIENT_STATE, newSessionTab } from "../src/renderer/state/store";
+import { activateTab, consoleStore, INITIAL_CLIENT_STATE, newSessionTab } from "../src/renderer/state/store";
 import { installGlobals, mountWindow } from "./helpers";
 import { upgradeWebSocket } from "./helpers/chat-server";
 import { testPlatform } from "./helpers/platform";
@@ -17,9 +18,32 @@ beforeEach(() => consoleStore.setState(() => INITIAL_CLIENT_STATE));
 
 const pin = { session: "durable", anchor: "hash-2", parentSeq: 3, parentHead: "head-3", copied: 4 };
 
-/** The gateway double: pages carry a boundary anchor; the fork answers in order. */
-function serveFork() {
+/**
+ * The gateway double: pages carry a boundary anchor; the fork answers in
+ * order. Under `script: "children"` the single fork succeeds immediately and
+ * the parent's pages then list fork children (one adopted by that fork, one
+ * historical child this app never bound), the way the real gateway's
+ * inspect-tree projection does (#1257 H-2).
+ */
+function serveFork(script: "legs" | "children" = "legs") {
   let forkCalls = 0;
+  const childrenField = () =>
+    script === "children" && forkCalls > 0
+      ? {
+          children: [
+            { sessionId: "child-1", anchor: "hash-2" },
+            { sessionId: "child-9", anchor: "hash-2" },
+          ],
+        }
+      : {};
+  const parentPage = (sessionId: string, cursored: boolean) => ({
+    type: cursored ? "session_page" : "session_snapshot",
+    sessionId, state: "idle", phase: "completed", phaseSince: 100,
+    epoch: 1, afterRevision: 0, headRevision: forkCalls > 0 ? 2 : 1, nextRevision: null,
+    actions: [{ revision: 1, actionId: "turn-1", kind: "turn", at: 120, forkAnchor: "hash-2" }],
+    usage: [], toolWallMs: 0,
+    ...(sessionId === "durable" ? childrenField() : {}),
+  });
   return Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -28,17 +52,19 @@ function serveFork() {
       message(socket: ServerWebSocket<undefined>, raw) {
         const frame = z.record(z.string(), z.json()).parse(JSON.parse(String(raw)));
         if (frame.type === "session_read") {
-          socket.send(JSON.stringify({
-            type: frame.cursor === undefined ? "session_snapshot" : "session_page",
-            sessionId: frame.sessionId, state: "idle", phase: "completed", phaseSince: 100,
-            epoch: 1, afterRevision: 0, headRevision: 1, nextRevision: null,
-            actions: [{ revision: 1, actionId: "turn-1", kind: "turn", at: 120, forkAnchor: "hash-2" }],
-            usage: [], toolWallMs: 0,
-          }));
+          socket.send(JSON.stringify(parentPage(z.string().parse(frame.sessionId), frame.cursor !== undefined)));
           return;
         }
         if (frame.type !== "session_fork") return;
         forkCalls += 1;
+        if (script === "children") {
+          socket.send(JSON.stringify({ type: "session_forked", sessionId: "child-1",
+            parentId: frame.sessionId, forkedFrom: pin, head: "child-head" }));
+          // The authoritative push after a fork: the parent page now lists
+          // its children, like the real gateway's subscription re-read.
+          socket.send(JSON.stringify(parentPage("durable", false)));
+          return;
+        }
         if (forkCalls === 3) {
           // The dead-gateway leg: close instead of answering, so the client's
           // pending fork waiter is rejected by the socket drain.
@@ -134,16 +160,24 @@ function storeSignal(predicate: () => boolean, label: string): Promise<void> {
   );
 }
 
-/** Resolves when the read page for `sessionId` lands in the query cache. */
-function pageSignal(client: QueryClient, sessionId: string): Promise<void> {
+/** Resolves when a read page for `sessionId` satisfying `holds` is cached. */
+function pageSignal(
+  client: QueryClient,
+  sessionId: string,
+  holds: (page: SessionRead.Page) => boolean = () => true,
+): Promise<void> {
+  const cached = () => {
+    const page = client.getQueryData<SessionRead.Page>(queryKeys.session(sessionId));
+    return page !== undefined && holds(page);
+  };
   return bounded(
     new Promise<void>((resolve) => {
-      if (client.getQueryData(queryKeys.session(sessionId)) !== undefined) {
+      if (cached()) {
         resolve();
         return;
       }
       const unsubscribe = client.getQueryCache().subscribe((event) => {
-        if (event.query.queryKey.at(-1) !== sessionId || event.query.state.data === undefined) return;
+        if (event.query.queryKey.at(-1) !== sessionId || !cached()) return;
         unsubscribe();
         resolve();
       });
@@ -231,6 +265,86 @@ test("the desktop fork control adopts the gateway's child and surfaces typed ref
     server.stop(true);
     client.clear();
     // The library default (restored for the rest of the suite's files).
+    notifyManager.setScheduler((callback) => setTimeout(callback, 0));
+  }
+}, 20_000);
+
+/**
+ * Parent->children inspection (#1257 H-2): after a fork the parent's read
+ * page lists its fork children; clicking an entry opens the child - the
+ * already-bound fork reuses its local session, a historical child this app
+ * never bound is adopted through the same adoption path as a fresh fork.
+ */
+test("the parent page lists fork children and clicking one opens it", async () => {
+  const server = serveFork("children");
+  const window = new Window({ url: "http://localhost" });
+  const { host, restoreGlobals, root } = mountWindow(window);
+  const restoreSocket = installGlobals({ WebSocket: ObservedWebSocket });
+  const client = new QueryClient();
+  const localId = newSessionTab();
+  bindDurableSession(localId, "durable");
+  client.setQueryData(queryKeys.gatewayEndpoint, { url: `ws://127.0.0.1:${server.port}` });
+  notifyManager.setScheduler((callback) => callback());
+  try {
+    const parentPaged = pageSignal(client, "durable");
+    await act(() =>
+      root.render(
+        <StateProvider client={client}>
+          <App platform="darwin" storage={null} host={testPlatform} />
+        </StateProvider>,
+      ),
+    );
+    await settled(parentPaged);
+    const button = host.querySelector<HTMLElement>('[data-ui="SessionContent.Fork"]');
+    expect(button).not.toBeNull();
+
+    // Fork, then wait for the authoritative parent page that lists children.
+    const listed = pageSignal(client, "durable", (page) => page.children !== undefined);
+    await settled(
+      storeSignal(() => consoleStore.state.sessions.length === 2, "child adoption"),
+      () => button?.click(),
+    );
+    await settled(listed);
+
+    // Back on the parent tab: both children render with their anchors.
+    const parentTab = consoleStore.state.tabs.find(
+      (tab) => tab.place.kind === "session" && tab.place.sessionId === localId,
+    );
+    expect(parentTab).toBeDefined();
+    await act(() => activateTab(parentTab?.id ?? ""));
+    const entries = [...host.querySelectorAll<HTMLElement>('[data-ui="SessionContent.ForkChild"]')];
+    expect(entries.map((entry) => entry.dataset.child)).toEqual(["child-1", "child-9"]);
+    expect(entries.map((entry) => entry.dataset.anchor)).toEqual(["hash-2", "hash-2"]);
+
+    // The unbound historical child adopts a new local session and its tab.
+    await settled(
+      storeSignal(() => consoleStore.state.sessions.length === 3, "historical child adoption"),
+      () => entries[1]?.click(),
+    );
+    const adopted = consoleStore.state.sessions.find((session) => session.durableSessionId === "child-9");
+    expect(adopted?.title).toBe("child-9");
+    const activePlace = () => {
+      const tab = consoleStore.state.tabs.find((candidate) => candidate.id === consoleStore.state.activeTabId);
+      return tab?.place.kind === "session" ? tab.place.sessionId : undefined;
+    };
+    expect(activePlace()).toBe(adopted?.id);
+
+    // The already-bound fork child reuses its local session: no new adoption.
+    await act(() => activateTab(parentTab?.id ?? ""));
+    const bound = consoleStore.state.sessions.find((session) => session.durableSessionId === "child-1");
+    const reopened = storeSignal(() => activePlace() === bound?.id, "bound child tab activation");
+    await settled(reopened, () => {
+      host.querySelector<HTMLElement>('[data-ui="SessionContent.ForkChild"][data-child="child-1"]')?.click();
+    });
+    expect(consoleStore.state.sessions.length).toBe(3);
+  } finally {
+    await act(() => root.unmount());
+    host.remove();
+    restoreSocket();
+    restoreGlobals();
+    await window.happyDOM.close();
+    server.stop(true);
+    client.clear();
     notifyManager.setScheduler((callback) => setTimeout(callback, 0));
   }
 }, 20_000);

@@ -41,6 +41,8 @@ export interface Session extends LocalSession {
   readonly forkAside?: string;
   /** Fork ancestry (#1257): the parent edge and fork pin off the read page. */
   readonly ancestry?: NonNullable<SessionRead.Page["ancestry"]>;
+  /** Fork children (#1257): the read page's inspect-tree child projection. */
+  readonly forkChildren?: NonNullable<SessionRead.Page["children"]>;
   /** The newest boundary anchor on the cached page: where a fork would cut (#1257). */
   readonly latestForkAnchor?: string;
 }

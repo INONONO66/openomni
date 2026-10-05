@@ -94,6 +94,12 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
   socket.send(JSON.stringify({ type: "session_read", sessionId, limit: 256 }));
   const parent = await parentPage;
   expect("ancestry" in parent).toBeFalse();
+  // The parent page lists its fork children (#1257 H-2): the child id plus
+  // the same anchor the fork pinned; the child's own page lists none.
+  expect(SessionRead.Page.parse(parent).children).toEqual([
+    { sessionId: "forked-child", anchor: anchor.actionHash },
+  ]);
+  expect("children" in page).toBeFalse();
   // Boundary rows (and only boundary rows) advertise their fork anchor, so a
   // desktop reader can cite one without reconstructing hashes (#1257 M-3).
   const rows = SessionRead.Page.parse(parent).actions;
