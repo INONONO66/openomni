@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { retryableOnce } from "../src";
+import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 
 /**
  * #1256 r2 C-1: the app `stop()` memo. Concurrent callers join ONE in-flight
@@ -51,4 +52,25 @@ test("a rejected run clears the memo so the next call retries; success is perman
   await stop();
   expect(attempts).toBe(2);
   expect(stop()).toBe(second);
+});
+
+test("the real app stop(): a second shutdown during an in-flight close joins the SAME run", async () => {
+  const suite = residentSuite();
+  const app = await suite.boot({
+    config: suite.config("retryable-once-state-"),
+    llm: { resolveModel: fakeProviderModel },
+  });
+  try {
+    // Two shutdowns racing the same in-flight close: the memo hands back the
+    // identical promise — the app never tears down twice.
+    const first = app.stop();
+    const joined = app.stop();
+    expect(joined).toBe(first);
+    await first;
+    await joined;
+    // Success is permanent across later callers (suite cleanup re-enters here).
+    expect(app.stop()).toBe(first);
+  } finally {
+    await suite.cleanup();
+  }
 });
