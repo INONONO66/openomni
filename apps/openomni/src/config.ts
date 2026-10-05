@@ -14,6 +14,7 @@ export const ConfigurationError = NamedError.create(
       "invalid_alarm_sweep",
       "invalid_entity_idle_ms",
       "invalid_env_json",
+      "invalid_fork_copy_byte_cap",
       "invalid_machines_default",
       "invalid_machines_self",
       "invalid_machines_tcp",
@@ -44,6 +45,8 @@ export interface OpenOmniConfig {
   readonly entityIdleMs?: number;
   /** Boot alarm sweep (#1254 S3): full rescan toggle and the idle-days floor. */
   readonly alarmSweep?: { readonly full: boolean; readonly idleDays: number };
+  /** Fork copy cap in bytes (#1257): refuse forks copying more than this. */
+  readonly forkCopyByteCap?: number;
   readonly host: string;
   readonly wsPort: number;
   /** Enabled unless explicitly disabled with OPENOMNI_COMPACTION_SUMMARIZER=off. */
@@ -234,6 +237,23 @@ export interface AlarmDrainSettings {
   readonly sweep: { readonly full: boolean; readonly idleDays: number };
 }
 
+/**
+ * Session fork copy cap (#1257): the one owner of the composed default,
+ * mirroring `resolveAlarmDrain` — typed in core (`byteCap` on
+ * `Core.ForkInput`), the VALUE lives here at the composition root.
+ */
+const DEFAULT_FORK_COPY = { byteCap: 4 * 1024 * 1024 } as const;
+
+export interface SessionForkSettings {
+  readonly copyByteCap: number;
+}
+
+export function resolveSessionFork(
+  config: Pick<OpenOmniConfig, "forkCopyByteCap">,
+): SessionForkSettings {
+  return { copyByteCap: config.forkCopyByteCap ?? DEFAULT_FORK_COPY.byteCap };
+}
+
 /** The one owner of the D3 drain values, mirroring `resolveClusterStorage`. */
 export function resolveAlarmDrain(
   config: Pick<OpenOmniConfig, "alarmSweep" | "entityIdleMs">,
@@ -288,6 +308,19 @@ function entityIdleMsFromEnv(env: Record<string, string | undefined>): number | 
     });
   }
   return ms;
+}
+
+function forkCopyByteCapFromEnv(env: Record<string, string | undefined>): number | undefined {
+  const raw = env.OPENOMNI_FORK_COPY_BYTE_CAP?.trim();
+  if (raw === undefined || raw.length === 0) return undefined;
+  const cap = Number(raw);
+  if (!Number.isInteger(cap) || cap <= 0) {
+    throw new ConfigurationError({
+      code: "invalid_fork_copy_byte_cap",
+      message: "OPENOMNI_FORK_COPY_BYTE_CAP must be a positive integer of bytes",
+    });
+  }
+  return cap;
 }
 
 function compactionSummarizerFromEnv(env: Record<string, string | undefined>): boolean {
@@ -642,6 +675,7 @@ export function loadConfig(
   const actors = actorsFromEnv(env);
   const socialBudgets = socialBudgetsFromEnv(env);
   const alarmSweep = alarmSweepFromEnv(env);
+  const forkCopyByteCap = forkCopyByteCapFromEnv(env);
   const channelAllowedSenders = channelAllowedSendersFromEnv(env);
   const bundlesOff = bundlesOffFromEnv(env);
   return {
@@ -657,6 +691,7 @@ export function loadConfig(
     wsPort: parseWsPort(env.OPENOMNI_WS_PORT),
     compactionSummarizer: compactionSummarizerFromEnv(env),
     ...(alarmSweep === undefined ? {} : { alarmSweep }),
+    ...(forkCopyByteCap === undefined ? {} : { forkCopyByteCap }),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),
     kek: resolveKek(env, home),
     model: modelFromEnv(env),

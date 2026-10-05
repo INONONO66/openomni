@@ -20,6 +20,8 @@ export interface SessionForkOptions {
   readonly now: () => number;
   /** Injected entropy for the child session and genesis action ids (#1245). */
   readonly id: () => string;
+  /** Copied-bytes cap from the composition root (`resolveSessionFork`, #1257). */
+  readonly copyByteCap: number;
 }
 
 export function createSessionForkExecutor(
@@ -64,6 +66,7 @@ export function createSessionForkExecutor(
           childId,
           genesisActionId: `${childId}:genesis`,
           now: options.now(),
+          byteCap: options.copyByteCap,
         },
       ).pipe(
         Effect.map(

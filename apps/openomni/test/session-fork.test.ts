@@ -97,6 +97,59 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
 });
 
 /**
+ * Generation-configured copy cap (#1257 M-5): the composition root's
+ * `forkCopyByteCap` threads through the SHIPPED gateway fork path. An
+ * override smaller than the parent's copied bytes turns the same
+ * otherwise-valid boundary fork into the typed `byte_cap` refusal.
+ */
+test("session_fork refuses an over-limit copy under a configured byte cap", async () => {
+  const committed = Promise.withResolvers<string>();
+  const app = await suite.boot({
+    // 16 bytes: far below any real chain's copied intent/effect payloads.
+    config: suite.config("session-fork-cap-", { wsToken: "fork-token", forkCopyByteCap: 16 }),
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) => Effect.sync(() => {
+        sink.onMessage(assistantMessage(input, { text: "done" }));
+        return { type: "stop" as const };
+      }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind === "turn") committed.resolve(event.sessionId);
+  });
+  suite.defer(unsubscribe);
+  const socket = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws`, ["auth", "fork-token"]);
+  const terminal = nextResidentTurn(plane);
+  socket.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "first" }));
+  const sessionId = await bounded(committed.promise);
+  await terminal;
+
+  const kernel = plane.openKernel(sessionId);
+  const actions = kernel.historyPage(sessionId, { afterRevision: 0, limit: 256 }).actions;
+  const anchor = [...actions].reverse().find((action) => {
+    const effect = action.effect.value;
+    return action.kind === "turn" && effect !== null && typeof effect === "object" &&
+      !Array.isArray(effect) && effect.phase === "terminal";
+  });
+  if (anchor === undefined) throw new Error("no terminal anchor in parent history");
+
+  const refusedFrame = nextFrame(socket, (frame) => frame.type === "session_fork_refused");
+  socket.send(JSON.stringify({
+    type: "session_fork", sessionId, at: anchor.actionHash, childId: "capped-child",
+  }));
+  expect(await refusedFrame).toMatchObject({
+    type: "session_fork_refused",
+    sessionId,
+    reason: "byte_cap",
+  });
+  // The refusal materialized no child: the catalog has no such session.
+  expect(plane.catalog.sessionIndex("capped-child")).toBeUndefined();
+  await closeSocket(socket);
+});
+
+/**
  * Fail-closed legacy handling (#1257 H-1): a parent file on an old
  * schemaVersion is refused by the read-only `PRAGMA user_version` probe
  * BEFORE anything opens it for write — no stamp, no WAL, bytes identical.

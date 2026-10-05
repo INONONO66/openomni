@@ -60,6 +60,7 @@ import {
   modelTransport,
   resolveAlarmSweep,
   resolveClusterStorage,
+  resolveSessionFork,
   validateMachinePlane,
   type OpenOmniConfig,
   type RegisteredActor,
@@ -942,6 +943,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         sessionsDir: config.sessionsDir,
         now: services.now,
         id: services.entropy.id,
+        copyByteCap: resolveSessionFork(config).copyByteCap,
       }));
     const server = Bun.serve({
       hostname: config.host,
