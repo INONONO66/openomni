@@ -7,10 +7,11 @@ import {
   type PolicyRow,
   type RowVerdict,
 } from "@openomni/protocol";
+import type { Effect } from "effect";
 import type { z } from "zod";
 import { clonePlain, type MessagePolicyContext } from "./match";
 import type { GatePointTable } from "../points";
-import type { GateHandler } from "./compose";
+import type { GateHandler, PendingConsult, PreparedResults } from "./compose";
 import { legacyPointOf } from "./migrate";
 import type { CompileErrorData, CompiledRow, PolicyCompileError } from "./legacy-rows";
 import type { ProjectedGeneration } from "./project";
@@ -73,6 +74,15 @@ export interface CompiledPolicySnapshot {
   /** The merged point registration table this snapshot compiled against (#1251). */
   readonly pointTable: GatePointTable;
   evaluate(input: PolicyEvaluationInput): PolicyEvaluation;
+  /**
+   * Effectful evaluation (#1256): resolves the matched rows' asynchronous
+   * consultants (the hook process) IN ROW ORDER — each consultant receives
+   * the fold's value as of its position (r5 H-1) — then runs the synchronous
+   * fold with every settled result prepared. The sync `evaluate` on a consult
+   * row has no prepared result and folds `handler_unavailable` -> deny
+   * fail-closed.
+   */
+  evaluateEffect?(input: PolicyEvaluationInput): Effect.Effect<PolicyEvaluation>;
 }
 
 function publicBucket(kind: string, phase: PolicyRow.Phase, op: string | undefined): string {
@@ -93,6 +103,57 @@ const VERDICT_PRECEDENCE: Record<"deny" | "require_approval" | "allow", readonly
   allow: ["allow"],
 };
 
+/** The projected gate's `when` record for one legacy evaluation input. */
+function projectedWhenOf(input: PolicyEvaluationInput): Record<string, PlainValue> {
+  const when: Record<string, PlainValue> = {};
+  if (input.op !== undefined) when.op = input.op;
+  const operation = innerOperation(input.value);
+  if (operation !== undefined) when.operation = operation;
+  if (input.role !== undefined) when.role = input.role;
+  if (input.sessionId !== undefined) when.sessionId = input.sessionId;
+  return when;
+}
+
+/**
+ * The next async consultation a fresh decision for this input would make
+ * (#1256 r5 H-1): the ordered fold runs — sync rows included — up to the
+ * first matched consult row whose async ref has no `prepared` result yet, and
+ * that row surfaces here CARRYING THE FOLD'S VALUE AT ITS POSITION. Undefined
+ * when the input refuses before the gate, the recorded decision would replay,
+ * or every async row is prepared. `evaluateEffect` resolves consultations one
+ * at a time through this probe so a later guard judges the value an earlier
+ * rewrite actually sends to the executor.
+ */
+export interface PlannedConsult extends PendingConsult {
+  /** The projected gate point the consultation addresses. */
+  readonly point: string;
+}
+
+export function nextProjectedConsult(
+  projected: ProjectedGeneration,
+  handlers: ReadonlyMap<string, GateHandler>,
+  table: GatePointTable,
+  input: PolicyEvaluationInput,
+  asyncRefs: ReadonlySet<string>,
+  prepared: PreparedResults,
+): PlannedConsult | undefined {
+  const point = legacyPointOf(input.kind, input.phase);
+  if (point === undefined || !table.has(point)) return undefined;
+  if (input.kind === "message" && input.op === "send_message" && input.message === undefined)
+    return undefined;
+  const outcome = projected.gate.decide(
+    point,
+    { when: projectedWhenOf(input), value: clonePlain(input.value), context: input.message },
+    {
+      handlers: (ref) => handlers.get(ref),
+      ...(input.recorded === undefined ? {} : { recorded: input.recorded }),
+      prepared,
+      pendingAsync: asyncRefs,
+    },
+  );
+  return outcome.pending === undefined ? undefined : { ...outcome.pending, point };
+}
+
 export function evaluateProjected(
   projected: ProjectedGeneration,
   handlers: ReadonlyMap<string, GateHandler>,
@@ -100,6 +161,7 @@ export function evaluateProjected(
   contentHash: string,
   table: GatePointTable,
   input: PolicyEvaluationInput,
+  prepared?: PreparedResults,
 ): PolicyEvaluation {
   // The recorded decision is replay input, never part of the input identity.
   const { recorded, ...identity } = input;
@@ -124,17 +186,16 @@ export function evaluateProjected(
   if (input.kind === "message" && input.op === "send_message" && input.message === undefined)
     return refused("message_context_missing");
 
-  const when: Record<string, PlainValue> = {};
-  if (input.op !== undefined) when.op = input.op;
-  const operation = innerOperation(input.value);
-  if (operation !== undefined) when.operation = operation;
-  if (input.role !== undefined) when.role = input.role;
-  if (input.sessionId !== undefined) when.sessionId = input.sessionId;
+  const when = projectedWhenOf(input);
 
   const outcome = projected.gate.decide(
     point,
     { when, value: clonePlain(input.value), context: input.message },
-    { handlers: (ref) => handlers.get(ref), ...(recorded === undefined ? {} : { recorded }) },
+    {
+      handlers: (ref) => handlers.get(ref),
+      ...(recorded === undefined ? {} : { recorded }),
+      ...(prepared === undefined ? {} : { prepared }),
+    },
   );
   const matched = outcome.decision.rowIds.flatMap((id) => {
     const row = projected.rowById.get(id);
@@ -159,7 +220,9 @@ export function evaluateProjected(
         : obligations.length > 0
           ? "obligation"
           : "allow";
-  const reason = projectedReason(outcome.decision.verdict, matched);
+  const reason =
+    projectedReason(outcome.decision.verdict, matched) ??
+    consultedReason(outcome.decision);
 
   return Object.freeze({
     generation,
@@ -195,6 +258,23 @@ function projectedReason(
       if (reason !== undefined) return reason;
     }
   }
+  return undefined;
+}
+
+/**
+ * A consulted guard's reason (#1256): the first consulted payload carrying a
+ * string `reason`, else — on a deny — the first recorded fact's code (e.g.
+ * `handler_unavailable` on the sync path of an async consultant row).
+ */
+function consultedReason(decision: GateDecision): string | undefined {
+  for (const entry of decision.consulted) {
+    const payload = entry.payload;
+    if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+      const reason = payload.reason;
+      if (typeof reason === "string" && reason.length > 0) return reason;
+    }
+  }
+  if (decision.verdict === "deny") return decision.facts[0]?.code;
   return undefined;
 }
 

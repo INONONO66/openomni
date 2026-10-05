@@ -243,6 +243,8 @@ export function turnIntentAction(input: {
   readonly sessionId: string;
   readonly resultId: string;
   readonly inboxIds: readonly string[];
+  /** #1256 H-3: stale `action` inputs this turn closes WITHOUT execution (`turn.consumed.stale`). */
+  readonly consumedStale?: readonly string[];
   readonly generation: SessionGeneration.Snapshot;
   readonly resumeCount: number;
   readonly boundaryActionId: string | null;
@@ -253,6 +255,9 @@ export function turnIntentAction(input: {
     SessionTurn.DecodeIntent.parse({
       phase: "intent",
       inboxIds: [...input.inboxIds],
+      ...(input.consumedStale === undefined || input.consumedStale.length === 0
+        ? {}
+        : { consumedStale: [...input.consumedStale] }),
       ...pinnedTurn(input),
     }),
   );
@@ -290,6 +295,8 @@ export function turnCheckpointAction(input: {
   readonly boundary: SessionTurn.Boundary;
   /** Consumed input seqs at this boundary (#1253): the turn's `turn.consumed` record. */
   readonly inboxIds: readonly string[];
+  /** #1256 H-1 (r3): stale `action` inputs this boundary closes WITHOUT execution (`turn.consumed.stale`). */
+  readonly consumedStale?: readonly string[];
   readonly at: number;
 }): LedgerAction.Append {
   return {
@@ -299,7 +306,14 @@ export function turnCheckpointAction(input: {
     kind: "turn",
     intent: {
       encodingVersion: 1,
-      value: { phase: "checkpoint", turnId: input.turnId, inboxIds: [...input.inboxIds] },
+      value: {
+        phase: "checkpoint",
+        turnId: input.turnId,
+        inboxIds: [...input.inboxIds],
+        ...(input.consumedStale === undefined || input.consumedStale.length === 0
+          ? {}
+          : { consumedStale: [...input.consumedStale] }),
+      },
     },
     effect: {
       encodingVersion: 1,
@@ -563,6 +577,26 @@ export function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.
   return kernel.pendingMessages(sessionId);
 }
 
+/**
+ * #1256 H-3: the staleness split a turn start applies to its backlog. A
+ * deferred `action` input carries the journal ordinal (`after`) its payload
+ * was computed against; one pointing BEFORE the latest executed compaction
+ * reasons about a context that no longer exists, so it is never consumed —
+ * the turn closes it via `turn.consumed.stale`. Everything else is live.
+ */
+export function staleActionBacklog(
+  backlog: readonly Inbox.Row[],
+  compactionHead: number,
+): { readonly live: Inbox.Row[]; readonly stale: Inbox.Row[] } {
+  const live: Inbox.Row[] = [];
+  const stale: Inbox.Row[] = [];
+  for (const row of backlog) {
+    const isStale = row.kind === "action" && row.after !== undefined && row.after < compactionHead;
+    (isStale ? stale : live).push(row);
+  }
+  return { live, stale };
+}
+
 /** `session.configure.settings` carrier (#1253); any configure row may pin the widths. */
 const ConfigureSettingsIntent = z.object({ settings: ConsumptionSettings });
 
@@ -600,10 +634,13 @@ export function boundaryConsumption(
   backlog: readonly Inbox.Row[],
   boundary: SessionTurn.Boundary | "turn_end",
   settings: ConsumptionSettings,
-): Inbox.Row[] {
+  /** #1256 H-1 (r3): the latest executed compaction's ordinal; EVERY boundary closes stale actions, not just turn start. */
+  compactionHead: number,
+): { readonly consumed: Inbox.Row[]; readonly stale: Inbox.Row[] } {
+  const { live, stale } = staleActionBacklog(backlog, compactionHead);
   const width = (rows: readonly Inbox.Row[], mode: ConsumptionWidth) =>
     mode === "one" ? rows.slice(0, 1) : rows;
-  const inputs = backlog.filter((item) => item.kind === "prompt" || item.kind === "action");
+  const inputs = live.filter((item) => item.kind === "prompt" || item.kind === "action");
   const steer = inputs.filter(
     (item) => (item.delivery ?? JournalKind.DEFAULT_DELIVERY) === "steer",
   );
@@ -612,12 +649,12 @@ export function boundaryConsumption(
   );
   const chosen = new Set(
     [
-      ...backlog.filter((item) => item.kind === "interrupt" || item.kind === "resume"),
+      ...live.filter((item) => item.kind === "interrupt" || item.kind === "resume"),
       ...(boundary === "after_tools" || boundary === "turn_end"
         ? width(steer, settings.steering)
         : []),
       ...(boundary === "turn_end" ? width(followUp, settings.followUp) : []),
     ].map((item) => item.id),
   );
-  return backlog.filter((item) => chosen.has(item.id));
+  return { consumed: live.filter((item) => chosen.has(item.id)), stale };
 }

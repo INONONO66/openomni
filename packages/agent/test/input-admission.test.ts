@@ -91,13 +91,15 @@ test("an input of a capability kind whose capability is off is rejected with unk
   // The composed generation registers only the built-ins: the action input is refused.
   const refused = decideSessionAdmission({ row: sessionRow, pending });
   expect(refused).toEqual({ kind: "refused", reason: "unknown_kind" });
-  // The same input with the action capability composed is admitted (it heads a turn like a prompt).
+  // The same input with the action capability composed is admitted and heads
+  // a turn like a prompt (#1256 r5 H-3): boundary consumption — not an idle
+  // noop-consume — owns a pending action's delivery or stale closure.
   const admitted = decideSessionAdmission({
     row: sessionRow,
     pending,
     capabilityKinds: ["tool", "compaction", "action"],
   });
-  expect(admitted.kind).not.toBe("refused");
+  expect(admitted).toEqual({ kind: "start" });
   // The mapping is exact: action inputs land as action rows, control as signal.
   expect(inputRowKind("action")).toBe("action");
   expect(inputRowKind("prompt")).toBe("prompt");
