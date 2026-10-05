@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { LedgerAction } from "@openomni/protocol";
 import { useMemoryStores, testNow } from "../helpers/storage";
 import { CHILD, PARENT, forkFixture } from "../helpers/fork-fixture";
 import * as SessionHandleStore from "../../../src/core/store/fence";
-import { openSessionStore, SESSION_FILE_SCHEMA_VERSION, type SessionStore } from "../../../src/core/store/session-file";
+import { openSessionStore, readSessionFileSchemaVersion, SESSION_FILE_SCHEMA_VERSION, type SessionStore } from "../../../src/core/store/session-file";
 import { receivedMessageAction } from "../../../src/core/commit";
 import { isForkBoundary } from "../../../src/core/fork";
 
@@ -121,16 +126,39 @@ describe("Session.fork", () => {
     ).toBe("byte_cap");
   });
 
-  test("refuses a parent file on a different schemaVersion without writing", () => {
+  test("refuses a real old-schemaVersion parent file and leaves its bytes identical", () => {
     const parent = fixture.buildParent();
-    const refusal = fixture.refusalOf(
-      fixture.fork(parent.hashOf("turn-1:terminal"), {
-        parentSchemaVersion: SESSION_FILE_SCHEMA_VERSION + 1,
-      }),
-    );
-    expect(refusal.reason).toBe("schema_version");
-    expect(child().sessions.get(CHILD)).toBeUndefined();
-    expect(stores.catalog.sessionIndex(CHILD)).toBeUndefined();
+    // A REAL legacy fixture file on disk: tables and rows, but no
+    // schemaVersion marker (user_version 0, not SESSION_FILE_SCHEMA_VERSION).
+    const directory = mkdtempSync(join(tmpdir(), "fork-legacy-"));
+    try {
+      const legacyPath = join(directory, "legacy-parent.sqlite");
+      const legacy = new Database(legacyPath);
+      legacy.run("CREATE TABLE legacy_actions (id TEXT PRIMARY KEY, payload TEXT)");
+      legacy.run("INSERT INTO legacy_actions VALUES ('a-1', 'old-world row')");
+      legacy.close();
+      const sha256 = () => createHash("sha256").update(readFileSync(legacyPath)).digest("hex");
+      const before = sha256();
+
+      // The probe is read-only and sees an old version; the fork refuses on it.
+      const probed = readSessionFileSchemaVersion(legacyPath);
+      expect(probed).not.toBe(SESSION_FILE_SCHEMA_VERSION);
+      const refusal = fixture.refusalOf(
+        fixture.fork(parent.hashOf("turn-1:terminal"), { parentSchemaVersion: probed }),
+      );
+      expect(refusal.reason).toBe("schema_version");
+
+      // Zero writes on the legacy file: byte identity, no stamp, no WAL/SHM.
+      expect(sha256()).toBe(before);
+      expect(readSessionFileSchemaVersion(legacyPath)).toBe(probed);
+      expect(existsSync(`${legacyPath}-wal`)).toBeFalse();
+      expect(existsSync(`${legacyPath}-shm`)).toBeFalse();
+      // And no child was materialized anywhere.
+      expect(child().sessions.get(CHILD)).toBeUndefined();
+      expect(stores.catalog.sessionIndex(CHILD)).toBeUndefined();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test("refuses an existing child id and leaves the first chain intact", () => {
