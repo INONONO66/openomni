@@ -20,6 +20,7 @@ import { runTestPromise } from "./helpers/isolated";
 /** The scripted echo child: behavior is keyed by the request's `event` field. */
 const CHILD_SCRIPT = `
 const held = [];
+let splitRest = "";
 process.on("SIGUSR2", () => {
   for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
 });
@@ -44,6 +45,15 @@ for await (const chunk of Bun.stdin.stream()) {
       case "hold": held.push(request.id); break;
       case "die": process.exit(7);
       case "silent": break;
+      case "oversize": reply({ type: "gate", verdict: "allow", reason: "r".repeat(4096) }); break;
+      case "unterminated": process.stdout.write("y".repeat(4096)); break;
+      case "split": {
+        const line = JSON.stringify({ id: request.id, result: { type: "gate", verdict: "allow" } }) + "\\n";
+        splitRest = line.slice(6);
+        process.stdout.write(line.slice(0, 6));
+        break;
+      }
+      case "flush-split": process.stdout.write(splitRest); reply({ type: "gate", verdict: "allow" }); break;
     }
   }
 }
@@ -217,3 +227,50 @@ test("a missing executable is a typed spawn refusal, never a partial activation"
       }),
     ),
   ));
+
+test("H-2: a response line over maxLineBytes poisons the PID as a framing failure", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        const hook = yield* acquireHookProcess({
+          command: COMMAND,
+          timeoutMs: 60_000,
+          maxLineBytes: 1024,
+        }).pipe(Scope.provide(scope));
+        expect(yield* hook.call(request("oversize"))).toEqual({
+          kind: "failure",
+          code: "hook_timeout",
+          cause: "framing",
+        });
+        // The poisoned PID was killed and refuses further calls without hanging.
+        yield* hook.exited;
+        expect(yield* hook.call(request("allow"))).toEqual({
+          kind: "failure",
+          code: "hook_timeout",
+          cause: "exit",
+        });
+      }),
+    ),
+  ));
+
+test("H-2: an unterminated buffer over maxLineBytes poisons the PID as a framing failure", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        const hook = yield* acquireHookProcess({
+          command: COMMAND,
+          timeoutMs: 60_000,
+          maxLineBytes: 1024,
+        }).pipe(Scope.provide(scope));
+        // The child floods 4096 bytes with NO newline: the buffer bound trips
+        // without ever completing a line, and the pending call settles framing.
+        expect(yield* hook.call(request("unterminated"))).toEqual({
+          kind: "failure",
+          code: "hook_timeout",
+          cause: "framing",
+        });
+        yield* hook.exited;
+      }),
+    ),
+  ));
+

@@ -17,6 +17,15 @@ import { PlainValueSchema, type PlainValue } from "@openomni/protocol";
 /** The composed `how.ref` target the hook capability registers (#1256). */
 export const HOOK_PROCESS_REF = "hook/process";
 
+/**
+ * H-2 (#1256 r2): the stdout framing bound. A single response line (or an
+ * unterminated buffer) larger than this is a framing violation: the process
+ * is declared poisoned, every in-flight call settles `failure("framing")`
+ * (deny at the gate) and the PID is killed — stdout buffering never grows
+ * without bound on a hook that misbehaves.
+ */
+export const HOOK_MAX_LINE_BYTES = 64 * 1024;
+
 /** The gate vocabulary a hook result must use; anything else is a framing failure. */
 export const HookGateVerdict = z.enum(["allow", "deny", "require_approval"]);
 export type HookGateVerdict = z.infer<typeof HookGateVerdict>;
@@ -77,6 +86,8 @@ export interface HookProcessConfig {
   readonly command: readonly string[];
   /** Bounds ONE handler call via the Effect clock; there is no alarm timer. */
   readonly timeoutMs: number;
+  /** Per-line/buffer byte bound on stdout framing; default `HOOK_MAX_LINE_BYTES`. */
+  readonly maxLineBytes?: number;
 }
 
 /** The scoped service face: one live PID, one bounded call at a time semantics-free. */
@@ -178,6 +189,15 @@ export function acquireHookProcess(
       }),
     );
 
+    // H-2: a framing-bound violation poisons the PID fail-closed — settle
+    // everything as a framing failure, kill the child, accept no new calls.
+    const maxLineBytes = config.maxLineBytes ?? HOOK_MAX_LINE_BYTES;
+    const poisonFraming = (): void => {
+      dead = true;
+      settleAll(failure("framing"));
+      child.kill();
+    };
+
     // The stdout reader: one fiber per PID, interrupted after the drain.
     yield* Effect.forkScoped(
       Effect.promise(async () => {
@@ -188,8 +208,11 @@ export function acquireHookProcess(
           for (let cut = buffer.indexOf("\n"); cut >= 0; cut = buffer.indexOf("\n")) {
             const line = buffer.slice(0, cut);
             buffer = buffer.slice(cut + 1);
+            if (Buffer.byteLength(line, "utf8") > maxLineBytes) return poisonFraming();
             if (line.length > 0) settleLine(line);
           }
+          // An unterminated line may never see its newline: bound the buffer too.
+          if (Buffer.byteLength(buffer, "utf8") > maxLineBytes) return poisonFraming();
         }
         // Stream end = the process died mid-conversation.
         dead = true;
