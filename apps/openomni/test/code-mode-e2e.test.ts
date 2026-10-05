@@ -282,7 +282,7 @@ test("a cell creates three child sessions through send_message", async () => {
               op: "run",
               code: [
                 "answers = [",
-                "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}')['target']",
+                "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}', spend_cap=1)['target']",
                 "  for name in ('lint', 'types', 'tests')",
                 "]",
                 "len(set(answers))",
@@ -343,6 +343,72 @@ test("a cell creates three child sessions through send_message", async () => {
       directoryExists: existsSync(dirname(catalogPath)),
     }),
   );
+}, 60_000);
+
+/**
+ * #1258 C-1 regression: the cell door THROWS ToolRefused (tool.ts
+ * finishResult) when the seeded spend-cap guard denies a capless `to.new`
+ * send. composition/codemode.ts folds that defect to the typed failed
+ * ToolCallResult, so the cell sees ToolError and the turn settles — never an
+ * IPC "request handler defect" tearing the connection.
+ */
+test("a cell's refused send_message surfaces as ToolError inside the cell, not an IPC defect", async () => {
+  const socketPath = testSocketPath();
+  const config = suite.config("openomni-code-mode-refused-", {
+    wsToken: WS_TOKEN,
+    model: { provider: "fake", id: "code-mode-test", apiKey: "test-key" },
+    machines: { self: testSelfMachine(), listen: { unix: socketPath }, enrolled: [enrollment] },
+  });
+  const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) => Effect.sync(() => {
+        const executed = requestToolStep(input, sink, {
+          id: "call-1",
+          tool: "eval",
+          input: {
+            operation: {
+              op: "run",
+              code: [
+                "try:",
+                "    tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message='no cap')",
+                "    outcome = 'created'",
+                "except ToolError as error:",
+                "    outcome = 'refused: ' + str(error)",
+                "outcome",
+              ].join("\n"),
+              timeout: 20,
+            },
+          },
+        });
+        if (executed === undefined) return { type: "stop" };
+        sink.onMessage(assistantMessage(input, { text: `cell=${executed?.content ?? "nothing"}` }));
+        return { type: "stop" };
+      }),
+    },
+  });
+  planeRef.current = await planeOf(app.runtime);
+  const daemon = await attachMachineDaemon(cellDaemonOptions(socketPath, MACHINE_ID));
+  expect(daemon.attachment.status).toBe("attached");
+
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, [
+    "auth",
+    WS_TOKEN,
+  ]);
+  const reply = nextResidentTurn(planeRef.current, 30_000);
+  ws.send(JSON.stringify({ type: "message", eventId: newTraceId(), text: "spawn without a cap" }));
+
+  // The turn SETTLES with the refusal as cell data: the catchDefect fold, not
+  // a torn connection or a disposed-runtime cascade.
+  const answer = String((await reply).text);
+  // Python renders the cell value quoted; the refusal text is the data.
+  expect(answer).toContain("refused: send_message refused");
+  expect(answer).not.toContain("created");
+  // The refused send created no child session.
+  expect(planeRef.current.listSessions().filter((row) => row.role === "worker")).toHaveLength(0);
+  await suite.cleanup();
 }, 60_000);
 
 test("the catalog remains available while machine execution refuses without attachment", async () => {

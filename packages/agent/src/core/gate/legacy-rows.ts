@@ -243,8 +243,13 @@ function resolveVerdict(
         });
       return Object.freeze(verdict);
     case "consult":
-      // The named async service must be registered or the generation refuses.
-      if (!(registry.consultants ?? []).some(({ name }) => name === verdict.ref))
+      // One consulted-row vocabulary (#1256/#1258): the ref resolves to an
+      // async consultant or a sync guard; unregistered names refuse the
+      // generation.
+      if (
+        !(registry.consultants ?? []).some(({ name }) => name === verdict.ref) &&
+        !(registry.guards ?? []).some(({ name }) => name === verdict.ref)
+      )
         throw new PolicyCompileError({
           code: "unknown_ref",
           generation,

@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Cause, Effect, Layer } from "effect";
 import { Core } from "@openomni/agent";
 const createTurnDispatcher = Core.createTurnDispatcher;
 import { createCodemode } from "@openomni/codemode";
-import { attachMachineDaemon, createMachineHost } from "@openomni/machines";
+import { attachMachineDaemon, createMachineHost, MachinesFailure } from "@openomni/machines";
 import { LedgerAction, type Machine } from "@openomni/protocol";
 import { catalogLayer, executorLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { runnerTestLayer } from "../../../packages/agent/test/helpers/isolated";
@@ -83,4 +83,82 @@ test("two cells in one turn each own a full completion budget", async () => {
     expect(completions).toBe(index * 32);
   }
   expect([...cellCalls.values()]).toEqual([33, 33]);
+}, 15_000);
+
+/**
+ * #1258: the cell door's `catchDefect` folds ONLY a thrown ToolRefused into
+ * the typed failed ToolCallResult; any other defect inside the dispatch (here
+ * a result-parse throw on an empty failure text) must keep dying through
+ * `callTool`, never surface to the cell as a failed result.
+ */
+test("a non-ToolRefused defect inside the cell door dies instead of folding to a failed result", async () => {
+  const path = socketPath();
+  let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
+  const causes: Cause.Cause<unknown>[] = [];
+  const settled: Machine.ToolCallResult[] = [];
+  const host = await acquireEffect(createMachineHost({
+    listen: { unix: path },
+    id: testIds("defect-host"),
+    enrollment: (machineId: string) => ({ machineId, name: "defect", allowedCapabilities: ["kernel.py"], publicKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", enrolledAt: 0 }),
+    events: { publish: () => undefined }, now: () => 1,
+    // The defect is recorded HERE, at the host's callback boundary, then
+    // converted to the typed failure so the daemon and cell settle in teardown.
+    callTool: (call: Machine.ToolCall) => Effect.suspend(() => cells.callTool(call)).pipe(
+      Effect.tap((result: Machine.ToolCallResult) => Effect.sync(() => { settled.push(result); })),
+      Effect.catchCause((cause) => {
+        causes.push(cause);
+        return Effect.fail(new MachinesFailure({ operation: "test.callTool", cause: "recorded" }));
+      }),
+    ),
+  }));
+  suite.defer(() => runEffect(host.close()));
+  const daemon = await acquireEffect(attachMachineDaemon({
+    ...cellDaemonOptions(path, "defect"), runner: acquireSyncEffect(createCodemode({ id: testIds("defect-cell") })).runner,
+  }));
+  suite.defer(() => runEffect(daemon.close()));
+  expect(daemon.attachment.status).toBe("attached");
+  cells = acquireSyncEffect(composeCodemode(host, { id: testIds("defect-compose") }));
+  suite.defer(() => runEffect(cells.close()));
+  let completions = 0;
+  const definitions = catalogDefinitions({ ...testToolPorts, cells: cellPorts(cells), llm: () => {
+    completions += 1;
+    // String("") renders an EMPTY failure text: the dispatch settles as a
+    // failed result whose message is "", and the cell door's
+    // ToolCallResult.parse (error: min 1) throws a genuine non-ToolRefused
+    // defect inside the tools binding.
+    return Promise.reject("");
+  } });
+  let sequence = 0;
+  const runnerServices = acquireSyncEffect(Layer.build(runnerTestLayer));
+  const dispatcher = acquireSyncEffect(createTurnDispatcher({
+    sessionId: "defect-session", role: "resident", actionId: "one-turn",
+    ledger: { commit: (append: LedgerAction.Append) => Effect.succeed({
+      action: LedgerAction.Node.parse({ ...append, ordinal: sequence, ...fixtureHashes(sequence) }), revision: sequence,
+    }) },
+  }, {}).pipe(
+    Effect.provide(catalogLayer(definitions)),
+    Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `defect-${++sequence}` })),
+    Effect.provide(runnerServices),
+  ));
+  const code = [
+    "try:",
+    "    completion('boom')",
+    "    outcome = 'completed'",
+    "except Exception as error:",
+    "    outcome = type(error).__name__",
+    "outcome",
+  ].join("\n");
+  const exit = await runEffect(Effect.exit(dispatcher.execute({
+    id: "cell-defect", tool: "eval", input: { operation: { op: "run", code, timeout: 3 } },
+  }, { sessionId: "defect-session", turnId: "one-turn" })));
+  // The completion dispatch died through the cell door: the host observed the
+  // defect itself, never a synthesized failed ToolCallResult.
+  const defects = causes.flatMap((cause) => cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect));
+  expect(completions).toBe(1);
+  expect(defects).toHaveLength(1);
+  expect(defects[0]).toBeInstanceOf(Error);
+  expect((defects[0] as Error).name).not.toBe("ToolRefused");
+  expect(settled).toEqual([]);
+  // The turn never saw a completed cell value built from a folded result.
+  expect(JSON.stringify(exit)).not.toContain("'completed'");
 }, 15_000);

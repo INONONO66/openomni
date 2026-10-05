@@ -20,6 +20,7 @@ const compilePolicySnapshot = Core.compilePolicySnapshot;
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type PlainValue, type SessionGeneration } from "@openomni/protocol";
 import { type Clock, Context, Effect, Layer, Option, Scope, Semaphore } from "effect";
 
+import { catalogDelegationReads, delegationGuardHandlers } from "../bundles/delegation-policy";
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
 import { ComposedGeneration, type ComposedContext } from "./composed";
@@ -37,20 +38,34 @@ import { captureNow } from "./platform";
 function composedPolicyRegistry(
   generation: Bundle.Generation,
   consultants: readonly Core.NamedConsultant[],
+  live: Readonly<Record<string, { decide: Core.NamedGuard["decide"] }>> = {},
 ): Core.HandlerTable {
   const transformers = [...Core.KERNEL_POLICY_REGISTRY.transformers];
   const obligations = [...Core.KERNEL_POLICY_REGISTRY.obligations];
   const known = new Set(
     [...transformers, ...obligations, ...consultants].map((entry) => entry.name),
   );
+  const guards = [...(Core.KERNEL_POLICY_REGISTRY.guards ?? [])];
+  // #1258: a bundle contract's guard face is a declaration; the composition
+  // binds the live doors here (catalog reads), like catalog tool ports. They
+  // register unconditionally so a persisted consult row always compiles — the
+  // row itself only exists while its bundle is composed on.
+  for (const [name, guard] of Object.entries(live)) {
+    if (known.has(name)) continue;
+    known.add(name);
+    guards.push({ name, decide: guard.decide });
+  }
   for (const [name, handler] of generation.handlers) {
     if (known.has(name)) continue;
     known.add(name);
     if ("apply" in handler && typeof handler.apply === "function")
       transformers.push({ name, apply: handler.apply as Core.NamedTransformer["apply"] });
+    else if ("decide" in handler && typeof handler.decide === "function")
+      // A consulted gate guard (#1258): the handler decides per input.
+      guards.push({ name, decide: handler.decide as Core.NamedGuard["decide"] });
     else obligations.push({ name });
   }
-  return { transformers, obligations, consultants };
+  return { transformers, obligations, consultants, guards };
 }
 
 /**
@@ -202,7 +217,16 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
                   },
                 }),
           });
-          return composedPolicyRegistry(generation, consultants);
+          return composedPolicyRegistry(generation, consultants, delegationGuardHandlers(catalogDelegationReads(
+            plane.listSessions,
+            // #1258 M-4: a child is active while work is in flight — an open
+            // turn or an undelivered inbox message, both durable journal facts.
+            (childId) => {
+              const kernel = plane.openKernel(childId);
+              return kernel.latestOpenTurn(childId) !== undefined ||
+                kernel.pendingMessages(childId).length > 0;
+            },
+          )));
         }),
       ).pipe(Layer.provideMerge(seed));
       // #1255 P3: the composed ON bundles' Layers acquire INSIDE this

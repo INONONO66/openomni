@@ -4,7 +4,7 @@
  * import apps/openomni, so core tests inject the mirrors). This suite drives
  * the REAL implementations and the mirrors with identical inputs and asserts
  * identical outputs, so either side changing alone fails here until both move
- * together. #1258 replaces parent-reply with the contact contract.
+ * together. #1258 moved parentReply into bundles/delegation-policy.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +13,7 @@ import { afterAll, expect, test } from "bun:test";
 import { Core } from "@openomni/agent";
 import type { LedgerAction, Model } from "@openomni/protocol";
 import { Effect } from "effect";
-import { parentReply } from "../src/composition/parent-reply";
+import { parentReply } from "../src/bundles/delegation-policy";
 import { pinnedModelSelection, restoreModelSelection } from "../src/composition/model-selection";
 import * as mirror from "../../../packages/agent/test/helpers/composition-fixtures";
 import { materializeSession } from "../../../packages/agent/test/store/helpers/session";

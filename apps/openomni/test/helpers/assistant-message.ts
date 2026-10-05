@@ -109,9 +109,12 @@ export function commissionInput(send: {
   readonly message: string;
   readonly reply_to: string;
   readonly deadline_ms?: number;
+  readonly spend_cap?: number;
 }) {
   return {
     to: { kind: "new_session", role: "worker", runner: "native", parent: "me" } as const,
+    // #1258: delegation policy refuses child creation without a spend cap.
+    spend_cap: 1,
     ...send,
   };
 }

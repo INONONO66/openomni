@@ -13,7 +13,8 @@ export { SessionTransition } from "./session-transition.js";
 const Identifier = z.string().min(1);
 
 /** The one definition of deliverable input kinds (#1252); `Inbox.Kind` aliases it. */
-const InputKind = z.enum(["prompt", "interrupt", "resume", "action"]);
+/** `cancel` (#1258) rides the existing `signal` journal kind, like interrupt/resume. */
+const InputKind = z.enum(["prompt", "interrupt", "resume", "cancel", "action"]);
 const NullableIdentifier = Identifier.nullable();
 
 export { EncodedPayload } from "../journal/declaration.js";

@@ -14,7 +14,7 @@ import type { MonitorPorts } from "./watch";
 import { createProvisionTool } from "../provision";
 import type { ProvisionPort } from "../../provisioning/channels";
 import { createReadTool } from "../read";
-import { createSendMessageTool, type MessagePort } from "../send-message";
+import { createSendMessageTool, type ContactPorts, type MessagePort } from "../../bundles/send-message";
 import { createWriteTool } from "../write";
 
 export interface CatalogOrigin {
@@ -26,6 +26,8 @@ export interface CatalogOrigin {
 export interface ToolPorts {
   readonly alarms: MonitorPorts | undefined;
   readonly messages: MessagePort | undefined;
+  /** Contact connectors (#1258); absent means connector kinds report not_sent. */
+  readonly contacts?: ContactPorts;
   readonly machines: FilePorts["machines"];
   readonly cells: { readonly cell: Cell } | undefined;
   readonly llm: LlmPort | undefined;
@@ -47,7 +49,7 @@ export function catalogDefinitions(ports: ToolPorts): readonly AnyToolDefinition
     eraseTool(createBashTool(ports)),
     eraseTool(createEvalTool(ports.cells?.cell)),
     eraseTool(createMonitorTool(ports.alarms)),
-    eraseTool(createSendMessageTool(ports.messages, ports.clock)),
+    eraseTool(createSendMessageTool(ports.messages, ports.clock, ports.contacts)),
     eraseTool(createProvisionTool(ports.provisioning, ports.clock)),
     eraseTool(createCompletionTool(ports.llm)),
   ]);

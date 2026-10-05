@@ -159,6 +159,7 @@ export function projectGeneration(
       ...registry.transformers,
       ...registry.obligations,
       ...(registry.consultants ?? []),
+      ...(registry.guards ?? []),
     ].map(({ name }) => name),
     generation,
     matchers,

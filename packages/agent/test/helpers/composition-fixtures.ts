@@ -1,10 +1,10 @@
 /**
  * #1276 composition fixtures: the product choices the app injects
- * (apps/openomni/src/composition/model-selection.ts and ./parent-reply).
+ * (apps/openomni/src/composition/model-selection.ts and bundles/delegation-policy).
  * Core tests inject these to exercise the seams `ChatAgentConfig.
  * restoreModelSelection`, `SessionChatRunnerOptions.pinnedModel` and
  * `SessionRuntime.parentReply` with the shipped behavior. Kept in sync by
- * hand; #1258 replaces parent-reply with the contact contract.
+ * hand; #1258 moved parentReply into bundles/delegation-policy.
  */
 import type { SessionKernel } from "../../src/core/entity";
 import type { SessionRunnerResult } from "../../src/core/run";
@@ -66,7 +66,7 @@ export function restoreModelSelection(
   });
 }
 
-/** Mirror of apps/openomni/src/composition/parent-reply#parentReply. */
+/** Mirror of apps/openomni/src/bundles/delegation-policy#parentReply. */
 export function parentReply(
   kernel: SessionKernel,
   row: LedgerSession.Row,

@@ -410,6 +410,7 @@
     "windowMs"
   ],
   "Inbox.Commit": [
+    "after",
     "content",
     "createdAt",
     "createSession",
@@ -439,6 +440,7 @@
     "terminalKind"
   ],
   "Inbox.Row": [
+    "after",
     "consumedAt",
     "consumedBy",
     "content",
@@ -957,14 +959,33 @@
     "wrappedDek"
   ],
   "RowVerdict.out#allow": ["effects", "reason", "reasonCodes", "type"],
+  "RowVerdict.out#consult": ["config", "observe", "ref", "rewrite", "type"],
   "RowVerdict.out#deny": ["reason", "type"],
   "RowVerdict.out#obligation": ["limit", "metric", "ref", "type"],
   "RowVerdict.out#require_approval": ["reason", "type"],
   "RowVerdict.out#transform": ["config", "ref", "type"],
+  "SessionFork.Forked": ["forkedFrom", "head", "parentId", "sessionId", "type"],
+  "SessionFork.Refused": ["detail", "reason", "sessionId", "type"],
+  "SessionFork.Request": ["at", "childId", "sessionId", "type"],
+  "SessionFork.Response#0": [
+    "forkedFrom",
+    "head",
+    "parentId",
+    "sessionId",
+    "type"
+  ],
+  "SessionFork.Response#1": ["detail", "reason", "sessionId", "type"],
   "SessionGeneration.ConfigureEffect": ["phase", "snapshot"],
-  "SessionGeneration.ConfigureIntent": ["operation", "settings"],
+  "SessionGeneration.ConfigureIntent": ["forkedFrom", "operation", "settings"],
   "SessionGeneration.ConfigureReceipt": ["generation", "revertTo"],
   "SessionGeneration.ConfigureRevert": ["generation"],
+  "SessionGeneration.ForkAncestry": [
+    "anchor",
+    "copied",
+    "parentHead",
+    "parentSeq",
+    "session"
+  ],
   "SessionGeneration.Id": ["generation", "sessionId"],
   "SessionGeneration.Snapshot": [
     "bundles",
@@ -1078,6 +1099,8 @@
   "SessionRead.Page": [
     "actions",
     "afterRevision",
+    "ancestry",
+    "children",
     "epoch",
     "headRevision",
     "nextRevision",
@@ -1094,6 +1117,8 @@
   "SessionRead.Response#0": [
     "actions",
     "afterRevision",
+    "ancestry",
+    "children",
     "epoch",
     "headRevision",
     "nextRevision",
@@ -1230,6 +1255,7 @@
   ],
   "SessionTurn.DecodeIntent#0": [
     "boundaryActionId",
+    "consumedStale",
     "context",
     "inboxIds",
     "phase",
@@ -1242,6 +1268,7 @@
   ],
   "SessionTurn.DecodeIntent#1": [
     "boundaryActionId",
+    "consumedStale",
     "inboxIds",
     "phase",
     "policyGeneration",
@@ -1286,6 +1313,7 @@
   ],
   "SessionTurn.HistoricalIntent": [
     "boundaryActionId",
+    "consumedStale",
     "inboxIds",
     "phase",
     "policyGeneration",
@@ -1308,6 +1336,7 @@
   ],
   "SessionTurn.Intent": [
     "boundaryActionId",
+    "consumedStale",
     "context",
     "inboxIds",
     "phase",
@@ -1375,10 +1404,13 @@
   ],
   "Tool.Call": ["id", "input", "tool"],
   "Tool.Result": [
+    "content",
+    "details",
     "id",
     "isError",
     "output",
     "settlement",
+    "structuredContent",
     "toolCallId",
     "toolName"
   ],
