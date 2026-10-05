@@ -238,9 +238,10 @@ export interface AlarmDrainSettings {
 }
 
 /**
- * Session fork copy cap (#1257): the one owner of the composed default,
- * mirroring `resolveAlarmDrain` — typed in core (`byteCap` on
- * `Core.ForkInput`), the VALUE lives here at the composition root.
+ * Session fork copy cap (#1257): the one owner of the resolved startup value,
+ * mirroring `resolveAlarmDrain`. The cap itself is generation configuration —
+ * `session.configure{settings.forkCopyByteCap}` — and this resolved VALUE is
+ * the input the composition writes into each new session's genesis settings.
  */
 const DEFAULT_FORK_COPY = { byteCap: 4 * 1024 * 1024 } as const;
 
