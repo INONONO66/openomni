@@ -1284,6 +1284,10 @@ The #967 corrections are merged: subprotocol-only authentication (#974), legacy 
 
 The archive CLI creates a native SQLite image plus a v2 all-table receipt at explicit paths. Verification restores a temporary copy rather than opening the operator archive writable. `--dispose-967 --approve-manifest-sha256` revalidates the archive/receipt/source before guarded migration `0034_u967_archive_disposition`, in the migration transaction. Eligible retired Wait projections and archived bus rows are removed only with approval; the empty bus table is dropped. Ordinary boot does not archive implicitly. Message/part retention is not a DROP receipt and remains a final-convergence consideration for #945/#948, even though #937 is now merged.
 
+## #1259 slop cleanup sub-PRs
+
+Band b4 (`epic1260/1259-b4-channels`, commit `c1420c6e`) cleans packages/channels per the #1259 inventory: duplicated normalizer guards deleted from the telegram/discord surfaces, handler casts replaced by `requireHandler` binding, the floating telegram poll-loop promise annotated with `void`, the stale `DeliveringSurface` comment pruned, `verifyGitHubSignature` moved into `src/authn/` beside its only consumer, and a duplicate file-level `beforeEach` removed from the send suite — net LOC negative, zero behavior change; full per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
+
 ## Census and final quality: current versus required
 
 **#1116 lean PR gate (2026-09-20):** the per-PR Quality ratchet stack (census
@@ -1315,3 +1319,6 @@ claim about it.
 - #949 stays open after stage 3, which landed `eval.op = run | peek | stop` over a background cell registry, `completion` options, and tool-named codemode handle methods for the five operations the machine wire carries (`read/write/ls/bash/eval`). Not landed: the `edit`, `find` and `grep` handle methods from the Owner amendment. Those tools are compositions the app tool layer builds over `read/write/list/stat` (`apps/openomni/src/tools/{edit,find,grep}.ts` on `core/filesystem.ts`); the codemode plane (`packages/codemode/`, #1246 fold reversed by #1272) sits below that layer and the wire has no such op, so offering them in the cell without duplicating the tools means hoisting that composition into a package both can import. Until then the handle set is the five above and a cell reaches the other three through `tool.edit/find/grep()` proxies. Continuous alarm scheduling stays #947; #969 acceptance uses the behavioral and deletion receipts above, not only its census; machine handles and codemode are described above.
 - Connector definitions and installation schemas are not an installed connector execution host. The dormant installation store is deleted.
 - Governor/Jester/Voice, Stakes and effective-authority target consumers, dynamic reactive composition, and any later memory/search redesign are not promoted to shipped by retained design prose.
+
+## #1259 slop cleanup ladder
+Band b3 (machines + codemode) landed on `epic1260/1259-b3-machines-codemode`: the `RootWalk` alias is deleted, the duplicated `peek`/`stop` open-check is folded into `tenantCell`, and the unexported `Options` interface is renamed `CodemodeOptions`; the zod boundary parses in `exec.ts`/`failure.ts` stay (written-types gate: the untyped thrown value is owned by the parse), item 108 is deferred to PR #1293's ownership, and item 109 was already resolved on main.

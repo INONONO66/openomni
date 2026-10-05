@@ -2,6 +2,7 @@ import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
+import { requireHandler } from "../../support/handler-frame";
 import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { DiscordClient } from "./client";
 import {
@@ -25,7 +26,6 @@ export class DiscordAdapter implements Channel.Surface {
   private readonly dedupe: Dedupe;
   private readonly outbound = new DeliveryReconciliation();
   private normalizer: DiscordNormalizer | null = null;
-  private botId: string | null = null;
   private handler: Channel.MessageHandler | null = null;
 
   constructor(
@@ -46,7 +46,6 @@ export class DiscordAdapter implements Channel.Surface {
       () => this.client.fetchGatewayUrl(),
       {
         onReady: ({ botId, botUsername }) => {
-          this.botId = botId;
           this.normalizer = new DiscordNormalizer();
           this.publish(Operational.Events.Info, {
             // Origin: a gateway READY is a distinct occurrence (initial connect
@@ -138,7 +137,6 @@ export class DiscordAdapter implements Channel.Surface {
       errorMessage: "discord message handling failed",
       rethrowFailure: false,
       handle: async () => {
-        if (message.author.bot || !message.content || !this.botId) return;
         const inbound = normalizer.normalize(message);
         if (inbound) await this.handleIncoming(inbound, message.channel_id, traceId);
       },
@@ -158,6 +156,6 @@ export class DiscordAdapter implements Channel.Surface {
       context: { channelId },
     });
 
-    await (this.handler as Channel.MessageHandler)(inbound);
+    await requireHandler(this.handler, "discord")(inbound);
   }
 }
