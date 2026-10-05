@@ -29,13 +29,18 @@ export const queryKeys = {
  * keep the populated page when a same-epoch refetch at the same head returns
  * an empty continuation: no new actions is not new authority, and replacing
  * the cached slice would erase the authoritative last-activity timestamp.
+ * Catalog-derived fork children are the one exception (#1257 r4 H-1): a fork
+ * writes no parent action, so the gateway's post-fork refresh arrives as a
+ * same-head empty page whose `children` must still land in the cache.
  */
 function newerPage(previous: SessionRead.Page | undefined, page: SessionRead.Page): SessionRead.Page {
   if (previous === undefined || page.epoch > previous.epoch) return page;
   if (page.epoch < previous.epoch || page.headRevision < previous.headRevision) return previous;
-  return page.headRevision === previous.headRevision &&
-    (page.afterRevision < previous.afterRevision || page.actions.length === 0)
-    ? previous : page;
+  if (page.headRevision === previous.headRevision &&
+    (page.afterRevision < previous.afterRevision || page.actions.length === 0)) {
+    return page.children === undefined ? previous : { ...previous, children: page.children };
+  }
+  return page;
 }
 
 export function sessionReadOptions(client: QueryClient, transport: GatewayChatTransport | null, sessionId: string) {

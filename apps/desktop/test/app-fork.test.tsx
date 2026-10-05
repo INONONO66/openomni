@@ -39,10 +39,18 @@ function serveFork(script: "legs" | "children" = "legs") {
   const parentPage = (sessionId: string, cursored: boolean) => ({
     type: cursored ? "session_page" : "session_snapshot",
     sessionId, state: "idle", phase: "completed", phaseSince: 100,
-    epoch: 1, afterRevision: 0, headRevision: forkCalls > 0 ? 2 : 1, nextRevision: null,
+    epoch: 1, afterRevision: 0, headRevision: 1, nextRevision: null,
     actions: [{ revision: 1, actionId: "turn-1", kind: "turn", at: 120, forkAnchor: "hash-2" }],
     usage: [], toolWallMs: 0,
     ...(sessionId === "durable" ? childrenField() : {}),
+  });
+  // The shipped gateway's post-fork subscription refresh: the parent chain
+  // did not grow, so the pushed page is same-head and action-free; only the
+  // catalog-derived `children` are new (#1257 r4 H-1).
+  const parentRefresh = () => ({
+    type: "session_page", sessionId: "durable", state: "idle", phase: "completed",
+    phaseSince: 100, epoch: 1, afterRevision: 1, headRevision: 1, nextRevision: null,
+    actions: [], usage: [], toolWallMs: 0, ...childrenField(),
   });
   return Bun.serve({
     hostname: "127.0.0.1",
@@ -60,9 +68,7 @@ function serveFork(script: "legs" | "children" = "legs") {
         if (script === "children") {
           socket.send(JSON.stringify({ type: "session_forked", sessionId: "child-1",
             parentId: frame.sessionId, forkedFrom: pin, head: "child-head" }));
-          // The authoritative push after a fork: the parent page now lists
-          // its children, like the real gateway's subscription re-read.
-          socket.send(JSON.stringify(parentPage("durable", false)));
+          socket.send(JSON.stringify(parentRefresh()));
           return;
         }
         if (forkCalls === 3) {

@@ -62,7 +62,18 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
     reason: "anchor_not_found",
   });
 
+  // Subscribe the PARENT before forking (#1257 r4 H-1): a fork writes no
+  // parent action, so only the gateway's own post-fork refresh can tell an
+  // already-open parent about its new child.
+  const subscribedParent = nextFrame(socket, (frame) =>
+    frame.type === "session_snapshot" && frame.sessionId === sessionId);
+  socket.send(JSON.stringify({ type: "session_read", sessionId, limit: 256 }));
+  const beforeFork = SessionRead.Page.parse(await subscribedParent);
+  expect("children" in beforeFork).toBeFalse();
+
   const forkedFrame = nextFrame(socket, (frame) => frame.type === "session_forked");
+  const parentRefresh = nextFrame(socket, (frame) =>
+    frame.type === "session_page" && frame.sessionId === sessionId);
   socket.send(JSON.stringify({
     type: "session_fork", sessionId, at: anchor.actionHash, childId: "forked-child",
   }));
@@ -77,6 +88,16 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
     throw new Error("session_forked carried no fork pin");
   expect(forkedFrom.session).toBe(sessionId);
   expect(forkedFrom.anchor).toBe(anchor.actionHash);
+
+  // The subscribed parent is refreshed by the fork itself: same head (no
+  // synthetic parent journal growth), no new actions, the child in `children`.
+  const refreshed = SessionRead.Page.parse(await parentRefresh);
+  expect(refreshed.epoch).toBe(beforeFork.epoch);
+  expect(refreshed.headRevision).toBe(beforeFork.headRevision);
+  expect(refreshed.actions).toEqual([]);
+  expect(refreshed.children).toEqual([
+    { sessionId: "forked-child", anchor: anchor.actionHash },
+  ]);
 
   // The child's read page projects the ancestry and the history-only aside.
   const childPage = nextFrame(socket, (frame) => frame.type === "session_snapshot");

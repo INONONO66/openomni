@@ -340,6 +340,11 @@ export function webSocketCallbacks(
 ) {
   const inflight = new Set<Promise<void>>();
   const readers = new Map<WsConnection, Map<string, () => void>>();
+  // Session-indexed re-send hooks (#1257 r4 H-1): a fork writes no parent
+  // action, so no ActionCommittedEvent ever refreshes a subscribed parent.
+  // A successful fork re-sends every parent subscriber's page instead; the
+  // same-head page carries the new catalog child in `children`.
+  const refreshers = new Map<string, Set<() => void>>();
   function read(ws: WsConnection, request: SessionRead.Request): void {
     const subscriptions = readers.get(ws) ?? new Map<string, () => void>();
     readers.set(ws, subscriptions);
@@ -363,10 +368,18 @@ export function webSocketCallbacks(
         ws.send(JSON.stringify({ type: "error", reason: "session_read_failed", sessionId: request.sessionId }));
       }
     };
+    const pool = refreshers.get(request.sessionId) ?? new Set<() => void>();
+    refreshers.set(request.sessionId, pool);
+    pool.add(send);
     // Register before capture; notifications only hint at authoritative reads.
-    subscriptions.set(request.sessionId, sink.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    const unsubscribe = sink.subscribe(L0Observation.ActionCommittedEvent, (event) => {
       if (event.revision > sentRevision) send();
-    }, { match: { sessionId: request.sessionId } }));
+    }, { match: { sessionId: request.sessionId } });
+    subscriptions.set(request.sessionId, () => {
+      unsubscribe();
+      pool.delete(send);
+      if (pool.size === 0) refreshers.delete(request.sessionId);
+    });
     send();
   }
   return {
@@ -393,7 +406,13 @@ export function webSocketCallbacks(
                       reason: "storage",
                       detail: "fork is not available on this gateway",
                     } satisfies SessionFork.Refused);
-                  return Effect.map(response, (frame) => void ws.send(JSON.stringify(frame)));
+                  return Effect.map(response, (frame) => {
+                    ws.send(JSON.stringify(frame));
+                    // #1257 r4 H-1: the parent chain did not grow, so push the
+                    // refreshed parent page (new `children`) to its subscribers.
+                    if (frame.type !== "session_forked") return;
+                    for (const refresh of refreshers.get(frame.parentId) ?? []) refresh();
+                  });
                 }
                 return Effect.sync(() => {
                   // A keyless frame is a perimeter refusal (#1245) — report it verbatim.
