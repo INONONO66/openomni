@@ -141,6 +141,65 @@ describe("immutable named policy registry", () => {
     expect(gateEvaluation.value).toEqual(input.value);
   });
 
+  test("a sync guard reads `when` beside an async consultant on the same point: both evaluate and the evaluateEffect probe fold carry the real when (#1258)", async () => {
+    const registry = {
+      ...KERNEL_POLICY_REGISTRY,
+      consultants: [
+        {
+          name: "hook/process",
+          consult: () =>
+            Effect.succeed({ verdict: "allow" as const, payload: { ref: "hook/process" } }),
+        },
+      ],
+      guards: [
+        {
+          name: "demo/op-guard",
+          decide: ({ when }: { when: Readonly<Record<string, PlainValue>> }): GateHandlerResult => {
+            const verdict = when.op === "bash" ? ("deny" as const) : ("allow" as const);
+            return { verdict, payload: { decided: verdict, op: when.op ?? null } };
+          },
+        },
+      ],
+    };
+    const snapshot = compilePolicySnapshot({
+      generation: 9,
+      registry,
+      rows: [
+        atGeneration(compaction, 9),
+        atGeneration(draft("async-gate", "tool", "pre", { type: "consult", ref: "hook/process" }), 9),
+        atGeneration(draft("sync-guard", "tool", "pre", { type: "consult", ref: "demo/op-guard" }), 9),
+      ],
+    });
+    if (snapshot.evaluateEffect === undefined) throw new Error("effectful evaluation missing");
+    // Probe path (#1256 fold): the guard folds inline while the consultant is
+    // awaited; with the REAL when (op=bash) it denies. Dropping `when` on the
+    // probe path would fold allow+allow here and break this assertion.
+    const denied = await runTestPromise(snapshot.evaluateEffect(input));
+    expect(denied.verdict).toBe("deny");
+    expect(denied.gate?.consulted.find((entry) => entry.ref === "demo/op-guard")?.payload).toEqual({
+      decided: "deny",
+      op: "bash",
+    });
+    const allowed = await runTestPromise(snapshot.evaluateEffect({ ...input, op: "ls" }));
+    expect(allowed.verdict).toBe("allow");
+    expect(allowed.gate?.consulted.find((entry) => entry.ref === "demo/op-guard")?.payload).toEqual({
+      decided: "allow",
+      op: "ls",
+    });
+    // Sync path: the un-prepared async consult row fail-closes to deny either
+    // way, but the guard's recorded payload proves `evaluate` handed the real
+    // when to the sync handler too.
+    const sync = snapshot.evaluate(input);
+    expect(sync.verdict).toBe("deny");
+    expect(sync.gate?.consulted.find((entry) => entry.ref === "demo/op-guard")?.payload).toEqual({
+      decided: "deny",
+      op: "bash",
+    });
+    expect(
+      snapshot.evaluate({ ...input, op: "ls" }).gate?.consulted.find((entry) => entry.ref === "demo/op-guard")?.payload,
+    ).toEqual({ decided: "allow", op: "ls" });
+  });
+
   test("consult{rewrite} misdeclarations refuse the generation: observe+rewrite and missing fields (#1256 r4 H-2)", () => {
     const registry = {
       ...KERNEL_POLICY_REGISTRY,

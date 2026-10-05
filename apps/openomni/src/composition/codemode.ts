@@ -58,7 +58,17 @@ function bindings(frame: InvocationFrame, id: () => string): NonNullable<RunOpti
             ? { status: "failed", error: toolResultText(result) }
             : { status: "completed", value: result.structuredContent },
         );
-      }).pipe(Effect.mapError((error) => new MachinesFailure({ operation: call.name, cause: String(error) })));
+      }).pipe(
+        // #1258: the cell door throws on a policy refusal (tool.ts
+        // finishResult); the cell consumes it as the typed failed result —
+        // a denied send is the contracted refusal, never an IPC defect.
+        Effect.catchDefect((defect) =>
+          defect instanceof Error && defect.name === "ToolRefused"
+            ? Effect.succeed(Machine.ToolCallResult.parse({ status: "failed", error: defect.message }))
+            : Effect.die(defect),
+        ),
+        Effect.mapError((error) => new MachinesFailure({ operation: call.name, cause: String(error) })),
+      );
     },
   };
 }

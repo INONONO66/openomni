@@ -15,7 +15,7 @@ import { projectGeneration, type ProjectedGeneration } from "./project";
 import { evaluateProjected, failedSnapshot, nextProjectedConsult, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
 import type { GateHandlerResult } from "./compose";
 
-export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer, type NamedConsultant, type ConsultInput } from "./registry";
+export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer, type NamedConsultant, type ConsultInput, type NamedGuard } from "./registry";
 export { PolicyCompileError } from "./legacy-rows";
 export type { CompiledPolicySnapshot, PolicyEvaluation, PolicyEvaluationInput } from "./evaluate";
 
@@ -75,9 +75,13 @@ export function compilePolicySnapshot(
       ...(cause.data.ref === undefined ? {} : { ref: cause.data.ref }),
     });
   }
-  const handlers = new Map(
-    registry.transformers.map((transformer) => [transformer.name, wrapTransformer(transformer)]),
-  );
+  const handlers = new Map([
+    ...registry.transformers.map(
+      (transformer) => [transformer.name, wrapTransformer(transformer)] as const,
+    ),
+    // Guards (#1258) are already gate handlers: consulted, verdict-bearing.
+    ...(registry.guards ?? []).map((guard) => [guard.name, guard.decide] as const),
+  ]);
   const consultants = new Map((registry.consultants ?? []).map((entry) => [entry.name, entry]));
   const contentHash = canonicalDigest(contentIdentity(options.rows));
   const evaluate = (input: PolicyEvaluationInput, prepared?: Parameters<typeof evaluateProjected>[6]) =>

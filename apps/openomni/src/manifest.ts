@@ -1,12 +1,12 @@
 import { Bundle } from "@openomni/agent";
 import { Journal, type PlainValue } from "@openomni/protocol";
 import { cronBundle } from "./bundles/cron";
+import { delegationPolicyBundle } from "./bundles/delegation-policy";
 import { hooksJsonBundle, type HooksJsonInput } from "./bundles/hooks-json";
 import { monitorBundle } from "./bundles/monitor";
+import { ActionCapabilitySeam, ToolCapabilitySeam } from "./bundles/seams";
+import { sendMessageBundle } from "./bundles/send-message";
 import { AppInvariantError } from "./invariant";
-
-/** The tool capability's seam; no bundle requires it yet, `Capability.define` needs one. */
-const ToolCapabilitySeam = Bundle.seam("@openomni/openomni/ToolCapabilitySeam");
 
 /**
  * The thin tool-capability contract (#1255 P3): the dispatcher stays the
@@ -24,9 +24,6 @@ export const toolCapability = Bundle.Capability.define({
   seam: ToolCapabilitySeam,
 });
 
-/** The action capability's seam; the hook capability requires it by NAME. */
-const ActionCapabilitySeam = Bundle.seam("@openomni/openomni/ActionCapabilitySeam");
-
 const actionKindDeclaration = Journal.CAPABILITY_DECLARATIONS.find(
   (declaration) => declaration.kind === "action",
 );
@@ -34,12 +31,13 @@ if (actionKindDeclaration === undefined)
   throw new AppInvariantError("protocol no longer declares the action journal kind");
 
 /**
- * The thin action-capability contract (#1256): declares the protocol's
+ * The thin action-capability contract (#1256/#1258): declares the protocol's
  * `action` journal kind, admits `action` as `deliver` input, and owns the
- * `action.pre` point — the seam the hook capability's `requires: ["action"]`
- * resolves against, so `off: ["action"]` cascades `hook` and `hooks-json`
- * off together. The reducer is identity: an action row is a deferred INPUT
- * consumed by delivery, never folded session state.
+ * `action.pre` point. Two dependents hang off it: the hook capability's
+ * `requires: ["action"]` resolves it by NAME, and `bundles/delegation-policy`
+ * requires its seam — so `off: ["action"]` cascades `hook`, `hooks-json`, and
+ * delegation policy off together. The reducer is identity: an action row is a
+ * deferred INPUT consumed by delivery, never folded session state.
  */
 const actionCapability = Bundle.Capability.define({
   name: "action",
@@ -79,7 +77,13 @@ export interface AppManifestInput {
 export function appManifest(input: AppManifestInput): Bundle.ManifestDefinition {
   return Bundle.Manifest.define({
     capabilities: [toolCapability, actionCapability, Bundle.hookCapability(), input.alarm],
-    bundles: [monitorBundle(input.wake), cronBundle(), hooksJsonBundle(input.hooks)],
+    bundles: [
+      monitorBundle(input.wake),
+      cronBundle(),
+      hooksJsonBundle(input.hooks),
+      sendMessageBundle(),
+      delegationPolicyBundle(),
+    ],
     off: input.off ?? [],
   });
 }

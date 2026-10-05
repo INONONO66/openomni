@@ -214,7 +214,7 @@ export function compileGateRows<Context = never>(
           },
         };
       }
-      applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers, decideOptions.prepared);
+      applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers, input.when, decideOptions.prepared);
     }
     const decision: GateDecision = {
       point,

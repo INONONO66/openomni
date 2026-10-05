@@ -21,7 +21,7 @@ import { localInbox } from "./ledger";
 import { allowConfigure, generationServices } from "./generation-services";
 const ToolCatalog = Core.ToolCatalog;
 import { seedKernelPolicyRows } from "../../src/policy-seed";
-import { createSendMessageTool } from "../../src/tools/send-message";
+import { createSendMessageTool } from "../../src/bundles/send-message";
 import { dispatchOutboundMessage } from "../../src/composition/terminal-message";
 import type { z } from "zod";
 import { Effect } from "effect";

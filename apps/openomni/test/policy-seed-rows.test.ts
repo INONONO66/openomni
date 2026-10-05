@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { Bundle } from "@openomni/agent";
-import { gateRowPolicySeeds } from "../src/policy-seed";
 import { AppInvariantError } from "../src/invariant";
+import { gateRowPolicySeeds } from "../src/policy-seed";
 
 const row = (over: Partial<Bundle.BundleGateRow>): Bundle.BundleGateRow => ({
   id: "probe/tool.pre#1",
@@ -96,6 +96,16 @@ test("a rewrite row naming a registered consultant seeds consult{rewrite}; a syn
   ]);
 });
 
+test("a consulted gate row without budget fields seeds as a consult verdict (#1258)", () => {
+  const seeds = gateRowPolicySeeds(
+    generationOf([row({ how: { ref: "delegation-policy/spawn-depth", params: { limit: 3 } } })]),
+  );
+  expect(seeds[0]?.verdict.value).toEqual({
+    type: "consult",
+    ref: "delegation-policy/spawn-depth",
+    config: { limit: 3 },
+  });
+});
 test("a row the live plane cannot seed is an invariant failure, never a silent default", () => {
   expect(() => gateRowPolicySeeds(generationOf([row({ how: { ref: "kernel/budget-clamp" } })]))).toThrow(
     AppInvariantError,

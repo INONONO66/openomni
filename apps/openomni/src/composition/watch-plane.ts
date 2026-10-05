@@ -3,6 +3,7 @@ import { Core, Bundle } from "@openomni/agent";
 import { parseJson } from "@openomni/protocol";
 import { AppInvariantError } from "../invariant";
 import { cronPurposes } from "../bundles/cron";
+import { delegationPurposes, type DelegationDeadlineDeps } from "../bundles/delegation-policy";
 import { monitorPurposes } from "../bundles/monitor";
 import { createLiveArmRegistry, type LiveArmRegistry } from "./alarm-plane";
 import type { WatchSources } from "./watch-sources";
@@ -64,7 +65,9 @@ interface AlarmOccurrence {
   readonly fireAt: number;
 }
 
-export function createWatchPlane(): WatchPlane {
+export function createWatchPlane(
+  deps: { readonly delegation?: DelegationDeadlineDeps } = {},
+): WatchPlane {
   let sources: WatchSources | undefined;
   const live = (): WatchSources => {
     if (sources === undefined) throw new AppInvariantError("watch sources used before boot bound them");
@@ -72,7 +75,17 @@ export function createWatchPlane(): WatchPlane {
   };
   const wake: Bundle.WatchWakeDeps = { close: (watchId) => void live().close(watchId) };
   const arms = createLiveArmRegistry();
-  const declared: readonly Bundle.AlarmBundlePurposes[] = [monitorPurposes(wake), cronPurposes()];
+  const declared: readonly Bundle.AlarmBundlePurposes[] = [
+    monitorPurposes(wake),
+    cronPurposes(),
+    // #1258: the delegation deadline purpose; the cancel door is injected by
+    // the boot (entity deliver), fail-closed until bound.
+    delegationPurposes(
+      deps.delegation ?? {
+        cancel: () => Effect.fail({ reason: "outbound cancel door is not composed" }),
+      },
+    ),
+  ];
   const watch: Bundle.WatchInstallDeps = {
     install: ({ sessionId, watchId, spec, occurrence }) =>
       Effect.tryPromise({

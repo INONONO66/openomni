@@ -41,7 +41,7 @@ import { messageDecisionRules } from "./composition/message-decision";
 import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
-import { parentReply } from "./composition/parent-reply";
+import { parentReply } from "./bundles/delegation-policy";
 import { createProcessReplyChannel } from "./composition/process-replies";
 
 export const ProcessSessionRequest = z
