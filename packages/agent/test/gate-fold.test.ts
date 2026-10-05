@@ -127,16 +127,8 @@ describe("gate decision fold (#1251)", () => {
     const gate = compileGateRows({
       table,
       rows: [
-        gateRow("llm.pre", {
-          order: 1,
-          do: "rewrite",
-          how: { ref: "rewrite/upgrade", fields: ["model"] },
-        }),
-        gateRow("llm.pre", {
-          order: 2,
-          do: "rewrite",
-          how: { ref: "rewrite/suffix", fields: ["model"] },
-        }),
+        gateRow("llm.pre", { order: 1, do: "rewrite", how: { ref: "rewrite/upgrade", fields: ["model"] } }),
+        gateRow("llm.pre", { order: 2, do: "rewrite", how: { ref: "rewrite/suffix", fields: ["model"] } }),
       ],
       handlers: [...handlers.keys()],
       generation: 1,
@@ -240,11 +232,7 @@ describe("gate decision fold (#1251)", () => {
     const gate = compileGateRows({
       table,
       rows: [
-        gateRow("tool.pre", {
-          id: "audit/tool.pre#3",
-          do: "observe",
-          how: { ref: "audit/mutate" },
-        }),
+        gateRow("tool.pre", { id: "audit/tool.pre#3", do: "observe", how: { ref: "audit/mutate" } }),
       ],
       handlers: ["audit/mutate"],
       generation: 1,
@@ -287,11 +275,7 @@ describe("gate decision fold (#1251)", () => {
     const gate = compileGateRows({
       table,
       rows: [
-        gateRow("tool.pre", {
-          id: "audit/tool.pre#4",
-          do: "observe",
-          how: { ref: "audit/broken" },
-        }),
+        gateRow("tool.pre", { id: "audit/tool.pre#4", do: "observe", how: { ref: "audit/broken" } }),
       ],
       handlers: ["audit/broken"],
       generation: 1,
@@ -316,11 +300,7 @@ describe("gate decision fold (#1251)", () => {
     const gate = compileGateRows({
       table,
       rows: [
-        gateRow("tool.pre", {
-          id: "audit/tool.pre#2",
-          do: "observe",
-          how: { ref: "audit/escape" },
-        }),
+        gateRow("tool.pre", { id: "audit/tool.pre#2", do: "observe", how: { ref: "audit/escape" } }),
       ],
       handlers: ["audit/escape"],
       generation: 1,
@@ -375,10 +355,7 @@ describe("gate decision fold (#1251)", () => {
     // A rewrite-shaped hook response on a command (gate) row: value + payload,
     // no verdict. "Missing verdict => allow" is forbidden.
     const prepared = new Map([
-      [
-        "hooks/prompt.pre#1",
-        { value: { body: "zap" }, payload: { ref: "hook/process", output: "digest" } },
-      ],
+      ["hooks/prompt.pre#1", { value: { body: "zap" }, payload: { ref: "hook/process", output: "digest" } }],
     ]);
     const outcome = gate.decide(
       "prompt.pre",
@@ -399,16 +376,8 @@ describe("gate decision fold (#1251)", () => {
     const gate = compileGateRows({
       table,
       rows: [
-        gateRow("tool.post", {
-          id: "hooks/tool.post#1",
-          do: "observe",
-          how: { ref: "hook/process" },
-        }),
-        gateRow("tool.post", {
-          id: "hooks/tool.post#2",
-          do: "observe",
-          how: { ref: "hook/process" },
-        }),
+        gateRow("tool.post", { id: "hooks/tool.post#1", do: "observe", how: { ref: "hook/process" } }),
+        gateRow("tool.post", { id: "hooks/tool.post#2", do: "observe", how: { ref: "hook/process" } }),
       ],
       handlers: ["hook/process"],
       generation: 1,

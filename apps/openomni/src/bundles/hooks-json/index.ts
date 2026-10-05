@@ -92,10 +92,7 @@ export function readHooksJson(path: string): HooksJsonInput {
   try {
     raw = readFileSync(path, "utf8");
   } catch (cause) {
-    throw new AppInvariantError(
-      `hooks-json: cannot read ${path}: ${String(cause)}`,
-      "unreadable_path",
-    );
+    throw new AppInvariantError(`hooks-json: cannot read ${path}: ${String(cause)}`, "unreadable_path");
   }
   let parsed: PlainValue;
   try {
@@ -111,10 +108,7 @@ export function readHooksJson(path: string): HooksJsonInput {
         `hooks-json: unmapped_event ${unrecognized.keys.join(", ")} in ${path}; mapped events are ${Object.keys(EVENT_POINTS).join(", ")}`,
         "unmapped_event",
       );
-    throw new AppInvariantError(
-      `hooks-json: invalid config in ${path}: ${result.error.message}`,
-      "invalid_config",
-    );
+    throw new AppInvariantError(`hooks-json: invalid config in ${path}: ${result.error.message}`, "invalid_config");
   }
   return result.data;
 }

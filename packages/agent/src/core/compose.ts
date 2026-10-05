@@ -19,9 +19,7 @@ import type {
   ManifestDefinition,
 } from "./capability";
 
-export class GenerationHandlers extends Context.Service<GenerationHandlers, PolicyRegistry>()(
-  "@openomni/agent/GenerationHandlers",
-) {}
+export class GenerationHandlers extends Context.Service<GenerationHandlers, PolicyRegistry>()("@openomni/agent/GenerationHandlers") {}
 
 /** What a consultant factory receives at generation acquisition (#1256). */
 export interface ConsultantSeed {
@@ -167,9 +165,7 @@ function cascadeOff(manifest: ManifestDefinition): ReadonlyMap<string, string> {
     manifest.capabilities.map((capability) => [capability.seam.key, capability.name]),
   );
   const provideOwner = new Map(
-    manifest.bundles.flatMap((bundle) =>
-      bundle.provides.map((tag) => [tag.key, bundle.name] as const),
-    ),
+    manifest.bundles.flatMap((bundle) => bundle.provides.map((tag) => [tag.key, bundle.name] as const)),
   );
   for (;;) {
     const capabilitiesChanged = sweepOffCapabilities(manifest, disabled);
@@ -179,10 +175,7 @@ function cascadeOff(manifest: ManifestDefinition): ReadonlyMap<string, string> {
 }
 
 /** One cascade sweep over capabilities: a disabled requirement disables the dependent. */
-function sweepOffCapabilities(
-  manifest: ManifestDefinition,
-  disabled: Map<string, string>,
-): boolean {
+function sweepOffCapabilities(manifest: ManifestDefinition, disabled: Map<string, string>): boolean {
   let changed = false;
   for (const capability of manifest.capabilities) {
     if (disabled.has(capability.name)) continue;

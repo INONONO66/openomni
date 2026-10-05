@@ -35,10 +35,7 @@ test("staleActionBacklog: only action inputs with after < compaction head fold s
   const boundaryAction = row("a2", "action", 5);
   const freshAction = row("a3", "action", 9);
   const cursorless = row("a4", "action");
-  const { live, stale } = staleActionBacklog(
-    [prompt, oldAction, boundaryAction, freshAction, cursorless],
-    5,
-  );
+  const { live, stale } = staleActionBacklog([prompt, oldAction, boundaryAction, freshAction, cursorless], 5);
   expect(stale.map((item) => item.id)).toEqual(["a1"]);
   expect(live.map((item) => item.id)).toEqual(["p1", "a2", "a3", "a4"]);
   // No compaction yet (head 0): nothing is stale.
@@ -111,12 +108,7 @@ test("the chain fold: after rides the pending row, compactionHead is the execute
     { phase: "result", terminal: "executed", result: { projection: [] } },
   );
   expect(kernel.compactionHead("stale")).toBe(compaction.ordinal);
-  append(
-    "a2",
-    "action",
-    { kind: "hook.late", after: compaction.ordinal },
-    { inboxKind: "action", content: "{}" },
-  );
+  append("a2", "action", { kind: "hook.late", after: compaction.ordinal }, { inboxKind: "action", content: "{}" });
 
   const pending = kernel.pendingMessages("stale");
   expect(pending.map((item) => [item.id, item.after ?? null])).toEqual([
@@ -180,8 +172,7 @@ function fixture(): SessionFixture {
   };
 }
 
-const bounded = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.timeout("2 seconds"));
+const bounded = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.timeout("2 seconds"));
 
 test("a stale action delivered DURING a turn closes via turn.consumed.stale at the live boundary; zero delivery", () =>
   isolated(
@@ -213,32 +204,32 @@ test("a stale action delivered DURING a turn closes via turn.consumed.stale at t
               .pipe(Effect.map((adopted) => ({ owner: "compactor", fence: adopted.fence })))
           : Effect.succeed({ owner: current.fenceOwner, fence: current.fence });
       yield* writer.pipe(
-        Effect.flatMap(({ owner, fence }) =>
-          kernel.commit({
-            sessionId: "S",
-            owner,
-            fence,
-            now: 29,
-            expectedRevision: current.revision,
-            actions: [
-              {
-                id: "compaction-1",
-                parentId: kernel.latestAction("S")?.id ?? null,
-                sessionId: "S",
-                kind: "compaction",
-                intent: { encodingVersion: 1, value: { reason: "threshold" } },
-                effect: {
-                  encodingVersion: 1,
-                  value: { phase: "result", terminal: "executed", result: { projection: [] } },
+          Effect.flatMap(({ owner, fence }) =>
+            kernel.commit({
+              sessionId: "S",
+              owner,
+              fence,
+              now: 29,
+              expectedRevision: current.revision,
+              actions: [
+                {
+                  id: "compaction-1",
+                  parentId: kernel.latestAction("S")?.id ?? null,
+                  sessionId: "S",
+                  kind: "compaction",
+                  intent: { encodingVersion: 1, value: { reason: "threshold" } },
+                  effect: {
+                    encodingVersion: 1,
+                    value: { phase: "result", terminal: "executed", result: { projection: [] } },
+                  },
+                  irreversible: true,
+                  ts: 29,
                 },
-                irreversible: true,
-                ts: 29,
-              },
-            ],
-            state: current.state,
-          }),
-        ),
-      );
+              ],
+              state: current.state,
+            }),
+          ),
+        );
       expect(kernel.compactionHead("S")).toBeGreaterThan(1);
       const running = yield* Effect.forkScoped(handle.prompt("start"));
       yield* bounded(Deferred.await(entered));
@@ -271,9 +262,7 @@ test("a stale action delivered DURING a turn closes via turn.consumed.stale at t
           (action.intent.value as { phase?: string }).phase === "checkpoint",
       );
       expect(
-        checkpoints.map(
-          (action) => (action.intent.value as { consumedStale?: string[] }).consumedStale,
-        ),
+        checkpoints.map((action) => (action.intent.value as { consumedStale?: string[] }).consumedStale),
       ).toContainEqual(["stale-action"]);
       // ...and the pending fold never surfaces it again.
       expect(kernel.pendingMessages("S").map((item) => item.id)).toEqual([]);

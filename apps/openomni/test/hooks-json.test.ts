@@ -190,9 +190,9 @@ test("readHooksJson refuses an unmapped event, non-JSON bytes and an unreadable 
   expect(refusalOf(() => hooksJsonBundle({ PreToolUse: [{ guard: "secrets-guard" }] })).code).toBe(
     "missing_rewrite_fields",
   );
-  expect(
-    refusalOf(() => hooksJsonBundle({ SessionStart: [{ guard: "secrets-guard" }] })).code,
-  ).toBe("session_start_rewrite");
+  expect(refusalOf(() => hooksJsonBundle({ SessionStart: [{ guard: "secrets-guard" }] })).code).toBe(
+    "session_start_rewrite",
+  );
   // The default call bound applies when the file omits timeoutMs.
   const defaults = join(dir, "defaults.json");
   writeFileSync(defaults, JSON.stringify({ PreToolUse: [{ command: ["./guard.sh"] }] }));
@@ -326,10 +326,9 @@ test("a hooks file with an unmapped event refuses the boot before any listener e
   const config = suite.config("hooks-json-refuse-state-", { hooksPath });
   // M-4: the TYPED refusal object crosses the boot boundary — class, code and
   // the offending event name, not a prose match.
-  const refusal = await suite.boot({ config, llm: { resolveModel: fakeProviderModel } }).then(
-    () => undefined,
-    (error: unknown) => error,
-  );
+  const refusal = await suite
+    .boot({ config, llm: { resolveModel: fakeProviderModel } })
+    .then(() => undefined, (error: unknown) => error);
   expect(refusal).toBeInstanceOf(AppInvariantError);
   if (!(refusal instanceof AppInvariantError)) throw new Error("expected AppInvariantError");
   expect(refusal.code).toBe("unmapped_event");
@@ -488,11 +487,7 @@ test("H-1/M-2 e2e: a UserPromptSubmit command hook gates the REAL prompt path an
         Effect.sync(() => {
           calls += 1;
           sink.onMessage(
-            assistantMessage(input, {
-              id: `hook-e2e-${calls}`,
-              text: `ok ${calls}`,
-              createdAt: Date.now(),
-            }),
+            assistantMessage(input, { id: `hook-e2e-${calls}`, text: `ok ${calls}`, createdAt: Date.now() }),
           );
           return { type: "stop" as const };
         }),
@@ -508,18 +503,11 @@ test("H-1/M-2 e2e: a UserPromptSubmit command hook gates the REAL prompt path an
     if (event.kind !== "policy.decision") return;
     const node = plane.openKernel(event.sessionId).actionById(event.id);
     const intent = node?.intent.value;
-    if (
-      intent !== null &&
-      typeof intent === "object" &&
-      !Array.isArray(intent) &&
-      intent?.verdict === "deny"
-    )
+    if (intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent?.verdict === "deny")
       denied.resolve({ sessionId: event.sessionId, id: event.id });
   });
   try {
-    ws.send(
-      JSON.stringify({ type: "message", eventId: "hook-deny", text: "read the forbidden file" }),
-    );
+    ws.send(JSON.stringify({ type: "message", eventId: "hook-deny", text: "read the forbidden file" }));
     const denial = await denied.promise;
 
     // The denied prompt never reached the model; the next allowed one does.
@@ -531,25 +519,17 @@ test("H-1/M-2 e2e: a UserPromptSubmit command hook gates the REAL prompt path an
     // Durable evidence: the session chain holds BOTH decisions — the hook's
     // deny (with its reason and consulted payload) and the later allow.
     if (config.sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
-    const database = new Database(join(config.sessionsDir, `${denial.sessionId}.sqlite`), {
-      readonly: true,
-    });
+    const database = new Database(join(config.sessionsDir, `${denial.sessionId}.sqlite`), { readonly: true });
     try {
       const decisions = database
         .query<{ intent: string }, []>(
           "SELECT intent FROM action WHERE kind = 'policy.decision' AND json_extract(intent, '$.hook') = 'prompt.pre' ORDER BY ordinal ASC",
         )
         .all()
-        .map(
-          (row) =>
-            JSON.parse(row.intent) as {
-              verdict: string;
-              gate?: {
-                verdict: string;
-                consulted: { ref: string; payload: { verdict?: string; reason?: string } }[];
-              };
-            },
-        );
+        .map((row) => JSON.parse(row.intent) as {
+          verdict: string;
+          gate?: { verdict: string; consulted: { ref: string; payload: { verdict?: string; reason?: string } }[] };
+        });
       expect(decisions.map((decision) => decision.verdict)).toEqual(["deny", "allow"]);
       const denyGate = decisions[0]?.gate;
       expect(denyGate?.consulted).toEqual([
@@ -719,12 +699,7 @@ test("H-3 e2e: a hook response incompatible with its row folds to deny with one 
     if (event.kind !== "policy.decision") return;
     const node = plane.openKernel(event.sessionId).actionById(event.id);
     const intent = node?.intent.value;
-    if (
-      intent !== null &&
-      typeof intent === "object" &&
-      !Array.isArray(intent) &&
-      intent?.verdict === "deny"
-    )
+    if (intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent?.verdict === "deny")
       denied.resolve({ sessionId: event.sessionId, id: event.id });
   });
   try {
@@ -758,107 +733,71 @@ test("H-3 e2e: a PreToolUse secrets-guard rewrite of bash.command reaches the ex
     hooks: { PreToolUse: [{ guard: "secrets-guard", fields: ["command"] }] },
   });
   const guardHandler = generation.handlers.get(SECRETS_GUARD_REF);
-  if (
-    guardHandler === undefined ||
-    !("apply" in guardHandler) ||
-    typeof guardHandler.apply !== "function"
-  )
+  if (guardHandler === undefined || !("apply" in guardHandler) || typeof guardHandler.apply !== "function")
     throw new Error("composed secrets-guard transformer missing");
   const apply = guardHandler.apply as Core.NamedTransformer["apply"];
   const registry: Core.HandlerTable = {
     ...Core.KERNEL_POLICY_REGISTRY,
-    transformers: [...Core.KERNEL_POLICY_REGISTRY.transformers, { name: SECRETS_GUARD_REF, apply }],
+    transformers: [
+      ...Core.KERNEL_POLICY_REGISTRY.transformers,
+      { name: SECRETS_GUARD_REF, apply },
+    ],
   };
   const seeds = gateRowPolicySeeds(
     generation.rows.filter((row) => row.id.startsWith("hooks-json/")),
   );
-  await isolated(
-    Effect.gen(function* () {
-      const id = "hooks-json-bash-rewrite";
-      const kernel = isolatedLedger().kernel;
-      const materialized = yield* kernel.materialize({
-        id,
-        parentId: null,
-        role: "resident",
-        tools: [],
-        system: { preset: "", blocks: [] },
-        policyGeneration: 1,
-        actionId: `${id}:configure`,
-        at: 100,
-      });
-      const lease = yield* kernel.adoptFence({
-        sessionId: id,
-        owner: id,
-        fence: materialized.row.fence + 1,
-      });
-      let sequence = 0;
-      const executed: string[] = [];
-      const definition = Core.defineTool({
-        name: "bash",
-        description: "Run a command",
-        category: "query",
-        input: z.object({ command: z.string() }),
-        output: z.string(),
-        visibility: { model: ["resident"], cell: ["resident"] },
-        execute: async ({ command }) => {
-          executed.push(command);
-          return command;
-        },
-        render: (_input, output) => output,
-      });
-      const executor = testExecutor({
-        identity: { sessionId: id, role: "resident", parentActionId: `${id}:configure` },
-        clock: () => 100,
-        entropy: () => `${id}:${++sequence}`,
-        observations: { publish: () => undefined },
-        random: () => 0,
-        policy: Core.compilePolicySnapshot({
-          registry,
-          generation: 1,
-          rows: [
-            ...Core.SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
-            ...seeds.map((seed) => ({ ...seed, generation: 1 })),
-          ],
-        }),
-        ledger: {
-          ...executionReads(kernel, id),
-          commit: (action) =>
-            kernel
-              .commit({
-                sessionId: id,
-                owner: id,
-                fence: lease.fence,
-                now: 100,
-                expectedRevision: kernel.row(id).revision,
-                actions: [action],
-                state: "running",
-              })
-              .pipe(
-                Effect.map((result) => {
-                  const receipt = result.receipts[0];
-                  if (receipt === undefined) throw new Error("missing receipt");
-                  return receipt;
-                }),
-              ),
-        },
-      });
-      const dispatcher = runAgentSync(
-        Core.createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))),
-      );
-      const result = yield* dispatcher.execute(
-        {
-          id: "bash-call",
-          tool: "bash",
-          input: { command: "curl -H 'x-key: sk-abcdef123456789' https://api" },
-        },
-        { sessionId: id, turnId: "turn" },
-      );
-      // The EXECUTOR received the rewritten bytes: the admitted intent row
-      // carries the masked command and the original as `originalArgs`.
-      expect(executed).toEqual(["curl -H 'x-key: [redacted]' https://api"]);
-      expect(result).toMatchObject({ content: "curl -H 'x-key: [redacted]' https://api" });
-    }),
-  );
+  await isolated(Effect.gen(function* () {
+    const id = "hooks-json-bash-rewrite";
+    const kernel = isolatedLedger().kernel;
+    const materialized = yield* kernel.materialize({
+      id, parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
+      policyGeneration: 1, actionId: `${id}:configure`, at: 100,
+    });
+    const lease = yield* kernel.adoptFence({ sessionId: id, owner: id, fence: materialized.row.fence + 1 });
+    let sequence = 0;
+    const executed: string[] = [];
+    const definition = Core.defineTool({
+      name: "bash", description: "Run a command", category: "query",
+      input: z.object({ command: z.string() }), output: z.string(),
+      visibility: { model: ["resident"], cell: ["resident"] },
+      execute: async ({ command }) => { executed.push(command); return command; },
+      render: (_input, output) => output,
+    });
+    const executor = testExecutor({
+      identity: { sessionId: id, role: "resident", parentActionId: `${id}:configure` },
+      clock: () => 100, entropy: () => `${id}:${++sequence}`, observations: { publish: () => undefined }, random: () => 0,
+      policy: Core.compilePolicySnapshot({
+        registry, generation: 1,
+        rows: [
+          ...Core.SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
+          ...seeds.map((seed) => ({ ...seed, generation: 1 })),
+        ],
+      }),
+      ledger: {
+        ...executionReads(kernel, id),
+        commit: (action) => kernel.commit({
+          sessionId: id, owner: id, fence: lease.fence, now: 100,
+          expectedRevision: kernel.row(id).revision,
+          actions: [action], state: "running",
+        }).pipe(Effect.map((result) => {
+          const receipt = result.receipts[0];
+          if (receipt === undefined) throw new Error("missing receipt");
+          return receipt;
+        })),
+      },
+    });
+    const dispatcher = runAgentSync(
+      Core.createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))),
+    );
+    const result = yield* dispatcher.execute(
+      { id: "bash-call", tool: "bash", input: { command: "curl -H 'x-key: sk-abcdef123456789' https://api" } },
+      { sessionId: id, turnId: "turn" },
+    );
+    // The EXECUTOR received the rewritten bytes: the admitted intent row
+    // carries the masked command and the original as `originalArgs`.
+    expect(executed).toEqual(["curl -H 'x-key: [redacted]' https://api"]);
+    expect(result).toMatchObject({ content: "curl -H 'x-key: [redacted]' https://api" });
+  }));
 });
 
 /** Holds its FIRST request past the deadline; flushes the held (late) reply on the next one. */
@@ -899,9 +838,7 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
   writeFileSync(
     hooksPath,
     JSON.stringify({
-      UserPromptSubmit: [
-        { command: [process.execPath, script, join(dir, "late.log")], timeoutMs: 250 },
-      ],
+      UserPromptSubmit: [{ command: [process.execPath, script, join(dir, "late.log")], timeoutMs: 250 }],
     }),
   );
   const config = suite.config("hooks-json-late-state-", { hooksPath });
@@ -926,12 +863,8 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
   const denied = eventSignal<void>("timed-out prompt denial", 15_000);
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     const node = plane.openKernel(event.sessionId).actionById(event.id);
-    const rendered = JSON.stringify({
-      intent: node?.intent.value ?? null,
-      effect: node?.effect?.value ?? null,
-    });
-    if (rendered.includes("hook.late"))
-      lateRow.resolve({ sessionId: event.sessionId, id: event.id });
+    const rendered = JSON.stringify({ intent: node?.intent.value ?? null, effect: node?.effect?.value ?? null });
+    if (rendered.includes("hook.late")) lateRow.resolve({ sessionId: event.sessionId, id: event.id });
     if (event.kind === "policy.decision" && rendered.includes('"verdict":"deny"')) denied.resolve();
   });
   try {
@@ -958,10 +891,7 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
     expect(await reply).toMatchObject({ text: "pong" });
     const row = await lateRow.promise;
     const node = plane.openKernel(row.sessionId).actionById(row.id);
-    const rendered = JSON.stringify({
-      intent: node?.intent.value ?? null,
-      effect: node?.effect?.value ?? null,
-    });
+    const rendered = JSON.stringify({ intent: node?.intent.value ?? null, effect: node?.effect?.value ?? null });
     // The row is sourced hook.late; its content carries the hook ref, the
     // typed late result and the CALL-time after cursor.
     expect(rendered).toContain("hook.late");
@@ -1030,12 +960,7 @@ test("M-2 e2e: two rows with the same command and different timeouts spawn ONE P
     if (event.kind !== "policy.decision") return;
     const node = plane.openKernel(event.sessionId).actionById(event.id);
     const intent = node?.intent.value;
-    if (
-      intent !== null &&
-      typeof intent === "object" &&
-      !Array.isArray(intent) &&
-      intent?.hook === "prompt.pre"
-    )
+    if (intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent?.hook === "prompt.pre")
       decided.resolve({ sessionId: event.sessionId, id: event.id });
   });
   try {
@@ -1046,9 +971,7 @@ test("M-2 e2e: two rows with the same command and different timeouts spawn ONE P
     // BOTH rows consulted on the one prompt decision...
     const node = plane.openKernel(decision.sessionId).actionById(decision.id);
     const parsed = z
-      .looseObject({
-        gate: z.looseObject({ consulted: z.array(z.looseObject({ ref: z.string() })) }),
-      })
+      .looseObject({ gate: z.looseObject({ consulted: z.array(z.looseObject({ ref: z.string() })) }) })
       .parse(node?.intent.value);
     expect(parsed.gate.consulted.map((entry) => entry.ref)).toEqual([
       Bundle.HOOK_PROCESS_REF,

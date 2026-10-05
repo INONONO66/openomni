@@ -8,22 +8,21 @@ import { MESSAGE_POLICY_ROWS } from "./message-policy";
 import { PROVISION_POLICY_ROWS } from "./tools/provision";
 
 /** The live policy plane's legacy `kind`/`phase` address of each #1251 point. */
-const LEGACY_ADDRESS_BY_POINT: Readonly<Record<string, { kind: string; phase: PolicyRow.Phase }>> =
-  {
-    "ingress.pre": { kind: "inbox.deliver", phase: "pre" },
-    "session.open": { kind: "session.configure", phase: "pre" },
-    "prompt.pre": { kind: "prompt", phase: "pre" },
-    "turn.pre": { kind: "turn", phase: "pre" },
-    "turn.post": { kind: "turn", phase: "post" },
-    "llm.pre": { kind: "llm", phase: "pre" },
-    "llm.post": { kind: "llm", phase: "post" },
-    "message.pre": { kind: "message", phase: "pre" },
-    "tool.pre": { kind: "tool", phase: "pre" },
-    "tool.post": { kind: "tool", phase: "post" },
-    "compaction.pre": { kind: "compaction", phase: "pre" },
-    "compaction.post": { kind: "compaction", phase: "post" },
-    "alarm.fired": { kind: "alarm.fired", phase: "post" },
-  };
+const LEGACY_ADDRESS_BY_POINT: Readonly<Record<string, { kind: string; phase: PolicyRow.Phase }>> = {
+  "ingress.pre": { kind: "inbox.deliver", phase: "pre" },
+  "session.open": { kind: "session.configure", phase: "pre" },
+  "prompt.pre": { kind: "prompt", phase: "pre" },
+  "turn.pre": { kind: "turn", phase: "pre" },
+  "turn.post": { kind: "turn", phase: "post" },
+  "llm.pre": { kind: "llm", phase: "pre" },
+  "llm.post": { kind: "llm", phase: "post" },
+  "message.pre": { kind: "message", phase: "pre" },
+  "tool.pre": { kind: "tool", phase: "pre" },
+  "tool.post": { kind: "tool", phase: "post" },
+  "compaction.pre": { kind: "compaction", phase: "pre" },
+  "compaction.post": { kind: "compaction", phase: "post" },
+  "alarm.fired": { kind: "alarm.fired", phase: "post" },
+};
 
 /**
  * The kernel's SYNCHRONOUS named services (#1256 r3 G-3): a gate row naming
@@ -48,11 +47,7 @@ function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
     // verdict; the compiled snapshot resolves the named async service and
     // REFUSES the generation on an unregistered ref (unknown_ref, #1251) —
     // an unknown name never folds to allow.
-    return {
-      type: "consult",
-      ref: row.how.ref,
-      ...(row.how.params === undefined ? {} : { config: row.how.params }),
-    };
+    return { type: "consult", ref: row.how.ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
   }
   if (row.do === "gate") {
     const verdict = row.how.verdict ?? "allow";
@@ -60,18 +55,9 @@ function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
   }
   // #1256: an observe hook row (PostToolUse) seeds the audit-only consult.
   if (row.do === "observe" && row.how.ref !== undefined)
-    return {
-      type: "consult",
-      ref: row.how.ref,
-      observe: true,
-      ...(row.how.params === undefined ? {} : { config: row.how.params }),
-    };
+    return { type: "consult", ref: row.how.ref, observe: true, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
   if (row.do === "rewrite" && row.how.ref !== undefined)
-    return {
-      type: "transform",
-      ref: row.how.ref,
-      ...(row.how.params === undefined ? {} : { config: row.how.params }),
-    };
+    return { type: "transform", ref: row.how.ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
   throw new AppInvariantError(`gate row ${row.id} (${row.do}) has no live policy-plane seed shape`);
 }
 
@@ -87,9 +73,7 @@ export function gateRowPolicySeeds(
   return rows.map((row) => {
     const address = LEGACY_ADDRESS_BY_POINT[row.on];
     if (address === undefined)
-      throw new AppInvariantError(
-        `gate row ${row.id} targets ${row.on}, which has no legacy policy address`,
-      );
+      throw new AppInvariantError(`gate row ${row.id} targets ${row.on}, which has no legacy policy address`);
     return {
       name: row.id,
       kind: address.kind,

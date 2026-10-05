@@ -498,9 +498,7 @@ export function configureAction(input: {
       value: {
         operation: input.operation,
         ...(input.settings === undefined ? {} : { settings: input.settings }),
-        ...(input.disabled === undefined
-          ? {}
-          : { disabled: input.disabled.map((entry) => ({ ...entry })) }),
+        ...(input.disabled === undefined ? {} : { disabled: input.disabled.map((entry) => ({ ...entry })) }),
       },
     },
     effect: {

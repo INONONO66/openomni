@@ -7,7 +7,11 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import type { Inbox, LedgerAction } from "@openomni/protocol";
-import { DEFAULT_CONSUMPTION, boundaryConsumption, consumptionSettings } from "../src/core/commit";
+import {
+  DEFAULT_CONSUMPTION,
+  boundaryConsumption,
+  consumptionSettings,
+} from "../src/core/commit";
 import { configureAction } from "../src/core/store/fence";
 import type { SessionRunner } from "../src/core/run";
 import { session } from "../src/testing/registry";
@@ -53,15 +57,13 @@ describe("boundaryConsumption rule", () => {
   const ids = (rows: readonly Inbox.Row[]) => rows.map((row) => row.id);
 
   test("controls drain at every boundary; steer and followUp wait for their consumption points", () => {
-    expect(
-      ids(boundaryConsumption(backlog, "before_llm", DEFAULT_CONSUMPTION, 0).consumed),
-    ).toEqual(["I1"]);
-    expect(ids(boundaryConsumption(backlog, "after_llm", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(
-      ["I1"],
-    );
-    expect(
-      ids(boundaryConsumption(backlog, "after_tools", DEFAULT_CONSUMPTION, 0).consumed),
-    ).toEqual(["I1", "I2", "I3"]);
+    expect(ids(boundaryConsumption(backlog, "before_llm", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I1"]);
+    expect(ids(boundaryConsumption(backlog, "after_llm", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I1"]);
+    expect(ids(boundaryConsumption(backlog, "after_tools", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([
+      "I1",
+      "I2",
+      "I3",
+    ]);
     expect(ids(boundaryConsumption(backlog, "turn_end", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([
       "I1",
       "I2",
@@ -73,44 +75,19 @@ describe("boundaryConsumption rule", () => {
 
   test("width one caps each delivery mode independently in backlog order", () => {
     expect(
-      ids(
-        boundaryConsumption(backlog, "after_tools", { steering: "one", followUp: "one" }, 0)
-          .consumed,
-      ),
+      ids(boundaryConsumption(backlog, "after_tools", { steering: "one", followUp: "one" }, 0).consumed),
     ).toEqual(["I1", "I2"]);
     expect(
-      ids(
-        boundaryConsumption(backlog, "turn_end", { steering: "one", followUp: "one" }, 0).consumed,
-      ),
+      ids(boundaryConsumption(backlog, "turn_end", { steering: "one", followUp: "one" }, 0).consumed),
     ).toEqual(["I1", "I2", "I4"]);
     expect(
-      ids(
-        boundaryConsumption(backlog, "turn_end", { steering: "all", followUp: "one" }, 0).consumed,
-      ),
+      ids(boundaryConsumption(backlog, "turn_end", { steering: "all", followUp: "one" }, 0).consumed),
     ).toEqual(["I1", "I2", "I3", "I4"]);
   });
 
   test("a row without a delivery mark folds to followUp", () => {
-    expect(
-      ids(
-        boundaryConsumption(
-          [inboxRow({ ordinal: 9, kind: "prompt" })],
-          "after_tools",
-          DEFAULT_CONSUMPTION,
-          0,
-        ).consumed,
-      ),
-    ).toEqual([]);
-    expect(
-      ids(
-        boundaryConsumption(
-          [inboxRow({ ordinal: 9, kind: "prompt" })],
-          "turn_end",
-          DEFAULT_CONSUMPTION,
-          0,
-        ).consumed,
-      ),
-    ).toEqual(["I9"]);
+    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "after_tools", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([]);
+    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "turn_end", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I9"]);
   });
 });
 
@@ -198,8 +175,7 @@ describe("integrated boundary consumption", () => {
         // the first window still wins over every earlier one.
         yield* Effect.forEach(
           Array.from({ length: 256 }, (_, index) => index),
-          (index) =>
-            commitSettings({ steering: "all", followUp: "all" }, `configure-page-${index}`),
+          (index) => commitSettings({ steering: "all", followUp: "all" }, `configure-page-${index}`),
           { discard: true },
         );
         yield* commitSettings({ steering: "one", followUp: "all" }, "configure-final");
@@ -258,9 +234,11 @@ describe("integrated boundary consumption", () => {
             (action.effect.value as { phase?: string } | null)?.phase === "delivery" &&
             String((action.intent.value as { inboxId?: string }).inboxId).startsWith("queued-"),
         );
-        expect(
-          deliveries.map((action) => (action.intent.value as { inboxId: string }).inboxId),
-        ).toEqual(["queued-0", "queued-1", "queued-2"]);
+        expect(deliveries.map((action) => (action.intent.value as { inboxId: string }).inboxId)).toEqual([
+          "queued-0",
+          "queued-1",
+          "queued-2",
+        ]);
       }),
     ));
 });
