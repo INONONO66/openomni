@@ -8,8 +8,7 @@ type NativeInput = {
 	receipt?: string;
 	onStderr?: (chunk: Uint8Array) => void;
 };
-/** A child's failure message carries the nested process excerpt (up to 16 KB);
- * cutting it shorter hides the traceback the excerpt exists to surface. */
+/** A child's failure message carries the nested process excerpt (up to ERROR_LIMIT bytes, 20 kB); cutting it shorter hides the traceback the excerpt exists to surface. */
 const ERROR_LIMIT = 20_000;
 function formatErrors(errors: Json[]): string {
 	return errors.slice(0, 20).map((error: Json) => JSON.stringify(error).slice(0, ERROR_LIMIT)).join("; ");
@@ -43,16 +42,7 @@ export async function nativeJson(input: NativeInput) {
 		child.exited,
 	]);
 	if (input.receipt) writeFileSync(input.receipt, JSON.stringify({ command: input.command, cwd: input.cwd, runtime: Bun.version, exitCode, signal: child.signalCode, stdout, stderr }), { flag: "wx" });
-	if (child.signalCode || ![0, 1].includes(exitCode)) {
-		throw new InventoryError(
-			"native_process",
-			input.command[0] ?? "",
-			`${child.signalCode ? `signal ${child.signalCode}` : `exit ${exitCode}`}: ${nativeFailure(stdout, stderr)}`,
-		);
-	}
-	return {
-		command: input.command, exitCode, stderr,
-		stdoutHash: digest(stdout),
-		document: decodeJson(stdout),
-	};
+	if (child.signalCode || ![0, 1].includes(exitCode))
+		throw new InventoryError("native_process", input.command[0] ?? "", `${child.signalCode ? `signal ${child.signalCode}` : `exit ${exitCode}`}: ${nativeFailure(stdout, stderr)}`);
+	return { command: input.command, exitCode, stderr, stdoutHash: digest(stdout), document: decodeJson(stdout) };
 }
