@@ -5,7 +5,7 @@ import { z } from "zod";
 import { SpawnFailure, type MachineError } from "./errors";
 import { onAbort } from "./interrupt-on";
 
-const spawnFailure = z.preprocess(String, z.string()).transform((cause) => new SpawnFailure({ operation: "exec.spawn", message: cause, cause })).parse;
+const spawnFailure = (cause: unknown) => new SpawnFailure({ operation: "exec.spawn", message: String(cause), cause: String(cause) });
 const killFailure = z.object({ code: z.enum(["ESRCH", "EPERM"]) });
 
 /** Cancellation interrupts, kills the process group, and waits for its close event. */
