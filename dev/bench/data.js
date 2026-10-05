@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791212212697,
+  "lastUpdate": 1791216312876,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -78965,6 +78965,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 151139,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dc0830bcc2777622c323e42c419cbad52e6c98b6",
+          "message": "chore(script): #1259 band 6 — ui + script gates slop review (1 fixed, 11 keep) (#1298)\n\n* chore(#1259): open epic1260/1259-b6-ui-script-gates on main ab62ca98 (band b6: ui-script-gates)\n\n* fix(#1259): b6 item 171 — correct quality-native-process excerpt-size comment to ERROR_LIMIT 20 kB; fold throw/return for net LOC\n\n* docs(#1259): b6 SLOP §L row + implementation-status note (items 166-181: 1 fixed, 4 gone, 11 keep)\n\n* docs(slop): b6 review r1 — relabel 167/173/174/179 gone→keep\n\nReview r1 (review-1259-b6-r1.md) disproved the mechanical \"symbol_gone\"\ntriage against origin/main 79649f3c: lint-tools-baseline still lists ten\nvocab.unmappedNamespaces entries (#1241 only emptied naming.grandfathered),\nStatusDot and StatusGlyph still coexist (#1037 only moved StatusDot), the\nfour chromatic status tokens are still in styles.css and test-pinned\n(#1015 introduced them), and 179 was a clean-audit record. The §L row and\nthe implementation-status sentence now record all four as keeps with the\ninventory's own rationales. Docs only.",
+          "timestamp": "2026-10-05T16:02:13Z",
+          "tree_id": "4f28fd092c861367844b0e66ef41df42cdf7f50f",
+          "url": "https://github.com/INONONO66/openomni/commit/dc0830bcc2777622c323e42c419cbad52e6c98b6"
+        },
+        "date": 1791216312165,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1101,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1989,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1643689,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 424977,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 7156676,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1123,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 213903,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 865751,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 524955,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 14195638,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1532488,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19668,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 183203,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 1003009,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 287964,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 18069113,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 94,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 223284,
             "unit": "ns/op"
           }
         ]
