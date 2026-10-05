@@ -875,13 +875,20 @@ test("H-3 e2e: a PreToolUse secrets-guard rewrite of bash.command reaches the ex
   }));
 });
 
-/** Holds its FIRST request past the deadline; flushes the held (late) reply on the next one. */
+/**
+ * Holds its FIRST request past the deadline and PUSHES a barrier receipt
+ * (HTTP POST to argv[2]) once it holds; SIGUSR2 flushes the held reply.
+ * The test synchronizes on the push and on committed facts — no file
+ * polling, no fixed sleeps (#1256 r4 H-1).
+ */
 const LATE_SCRIPT = `
-const fs = require("node:fs");
-const log = (note) => fs.appendFileSync(process.argv[2], Date.now() + " pid=" + process.pid + " " + note + "\\n");
-log("start");
+const barrier = process.argv[2];
 const held = [];
 let first = true;
+const flushHeld = () => {
+  for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
+};
+process.on("SIGUSR2", flushHeld);
 const decoder = new TextDecoder();
 let buffer = "";
 for await (const chunk of Bun.stdin.stream()) {
@@ -892,15 +899,13 @@ for await (const chunk of Bun.stdin.stream()) {
     buffer = buffer.slice(cut + 1);
     if (line.length === 0) continue;
     const request = JSON.parse(line);
-    log("request " + request.id);
     if (first) {
       first = false;
       held.push(request.id);
+      await fetch(barrier, { method: "POST", body: JSON.stringify({ pid: process.pid, id: request.id }) });
       continue;
     }
-    for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
     console.log(JSON.stringify({ id: request.id, result: { type: "gate", verdict: "allow" } }));
-    log("replied " + request.id);
   }
 }
 `;
@@ -909,11 +914,24 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
   const dir = suite.tempDir("hooks-json-late-");
   const script = join(dir, "late-hook.js");
   writeFileSync(script, LATE_SCRIPT);
+  // The child-receipt barrier: the child POSTS here the moment it HOLDS its
+  // first request — a push the test awaits, never a poll.
+  const heldRequest = Promise.withResolvers<{ pid: number; id: string }>();
+  const barrier = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      heldRequest.resolve((await request.json()) as { pid: number; id: string });
+      return new Response("ok");
+    },
+  });
+  suite.defer(() => void barrier.stop(true));
   const hooksPath = join(dir, "hooks.json");
   writeFileSync(
     hooksPath,
     JSON.stringify({
-      UserPromptSubmit: [{ command: [process.execPath, script, join(dir, "late.log")], timeoutMs: 250 }],
+      UserPromptSubmit: [
+        { command: [process.execPath, script, `http://127.0.0.1:${barrier.port}/`], timeoutMs: 250 },
+      ],
     }),
   );
   const config = suite.config("hooks-json-late-state-", { hooksPath });
@@ -943,27 +961,17 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters the se
     if (event.kind === "policy.decision" && rendered.includes('"verdict":"deny"')) denied.resolve();
   });
   try {
-    // Turn 1: the hook HOLDS the call past its 250ms deadline — fail-closed deny.
+    // Turn 1: the hook HOLDS the call past its deadline — fail-closed deny.
     ws.send(JSON.stringify({ type: "message", eventId: "late-hold", text: "hold me please" }));
+    // Two barriers, both pushes: the child's receipt (it HOLDS request #1)
+    // and the COMMITTED deny decision (the deadline already fired — the call
+    // settled as a timeout). Only after both can the flush happen, so the
+    // held reply is late BY CONSTRUCTION: the committed deny is the deadline
+    // fact itself, and the flush signal is ordered strictly after it —
+    // wall-clock can no longer race the second reply against the deadline.
+    const held = await heldRequest.promise;
     await denied.promise;
-    // The child's receipt log proves it HOLDS request #1 (its boot can outlast
-    // the 250ms deadline); only then does turn 2 trigger the flush, so call #2
-    // is answered by a live child while call #1's reply is genuinely late.
-    const logPath = join(dir, "late.log");
-    const deadline = Date.now() + 10_000;
-    for (;;) {
-      try {
-        if (readFileSync(logPath, "utf8").includes("request ")) break;
-      } catch {
-        // not spawned yet
-      }
-      if (Date.now() > deadline) throw new Error("hook child never logged request #1");
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    // Turn 2: the next call makes the child flush the held (now late) reply.
-    const reply = nextResidentTurn(plane);
-    ws.send(JSON.stringify({ type: "message", eventId: "late-flush", text: "hello" }));
-    expect(await reply).toMatchObject({ text: "pong" });
+    process.kill(held.pid, "SIGUSR2");
     const row = await lateRow.promise;
     const node = plane.openKernel(row.sessionId).actionById(row.id);
     const rendered = JSON.stringify({ intent: node?.intent.value ?? null, effect: node?.effect?.value ?? null });
