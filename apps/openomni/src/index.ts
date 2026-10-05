@@ -360,7 +360,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       release: (value: A) => Effect.Effect<void, E2>,
     ) => runAppBoot(runtime, bootResource(resource, release));
     const plane = services.plane;
-    // #1259: composition incidents ride the observation plane, never bare stderr.
     const incident = (msg: string, error: unknown): void =>
       services.observations.publish(Operational.Events.Error, {
         traceId: traceIdFromUuid(services.entropy.id()),
