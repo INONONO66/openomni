@@ -23,7 +23,6 @@ import { runTestPromise } from "./helpers/isolated";
 /** The scripted echo child: behavior is keyed by the request's `event` field. */
 const CHILD_SCRIPT = `
 const held = [];
-let splitRest = "";
 process.on("SIGUSR2", () => {
   for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
 });
@@ -50,13 +49,6 @@ for await (const chunk of Bun.stdin.stream()) {
       case "silent": break;
       case "oversize": reply({ type: "gate", verdict: "allow", reason: "r".repeat(4096) }); break;
       case "unterminated": process.stdout.write("y".repeat(4096)); break;
-      case "split": {
-        const line = JSON.stringify({ id: request.id, result: { type: "gate", verdict: "allow" } }) + "\\n";
-        splitRest = line.slice(6);
-        process.stdout.write(line.slice(0, 6));
-        break;
-      }
-      case "flush-split": process.stdout.write(splitRest); reply({ type: "gate", verdict: "allow" }); break;
       case "flush-held": {
         for (const id of held.splice(0)) console.log(JSON.stringify({ id, result: { type: "gate", verdict: "allow" } }));
         reply({ type: "gate", verdict: "allow" });
@@ -199,6 +191,13 @@ test("rotation: one PID per generation and the old PID dies only after its last 
       // One turn is mid-call against the generation it captured.
       const inFlightCall = yield* Effect.forkChild(oldHook.call(request("hold")));
       yield* settledWhen(() => oldHook.inFlight() === 1);
+      // M-1 (r3): `inFlight` only proves the parent wrote the request. The
+      // child reads stdin in order, so a completed ack round-trip PROVES it
+      // consumed the "hold" line before any SIGUSR2 can arrive.
+      expect(yield* oldHook.call(request("allow", "hold-ack"))).toEqual({
+        kind: "gate",
+        verdict: "allow",
+      });
       // The manifest changes: a NEW generation composes with its own PID while
       // the old Scope's close parks on the in-flight call.
       const closing = yield* Effect.forkChild(Scope.close(oldScope, Exit.void));
@@ -280,19 +279,61 @@ test("H-2: an unterminated buffer over maxLineBytes poisons the PID as a framing
     ),
   ));
 
-test("M-1: one JSON line split across two stdout writes decodes once complete", () =>
+test("M-1: one JSON line split at a chosen byte across two reader chunks decodes once complete", () =>
   runTestPromise(
     scoped((scope) =>
       Effect.gen(function* () {
-        const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
+        // M-1 (r3): separate child stdout WRITES do not guarantee separate
+        // reader chunks. The injected-child seam controls the exact chunk
+        // boundary instead: the first chunk carries bytes [0,6) of the "split"
+        // response line, the second the remainder plus the "flush" line.
+        const encoder = new TextEncoder();
+        const splitLine = `${JSON.stringify({ id: "split", result: { type: "gate", verdict: "allow" } })}\n`;
+        const flushLine = `${JSON.stringify({ id: "flush", result: { type: "gate", verdict: "allow" } })}\n`;
+        const chunks: ((chunk: Uint8Array | null) => void)[] = [];
+        const queued: (Uint8Array | null)[] = [];
+        const push = (chunk: Uint8Array | null): void => {
+          const waiter = chunks.shift();
+          if (waiter === undefined) queued.push(chunk);
+          else waiter(chunk);
+        };
+        let exited!: (code: number) => void;
+        const child = {
+          pid: 4100,
+          stdout: (async function* (): AsyncGenerator<Uint8Array> {
+            for (;;) {
+              const next =
+                queued.shift() ??
+                (await new Promise<Uint8Array | null>((resolve) => chunks.push(resolve)));
+              if (next === null) return;
+              yield next;
+            }
+          })(),
+          stdin: {
+            write(data: string): void {
+              const parsed = JSON.parse(data) as { id: string };
+              if (parsed.id === "split") push(encoder.encode(splitLine.slice(0, 6)));
+              if (parsed.id === "flush") {
+                push(encoder.encode(splitLine.slice(6)));
+                push(encoder.encode(flushLine));
+              }
+            },
+            flush: (): undefined => undefined,
+          },
+          kill: () => {
+            push(null);
+            exited(0);
+          },
+          exited: new Promise<number>((resolve) => {
+            exited = resolve;
+          }),
+        };
+        const hook = yield* acquireHookProcess({ command: ["./hook.sh"] }, () => child).pipe(
           Scope.provide(scope),
         );
-        // The child answers "split" with the FIRST 6 bytes of its response line
-        // (no newline) and holds the rest until the next request arrives, so
-        // the parent reader observes a frame boundary inside one JSON line.
-        const splitCall = yield* Effect.forkChild(hook.call(request("split")));
+        const splitCall = yield* Effect.forkChild(hook.call(request("split", "split")));
         yield* settledWhen(() => hook.inFlight() === 1);
-        expect(yield* hook.call(request("flush-split"))).toEqual({
+        expect(yield* hook.call(request("flush", "flush"))).toEqual({
           kind: "gate",
           verdict: "allow",
         });
@@ -344,8 +385,8 @@ test("H-3: the consultant routes a late result to seed.late with its CALL-time a
         const arrived = new Promise<PlainValue>((resolve) => {
           resolveLate = resolve;
         });
-        // A real (short) timeout: the "hold" child NEVER answers until told to
-        // flush, so the timeout outcome cannot race the reply.
+        // The deadline rides the TestClock (M-1 r3): the "hold" child NEVER
+        // answers until told to flush, and the clock advances only below.
         const params = { event: "hold", command: [...COMMAND], timeoutMs: 250 };
         const rowId = "hooks-json/tool.pre#1";
         let ordinal = 41;
@@ -355,7 +396,20 @@ test("H-3: the consultant routes a late result to seed.late with its CALL-time a
           late: (payload) => resolveLate(payload),
           cursor: () => ordinal,
         }).pipe(Scope.provide(scope));
-        const timedOut = yield* consult({ rowId, point: "tool.pre", params, value: { op: "bash" } });
+        const timedOutFiber = yield* Effect.forkChild(
+          consult({ rowId, point: "tool.pre", params, value: { op: "bash" } }),
+        );
+        // Drive the TestClock until the forked call's timer registers and
+        // fires; the loop is bounded by the fiber settling, never wall time.
+        let settled = false;
+        yield* Effect.forkChild(
+          Fiber.join(timedOutFiber).pipe(Effect.ensuring(Effect.sync(() => { settled = true; }))),
+        );
+        while (!settled) {
+          yield* Effect.yieldNow;
+          yield* TestClock.adjust(251);
+        }
+        const timedOut = yield* Fiber.join(timedOutFiber);
         expect(timedOut).toEqual({
           verdict: "deny",
           payload: {
@@ -369,6 +423,7 @@ test("H-3: the consultant routes a late result to seed.late with its CALL-time a
         // The journal moved on; the late payload must carry the CALL-time cursor.
         ordinal = 99;
         const flushed = yield* consult({ rowId, point: "tool.pre", params: { ...params, event: "flush-held" }, value: { op: "bash" } });
+        // The flush call settles on the child's REAL reply; no clock advance.
         expect(flushed).toEqual({
           verdict: "allow",
           payload: { ref: HOOK_PROCESS_REF, verdict: "allow" },
@@ -380,7 +435,7 @@ test("H-3: the consultant routes a late result to seed.late with its CALL-time a
           after: 41,
         });
       }),
-    ),
+    ).pipe(Effect.provide(TestClock.layer())),
   ));
 
 test("C-1: a stdin write failure settles the call as a typed exit failure, nothing in flight", () =>
