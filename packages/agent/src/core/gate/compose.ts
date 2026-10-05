@@ -8,9 +8,16 @@ import {
 } from "@openomni/protocol";
 import { GateComposeError, type GatePointTable } from "../points";
 import { admitRow } from "./admit";
-import { applyRow, initialFoldState, type GateEmission, type GateHandler } from "./fold";
+import {
+  applyRow,
+  initialFoldState,
+  type GateEmission,
+  type GateHandler,
+  type PreparedResults,
+} from "./fold";
+import { clonePlain } from "./match";
 
-export type { GateHandler } from "./fold";
+export type { GateHandler, GateHandlerResult, PreparedResults } from "./fold";
 
 /**
  * Gate-row compiler and evaluator (#1251): compiles the single row contract
@@ -31,6 +38,25 @@ interface GateDecideOptions {
   readonly handlers?: (ref: string) => GateHandler | undefined;
   /** A persisted decision for this point; same input hash replays it verbatim. */
   readonly recorded?: GateDecision;
+  /** Already-consulted async handler results keyed by row id (#1256). */
+  readonly prepared?: PreparedResults;
+  /**
+   * Refs resolved asynchronously (#1256 r5 H-1): the fold STOPS at the first
+   * matched consult row whose ref is listed here without a prepared result
+   * and surfaces it as `GateOutcome.pending`, carrying the fold's value AT
+   * THAT ROW'S POSITION — so an async consultant sees every earlier row's
+   * rewrite, exactly like a synchronous handler would.
+   */
+  readonly pendingAsync?: ReadonlySet<string>;
+}
+
+/** One matched handler row an asynchronous consultant must answer before the fold proceeds. */
+export interface PendingConsult {
+  readonly rowId: string;
+  readonly ref: string;
+  readonly params: PlainValue;
+  /** The decision value as folded by every row BEFORE this one (isolated copy). */
+  readonly value: PlainValue;
 }
 
 interface GateOutcome {
@@ -38,6 +64,13 @@ interface GateOutcome {
   readonly value: PlainValue;
   readonly emissions: readonly GateEmission[];
   readonly replayed: boolean;
+  /**
+   * The first unresolved async consult row (#1256 r5 H-1); present only when
+   * `pendingAsync` was supplied. A pending outcome is a PARTIAL fold: the
+   * caller must resolve the consultant, add it to `prepared` and decide again
+   * — never commit this outcome's decision.
+   */
+  readonly pending?: PendingConsult;
 }
 
 export interface CompiledGate<Context = never> {
@@ -94,6 +127,50 @@ export function compileGateRows<Context = never>(
     return whenMatch && (entry.matcher === undefined || entry.matcher(input.context));
   }
 
+  function replays(
+    point: PointId,
+    input: GateDecideInput<Context>,
+    entries: readonly CompiledGateRow<Context>[],
+    inputHash: string,
+    recorded: GateDecision | undefined,
+  ): boolean {
+    // Matcher context is a decision input: a recorded decision replays only
+    // when every context-dependent row still matches exactly as recorded.
+    // A decision is bound to its policy generation (#1251 r4): a record from
+    // another generation never replays — the current rows decide fresh.
+    return (
+      recorded !== undefined &&
+      recorded.generation === options.generation &&
+      recorded.point === point &&
+      recorded.inputHash === inputHash &&
+      entries.every(
+        (entry) =>
+          entry.matcher === undefined ||
+          matches(entry, input) === recorded.rowIds.includes(entry.row.id),
+      )
+    );
+  }
+
+  /**
+   * The ref a consult-shaped row (handler ref, no fixed verdict, no emission)
+   * still awaits an async result for; undefined when the row folds inline.
+   */
+  function awaitedConsultRef(
+    entry: CompiledGateRow<Context>,
+    pendingAsync: ReadonlySet<string> | undefined,
+    prepared: PreparedResults | undefined,
+  ): string | undefined {
+    const ref = entry.row.how.ref;
+    return pendingAsync !== undefined &&
+      ref !== undefined &&
+      entry.emit === undefined &&
+      entry.row.how.verdict === undefined &&
+      pendingAsync.has(ref) &&
+      prepared?.has(entry.row.id) !== true
+      ? ref
+      : undefined;
+  }
+
   function decide(
     point: PointId,
     input: GateDecideInput<Context>,
@@ -102,29 +179,42 @@ export function compileGateRows<Context = never>(
     const inputHash = canonicalDigest({ point, when: { ...input.when }, value: input.value });
     const entries = byPoint.get(point) ?? [];
     const recorded = decideOptions.recorded;
-    // Matcher context is a decision input: a recorded decision replays only
-    // when every context-dependent row still matches exactly as recorded.
-    const matchersUnchanged = (record: GateDecision): boolean =>
-      entries.every(
-        (entry) =>
-          entry.matcher === undefined ||
-          matches(entry, input) === record.rowIds.includes(entry.row.id),
-      );
-    // A decision is bound to its policy generation (#1251 r4): a record from
-    // another generation never replays — the current rows decide fresh.
-    if (
-      recorded !== undefined &&
-      recorded.generation === options.generation &&
-      recorded.point === point &&
-      recorded.inputHash === inputHash &&
-      matchersUnchanged(recorded)
-    ) {
+    if (recorded !== undefined && replays(point, input, entries, inputHash, recorded)) {
       // Replay restores the recorded rewrite output without invoking handlers.
       return { decision: recorded, value: recorded.output, emissions: [], replayed: true };
     }
     const state = initialFoldState(input.value);
     for (const entry of entries) {
-      if (matches(entry, input)) applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers);
+      if (!matches(entry, input)) continue;
+      // #1256 r5 H-1: an async consult row pauses the ordered fold HERE, so
+      // its consultant receives the value every earlier row already folded.
+      const awaited = awaitedConsultRef(entry, decideOptions.pendingAsync, decideOptions.prepared);
+      if (awaited !== undefined) {
+        return {
+          decision: {
+            point,
+            verdict: state.verdict,
+            rowIds: state.rowIds,
+            obligations: state.obligations,
+            consulted: state.consulted,
+            annotations: state.annotations,
+            facts: state.facts,
+            output: state.value,
+            inputHash,
+            generation: options.generation,
+          },
+          value: state.value,
+          emissions: state.emissions,
+          replayed: false,
+          pending: {
+            rowId: entry.row.id,
+            ref: awaited,
+            params: entry.row.how.params ?? null,
+            value: clonePlain(state.value),
+          },
+        };
+      }
+      applyRow(entry.row, entry.emit, state, inputHash, decideOptions.handlers, decideOptions.prepared);
     }
     const decision: GateDecision = {
       point,

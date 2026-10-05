@@ -72,9 +72,14 @@ export function decideSessionAdmission(snapshot: AdmissionSnapshot): AdmissionDe
 
 function decideIdleInbox(pending: readonly Inbox.Row[]): AdmissionDecision {
   if (pending.length === 0) return { kind: "stop" };
-  const firstPrompt = pending.findIndex((item) => item.kind === "prompt");
-  if (firstPrompt === 0) return { kind: "start" };
-  return { kind: "consume", items: firstPrompt > 0 ? pending.slice(0, firstPrompt) : pending };
+  // #1256 r5 H-3: an `action` input heads a turn like a prompt — the turn's
+  // boundary consumption is the ONE owner of its fate (a live one delivers,
+  // a stale one closes via `turn.consumed.stale`). Noop-consuming it here
+  // would drop a late hook result without the durable closure fact. Only
+  // leading control signals are swallowed.
+  const firstInput = pending.findIndex((item) => item.kind === "prompt" || item.kind === "action");
+  if (firstInput === 0) return { kind: "start" };
+  return { kind: "consume", items: firstInput > 0 ? pending.slice(0, firstInput) : pending };
 }
 
 export function createSessionAdmission(
@@ -177,21 +182,31 @@ export function createSessionAdmission(
       const observations = yield* captured.provide(ObservationSink);
       // #1253 turn end: both steer and followUp rows are eligible, each capped
       // by its settings width; the leftover backlog feeds the next turn.
-      const pending = boundaryConsumption(
+      // #1256 H-3/H-1: the stale split lives INSIDE boundaryConsumption — a
+      // deferred `action` input pointing before the compaction head is never
+      // consumed; this turn closes it via `turn.consumed.stale`.
+      const { consumed: pending, stale } = boundaryConsumption(
         pendingBacklog(kernel, sessionId),
         "turn_end",
         consumptionSettings(kernel, sessionId),
+        kernel.compactionHead(sessionId),
       );
-      const promptRefusal = yield* captured.provide(evaluatePromptPolicies(pending)).pipe(Effect.provide(runtime.services));
-      if (promptRefusal !== undefined) {
+      const evaluatedPrompts = yield* captured.provide(evaluatePromptPolicies(pending)).pipe(Effect.provide(runtime.services));
+      if (evaluatedPrompts.refusal !== undefined) {
         yield* consumePolicyBlockedInbox(pending);
-        return policyRefusalResult(promptRefusal.reason);
+        return policyRefusalResult(evaluatedPrompts.refusal.reason);
       }
+      // #1256 r3 H-3: a prompt.pre rewrite's output is what the turn delivers —
+      // the delivery row's content is what the model later reads.
+      const delivered = pending.map((item) => {
+        const body = evaluatedPrompts.contents.get(item.id);
+        return body === undefined ? item : { ...item, content: body };
+      });
       const resultId = entropy();
       const turnId = entropy();
       const parentActionId = kernel.latestAction(sessionId)?.id ?? null;
       const deliveries = deliveryActions(
-        pending,
+        delivered,
         { kind: "turn", turnId },
         "before_llm",
         parentActionId,
@@ -202,6 +217,7 @@ export function createSessionAdmission(
         sessionId,
         resultId,
         inboxIds: pending.map((item) => item.id),
+        consumedStale: stale.map((item) => item.id),
         generation,
         resumeCount: 0,
         boundaryActionId: parentActionId,
@@ -212,7 +228,7 @@ export function createSessionAdmission(
         actions: [...deliveries, envelope],
         state: "running",
       });
-      observeDrained(pending, turnId, "before_llm", clock(), observations, entropy);
+      observeDrained(delivered, turnId, "before_llm", clock(), observations, entropy);
       if (pending.some((item) => item.kind === "interrupt")) {
         const action = kernel.actionById(turnId);
         if (action === undefined) return yield* new AgentFailure({ operation: "session.turn", cause: `missing_turn:${turnId}` });
@@ -243,10 +259,17 @@ export function createSessionAdmission(
 
   function evaluatePromptPolicies(
     items: readonly Inbox.Row[],
-  ): Effect.Effect<SessionPolicyRefusal | undefined, ExecutionError, RunnerServices> {
+  ): Effect.Effect<
+    { readonly refusal: SessionPolicyRefusal | undefined; readonly contents: ReadonlyMap<string, string> },
+    ExecutionError,
+    RunnerServices
+  > {
     return Effect.gen(function* () {
       const ledger = createExecutionLedger();
       let refusal: SessionPolicyRefusal | undefined;
+      // #1256 r3 H-3: prompt.pre rewrites (the registry's `body` field) — what
+      // the boundary delivers (and the model reads) is the rewritten body.
+      const contents = new Map<string, string>();
       for (const item of items) {
         if (item.kind !== "prompt") continue;
         const recorded: PlainValue = { inboxId: item.id, status: "recorded" };
@@ -257,14 +280,20 @@ export function createSessionAdmission(
         const outcome = yield* executor.runExisting({
           kind: "prompt",
           op: "inbox",
-          intent: { inboxId: item.id, content: item.content, origin: item.origin.value, createdAt: item.createdAt, ordinal: item.ordinal },
+          intent: { inboxId: item.id, body: item.content, origin: item.origin.value, createdAt: item.createdAt, ordinal: item.ordinal },
           effect: { status: "recorded" },
-        }, () => Effect.succeed(recorded));
+        }, (pre) =>
+          Effect.sync(() => {
+            const value = pre.value;
+            if (value !== null && typeof value === "object" && !Array.isArray(value) && typeof value.body === "string" && value.body !== item.content)
+              contents.set(item.id, value.body);
+            return recorded;
+          }));
         if (refusal !== undefined) continue;
         if (outcome.terminal !== "executed") refusal = new SessionPolicyRefusal(outcome.reason);
         else if (canonicalDigest(outcome.value) !== canonicalDigest(recorded)) refusal = new SessionPolicyRefusal("invalid_output");
       }
-      return refusal;
+      return { refusal, contents };
     });
   }
 

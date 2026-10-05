@@ -130,7 +130,7 @@ export function serveProcessSession(
   const entropy = yield* Entropy;
   const observations = yield* ObservationSink;
   const owner = `process:${process.pid}`;
-  seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds(composed.current().generation.rows), yield* AppPointTable);
+  seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds(composed.current().generation), yield* AppPointTable);
   const runtime: SessionRuntime = {
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,
