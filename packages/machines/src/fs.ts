@@ -41,8 +41,6 @@ type FsDriverTestHooks = {
   readonly closeRootDescriptor?: (fd: number) => void;
 };
 
-type RootWalk = { readonly canonicalPath: string; readonly fd: number };
-
 type Root = {
   readonly canonicalPath: string;
   readonly fd: number;
@@ -328,7 +326,7 @@ function closeRootDescriptor(testHooks: FsDriverTestHooks, fd: number): void {
  * recorded path are produced by one traversal instead of a resolution that is
  * verified and then re-resolved by name when the descriptor is opened.
  */
-function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): RootWalk {
+function openRoot(configuredRoot: string, testHooks: FsDriverTestHooks): Root {
   const absolute = resolve(configuredRoot);
   let pending = absolute.split(sep).filter((segment) => segment.length > 0);
   let traversed: string[] = [];
