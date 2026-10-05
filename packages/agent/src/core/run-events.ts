@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BusEvent, Token } from "@openomni/protocol";
+import { RetryReason } from "./retry";
 
 // ─── from core/execution/events.ts (#1247) ───
 const AgentBase = z.object({
@@ -94,13 +95,7 @@ export const RunEvents = {
       maxAttempts: z.number(),
       error: z.string(),
       /** Why the error was judged retryable — see the canonical LLM decision. */
-      reason: z.enum([
-        "timeout",
-        "tool_error",
-        "transient_error",
-        "validation_error",
-        "context_overflow",
-      ]),
+      reason: RetryReason,
       /** How long the run waits before the next attempt. */
       backoffMs: z.number(),
     }),
