@@ -24,12 +24,29 @@ const LEGACY_ADDRESS_BY_POINT: Readonly<Record<string, { kind: string; phase: Po
   "alarm.fired": { kind: "alarm.fired", phase: "post" },
 };
 
+/**
+ * The kernel's SYNCHRONOUS named services (#1256 r3 G-3): a gate row naming
+ * one of these without its full obligation params is a malformed obligation,
+ * never a consult seed — the live plane would otherwise look the name up in
+ * the consultant table it can never join.
+ */
+const KERNEL_SYNC_SERVICES: ReadonlySet<string> = new Set([
+  ...Core.KERNEL_POLICY_REGISTRY.transformers.map((entry) => entry.name),
+  ...Core.KERNEL_POLICY_REGISTRY.obligations.map((entry) => entry.name),
+]);
+
 function gateRowVerdict(row: Bundle.BundleGateRow): PlainValue {
   if (row.do === "gate" && row.how.ref !== undefined) {
     if (row.how.metric !== undefined && row.how.limit !== undefined)
       return { type: "obligation", ref: row.how.ref, metric: row.how.metric, limit: row.how.limit };
+    if (KERNEL_SYNC_SERVICES.has(row.how.ref))
+      throw new AppInvariantError(
+        `gate row ${row.id} names the synchronous kernel service ${row.how.ref} without its obligation params; it has no live policy-plane seed shape`,
+      );
     // #1256 r2 H-1: a consulted gate guard (hook rows) seeds the consult
-    // verdict; the compiled snapshot resolves the named async service.
+    // verdict; the compiled snapshot resolves the named async service and
+    // REFUSES the generation on an unregistered ref (unknown_ref, #1251) —
+    // an unknown name never folds to allow.
     return { type: "consult", ref: row.how.ref, ...(row.how.params === undefined ? {} : { config: row.how.params }) };
   }
   if (row.do === "gate") {
