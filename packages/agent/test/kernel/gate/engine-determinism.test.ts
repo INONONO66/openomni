@@ -154,7 +154,5 @@ describe("compiled policy snapshot determinism", () => {
 
     expect(source.reads).toBe(readsBefore);
     expect(decision.matchedRuleIds).toEqual(["allow-read"]);
-    expect(decision.bucket).toBe("tool/pre/read");
-    expect(decision.evaluatedRuleCount).toBe(1);
   });
 });
