@@ -51,6 +51,17 @@ export interface HookCallInput {
   readonly point: string;
   readonly event: string;
   readonly decisionInput: PlainValue;
+  /**
+   * #1256 r3 M-2: bounds THIS call via the Effect clock. Timeout is a
+   * per-call parameter carried on the request — never process-pool identity.
+   */
+  readonly timeoutMs: number;
+  /**
+   * Per-call response-line byte bound: a well-formed line answering THIS call
+   * that exceeds it settles only this call as a framing failure. The reader's
+   * absolute `maxLineBytes` cap still poisons the PID.
+   */
+  readonly maxLineBytes?: number;
 }
 
 /**
@@ -88,11 +99,13 @@ export interface HookLateResult {
 }
 
 export interface HookProcessConfig {
-  /** The hook executable and its arguments, exactly as configured. */
+  /**
+   * The hook executable and its arguments, exactly as configured. The command
+   * IS the process identity (#1256 r3 M-2): one PID per distinct command per
+   * generation; timeout and framing bounds ride each call.
+   */
   readonly command: readonly string[];
-  /** Bounds ONE handler call via the Effect clock; there is no alarm timer. */
-  readonly timeoutMs: number;
-  /** Per-line/buffer byte bound on stdout framing; default `HOOK_MAX_LINE_BYTES`. */
+  /** The reader's ABSOLUTE line/buffer byte cap; default `HOOK_MAX_LINE_BYTES`. */
   readonly maxLineBytes?: number;
   /**
    * #1256 H-3: the typed late-result port. A well-formed line whose id no
@@ -129,6 +142,8 @@ export interface HookProcess {
 
 interface Pending {
   readonly waiter: Deferred.Deferred<HookOutcome>;
+  /** The call's own response-line byte bound (#1256 r3 M-2). */
+  readonly maxLineBytes: number;
 }
 
 function decodeLine(line: string): z.infer<typeof HookResponseLine> | undefined {
@@ -205,7 +220,13 @@ export function acquireHookProcess(
         return;
       }
       pending.delete(decoded.id);
-      Deferred.doneUnsafe(entry.waiter, Effect.succeed(outcomeOf(decoded.result)));
+      // #1256 r3 M-2: the per-call framing bound fails ONLY this call; the
+      // PID stays healthy (the reader's absolute cap already held).
+      const outcome =
+        Buffer.byteLength(line, "utf8") > entry.maxLineBytes
+          ? failure("framing")
+          : outcomeOf(decoded.result);
+      Deferred.doneUnsafe(entry.waiter, Effect.succeed(outcome));
       settleDrained();
     };
 
@@ -260,7 +281,10 @@ export function acquireHookProcess(
       Effect.gen(function* () {
         if (dead || closing) return failure("exit");
         const waiter = yield* Deferred.make<HookOutcome>();
-        pending.set(input.id, { waiter });
+        pending.set(input.id, {
+          waiter,
+          maxLineBytes: input.maxLineBytes ?? Number.POSITIVE_INFINITY,
+        });
         const wrote = yield* Effect.try(() => {
           child.stdin.write(
             `${JSON.stringify({ id: input.id, point: input.point, event: input.event, decisionInput: input.decisionInput })}\n`,
@@ -278,7 +302,7 @@ export function acquireHookProcess(
         // after the interrupt is a LATE result through `onLate`, like a
         // timeout's.
         const settled = yield* Deferred.await(waiter).pipe(
-          Effect.timeoutOption(config.timeoutMs),
+          Effect.timeoutOption(input.timeoutMs),
           Effect.onInterrupt(() =>
             Effect.sync(() => {
               pending.delete(input.id);

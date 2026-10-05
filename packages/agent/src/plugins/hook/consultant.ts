@@ -35,12 +35,13 @@ const HookRowParams = z.looseObject({
   maxLineBytes: z.number().int().positive().optional(),
 });
 
+/**
+ * #1256 r3 M-2: pool identity is the COMMAND (argv; cwd and env are not
+ * configurable today) — one PID per distinct command per generation. Timeout
+ * and framing bounds are per-call parameters on the request, never pool key.
+ */
 function processKey(params: z.infer<typeof HookRowParams>): string {
-  return canonicalDigest({
-    command: params.command,
-    timeoutMs: params.timeoutMs,
-    maxLineBytes: params.maxLineBytes ?? null,
-  });
+  return canonicalDigest({ command: params.command });
 }
 
 function denyResult(cause: string): GateHandlerResult {
@@ -144,14 +145,7 @@ export function hookProcessConsultant(
       if (pool.has(key)) continue;
       pool.set(
         key,
-        yield* acquireHookProcess({
-          command: params.data.command,
-          timeoutMs: params.data.timeoutMs,
-          ...(params.data.maxLineBytes === undefined
-            ? {}
-            : { maxLineBytes: params.data.maxLineBytes }),
-          onLate: routeLate,
-        }),
+        yield* acquireHookProcess({ command: params.data.command, onLate: routeLate }),
       );
     }
     let calls = 0;
@@ -170,6 +164,10 @@ export function hookProcessConsultant(
             point: input.point,
             event: params.data.event,
             decisionInput: input.value,
+            timeoutMs: params.data.timeoutMs,
+            ...(params.data.maxLineBytes === undefined
+              ? {}
+              : { maxLineBytes: params.data.maxLineBytes }),
           })
           .pipe(
             Effect.map((outcome) => {

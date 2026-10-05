@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Bundle, Core, Model } from "@openomni/agent";
 import { L0Observation } from "@openomni/protocol";
@@ -768,4 +768,97 @@ test("H-3 e2e: a PreToolUse secrets-guard rewrite of bash.command reaches the ex
     expect(executed).toEqual(["curl -H 'x-key: [redacted]' https://api"]);
     expect(result).toMatchObject({ content: "curl -H 'x-key: [redacted]' https://api" });
   }));
+});
+
+/** Logs its PID at startup, then answers allow to every request. */
+const PID_LOG_SCRIPT = `
+const fs = require("node:fs");
+fs.appendFileSync(process.argv[2], process.pid + "\\n");
+const decoder = new TextDecoder();
+let buffer = "";
+for await (const chunk of Bun.stdin.stream()) {
+  buffer += decoder.decode(chunk, { stream: true });
+  let cut;
+  while ((cut = buffer.indexOf("\\n")) >= 0) {
+    const line = buffer.slice(0, cut);
+    buffer = buffer.slice(cut + 1);
+    if (line.length === 0) continue;
+    const request = JSON.parse(line);
+    console.log(JSON.stringify({ id: request.id, result: { type: "gate", verdict: "allow" } }));
+  }
+}
+`;
+
+test("M-2 e2e: two rows with the same command and different timeouts spawn ONE PID in the real boot; teardown kills it", async () => {
+  const dir = suite.tempDir("hooks-json-pid-");
+  const script = join(dir, "pid-hook.js");
+  writeFileSync(script, PID_LOG_SCRIPT);
+  const pidLog = join(dir, "pids.log");
+  const hooksPath = join(dir, "hooks.json");
+  // One PID per distinct COMMAND per generation: timeouts are per-call
+  // parameters, never pool identity (#1256 r3 M-2).
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({
+      UserPromptSubmit: [
+        { command: [process.execPath, script, pidLog], timeoutMs: 10_000 },
+        { command: [process.execPath, script, pidLog], timeoutMs: 30_000 },
+      ],
+    }),
+  );
+  const config = suite.config("hooks-json-pid-state-", { hooksPath });
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          sink.onMessage(
+            assistantMessage(input, { id: "pid-1", text: "pong", createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+  const decided = eventSignal<{ sessionId: string; id: string }>("pid-count decision", 15_000);
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind !== "policy.decision") return;
+    const node = plane.openKernel(event.sessionId).actionById(event.id);
+    const intent = node?.intent.value;
+    if (intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent?.hook === "prompt.pre")
+      decided.resolve({ sessionId: event.sessionId, id: event.id });
+  });
+  try {
+    const reply = nextResidentTurn(plane);
+    ws.send(JSON.stringify({ type: "message", eventId: "pid-turn", text: "ping" }));
+    const decision = await decided.promise;
+    expect(await reply).toMatchObject({ text: "pong" });
+    // BOTH rows consulted on the one prompt decision...
+    const node = plane.openKernel(decision.sessionId).actionById(decision.id);
+    const parsed = z
+      .looseObject({ gate: z.looseObject({ consulted: z.array(z.looseObject({ ref: z.string() })) }) })
+      .parse(node?.intent.value);
+    expect(parsed.gate.consulted.map((entry) => entry.ref)).toEqual([
+      Bundle.HOOK_PROCESS_REF,
+      Bundle.HOOK_PROCESS_REF,
+    ]);
+    // ...yet each live generation spawned exactly ONE PID for the command.
+    // Two sessions hold a generation here (gateway-ingress + the resident), so
+    // TWO distinct rows with the same command yield 2 PIDs, never 4: the pool
+    // key is the command identity, not the per-call timeout (#1256 r3 M-2).
+    const sessions = plane.listSessions();
+    expect(sessions).toHaveLength(2);
+    const pids = readFileSync(pidLog, "utf8").trim().split("\n").map(Number);
+    expect(pids).toHaveLength(sessions.length);
+    expect(new Set(pids).size).toBe(pids.length);
+    for (const pid of pids) expect(Number.isInteger(pid)).toBe(true);
+    // The generation Scopes own the PIDs: teardown (the rotation finalizer
+    // path) kills ALL of them.
+    await suite.cleanup();
+    for (const pid of pids) expect(() => process.kill(pid, 0)).toThrow();
+  } finally {
+    unsubscribe();
+  }
 });

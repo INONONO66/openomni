@@ -69,8 +69,9 @@ for await (const chunk of Bun.stdin.stream()) {
 
 const COMMAND = [process.execPath, "-e", CHILD_SCRIPT] as const;
 
-function request(event: string, id = event): Parameters<HookProcess["call"]>[0] {
-  return { id, point: "tool.pre", event, decisionInput: { op: "bash" } };
+function request(event: string, id = event, timeoutMs = 60_000): Parameters<HookProcess["call"]>[0] {
+  // #1256 r3 M-2: timeout is a per-call parameter on the request.
+  return { id, point: "tool.pre", event, decisionInput: { op: "bash" }, timeoutMs };
 }
 
 const scoped = <A, E>(body: (scope: Scope.Scope) => Effect.Effect<A, E>) =>
@@ -100,7 +101,7 @@ test("allow, deny, rewrite and observe results round-trip over JSON lines", () =
   runTestPromise(
     scoped((scope) =>
       Effect.gen(function* () {
-        const hook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 60_000 }).pipe(
+        const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
           Scope.provide(scope),
         );
         expect(yield* hook.call(request("allow"))).toEqual({ kind: "gate", verdict: "allow" });
@@ -126,7 +127,7 @@ test("a non-JSON line and a verdict outside the vocabulary both fail as framing"
   runTestPromise(
     scoped((scope) =>
       Effect.gen(function* () {
-        const hook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 60_000 }).pipe(
+        const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
           Scope.provide(scope),
         );
         expect(yield* hook.call(request("garbage"))).toEqual({
@@ -147,7 +148,7 @@ test("the process dying during a call settles the call as an exit failure", () =
   runTestPromise(
     scoped((scope) =>
       Effect.gen(function* () {
-        const hook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 60_000 }).pipe(
+        const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
           Scope.provide(scope),
         );
         expect(yield* hook.call(request("die"))).toEqual({
@@ -170,10 +171,10 @@ test("a nonresponsive script times out when the TestClock passes timeoutMs", () 
   runTestPromise(
     scoped((scope) =>
       Effect.gen(function* () {
-        const hook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 5_000 }).pipe(
+        const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
           Scope.provide(scope),
         );
-        const call = yield* Effect.forkChild(hook.call(request("silent")));
+        const call = yield* Effect.forkChild(hook.call(request("silent", "silent", 5_000)));
         yield* settledWhen(() => hook.inFlight() === 1);
         yield* TestClock.adjust(5_001);
         expect(yield* Fiber.join(call)).toEqual({
@@ -190,7 +191,7 @@ test("rotation: one PID per generation and the old PID dies only after its last 
   runTestPromise(
     Effect.gen(function* () {
       const oldScope = yield* Scope.make();
-      const oldHook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 60_000 }).pipe(
+      const oldHook = yield* acquireHookProcess({ command: COMMAND }).pipe(
         Scope.provide(oldScope),
       );
       // A full round-trip proves the child is up with its signal handler bound.
@@ -203,7 +204,7 @@ test("rotation: one PID per generation and the old PID dies only after its last 
       const closing = yield* Effect.forkChild(Scope.close(oldScope, Exit.void));
       const result = yield* scoped((scope) =>
         Effect.gen(function* () {
-          const newHook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 60_000 }).pipe(
+          const newHook = yield* acquireHookProcess({ command: COMMAND }).pipe(
             Scope.provide(scope),
           );
           expect(newHook.pid).not.toBe(oldHook.pid);
@@ -228,7 +229,6 @@ test("a missing executable is a typed spawn refusal, never a partial activation"
       Effect.gen(function* () {
         const error = yield* acquireHookProcess({
           command: ["/nonexistent-hook-executable-1256"],
-          timeoutMs: 1_000,
         }).pipe(Effect.flip);
         expect(error).toBeInstanceOf(HookSpawnError);
         expect(error.command).toEqual(["/nonexistent-hook-executable-1256"]);
@@ -242,7 +242,6 @@ test("H-2: a response line over maxLineBytes poisons the PID as a framing failur
       Effect.gen(function* () {
         const hook = yield* acquireHookProcess({
           command: COMMAND,
-          timeoutMs: 60_000,
           maxLineBytes: 1024,
         }).pipe(Scope.provide(scope));
         expect(yield* hook.call(request("oversize"))).toEqual({
@@ -267,7 +266,6 @@ test("H-2: an unterminated buffer over maxLineBytes poisons the PID as a framing
       Effect.gen(function* () {
         const hook = yield* acquireHookProcess({
           command: COMMAND,
-          timeoutMs: 60_000,
           maxLineBytes: 1024,
         }).pipe(Scope.provide(scope));
         // The child floods 4096 bytes with NO newline: the buffer bound trips
@@ -286,7 +284,7 @@ test("M-1: one JSON line split across two stdout writes decodes once complete", 
   runTestPromise(
     scoped((scope) =>
       Effect.gen(function* () {
-        const hook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 60_000 }).pipe(
+        const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
           Scope.provide(scope),
         );
         // The child answers "split" with the FIRST 6 bytes of its response line
@@ -314,10 +312,9 @@ test("H-3: a result settling after its timeout surfaces through the typed onLate
         });
         const hook = yield* acquireHookProcess({
           command: COMMAND,
-          timeoutMs: 5_000,
           onLate: (late) => resolveLate(late),
         }).pipe(Scope.provide(scope));
-        const call = yield* Effect.forkChild(hook.call(request("hold", "late-1")));
+        const call = yield* Effect.forkChild(hook.call(request("hold", "late-1", 5_000)));
         yield* settledWhen(() => hook.inFlight() === 1);
         yield* TestClock.adjust(5_001);
         // The call itself settled as the one timeout failure the gate folds to deny.
@@ -410,7 +407,7 @@ test("C-1: a stdin write failure settles the call as a typed exit failure, nothi
           }),
         };
         const hook = yield* acquireHookProcess(
-          { command: ["./hook.sh"], timeoutMs: 60_000 },
+          { command: ["./hook.sh"] },
           () => child,
         ).pipe(Scope.provide(scope));
         expect(yield* hook.call(request("allow"))).toEqual({
@@ -446,7 +443,7 @@ test("H-2 (r3): an interrupted in-flight call cleans up; generation disposal com
       };
       const scope = yield* Scope.make();
       const hook = yield* acquireHookProcess(
-        { command: ["./hook.sh"], timeoutMs: 60_000 },
+        { command: ["./hook.sh"] },
         () => child,
       ).pipe(Scope.provide(scope));
       const call = yield* Effect.forkChild(hook.call(request("silent")));
@@ -459,4 +456,70 @@ test("H-2 (r3): an interrupted in-flight call cleans up; generation disposal com
       expect(killed).toBe(true);
       expect(yield* hook.exited).toBe(0);
     }),
+  ));
+
+test("M-2: two rows with the same command and different timeouts share ONE PID; a per-call line bound fails only its call", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        // The REAL consultant seed: two rows, identical command, different
+        // per-call timeouts. Pool identity is the command, so ONE child serves
+        // both rows (#1256 r3 M-2).
+        const seen: string[] = [];
+        const script = `
+const decoder = new TextDecoder();
+let buffer = "";
+for await (const chunk of Bun.stdin.stream()) {
+  buffer += decoder.decode(chunk, { stream: true });
+  let cut;
+  while ((cut = buffer.indexOf("\\n")) >= 0) {
+    const line = buffer.slice(0, cut);
+    buffer = buffer.slice(cut + 1);
+    if (line.length === 0) continue;
+    const request = JSON.parse(line);
+    console.log(JSON.stringify({ id: request.id, result: { type: "observe", payload: { pid: process.pid } } }));
+  }
+}
+`;
+        const command = [process.execPath, "-e", script];
+        const fast = { event: "PreToolUse", command, timeoutMs: 1_000 };
+        const slow = { event: "PreToolUse", command, timeoutMs: 30_000 };
+        const consult = yield* hookProcessConsultant({
+          name: HOOK_PROCESS_REF,
+          rows: [
+            { id: "hooks-json/tool.pre#1", on: "tool.pre", when: {}, do: "observe", how: { ref: HOOK_PROCESS_REF, params: fast }, order: 0 },
+            { id: "hooks-json/tool.pre#2", on: "tool.pre", when: {}, do: "observe", how: { ref: HOOK_PROCESS_REF, params: slow }, order: 1 },
+          ],
+        }).pipe(Scope.provide(scope));
+        const first = yield* consult({ rowId: "hooks-json/tool.pre#1", point: "tool.pre", params: fast, value: { op: "bash" } });
+        const second = yield* consult({ rowId: "hooks-json/tool.pre#2", point: "tool.pre", params: slow, value: { op: "bash" } });
+        const pidOf = (result: typeof first): number => {
+          const payload = result.payload;
+          if (payload === null || typeof payload !== "object" || Array.isArray(payload)) throw new Error("missing payload");
+          const pid = payload.pid;
+          if (typeof pid !== "number") throw new Error("missing pid");
+          seen.push(String(pid));
+          return pid;
+        };
+        // Both rows answered from the SAME child process.
+        expect(pidOf(first)).toBe(pidOf(second));
+        expect(seen).toHaveLength(2);
+        // A per-call maxLineBytes smaller than the response fails ONLY that
+        // call as framing; the shared PID stays healthy for the next row.
+        const bounded = { ...fast, maxLineBytes: 8 };
+        expect(yield* consult({ rowId: "hooks-json/tool.pre#1", point: "tool.pre", params: bounded, value: { op: "bash" } })).toEqual({
+          verdict: "deny",
+          payload: {
+            ref: HOOK_PROCESS_REF,
+            verdict: "deny",
+            reason: "bundle_failure",
+            code: "hook_timeout",
+            cause: "framing",
+          },
+        });
+        expect(pidOf(yield* consult({ rowId: "hooks-json/tool.pre#2", point: "tool.pre", params: slow, value: { op: "bash" } }))).toBe(
+          pidOf(first),
+        );
+      }),
+    ),
   ));
