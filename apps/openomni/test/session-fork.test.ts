@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -110,6 +110,37 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
     const node = kernel.actionById(row.actionId);
     expect(node !== undefined && Core.isForkBoundary(node)).toBeTrue();
   }
+
+  // The two residual failure mappings through the SHIPPED executor (#1257
+  // G-3): a typed non-refusal ledger failure and a thrown defect both come
+  // back as `session_fork_refused(storage)` frames, never dropped frames.
+  const realStore = plane.sessionStore;
+  const brokenStore = spyOn(plane, "sessionStore").mockImplementation((id: string) => {
+    const store = realStore(id);
+    spyOn(store, "fork").mockImplementation(() =>
+      Effect.fail(new Core.CorruptRecord({ operation: "fork", id })));
+    return store;
+  });
+  const storageRefusal = nextFrame(socket, (frame) => frame.type === "session_fork_refused");
+  socket.send(JSON.stringify({
+    type: "session_fork", sessionId, at: anchor.actionHash, childId: "broken-child",
+  }));
+  expect(await storageRefusal).toMatchObject({
+    type: "session_fork_refused", sessionId, reason: "storage",
+  });
+  brokenStore.mockRestore();
+
+  const brokenKernel = spyOn(plane, "openKernel").mockImplementation(() => {
+    throw new Error("kernel exploded");
+  });
+  const defectRefusal = nextFrame(socket, (frame) => frame.type === "session_fork_refused");
+  socket.send(JSON.stringify({
+    type: "session_fork", sessionId, at: anchor.actionHash, childId: "defect-child",
+  }));
+  expect(await defectRefusal).toMatchObject({
+    type: "session_fork_refused", sessionId, reason: "storage", detail: "kernel exploded",
+  });
+  brokenKernel.mockRestore();
   await closeSocket(socket);
 });
 
