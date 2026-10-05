@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { retryableOnce } from "../src";
+import { retryableOnce } from "../src/retryable-once";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 
 /**

@@ -1,6 +1,7 @@
 import { Effect, Result } from "effect";
 import { ThrownError } from "./thrown";
 import { AppInvariantError } from "./invariant";
+import { retryableOnce } from "./retryable-once";
 import { bootResource } from "./composition/boot";
 import { foreignFailure } from "./composition/failure";
 import { shutdownSessions } from "./shutdown";
@@ -1216,22 +1217,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     throw outcome.failure;
   }
   return outcome.success;
-}
-
-/**
- * One shared in-flight run (#1256 r2 C-1): concurrent callers join the same
- * promise, a rejection clears the memo so the NEXT call retries, and a
- * success is permanent — a stopped app never stops twice.
- */
-export function retryableOnce(run: () => Promise<void>): () => Promise<void> {
-  let inFlight: Promise<void> | undefined;
-  return () => {
-    inFlight ??= run().catch((error: Error) => {
-      inFlight = undefined;
-      throw error;
-    });
-    return inFlight;
-  };
 }
 
 /**
