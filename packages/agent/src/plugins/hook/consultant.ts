@@ -1,9 +1,12 @@
-import { canonicalDigest, type PlainValue } from "@openomni/protocol";
+import { canonicalDigest } from "@openomni/protocol";
 import { Effect, type Scope } from "effect";
 import { z } from "zod";
-import type { ConsultantSeed } from "../../core/compose";
-import type { ConsultInput, NamedConsultant } from "../../core/gate/compile";
-import type { GateHandlerResult } from "../../core/gate/compose";
+import type {
+  ConsultantSeed,
+  ConsultInput,
+  GateHandlerResult,
+  NamedConsultant,
+} from "../../core/api";
 import {
   acquireHookProcess,
   HOOK_PROCESS_REF,

@@ -24,7 +24,7 @@ export const HOOK_PROCESS_REF = "hook/process";
  * (deny at the gate) and the PID is killed — stdout buffering never grows
  * without bound on a hook that misbehaves.
  */
-export const HOOK_MAX_LINE_BYTES = 64 * 1024;
+const HOOK_MAX_LINE_BYTES = 64 * 1024;
 
 /** The gate vocabulary a hook result must use; anything else is a framing failure. */
 export const HookGateVerdict = z.enum(["allow", "deny", "require_approval"]);

@@ -20,3 +20,8 @@ export {
 // root `Bundle` barrel); the alarm seam is what the alarm plugin publishes.
 export { Capability, seam, type CapabilityDefinition, type SeamTag } from "./capability";
 export { AlarmSeam } from "./alarm";
+// #1256 consulted-gate seam: the types a hook-style capability needs to
+// register an asynchronous gate consultant without touching core internals.
+export type { ConsultantSeed } from "./compose";
+export type { ConsultInput, NamedConsultant } from "./gate/registry";
+export type { GateHandlerResult } from "./gate/compose";

@@ -44,7 +44,7 @@ export interface ConsultantSeed {
 export interface ConsultantHandler {
   readonly consultant: (
     seed: ConsultantSeed,
-  ) => Effect.Effect<NamedConsultant["consult"], unknown, Scope.Scope>;
+  ) => Effect.Effect<NamedConsultant["consult"], Error, Scope.Scope>;
 }
 
 export function isConsultantHandler(handler: object): handler is ConsultantHandler {
