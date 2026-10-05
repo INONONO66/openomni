@@ -207,7 +207,7 @@ export interface DurableExecutor extends Executor {
   }, ExecutionError>;
   runExisting<T extends PlainValue, R>(
     request: ExecutionRequest,
-    body: () => Effect.Effect<T, ExecutionError, R>,
+    body: (pre: PolicyEvaluation) => Effect.Effect<T, ExecutionError, R>,
   ): Effect.Effect<ExecutionResult, ExecutionError, R>;
   runAttempts<T extends PlainValue>(
     parent: LedgerAction.Receipt,
@@ -1231,10 +1231,16 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   function decide(request: ExecutionRequest, phase: "pre" | "post", value: PlainValue,
     parentId = options.identity.parentActionId): Effect.Effect<Decision, CommitFailed> {
     return Effect.suspend(() => {
-      const evaluated = options.policy.evaluate({
+      const input = {
         kind: request.kind, phase, op: request.op, role: options.identity.role, sessionId: options.identity.sessionId,
         ...(request.message === undefined ? {} : { message: request.message }), value,
-      });
+      };
+      // #1256: async consultants (hook rows) resolve through evaluateEffect;
+      // a snapshot without one evaluates synchronously as before.
+      const evaluatedEffect = options.policy.evaluateEffect === undefined
+        ? Effect.sync(() => options.policy.evaluate(input))
+        : options.policy.evaluateEffect(input);
+      return evaluatedEffect.pipe(Effect.flatMap((evaluated) => {
       const decision = gatedByRegistry(evaluated, request, phase);
       return record.commit({
         id: options.entropy(), parentId, sessionId: options.identity.sessionId, kind: "policy.decision",
@@ -1248,6 +1254,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         } },
         ts: options.clock(), irreversible: true,
       }).pipe(Effect.map((receipt) => ({ ...decision, receipt })));
+      }));
     });
   }
 
@@ -1562,11 +1569,15 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
     );
   }
 
-  function runExisting<T extends PlainValue, R>(request: ExecutionRequest, body: () => Effect.Effect<T, ExecutionError, R>) {
+  function runExisting<T extends PlainValue, R>(request: ExecutionRequest, body: (pre: PolicyEvaluation) => Effect.Effect<T, ExecutionError, R>) {
     return Effect.uninterruptibleMask((restore) => Effect.gen(function* () {
       const pre = yield* decide(request, "pre", request.intent);
-      if (pre.verdict !== "allow") return { terminal: "blocked_pre", reason: pre.reason ?? "denied" } as const;
-      const exit = yield* Effect.exit(restore(Effect.scoped(body())));
+      // #1256 r3 H-3: transform/obligation are allow-shaped effective verdicts
+      // (a prompt.pre rewrite must flow, not block); only deny and
+      // require_approval refuse here.
+      if (pre.verdict === "deny" || pre.verdict === "require_approval")
+        return { terminal: "blocked_pre", reason: pre.reason ?? "denied" } as const;
+      const exit = yield* Effect.exit(restore(Effect.scoped(body(pre))));
       if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
       const value = clonePlainValue(exit.value);
       if (!consulted(request.kind, "post")) return { terminal: "executed", value } as const;
@@ -1663,7 +1674,9 @@ function replayRecordedValue(
 }
 
 function recordedVerdict(verdict: PlainValue | undefined): PolicyEvaluation["verdict"] {
-  const parsed = RowVerdictType.safeParse(verdict);
+  // "consult" is row vocabulary, never an evaluation outcome: a consulted row
+  // records the folded allow/deny/require_approval, so it is excluded here.
+  const parsed = RowVerdictType.exclude(["consult"]).safeParse(verdict);
   if (!parsed.success) throw new ExecutionApprovalError({ code: "stale_approval" });
   return parsed.data;
 }

@@ -608,12 +608,6 @@ async function probe(point: FaultPoint): Promise<Probe> {
   };
 }
 
-beforeEach(() => {
-  resetStores();
-  registerAgentFixture("actor:sender");
-  registerAgentFixture("actor:target", [{ id: "endpoint:target", externalId: "target-1" }]);
-});
-
 describe("gateway send crash reconciliation transition table", () => {
   test.each([
     ["after_debit", 2],

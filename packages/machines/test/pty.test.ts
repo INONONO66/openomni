@@ -4,7 +4,7 @@ import { Machine } from "@openomni/protocol";
 import { systemCommandRunner } from "../src/commands";
 import { MachinesFailure } from "../src/errors";
 import { createPtyAdapter, type PtyAdapter } from "../src/pty";
-import type { PtyControl, PtyControlFactory } from "../src/pty-control";
+import { startPtyControl, type PtyControl, type PtyControlFactory } from "../src/pty-control";
 import { run } from "./ipc/helpers/effects";
 
 /**
@@ -199,6 +199,69 @@ describe("pty.session over real tmux", () => {
       _tag: "MachinesFailure",
       operation: "pty.command",
     });
+    await run(adapter.shutdown());
+  }, 30_000);
+
+  test("closing a session whose tmux side already ended removes the record instead of refusing (#1275 close race)", async () => {
+    const adapter = await openAdapter("gen-self-exit");
+    okOpen(await run(adapter.open({ name: "selfexit", cwd: "/" })));
+    // The session ends on its own (the #1275 browser launch line exits its
+    // shell once Chromium stops) before close() runs; the registry still holds
+    // the record, which pty_list would keep reporting as lost forever if
+    // close() refused the teardown.
+    expect(tmuxCli("kill-session", "-t", "=selfexit").exitCode).toBe(0);
+    expect(await run(adapter.close({ name: "selfexit" }))).toEqual({ status: "ok" });
+    const listed = await run(adapter.list({}));
+    if (listed.status !== "ok") throw new Error(`list refused: ${listed.reason}`);
+    expect(listed.sessions.map((entry) => entry.name)).not.toContain("selfexit");
+    await run(adapter.shutdown());
+  }, 30_000);
+
+  test("a kill-window failure with the window still alive surfaces the failure and keeps the record (#1293 r1 fail-closed)", async () => {
+    // Real tmux server and a real linked window; only the kill-window command
+    // is faulted (the transport-loss / command-timeout shape). The window
+    // genuinely survives on the server, so the production recheck against
+    // list-windows must propagate the failure instead of reporting ok.
+    let failKillWindow = false;
+    const faultyControl: PtyControlFactory = (opts) =>
+      Effect.map(startPtyControl(opts), (ctl): PtyControl => ({
+        ...ctl,
+        command: (line) =>
+          failKillWindow && line.startsWith("kill-window ")
+            ? Effect.fail(new MachinesFailure({ operation: "pty.command", cause: "injected transport loss during kill-window" }))
+            : ctl.command(line),
+      }));
+    const adapter = createPtyAdapter({
+      id: () => "gen-killwin-fail",
+      runner: systemCommandRunner(),
+      socketName: SOCKET,
+      control: faultyControl,
+    });
+    expect(await run(adapter.offeredCapabilities([Machine.WellKnownCapability.ptySession]))).toEqual([
+      Machine.WellKnownCapability.ptySession,
+    ]);
+    okOpen(await run(adapter.open({ name: "killwin", cwd: "/" })));
+    // A linked window is listed once per session holding it, so compare the
+    // unique id set: kill-session legitimately drops the dead session's entry.
+    const windowIds = () =>
+      new Set(tmuxCli("list-windows", "-a", "-F", "#{window_id}").stdout.toString().trim().split("\n").filter(Boolean));
+    const before = windowIds();
+    failKillWindow = true;
+    // kill-session succeeds (the named session dies), kill-window fails while
+    // the linked window survives in the control session: close must fail.
+    await expect(run(adapter.close({ name: "killwin" }))).rejects.toMatchObject({
+      _tag: "MachinesFailure",
+      operation: "pty.command",
+    });
+    // Fail-closed: the window is really still alive and the record is kept,
+    // so the teardown stays retryable instead of being reported done.
+    expect(windowIds()).toEqual(before);
+    const listed = await run(adapter.list({}));
+    if (listed.status !== "ok") throw new Error(`list refused: ${listed.reason}`);
+    expect(listed.sessions.map((entry) => entry.name)).toContain("killwin");
+    failKillWindow = false;
+    expect(await run(adapter.close({ name: "killwin" }))).toEqual({ status: "ok" });
+    expect(windowIds().size).toBe(before.size - 1);
     await run(adapter.shutdown());
   }, 30_000);
 

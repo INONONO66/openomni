@@ -60,6 +60,12 @@ export interface TestClusterOptions {
   readonly idleMs?: number;
   /** Turn execution port; defaults to a runner resolving one text result. */
   readonly runner?: TestTurnRunner;
+  /**
+   * #1256 r4 H-3(a): the FULL production turn port (createSessionEntityRunTurn
+   * over a resolved runtime) instead of the minimal test port — a test builds
+   * it inside its scoped program and installs it through a suspension cell.
+   */
+  readonly runTurnPort?: SessionEntityPorts["runTurn"];
   /** Exercise the production post-boundary fork instead of running the body inline. */
   readonly detachTurns?: boolean;
   /** Crypto service for the cluster host; defaults to Bun webcrypto. */
@@ -325,11 +331,13 @@ function entityPorts(
   forwardPersisted: NonNullable<SessionEntityPorts["sendAlarm"]>,
 ): SessionEntityEnv["ports"] {
   return {
-    runTurn: makeTurnPort(
-      options.runner ?? resolvedRunner("ok"),
-      options.detachTurns,
-      options.clock ?? (() => Date.now()),
-    ),
+    runTurn:
+      options.runTurnPort ??
+      makeTurnPort(
+        options.runner ?? resolvedRunner("ok"),
+        options.detachTurns,
+        options.clock ?? (() => Date.now()),
+      ),
     ...(options.alarmCapability === undefined
       ? {}
       : { alarmCapability: options.alarmCapability }),
@@ -693,6 +701,10 @@ export const sendDeliver = (
     readonly content: string;
     readonly control?: "interrupt" | "resume";
     readonly delivery?: "steer" | "followUp";
+    /** #1256 H-3: the journal cursor a deferred action's payload was computed against. */
+    readonly after?: number;
+    /** Canonical JSON origin override (default: a message origin keyed by the idempotency key). */
+    readonly source?: string;
   },
 ) =>
   Effect.gen(function* () {
@@ -704,8 +716,9 @@ export const sendDeliver = (
         content: input.content,
         ...(input.control === undefined ? {} : { control: input.control }),
         ...(input.delivery === undefined ? {} : { delivery: input.delivery }),
+        ...(input.after === undefined ? {} : { after: input.after }),
       }),
-      source: testOrigin(sessionId, input.idempotencyKey),
+      source: input.source ?? testOrigin(sessionId, input.idempotencyKey),
       idempotencyKey: input.idempotencyKey,
     });
   });

@@ -17,8 +17,8 @@ type GenerationBundle = Core.GenerationBundle;
 type SessionError = Core.SessionError;
 type SessionRuntime = Core.SessionRuntime;
 const compilePolicySnapshot = Core.compilePolicySnapshot;
-import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
-import { Context, Effect, Layer, Scope, Semaphore } from "effect";
+import { LedgerAction, type AnyToolDefinition, type LedgerSession, type PlainValue, type SessionGeneration } from "@openomni/protocol";
+import { type Clock, Context, Effect, Layer, Option, Scope, Semaphore } from "effect";
 
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
@@ -34,10 +34,15 @@ import { captureNow } from "./platform";
  * generation's `kernel/*` registrations are declarations of intent to use
  * them, not replacements.
  */
-function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTable {
+function composedPolicyRegistry(
+  generation: Bundle.Generation,
+  consultants: readonly Core.NamedConsultant[],
+): Core.HandlerTable {
   const transformers = [...Core.KERNEL_POLICY_REGISTRY.transformers];
   const obligations = [...Core.KERNEL_POLICY_REGISTRY.obligations];
-  const known = new Set([...transformers, ...obligations].map((entry) => entry.name));
+  const known = new Set(
+    [...transformers, ...obligations, ...consultants].map((entry) => entry.name),
+  );
   for (const [name, handler] of generation.handlers) {
     if (known.has(name)) continue;
     known.add(name);
@@ -45,7 +50,45 @@ function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTabl
       transformers.push({ name, apply: handler.apply as Core.NamedTransformer["apply"] });
     else obligations.push({ name });
   }
-  return { transformers, obligations };
+  return { transformers, obligations, consultants };
+}
+
+/**
+ * The Effect Clock hook consult deadlines run on when a composition injects
+ * one (#1256 r5 H-2): tests mount a TestClock here so a hook call's timeout
+ * advances deterministically. Absent, deadlines ride the fiber's own clock.
+ */
+export class HookConsultClock extends Context.Service<HookConsultClock, Clock.Clock>()(
+  "@openomni/openomni/HookConsultClock",
+) {}
+
+/**
+ * The generation's asynchronous consultants (#1256 r2 H-1): each registered
+ * `ConsultantHandler` (the hook capability's `hook/process`) acquires inside
+ * the generation Layer's Scope — the PID lifetime — with the rows that name
+ * it. A factory failure (e.g. a hook command that cannot spawn) is the typed
+ * candidate failure that refuses the generation.
+ */
+function acquireConsultants(
+  generation: Bundle.Generation,
+  ports: Pick<Bundle.ConsultantSeed, "late" | "cursor" | "clock">,
+): Effect.Effect<readonly Core.NamedConsultant[], Core.SessionError, Scope.Scope> {
+  return Effect.gen(function* () {
+    const consultants: Core.NamedConsultant[] = [];
+    for (const [name, handler] of generation.handlers) {
+      if (!Bundle.isConsultantHandler(handler)) continue;
+      const rows = generation.rows.filter((row) => row.how.ref === name);
+      const consult = yield* handler
+        .consultant({ name, rows, ...ports })
+        .pipe(
+          Effect.mapError(
+            (cause) => new AgentFailure({ operation: "generation.consultant", cause: String(cause) }),
+          ),
+        );
+      consultants.push({ name, consult });
+    }
+    return consultants;
+  });
 }
 
 export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => readonly AnyToolDefinition[];
@@ -53,6 +96,12 @@ export type CatalogSelection = (definitions: readonly AnyToolDefinition[]) => re
 /** App sessions carry a Layer recipe alongside the schema-only materialization surface. */
 export interface GenerationDefinitions extends Readonly<Record<LedgerSession.Role, readonly AnyToolDefinition[]>> {
   readonly catalogLayer?: (select: CatalogSelection) => Layer.Layer<ToolCatalog>;
+  /**
+   * #1256 H-3: the late-result door. A hook payload that settles AFTER its
+   * call timed out re-enters THIS session through the entity `deliver` path
+   * as an `action` row; absent means late results are dropped.
+   */
+  readonly deliverLate?: (sessionId: string, payload: PlainValue, after: number | undefined) => void;
 }
 
 /** The generation manager builds this Layer once per generation and retains its acquired service. */
@@ -129,7 +178,33 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         return sink;
       }));
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
-      const seeded = Layer.succeed(GenerationHandlers, composedPolicyRegistry(generation)).pipe(Layer.provideMerge(seed));
+      // #1256 r2 H-1: consultants (the hook PIDs) acquire in THIS generation
+      // Layer's Scope; rotation drains and kills them with the generation.
+      const seeded = Layer.effect(
+        GenerationHandlers,
+        Effect.gen(function* () {
+          // #1256 H-3: the consultant seed's session-scoped ports — the
+          // journal-head cursor captured at call time and the late door.
+          const late = source.deliverLate;
+          const consultClock = yield* Effect.serviceOption(HookConsultClock);
+          const consultants = yield* acquireConsultants(generation, {
+            cursor: () => plane.openKernel(sessionId).latestAction(sessionId)?.ordinal ?? 0,
+            ...(Option.isSome(consultClock) ? { clock: consultClock.value } : {}),
+            ...(late === undefined
+              ? {}
+              : {
+                  late: (payload: PlainValue) => {
+                    const after =
+                      payload !== null && typeof payload === "object" && !Array.isArray(payload) && typeof payload.after === "number"
+                        ? payload.after
+                        : undefined;
+                    late(sessionId, payload, after);
+                  },
+                }),
+          });
+          return composedPolicyRegistry(generation, consultants);
+        }),
+      ).pipe(Layer.provideMerge(seed));
       // #1255 P3: the composed ON bundles' Layers acquire INSIDE this
       // generation's Scope in composition order, each provided the seed plus
       // every earlier bundle's outputs — the per-generation resource semantics
@@ -164,7 +239,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
   return {
     initialize: (input: GenerationDefinitions) => Effect.suspend(() => {
       if (definitions !== undefined) return Effect.fail(new AgentFailure({ operation: "generation.initialize", cause: "already_initialized" }));
-      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]), catalogLayer: input.catalogLayer });
+      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]), catalogLayer: input.catalogLayer, deliverLate: input.deliverLate });
       return Effect.void;
     }),
     capture: (id: SessionGeneration.Id) => Effect.gen(function* () {
@@ -203,10 +278,16 @@ export function configureAuthority(
       generation: openKernel(input.sessionId).latestGenerationFor(input.sessionId).generation,
     });
     const { policy } = yield* captured.provide(SessionLayer);
-    return policy.evaluate({
-      kind: "session.configure", phase: "pre", op: input.operation,
+    const evaluationInput = {
+      kind: "session.configure", phase: "pre" as const, op: input.operation,
       role: input.role, sessionId: input.sessionId,
       value: { op: input.operation, generation: input.generation },
-    }).verdict === "allow";
+    };
+    // #1256 r2: session.open hook rows consult asynchronously; a snapshot
+    // without the effectful path evaluates synchronously as before.
+    const evaluated = policy.evaluateEffect === undefined
+      ? policy.evaluate(evaluationInput)
+      : yield* policy.evaluateEffect(evaluationInput);
+    return evaluated.verdict === "allow";
   }));
 }

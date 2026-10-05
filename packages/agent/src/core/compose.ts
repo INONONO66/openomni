@@ -7,9 +7,9 @@
  * the live `GenerationServices` contract the app's generation Layers provide.
  * ──────────────────────────────────────────────────────────────────────────
  */
-import type { HandlerTable as PolicyRegistry } from "./gate/compile";
+import type { HandlerTable as PolicyRegistry, NamedConsultant } from "./gate/compile";
 import { canonicalDigest, CORE_POINT_RECORDS, type PlainValue } from "@openomni/protocol";
-import { Context, Effect, Schema } from "effect";
+import { type Clock, Context, Effect, Schema, type Scope } from "effect";
 import type {
   BundleContract,
   BundleGateRow,
@@ -20,6 +20,53 @@ import type {
 } from "./capability";
 
 export class GenerationHandlers extends Context.Service<GenerationHandlers, PolicyRegistry>()("@openomni/agent/GenerationHandlers") {}
+
+/** What a consultant factory receives at generation acquisition (#1256). */
+export interface ConsultantSeed {
+  /** The registered `how.ref` name the factory serves. */
+  readonly name: string;
+  /** The composed generation's rows naming this consultant, in order. */
+  readonly rows: readonly BundleGateRow[];
+  /**
+   * Fire-and-forget late-result port: a payload that settles AFTER its call
+   * timed out re-enters the session through the composition's `deliver` door
+   * as an `action` row — never through this turn's decision.
+   */
+  readonly late?: (payload: PlainValue) => void;
+  /**
+   * The session's journal head ordinal at call time (#1256 H-3): a late
+   * result delivers with this `after` cursor, and one older than the
+   * compaction head folds to `turn.consumed.stale` instead of a prompt.
+   */
+  readonly cursor?: () => number;
+  /**
+   * How many timed-out calls stay correlatable for a late result (#1256 r3);
+   * older entries evict first. Default 256.
+   */
+  readonly lateWindow?: number;
+  /**
+   * The Effect Clock a consult call's deadline runs on (#1256 r5 H-2);
+   * absent = the executing fiber's clock. The composition threads a test's
+   * injected TestClock here so hook deadlines advance deterministically.
+   */
+  readonly clock?: Clock.Clock;
+}
+
+/**
+ * A capability `handlers` registration carrying an ASYNC consulted service
+ * (#1256): the composition acquires `consult` INSIDE the generation Layer's
+ * Scope (the hook PID's lifetime), and a factory failure is the typed
+ * candidate failure that refuses the generation — never a partial activation.
+ */
+export interface ConsultantHandler {
+  readonly consultant: (
+    seed: ConsultantSeed,
+  ) => Effect.Effect<NamedConsultant["consult"], Error, Scope.Scope>;
+}
+
+export function isConsultantHandler(handler: object): handler is ConsultantHandler {
+  return "consultant" in handler && typeof handler.consultant === "function";
+}
 
 /*
  * ──────────────────────────────────────────────────────────────────────────
