@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791189796270,
+  "lastUpdate": 1791206400368,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -78429,6 +78429,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 203373,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "88f73d42ee1a4e409ffa3856bd025f3f8c482282",
+          "message": "fix(codemode): make browser close() a real teardown guarantee (#1275 race) (#1293)\n\n* fix(codemode): make browser close() a real teardown guarantee (#1275 race)\n\nTwo CI-observed timing races after close():\n\n- machines pty_close now tolerates a session whose shell already exited on\n  its own (the #1275 browser launch line exits once Chromium stops): close\n  of a recorded-but-gone session removes the registry record and returns ok,\n  and a kill-session failure is re-checked against the server instead of\n  propagated blindly. Before, the stale record stayed listed as lost forever\n  and BrowserClient.close() resolving guaranteed nothing.\n- DRIVER_EXIT_GRACE_MS 2s -> 10s so a loaded host cannot burn the whole\n  grace scheduling the python driver before its browser cleanup runs.\n- the interpreter-close test now awaits the launch shell's chromium-exited\n  reap line (or the session ending) via cursor long-polls before probing the\n  pid: Chromium is the shell's child, so kill(pid, 0) stays true on the\n  zombie until the shell's wait reaps it - never a guarantee close() can make.\n- new machines unit test pins lost-session close semantics.\n\n* fix(machines,codemode): fail-closed kill-window recheck and explicit browser-cleanup ack on close (#1293 r1)\n\n* fix(codemode): request cleanup ack before cancelling an active cell on close (#1293 r2 HIGH)\n\n* fix(codemode): refuse post-EOF driver deliveries typed instead of writing after close (#1293 r3 HIGH)\n\n* chore(knip): register the spawned close-race helper as a codemode test entry (#1293)\n\nThe r4 regression spawns test/codemode/helpers/close-race-normal-answer.ts\nas a child process, so knip saw an unused file. Follow the existing pattern\nfor spawned helpers (apps/openomni generation-crash-process.ts, agent\ncluster-crash-child.ts): an explicit workspace entry, not a baseline update.",
+          "timestamp": "2026-10-05T22:17:29+09:00",
+          "tree_id": "ac468feb88c7ebe0d6eb2436dbb420112a30f4e5",
+          "url": "https://github.com/INONONO66/openomni/commit/88f73d42ee1a4e409ffa3856bd025f3f8c482282"
+        },
+        "date": 1791206399806,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 607,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 838,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1068257,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 310712,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5019749,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 81,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 795,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 466,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 131465,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 519529,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 331333,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2066,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 7745845,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1010404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11872,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 113256,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 558309,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 202456,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 12894249,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 62,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 126430,
             "unit": "ns/op"
           }
         ]
