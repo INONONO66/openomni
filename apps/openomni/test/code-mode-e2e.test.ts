@@ -282,7 +282,7 @@ test("a cell creates three child sessions through send_message", async () => {
               op: "run",
               code: [
                 "answers = [",
-                "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}')['target']",
+                "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}', spend_cap=1)['target']",
                 "  for name in ('lint', 'types', 'tests')",
                 "]",
                 "len(set(answers))",
