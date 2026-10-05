@@ -1,10 +1,12 @@
-import { z } from "zod";
-import { machinesFallback, MachinesFailure } from "@openomni/machines";
+import { MachinesFailure } from "@openomni/machines";
 import { CodemodeError, DriverFailure, type CodeError } from "./errors";
 
+/** Dispatches a caught value to its typed error; anything untyped becomes `MachinesFailure`. */
 export function decodeCodeFailure(operation: string) {
-  return z.union([
-    z.instanceof(CodemodeError), z.instanceof(DriverFailure), z.instanceof(MachinesFailure),
-    machinesFallback(operation),
-  ]).transform((error): CodeError => error).parse;
+  return <Caught>(error: Caught): CodeError =>
+    error instanceof CodemodeError ||
+    error instanceof DriverFailure ||
+    error instanceof MachinesFailure
+      ? error
+      : new MachinesFailure({ operation, cause: String(error) });
 }

@@ -10,7 +10,6 @@ import {
   compareDeadExports,
   main,
   normalizeKnipIssues,
-  productionConsumerFindings,
   readBaseline,
   runKnip,
   runProductionKnip,
@@ -260,15 +259,23 @@ test.each([
 
 test("census projection keeps only exports without a production consumer", () => {
   const consumed = {
+    class: "export" as const,
     definition: { path: "packages/agent/src/used.ts", line: 4, symbol: "used" },
     consumers: [{ role: "production" as const }],
   };
   const testOnly = {
+    class: "export" as const,
     definition: { path: "packages/agent/src/idle.ts", line: 9, symbol: "idle" },
     consumers: [{ role: "test" as const }, { role: "barrel" as const }],
   };
-  expect(productionConsumerFindings([consumed, testOnly])).toEqual([
-    { path: "packages/agent/src/idle.ts", line: 9, symbol: "idle", class: "export" },
+  expect(censusConsumerFindings([consumed, testOnly])).toEqual([
+    {
+      path: "packages/agent/src/idle.ts",
+      line: 9,
+      symbol: "idle",
+      class: "export",
+      message: "export has no production consumer; tests and barrels do not count",
+    },
   ]);
 });
 

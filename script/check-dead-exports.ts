@@ -250,16 +250,6 @@ export function censusConsumerFindings(
   }));
 }
 
-/** Backward-compatible export-only projection used by the dead-export owner. */
-export function productionConsumerFindings(rows: readonly {
-  readonly definition: CensusDefinition;
-  readonly consumers: readonly { readonly role?: ConsumerRole }[];
-}[]): { path: string; line: number; symbol: string; class: "export" }[] {
-  return censusConsumerFindings(
-    rows.map((row) => ({ ...row, class: "export" as const })),
-  ).map(({ path, line, symbol }) => ({ path, line, symbol, class: "export" }));
-}
-
 export function readBaseline(): DeadExportBaseline {
   // Tolerate a missing key: `--update` always writes the `grandfathered`
   // array (empty or not), but a hand-minimized `{}` baseline is still valid.

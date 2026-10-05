@@ -18,7 +18,6 @@ describe("Policy decision and effect schemas", () => {
     { type: "audit.annotate", annotation: "policy matched", severity: "info" },
     { type: "writeback.rewrite", output: "Redacted final response." },
     { type: "writeback.suppress", reason: "contains sensitive content" },
-    { type: "runtime.workspace_lock", required: true },
   ];
 
   test("parses every supported PolicyEffect variant", () => {

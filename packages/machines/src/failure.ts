@@ -3,7 +3,7 @@ import { MachinesFailure, MachineCellError, MachineRefusalError, SpawnFailure, F
 import { IpcConnectionError, IpcPeerKeyMismatchError, IpcProtocolError, IpcRemoteError, IpcTimeoutError, type IpcError } from "./ipc/errors";
 
 /** One fallback for every machines-owned domain (including `@openomni/codemode`): a Cause without a typed error becomes MachinesFailure. */
-export function machinesFallback(operation: string) {
+function machinesFallback(operation: string) {
   return z.preprocess(String, z.string()).transform((cause) => new MachinesFailure({ operation, cause }));
 }
 

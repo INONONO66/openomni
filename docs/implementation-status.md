@@ -1295,6 +1295,8 @@ Band b4 (`epic1260/1259-b4-channels`, commit `c1420c6e`) cleans packages/channel
 
 Band b2 (`epic1260/1259-b2-agent-llm`) cleans packages/agent (core, session entity, compaction plugins, tests, model, store, gate) per the #1259 inventory: 17 items fixed (dead `runResult` options and `guardAborted`, one execution-authority refusal, a single `RetryReason` z.enum, deduped `requestSnapshot` reads, `Effect.retry`-native revision retry, zod-first `CompactionRecord`, zod row parsing in the surface-key adapter, the unreachable `writable()` gate, `evaluatedRuleCount`/`bucket` diagnostics, source-regex test ratchets, two stale comments, one rename, one flattened test loop), 23 kept with rationale, 11 deferred to bands 5/7, 11 re-verified as already resolved — net LOC negative, zero behavior change; full per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
 
+Band b7a (`epic1260/1259-b7a-xc`) sweeps the cross-cutting items outside `packages/agent`: knip.json stale ignore lists and eight redundant entry patterns deleted, `productionConsumerFindings` merged into `censusConsumerFindings`, the schema-only `runtime.workspace_lock` policy effect deleted, codemode's `decodeCodeFailure` rewritten as a plain instanceof dispatch, the provisioning `reconcile` pass-through inlined, cluster fixture clocks made deterministic, and stale H13 barrel claims corrected — 8 fixed, 14 already resolved upstream, 24 kept with rationale, net LOC negative; per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
+
 ## Census and final quality: current versus required
 
 **#1116 lean PR gate (2026-09-20):** the per-PR Quality ratchet stack (census
