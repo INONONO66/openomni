@@ -251,3 +251,46 @@ for (const verdict of ["require_approval", "deny"] as const) {
     } finally { await runtime.dispose(); }
   });
 }
+
+test("a composed bundle handler exposing apply registers as a transformer and one exposing decide as a guard (#1258)", async () => {
+  const shaper = Bundle.define({
+    name: "shaper",
+    requires: [],
+    handlers: {
+      "shaper/mask": { apply: () => ({ text: "masked" }) },
+      "shaper/gate": { decide: () => ({ verdict: "deny" as const, payload: { reason: "shaped" } }) },
+    },
+  });
+  const runtime = gatewayRuntime({ observations: Bus, composed: composedHolder({ bundles: [shaper] }) });
+  try {
+    await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
+      const generations = yield* GenerationLayers;
+      const plane = yield* AppLedger;
+      // Rows referencing the bundle's handlers compile only when the capture
+      // registered them: `apply` into transformers, `decide` into guards.
+      const policyGeneration = seedKernelPolicyRows(plane.catalog.policies, [
+        {
+          name: "mask-writes", kind: "tool", phase: "pre", priority: 1_000,
+          match: { encodingVersion: 1, value: { op: "write" } },
+          verdict: { encodingVersion: 1, value: { type: "transform", ref: "shaper/mask", config: { fields: ["text"] } } },
+        },
+        {
+          name: "gate-fetches", kind: "tool", phase: "pre", priority: 1_000,
+          match: { encodingVersion: 1, value: { op: "fetch" } },
+          verdict: { encodingVersion: 1, value: { type: "consult", ref: "shaper/gate" } },
+        },
+      ]);
+      yield* generations.initialize({ resident: [], worker: [] });
+      yield* plane.openKernel("shaped").materialize({
+        id: "shaped", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
+        policyGeneration, actionId: "shaped-create", at: 1,
+      });
+      const captured = yield* generations.capture({ sessionId: "shaped", generation: 1 });
+      const { policy } = yield* captured.provide(SessionLayer);
+      expect(policy.evaluate({ kind: "tool", phase: "pre", op: "write", value: { text: "secret" } }))
+        .toMatchObject({ verdict: "transform", ref: "shaper/mask", value: { text: "masked" } });
+      expect(policy.evaluate({ kind: "tool", phase: "pre", op: "fetch", value: {} }))
+        .toMatchObject({ verdict: "deny", reason: "shaped" });
+    })));
+  } finally { await runtime.dispose(); }
+});
