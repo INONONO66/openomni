@@ -173,6 +173,12 @@ launch session down. No new capability id, wire method, or model tool.
 driver's cleanup stops each client's browser process. Recipe documented in
 `docs/machines-and-delegation.md` section 2.7; end-to-end tests in
 `packages/codemode/test/codemode/browser.test.ts` run real tmux + Chromium.
+Close-race fix (fix/1275-browser-close-race): `pty_close` now guarantees the
+daemon record is removed even when the session's shell already exited on its
+own (the launch line exits once Chromium stops), so `BrowserClient.close()`
+resolving means the session is no longer listed; the interpreter-close test
+awaits the shell's `chromium-exited` reap line instead of assuming the pid is
+unprobeable the instant `close()` resolves.
 
 ## #1273 persistent terminals: pty.session over tmux
 

@@ -711,8 +711,14 @@ const Frame = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("result"), result: Machine.CellResult }).strict(),
 ]);
 
-/** EOF-first close grace (#1275): time the driver gets to run its cleanup before SIGKILL. */
-const DRIVER_EXIT_GRACE_MS = 2_000;
+/**
+ * EOF-first close grace (#1275): time the driver gets to run its cleanup
+ * before SIGKILL. Generous on purpose: the normal path resolves at actual
+ * driver exit (milliseconds), while expiry SIGKILLs the driver before its
+ * browser cleanup ran and leaks Chromium - a loaded CI host must not be able
+ * to spend the whole grace just scheduling the python process.
+ */
+const DRIVER_EXIT_GRACE_MS = 10_000;
 
 /** Answers a call made from inside a cell. */
 type CellToolCaller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;

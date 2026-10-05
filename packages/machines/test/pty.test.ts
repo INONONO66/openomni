@@ -202,6 +202,21 @@ describe("pty.session over real tmux", () => {
     await run(adapter.shutdown());
   }, 30_000);
 
+  test("closing a session whose tmux side already ended removes the record instead of refusing (#1275 close race)", async () => {
+    const adapter = await openAdapter("gen-self-exit");
+    okOpen(await run(adapter.open({ name: "selfexit", cwd: "/" })));
+    // The session ends on its own (the #1275 browser launch line exits its
+    // shell once Chromium stops) before close() runs; the registry still holds
+    // the record, which pty_list would keep reporting as lost forever if
+    // close() refused the teardown.
+    expect(tmuxCli("kill-session", "-t", "=selfexit").exitCode).toBe(0);
+    expect(await run(adapter.close({ name: "selfexit" }))).toEqual({ status: "ok" });
+    const listed = await run(adapter.list({}));
+    if (listed.status !== "ok") throw new Error(`list refused: ${listed.reason}`);
+    expect(listed.sessions.map((entry) => entry.name)).not.toContain("selfexit");
+    await run(adapter.shutdown());
+  }, 30_000);
+
   test("a session created outside the adapter resolves by name on first use", async () => {
     const adapter = await openAdapter("gen-outside");
     // Start the control client first so discovery has already run.

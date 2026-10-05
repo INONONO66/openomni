@@ -245,17 +245,34 @@ export function createPtyAdapter(options: PtyAdapterOptions): PtyAdapter {
   }
 
   function close(request: Machine.PtyCloseRequest): Effect.Effect<Machine.PtyCloseResult, MachineError> {
-    return session(request.name, (ctl, record) =>
-      Effect.gen(function* () {
-        yield* ctl.command(`kill-session -t =${record.name}`);
+    return Effect.suspend(() => {
+      if (!available) return Effect.succeed<Machine.PtyCloseResult>(ptyNotAvailable);
+      return Effect.gen(function* () {
+        const ctl = yield* ensureControl;
+        // Close is a teardown guarantee (#1275): a session whose shell already
+        // exited on its own (the browser launch line exits once Chromium
+        // stops) is gone on the server but may still be recorded, and closing
+        // it must drop the record either way. So a recorded-but-lost session
+        // stays closable, and a kill-session failure is re-checked against
+        // the server: only a session that still exists propagates the error.
+        const record = registry.get(request.name) ?? (yield* resolve(ctl, request.name));
+        if (record === undefined) return ptyNotFound;
+        yield* ctl.command(`kill-session -t =${record.name}`).pipe(
+          Effect.catch((error) =>
+            Effect.flatMap(listNames(ctl), (names) => (names.includes(record.name) ? Effect.fail(error) : Effect.void)),
+          ),
+        );
         // The window survives its session through the control-session link;
-        // killing it ends the processes without touching other terminals.
-        if (record.windowId !== undefined) yield* ctl.command(`kill-window -t ${record.windowId}`);
+        // killing it ends the processes without touching other terminals. Its
+        // only in-protocol failure is the window having already closed with
+        // its dead pane (the same shell-exited race), which is the outcome
+        // kill-window exists to force.
+        if (record.windowId !== undefined) yield* ctl.command(`kill-window -t ${record.windowId}`).pipe(Effect.ignore);
         if (record.paneId !== undefined) paneRoutes.delete(record.paneId);
         registry.remove(record.name);
         return { status: "ok" } as const;
-      }),
-    );
+      });
+    });
   }
 
   function list(_request: Machine.PtyListRequest): Effect.Effect<Machine.PtyListResult, MachineError> {
