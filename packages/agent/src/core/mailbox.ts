@@ -10,7 +10,7 @@ import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } fr
 import { SessionPolicyRefusal } from "./messages";
 import type { ResolvedSessionRuntime, SessionRunnerResult, SessionActionCommitPort } from "./run";
 import type { SessionKernel } from "./entity";
-import { turnIntentAction, turnResumeAction, deliveryActions, inputRowKind, policyRefusalResult, generationForOpen, pendingBacklog, staleActionBacklog, boundaryConsumption, consumptionSettings, } from "./commit";
+import { turnIntentAction, turnResumeAction, deliveryActions, inputRowKind, policyRefusalResult, generationForOpen, pendingBacklog, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { SessionControllerState } from "./run";
 import { observeDrained } from "./bus";
 import { commitSessionRequest } from "./request";
@@ -175,15 +175,17 @@ export function createSessionAdmission(
       const generation = kernel.latestGenerationFor(sessionId);
       const captured = yield* runtime.generations.capture({ sessionId, generation: generation.generation });
       const observations = yield* captured.provide(ObservationSink);
-      // #1256 H-3: a deferred `action` input pointing before the compaction
-      // head is never consumed; this turn closes it via `turn.consumed.stale`.
-      const { live, stale } = staleActionBacklog(
-        pendingBacklog(kernel, sessionId),
-        kernel.compactionHead(sessionId),
-      );
       // #1253 turn end: both steer and followUp rows are eligible, each capped
       // by its settings width; the leftover backlog feeds the next turn.
-      const pending = boundaryConsumption(live, "turn_end", consumptionSettings(kernel, sessionId));
+      // #1256 H-3/H-1: the stale split lives INSIDE boundaryConsumption — a
+      // deferred `action` input pointing before the compaction head is never
+      // consumed; this turn closes it via `turn.consumed.stale`.
+      const { consumed: pending, stale } = boundaryConsumption(
+        pendingBacklog(kernel, sessionId),
+        "turn_end",
+        consumptionSettings(kernel, sessionId),
+        kernel.compactionHead(sessionId),
+      );
       const promptRefusal = yield* captured.provide(evaluatePromptPolicies(pending)).pipe(Effect.provide(runtime.services));
       if (promptRefusal !== undefined) {
         yield* consumePolicyBlockedInbox(pending);

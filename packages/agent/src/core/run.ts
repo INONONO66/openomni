@@ -1061,10 +1061,14 @@ export function createSessionTurn(
       const observations = yield* ObservationService;
       // #1253 boundary rule: steer rows drain at tool.post boundaries, followUp
       // rows wait for turn end; widths are session.configure settings data.
-      const pending = boundaryConsumption(
+      // #1256 H-1 (r3): EVERY boundary applies the stale split — a late
+      // `action` with `after` behind the compaction head is closed durably
+      // here, never delivered mid-turn.
+      const { consumed: pending, stale } = boundaryConsumption(
         pendingBacklog(kernel, sessionId),
         boundary,
         consumptionSettings(kernel, sessionId),
+        kernel.compactionHead(sessionId),
       );
       const refusal = yield* ports.evaluatePromptPolicies(pending);
       if (refusal !== undefined) {
@@ -1081,7 +1085,7 @@ export function createSessionTurn(
       const checkpoint = turnCheckpointAction({
         id: checkpointId, parentId: parentActionId, sessionId, turnId: input.turnId, resultId: input.resultId,
         resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary,
-        inboxIds: pending.map((item) => item.id), at: clock(),
+        inboxIds: pending.map((item) => item.id), consumedStale: stale.map((item) => item.id), at: clock(),
       });
       const current = kernel.row(sessionId);
       yield* commitFoldBatch(kernel, {

@@ -57,14 +57,14 @@ describe("boundaryConsumption rule", () => {
   const ids = (rows: readonly Inbox.Row[]) => rows.map((row) => row.id);
 
   test("controls drain at every boundary; steer and followUp wait for their consumption points", () => {
-    expect(ids(boundaryConsumption(backlog, "before_llm", DEFAULT_CONSUMPTION))).toEqual(["I1"]);
-    expect(ids(boundaryConsumption(backlog, "after_llm", DEFAULT_CONSUMPTION))).toEqual(["I1"]);
-    expect(ids(boundaryConsumption(backlog, "after_tools", DEFAULT_CONSUMPTION))).toEqual([
+    expect(ids(boundaryConsumption(backlog, "before_llm", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I1"]);
+    expect(ids(boundaryConsumption(backlog, "after_llm", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I1"]);
+    expect(ids(boundaryConsumption(backlog, "after_tools", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([
       "I1",
       "I2",
       "I3",
     ]);
-    expect(ids(boundaryConsumption(backlog, "turn_end", DEFAULT_CONSUMPTION))).toEqual([
+    expect(ids(boundaryConsumption(backlog, "turn_end", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([
       "I1",
       "I2",
       "I3",
@@ -75,19 +75,19 @@ describe("boundaryConsumption rule", () => {
 
   test("width one caps each delivery mode independently in backlog order", () => {
     expect(
-      ids(boundaryConsumption(backlog, "after_tools", { steering: "one", followUp: "one" })),
+      ids(boundaryConsumption(backlog, "after_tools", { steering: "one", followUp: "one" }, 0).consumed),
     ).toEqual(["I1", "I2"]);
     expect(
-      ids(boundaryConsumption(backlog, "turn_end", { steering: "one", followUp: "one" })),
+      ids(boundaryConsumption(backlog, "turn_end", { steering: "one", followUp: "one" }, 0).consumed),
     ).toEqual(["I1", "I2", "I4"]);
     expect(
-      ids(boundaryConsumption(backlog, "turn_end", { steering: "all", followUp: "one" })),
+      ids(boundaryConsumption(backlog, "turn_end", { steering: "all", followUp: "one" }, 0).consumed),
     ).toEqual(["I1", "I2", "I3", "I4"]);
   });
 
   test("a row without a delivery mark folds to followUp", () => {
-    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "after_tools", DEFAULT_CONSUMPTION))).toEqual([]);
-    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "turn_end", DEFAULT_CONSUMPTION))).toEqual(["I9"]);
+    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "after_tools", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([]);
+    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "turn_end", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I9"]);
   });
 });
 

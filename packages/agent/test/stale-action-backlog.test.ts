@@ -130,3 +130,141 @@ test("the chain fold: after rides the pending row, compactionHead is the execute
   );
   expect(kernel.pendingMessages("stale").map((item) => item.id)).toEqual(["p1", "a2"]);
 });
+
+// ---------------------------------------------------------------------------
+// #1256 H-1 (r3): a LIVE boundary (after_tools, mid-turn) closes a stale
+// action instead of delivering it — the split runs inside the one
+// boundary-consumption function, not only at turn start.
+// ---------------------------------------------------------------------------
+
+import { Deferred, Effect, Fiber } from "effect";
+import { boundaryConsumption, DEFAULT_CONSUMPTION } from "../src/core/commit";
+import type { SessionRunner } from "../src/core/run";
+import { session } from "../src/testing/registry";
+import { isolated, isolatedLedger } from "./helpers/isolated";
+import { commitReceivedMessage } from "./helpers/ingress";
+import { seedPolicy } from "./helpers/seed-policy";
+import { sessionTree } from "./helpers/session-tree";
+import {
+  allowConfigure,
+  isolatedRuntime,
+  withSessionServices,
+  type SessionFixture,
+} from "./helpers/session-services";
+
+test("boundaryConsumption applies the stale split at every boundary", () => {
+  const staleSteer = { ...row("a1", "action", 3), delivery: "steer" as const };
+  const liveSteer = { ...row("a2", "action", 9), delivery: "steer" as const };
+  const out = boundaryConsumption([staleSteer, liveSteer], "after_tools", DEFAULT_CONSUMPTION, 5);
+  expect(out.consumed.map((item) => item.id)).toEqual(["a2"]);
+  expect(out.stale.map((item) => item.id)).toEqual(["a1"]);
+});
+
+function fixture(): SessionFixture {
+  let sequence = 0;
+  return {
+    authorizeConfigure: allowConfigure,
+    observations: { publish: () => undefined, subscribe: () => () => undefined },
+    clock: () => 30,
+    entropy: () => `sb-${++sequence}`,
+    processId: "sb",
+    ...isolatedRuntime(),
+  };
+}
+
+const bounded = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.timeout("2 seconds"));
+
+test("a stale action delivered DURING a turn closes via turn.consumed.stale at the live boundary; zero delivery", () =>
+  isolated(
+    Effect.gen(function* () {
+      seedPolicy();
+      const runtime = fixture();
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const drained: string[][] = [];
+      const declare = (runner: SessionRunner) =>
+        withSessionServices(session({ id: "S", role: "resident", runner }, runtime), runtime);
+      const handle = yield* declare((input) =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(entered, undefined);
+          yield* Deferred.await(release);
+          const batch = yield* input.boundary("after_tools");
+          drained.push(batch.messages.map((message) => message.text));
+          return { kind: "result", text: "done" };
+        }),
+      );
+      const kernel = isolatedLedger().kernel;
+      // An EXECUTED compaction before the turn: the head every later cursor
+      // is measured against.
+      const current = kernel.row("S");
+      const writer =
+        current.fenceOwner === null
+          ? kernel
+              .adoptFence({ sessionId: "S", owner: "compactor", fence: current.fence + 1 })
+              .pipe(Effect.map((adopted) => ({ owner: "compactor", fence: adopted.fence })))
+          : Effect.succeed({ owner: current.fenceOwner, fence: current.fence });
+      yield* writer.pipe(
+          Effect.flatMap(({ owner, fence }) =>
+            kernel.commit({
+              sessionId: "S",
+              owner,
+              fence,
+              now: 29,
+              expectedRevision: current.revision,
+              actions: [
+                {
+                  id: "compaction-1",
+                  parentId: kernel.latestAction("S")?.id ?? null,
+                  sessionId: "S",
+                  kind: "compaction",
+                  intent: { encodingVersion: 1, value: { reason: "threshold" } },
+                  effect: {
+                    encodingVersion: 1,
+                    value: { phase: "result", terminal: "executed", result: { projection: [] } },
+                  },
+                  irreversible: true,
+                  ts: 29,
+                },
+              ],
+              state: current.state,
+            }),
+          ),
+        );
+      expect(kernel.compactionHead("S")).toBeGreaterThan(1);
+      const running = yield* Effect.forkScoped(handle.prompt("start"));
+      yield* bounded(Deferred.await(entered));
+      // Mid-turn, a late hook result arrives through the deliver door as a
+      // steer action whose after cursor points BEFORE the compaction head.
+      yield* commitReceivedMessage(kernel, {
+        id: "stale-action",
+        sessionId: "S",
+        kind: "action",
+        content: "{}",
+        origin: { encodingVersion: 1, value: { kind: "hook.late", after: 1 } },
+        createdAt: 31,
+        parentActionId: kernel.latestAction("S")?.id ?? null,
+        delivery: "steer",
+      });
+      yield* Deferred.succeed(release, undefined);
+      yield* bounded(Fiber.join(running));
+      // The live after_tools boundary did NOT deliver the stale action...
+      expect(drained[0]).toEqual([]);
+      const actions = sessionTree(kernel, "S");
+      const deliveries = actions.filter(
+        (action) =>
+          (action.intent.value as { inboxId?: string } | null)?.inboxId === "stale-action",
+      );
+      expect(deliveries).toEqual([]);
+      // ...it closed it durably via the checkpoint's turn.consumed.stale...
+      const checkpoints = actions.filter(
+        (action) =>
+          action.kind === "turn" &&
+          (action.intent.value as { phase?: string }).phase === "checkpoint",
+      );
+      expect(
+        checkpoints.map((action) => (action.intent.value as { consumedStale?: string[] }).consumedStale),
+      ).toContainEqual(["stale-action"]);
+      // ...and the pending fold never surfaces it again.
+      expect(kernel.pendingMessages("S").map((item) => item.id)).toEqual([]);
+    }),
+  ));
