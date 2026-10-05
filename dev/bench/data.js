@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791242022090,
+  "lastUpdate": 1791242622170,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -79501,6 +79501,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 85476,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e9083a93a2a9d0156365abc32d728e4bffca444a",
+          "message": "#1259 band 7a: cross-cutting slop items outside packages/agent (#1301)\n\n* chore(#1259): open epic1260/1259-b7a-xc on main cd8d64172 (band b7a)\n\n* chore(#1259): band 7a items 184/185 — drop knip-reported redundant entry patterns and stale ignore lists\n\n* chore(#1259): band 7a item 183 — merge productionConsumerFindings into censusConsumerFindings (one exported census join)\n\n* chore(#1259): band 7a item 231 — delete schema-only PolicyEffect runtime.workspace_lock variant\n\n* chore(#1259): band 7a item 262 — decodeCodeFailure is a plain instanceof dispatch, zod union deleted\n\n* chore(#1259): band 7a items 210/255 — inline the reconcile pass-through; cluster fixture clocks off the wall clock\n\n* docs(#1259): band 7a — SLOP §L row, H13 barrel-claim correction (item 194), implementation-status note\n\n* chore(#1259): band 7a follow-through — machinesFallback export chain now module-local (dead-export ratchet)",
+          "timestamp": "2026-10-05T23:20:59Z",
+          "tree_id": "aa510e037ab10b4a6be28bffb988bb3e14ce4c28",
+          "url": "https://github.com/INONONO66/openomni/commit/e9083a93a2a9d0156365abc32d728e4bffca444a"
+        },
+        "date": 1791242621619,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 852,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1501,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1235,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1128448,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 335179,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5469216,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 860,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 574,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 131426,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 677134,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 382122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2640,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9155380,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1115391,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15162,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 138335,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 679716,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 180734,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 12590065,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 71,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 148656,
             "unit": "ns/op"
           }
         ]
