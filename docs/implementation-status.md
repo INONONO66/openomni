@@ -1297,6 +1297,8 @@ Band b2 (`epic1260/1259-b2-agent-llm`) cleans packages/agent (core, session enti
 
 Band b7a (`epic1260/1259-b7a-xc`) sweeps the cross-cutting items outside `packages/agent`: knip.json stale ignore lists and eight redundant entry patterns deleted, `productionConsumerFindings` merged into `censusConsumerFindings`, the schema-only `runtime.workspace_lock` policy effect deleted, codemode's `decodeCodeFailure` rewritten as a plain instanceof dispatch, the provisioning `reconcile` pass-through inlined, cluster fixture clocks made deterministic, and stale H13 barrel claims corrected — 8 fixed, 14 already resolved upstream, 24 kept with rationale, net LOC negative; per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
 
+Band b7b (`epic1260/1259-b7b-agent-final`, the final #1259 sub-PR) cleans the packages/agent cross-cutting items and the four lead-owned apps/openomni files: eight items fixed (single tool-result resolution and a collision-only tool-metadata assertion in `core/tool.ts`, the `pendingBacklog` and `SessionActionCommitPort` wrappers deleted, a stop-evidence empty-page guard, one `node:crypto` sha256 API across the model fingerprints, a top-level `ai` import, provision `replaceAll`), eighteen re-verified as already resolved upstream, twenty-four kept with rationale, none deferred — net LOC negative, zero behavior change; full per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
+
 ## Census and final quality: current versus required
 
 **#1116 lean PR gate (2026-09-20):** the per-PR Quality ratchet stack (census
