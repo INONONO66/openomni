@@ -1290,6 +1290,8 @@ The archive CLI creates a native SQLite image plus a v2 all-table receipt at exp
 
 ## #1259 slop cleanup sub-PRs
 
+Band b5 (`epic1260/1259-b5-openomni`) cleans apps/openomni composition, tools and delegation-cli items per the #1259 inventory: the dead `OPENOMNI_DB_PATH` test env var is deleted, the five boot-composition `console.error` incident sites publish `Operational.Events.Error` through the ObservationSink, `index-coverage.test.ts` is renamed `app-surface.test.ts`, `createMonitorTool` takes explicit `MonitorPorts | undefined`, find's `relativeTo` refuses a walk outside the search root, and eval's `signal` is the non-optional `AbortSignal`; items 118/133 defer to band 7's file ownership and eleven items keep with rationale — full per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
+
 Band b4 (`epic1260/1259-b4-channels`, commit `c1420c6e`) cleans packages/channels per the #1259 inventory: duplicated normalizer guards deleted from the telegram/discord surfaces, handler casts replaced by `requireHandler` binding, the floating telegram poll-loop promise annotated with `void`, the stale `DeliveringSurface` comment pruned, `verifyGitHubSignature` moved into `src/authn/` beside its only consumer, and a duplicate file-level `beforeEach` removed from the send suite — net LOC negative, zero behavior change; full per-item account in [SLOP.md](SLOP.md#l-1259-sub-prs).
 
 ## Census and final quality: current versus required
