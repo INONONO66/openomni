@@ -3,16 +3,16 @@ import { AgentFailure } from "../core/failure";
 
 export { AgentFailure };
 import { Data } from "effect";
-import { z } from "zod";
 
-
-const Diagnostic = z.object({ operation: z.string(), cause: z.string() });
-const MessageFields = z.object({ message: z.string(), cause: z.string().optional() });
-const ProviderIdentity = z.object({
-  provider: z.string().optional(),
-  model: z.string().optional(),
-  usageProvenance: z.enum(["reported", "estimated", "unknown"]).optional(),
-});
+// Field shapes are compile-time only (#1259 idx 90): plain types, no
+// module-load zod schemas — nothing here ever parses.
+type Diagnostic = { readonly operation: string; readonly cause: string };
+type MessageFields = { readonly message: string; readonly cause?: string };
+type ProviderIdentity = {
+  readonly provider?: string;
+  readonly model?: string;
+  readonly usageProvenance?: "reported" | "estimated" | "unknown";
+};
 
 /**
  * Thin typed identity over the SDK's own `APICallError`: provider facts
@@ -20,40 +20,43 @@ const ProviderIdentity = z.object({
  * and are never copied; this adds only the call identity the SDK lacks.
  */
 export class APIError extends Data.TaggedError("APIError")<
-  z.infer<typeof ProviderIdentity> & { readonly cause: APICallError }
+  ProviderIdentity & { readonly cause: APICallError }
 > {
   override get message(): string { return this.cause.message; }
 }
 
-const UsageFields = z.object({
-  inputTokens: z.number(), outputTokens: z.number(), reasoningTokens: z.number(),
-  cacheReadTokens: z.number(), cacheWriteTokens: z.number(),
-});
-const RunFields = ProviderIdentity.extend({
-  message: z.string(),
-  cause: z.union([z.instanceof(APICallError), z.string()]).optional(),
-  retryAfterMs: z.number().nonnegative().optional(),
-  usage: UsageFields,
-  aborted: z.boolean(),
-  contextOverflow: z.boolean(),
-  visibleOutput: z.boolean(),
-});
-export class LlmRunFailure extends Data.TaggedError("LlmRunFailure")<z.infer<typeof RunFields>> {}
+type UsageFields = {
+  readonly inputTokens: number; readonly outputTokens: number; readonly reasoningTokens: number;
+  readonly cacheReadTokens: number; readonly cacheWriteTokens: number;
+};
+type RunFields = ProviderIdentity & {
+  readonly message: string;
+  readonly cause?: APICallError | string;
+  readonly retryAfterMs?: number;
+  readonly usage: UsageFields;
+  readonly aborted: boolean;
+  readonly contextOverflow: boolean;
+  readonly visibleOutput: boolean;
+};
+export class LlmRunFailure extends Data.TaggedError("LlmRunFailure")<RunFields> {}
 
-const ResolutionFields = MessageFields.extend({
-  provider: z.string(), model: z.string(),
-  reason: z.enum(["provider_not_found", "proxy_listing_failed", "model_not_found"]),
-});
-export class ModelResolutionError extends Data.TaggedError("ModelResolutionError")<z.infer<typeof ResolutionFields>> {}
-const FileFields = MessageFields.extend({ path: z.string() });
-export class AuthInvalidFileError extends Data.TaggedError("AuthInvalidFileError")<z.infer<typeof FileFields>> {}
-const AuthFields = MessageFields.extend({ provider: z.string(), reason: z.enum(["missing_auth", "invalid_auth"]) });
-export class AuthResolutionError extends Data.TaggedError("AuthResolutionError")<z.infer<typeof AuthFields>> {}
-const ProxyFields = MessageFields.extend({ url: z.string(), status: z.number().optional() });
-export class ProxyModelsError extends Data.TaggedError("ProxyModelsError")<z.infer<typeof ProxyFields>> {}
-const BoundaryFields = Diagnostic.extend({ message: z.string(), aborted: z.boolean().optional(), providerErrorName: z.string().optional(), provider: z.string().optional(), model: z.string().optional() });
-export class TransportFailure extends Data.TaggedError("TransportFailure")<z.infer<typeof BoundaryFields>> {}
-export class InvalidProviderData extends Data.TaggedError("InvalidProviderData")<z.infer<typeof BoundaryFields>> {}
+type ResolutionFields = MessageFields & {
+  readonly provider: string; readonly model: string;
+  readonly reason: "provider_not_found" | "proxy_listing_failed" | "model_not_found";
+};
+export class ModelResolutionError extends Data.TaggedError("ModelResolutionError")<ResolutionFields> {}
+export class AuthInvalidFileError extends Data.TaggedError("AuthInvalidFileError")<MessageFields & { readonly path: string }> {}
+export class AuthResolutionError extends Data.TaggedError("AuthResolutionError")<MessageFields & { readonly provider: string; readonly reason: "missing_auth" | "invalid_auth" }> {}
+export class ProxyModelsError extends Data.TaggedError("ProxyModelsError")<MessageFields & { readonly url: string; readonly status?: number }> {}
+type BoundaryFields = Diagnostic & {
+  readonly message: string;
+  readonly aborted?: boolean;
+  readonly providerErrorName?: string;
+  readonly provider?: string;
+  readonly model?: string;
+};
+export class TransportFailure extends Data.TaggedError("TransportFailure")<BoundaryFields> {}
+export class InvalidProviderData extends Data.TaggedError("InvalidProviderData")<BoundaryFields> {}
 
 export type LlmError = AgentFailure | APIError | LlmRunFailure | ModelResolutionError |
   AuthInvalidFileError | AuthResolutionError | ProxyModelsError | TransportFailure | InvalidProviderData;
