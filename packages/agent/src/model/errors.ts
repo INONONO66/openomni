@@ -1,4 +1,4 @@
-import { APICallError } from "ai";
+import type { APICallError } from "ai";
 import { AgentFailure } from "../core/failure";
 
 export { AgentFailure };

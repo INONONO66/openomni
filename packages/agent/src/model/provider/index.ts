@@ -59,8 +59,6 @@ export namespace Provider {
     return models;
   }
 
-  export const ModelResolutionError = ResolutionError;
-
   /** Resolve only catalog-trusted or positively proxy-discovered models. */
   export function resolveModel(input: {
     readonly provider: string;
@@ -74,7 +72,7 @@ export namespace Provider {
     const data = yield* ModelsDev.get();
     const provider = data[input.provider];
     if (provider === undefined) {
-      return yield* new ModelResolutionError({
+      return yield* new ResolutionError({
         message: `Unknown provider: ${input.provider}`,
         provider: input.provider,
         model: input.id,
@@ -87,7 +85,7 @@ export namespace Provider {
     const auth = yield* Auth.get(input.provider, input.authFilePath);
     if (auth?.type === "proxy") {
       const ids = yield* fetchProxyModels(auth.baseURL, input.now, auth.apiKey).pipe(Effect.mapError((error) =>
-        new ModelResolutionError({
+        new ResolutionError({
           message: `Proxy model listing failed for provider: ${input.provider}`,
           provider: input.provider, model: input.id, reason: "proxy_listing_failed", cause: String(error),
         }),
@@ -97,7 +95,7 @@ export namespace Provider {
       );
       if (discovered !== undefined) return discovered;
     }
-    return yield* new ModelResolutionError({
+    return yield* new ResolutionError({
       message: `Model not found: ${input.provider}/${input.id}`,
       provider: input.provider,
       model: input.id,
@@ -107,5 +105,4 @@ export namespace Provider {
   }
 }
 
-export { ModelResolutionError } from "../errors";
 export { ModelsDev } from "../model";
