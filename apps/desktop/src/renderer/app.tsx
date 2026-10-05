@@ -75,19 +75,21 @@ export function App({ platform, storage, host }: AppEnvironment) {
   const onFork = useCallback(
     (sessionId: string, anchor: string) => {
       if (transport === null || !("forkSession" in transport)) return;
-      void transport
-        .forkSession({ sessionId, at: anchor })
-        .then((response) => {
+      void (async () => {
+        try {
+          const response = await transport.forkSession({ sessionId, at: anchor });
           if (response.type === "session_forked") {
             setForkNotice(undefined);
             adoptForkedSession(response.sessionId, `Fork of ${sessionId}`, host.now());
             return;
           }
           setForkNotice(`fork refused: ${response.reason} (${response.detail})`);
-        })
-        .catch((error: unknown) =>
-          setForkNotice(error instanceof Error ? error.message : String(error)),
-        );
+        } catch (error) {
+          // Boundary narrowing without a written type: the catch variable is
+          // already the widest type, narrowed structurally before it renders.
+          setForkNotice(error instanceof Error ? error.message : String(error));
+        }
+      })();
     },
     [host, transport],
   );
