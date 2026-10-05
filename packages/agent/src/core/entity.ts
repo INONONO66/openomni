@@ -123,7 +123,7 @@ function adoptFence(kernel: SessionKernel, authority: SessionEntityAuthority): E
  * `AdmissionFailure{code: revision}` — never an unbounded in-process spin.
  */
 function retryRevision<A, E>(attempt: () => Effect.Effect<A, E>): Effect.Effect<A, E | AdmissionFailure> {
-  const refused = (error: unknown): error is CommitRefused =>
+  const refused = (error: E): error is E & CommitRefused =>
     error instanceof CommitRefused && error.reason === "revision";
   return Effect.suspend(attempt).pipe(
     Effect.retry({ while: refused, times: 2 }),
