@@ -1,5 +1,6 @@
 import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe } from "../../support/dedupe";
+import { requireHandler } from "../../support/handler-frame";
 import { handoffInbound } from "../../support/inbound-handoff";
 import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { sendText } from "../../support/send-text";
@@ -148,6 +149,6 @@ export class SlackAdapter implements Channel.Surface {
   }
 
   private async handleIncoming(inbound: Channel.InboundMessage): Promise<void> {
-    await (this.handler as Channel.MessageHandler)(inbound);
+    await requireHandler(this.handler, "slack")(inbound);
   }
 }
