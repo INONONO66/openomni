@@ -393,3 +393,109 @@ test("capability-removed one-turn gate: the cascade is journaled in session.conf
   expect(second).toEqual(first);
 });
 
+/** The scripted prompt hook: denies any decision input containing "forbidden". */
+const PROMPT_HOOK_SCRIPT = `
+const decoder = new TextDecoder();
+let buffer = "";
+for await (const chunk of Bun.stdin.stream()) {
+  buffer += decoder.decode(chunk, { stream: true });
+  let cut;
+  while ((cut = buffer.indexOf("\\n")) >= 0) {
+    const line = buffer.slice(0, cut);
+    buffer = buffer.slice(cut + 1);
+    if (line.length === 0) continue;
+    const request = JSON.parse(line);
+    const result = JSON.stringify(request.decisionInput).includes("forbidden")
+      ? { type: "gate", verdict: "deny", reason: "forbidden_prompt" }
+      : { type: "gate", verdict: "allow" };
+    console.log(JSON.stringify({ id: request.id, result }));
+  }
+}
+`;
+
+test("H-1/M-2 e2e: a UserPromptSubmit command hook gates the REAL prompt path and journals durable policy.decision rows", async () => {
+  const dir = suite.tempDir("hooks-json-e2e-");
+  const script = join(dir, "prompt-hook.js");
+  writeFileSync(script, PROMPT_HOOK_SCRIPT);
+  const hooksPath = join(dir, "hooks.json");
+  writeFileSync(
+    hooksPath,
+    JSON.stringify({
+      UserPromptSubmit: [{ command: [process.execPath, script], timeoutMs: 30_000 }],
+    }),
+  );
+  const config = suite.config("hooks-json-e2e-state-", { hooksPath });
+  let calls = 0;
+  const app = await suite.boot({
+    config,
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input: RunInput, sink: Sink) =>
+        Effect.sync(() => {
+          calls += 1;
+          sink.onMessage(
+            assistantMessage(input, { id: `hook-e2e-${calls}`, text: `ok ${calls}`, createdAt: Date.now() }),
+          );
+          return { type: "stop" as const };
+        }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, []);
+
+  // Subscribe to the exact committed fact BEFORE sending: the denied prompt's
+  // durable policy.decision row (fail-closed consult verdict folded to deny).
+  const denied = eventSignal<{ sessionId: string; id: string }>("denied policy.decision", 15_000);
+  const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
+    if (event.kind !== "policy.decision") return;
+    const node = plane.openKernel(event.sessionId).actionById(event.id);
+    const intent = node?.intent.value;
+    if (intent !== null && typeof intent === "object" && !Array.isArray(intent) && intent?.verdict === "deny")
+      denied.resolve({ sessionId: event.sessionId, id: event.id });
+  });
+  try {
+    ws.send(JSON.stringify({ type: "message", eventId: "hook-deny", text: "read the forbidden file" }));
+    const denial = await denied.promise;
+
+    // The denied prompt never reached the model; the next allowed one does.
+    const reply = nextResidentTurn(plane);
+    ws.send(JSON.stringify({ type: "message", eventId: "hook-allow", text: "hello there" }));
+    expect(await reply).toMatchObject({ text: "ok 1" });
+    expect(calls).toBe(1);
+
+    // Durable evidence: the session chain holds BOTH decisions — the hook's
+    // deny (with its reason and consulted payload) and the later allow.
+    if (config.sessionsDir === undefined) throw new Error("suite config always sets sessionsDir");
+    const database = new Database(join(config.sessionsDir, `${denial.sessionId}.sqlite`), { readonly: true });
+    try {
+      const decisions = database
+        .query<{ intent: string }, []>(
+          "SELECT intent FROM action WHERE kind = 'policy.decision' AND json_extract(intent, '$.hook') = 'prompt.pre' ORDER BY ordinal ASC",
+        )
+        .all()
+        .map((row) => JSON.parse(row.intent) as {
+          verdict: string;
+          gate?: { verdict: string; consulted: { ref: string; payload: { verdict?: string; reason?: string } }[] };
+        });
+      expect(decisions.map((decision) => decision.verdict)).toEqual(["deny", "allow"]);
+      const denyGate = decisions[0]?.gate;
+      expect(denyGate?.consulted).toEqual([
+        expect.objectContaining({
+          ref: Bundle.HOOK_PROCESS_REF,
+          payload: expect.objectContaining({ verdict: "deny", reason: "forbidden_prompt" }),
+        }),
+      ]);
+      const allowGate = decisions[1]?.gate;
+      expect(allowGate?.consulted).toEqual([
+        expect.objectContaining({
+          ref: Bundle.HOOK_PROCESS_REF,
+          payload: expect.objectContaining({ verdict: "allow" }),
+        }),
+      ]);
+    } finally {
+      database.close();
+    }
+  } finally {
+    unsubscribe();
+  }
+});
