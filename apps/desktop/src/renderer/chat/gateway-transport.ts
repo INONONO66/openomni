@@ -1,5 +1,5 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
-import { listenForAbort, parseJson, SessionRead } from "@openomni/protocol";
+import { listenForAbort, parseJson, SessionFork, SessionRead } from "@openomni/protocol";
 import { GatewayUnavailableError, TransportCapabilityError } from "../errors";
 import { z } from "zod";
 
@@ -36,6 +36,8 @@ const serverFrameSchema = z.union([
   SessionRead.Response,
   SessionRead.Receipt,
   SessionRead.Bound,
+  SessionFork.Forked,
+  SessionFork.Refused,
   z.object({ type: z.literal("message"), messageId: z.string(), text: z.string() }),
   z.object({
     type: z.literal("error"),
@@ -106,6 +108,12 @@ export class SessionReadSupersessionError extends Error {
 export interface GatewayChatTransport extends ChatTransport<UIMessage> {
   readSession(sessionId: string, cursor?: SessionRead.Cursor): Promise<SessionRead.Page>;
   subscribeSession(listener: (page: SessionRead.Page) => void): () => void;
+  /**
+   * Fork a session at a boundary anchor (#1257). Resolves with the gateway's
+   * typed answer — `session_forked` or `session_fork_refused` — and rejects
+   * only on transport failure (socket drain, no gateway).
+   */
+  forkSession(request: Omit<SessionFork.Request, "type">): Promise<SessionFork.Response>;
 }
 
 function emptyStream(): ReadableStream<UIMessageChunk> {
@@ -135,6 +143,26 @@ export function createGatewayChatTransport(
     }
   >();
   const listeners = new Set<(page: SessionRead.Page) => void>();
+  /** FIFO fork waiters keyed by the PARENT session id (#1257). */
+  const forks = new Map<
+    string,
+    {
+      readonly socket: SocketLike;
+      readonly waiters: {
+        readonly resolve: (response: SessionFork.Response) => void;
+        readonly reject: (error: Error) => void;
+      }[];
+    }
+  >();
+
+  function settleFork(source: SocketLike, frame: SessionFork.Response): void {
+    const parentId = frame.type === "session_forked" ? frame.parentId : frame.sessionId;
+    const entry = forks.get(parentId);
+    if (entry === undefined || entry.socket !== source) return;
+    const waiter = entry.waiters.shift();
+    if (entry.waiters.length === 0) forks.delete(parentId);
+    waiter?.resolve(frame);
+  }
 
   function settleRead(source: SocketLike, frame: SessionRead.Response): void {
     const pendingRead = reads.get(frame.sessionId);
@@ -185,18 +213,24 @@ export function createGatewayChatTransport(
       bindSession(source, frame);
       return;
     }
+    if (frame.type === "session_forked" || frame.type === "session_fork_refused") {
+      settleFork(source, frame);
+      return;
+    }
     // A receipt is only the frozen acceptance ack; session_bound binds.
     if (frame.type === "receipt") return;
     if (frame.type === "error" && frame.sessionId !== undefined) {
-      const entry = reads.get(frame.sessionId);
-      if (entry !== undefined) {
-        reads.delete(frame.sessionId);
-        const failure = new Error(frame.reason ?? frame.message ?? "session read failed");
-        for (const waiter of entry.waiters) waiter.reject(failure);
-      }
+      rejectRead(frame.sessionId, new Error(frame.reason ?? frame.message ?? "session read failed"));
       return;
     }
     if (frame.type === "message" || frame.type === "error") settleChat(source, frame);
+  }
+
+  function rejectRead(sessionId: string, failure: Error): void {
+    const entry = reads.get(sessionId);
+    if (entry === undefined) return;
+    reads.delete(sessionId);
+    rejectWaiters(entry.waiters, failure);
   }
 
   function settleChat(
@@ -228,13 +262,23 @@ export function createGatewayChatTransport(
     turn.close();
   }
 
+  /** Reject and forget every map entry whose waiters rode the closed socket. */
+  function drainEntries<T extends { readonly socket: SocketLike; readonly waiters: readonly { readonly reject: (error: Error) => void }[] }>(
+    entries: Map<string, T>,
+    source: SocketLike,
+    failure: Error,
+  ): void {
+    for (const [id, entry] of entries) {
+      if (entry.socket !== source) continue;
+      entries.delete(id);
+      rejectWaiters(entry.waiters, failure);
+    }
+  }
+
   /** Every in-flight turn on one socket ends when that socket does. */
   function drain(source: SocketLike, errorText?: string): void {
-    for (const [id, pendingRead] of reads) {
-      if (pendingRead.socket !== source) continue;
-      reads.delete(id);
-      rejectWaiters(pendingRead.waiters, new Error(errorText ?? "gateway socket closed"));
-    }
+    drainEntries(reads, source, new Error(errorText ?? "gateway socket closed"));
+    drainEntries(forks, source, new Error(errorText ?? "gateway socket closed"));
     for (let index = pending.length - 1; index >= 0; index -= 1) {
       const turn = pending[index];
       if (turn?.socket !== source) continue;
@@ -279,6 +323,23 @@ export function createGatewayChatTransport(
         } catch (error) {
           reads.delete(sessionId);
           reject(error);
+        }
+      });
+    },
+    async forkSession(request) {
+      const live = await connectUntilAborted(undefined);
+      if (live === undefined) throw new GatewayUnavailableError("gateway socket unavailable");
+      const entry = forks.get(request.sessionId) ?? { socket: live, waiters: [] };
+      if (entry.socket !== live) throw new GatewayUnavailableError("gateway socket replaced");
+      return new Promise<SessionFork.Response>((resolve, reject) => {
+        entry.waiters.push({ resolve, reject });
+        forks.set(request.sessionId, entry);
+        try {
+          live.send(JSON.stringify(SessionFork.Request.parse({ type: "session_fork", ...request })));
+        } catch (error) {
+          entry.waiters.pop();
+          if (entry.waiters.length === 0) forks.delete(request.sessionId);
+          reject(error instanceof Error ? error : new Error(String(error)));
         }
       });
     },

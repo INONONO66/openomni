@@ -67,6 +67,8 @@ export namespace Storage {
     pendingMessages(sessionId: string): LedgerAction.Node[];
     /** The latest EXECUTED `compaction` row — the staleness horizon for deferred `action` inputs (#1256 H-3). */
     latestCompaction(sessionId: string): LedgerAction.Node | undefined;
+    /** Every input action (rows carrying an inboxKind effect), consumed or not (#1257). */
+    inputMessages(sessionId: string): LedgerAction.Node[];
   }
 
   export interface SessionSubAdapter {

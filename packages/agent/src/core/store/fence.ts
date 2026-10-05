@@ -90,6 +90,8 @@ export interface MaterializeInput {
   readonly policyGeneration: number;
   /** The composed manifest's `Generation.hash` this session adopts at creation (#1255). */
   readonly manifestHash?: string;
+  /** Generation settings pinned at genesis (#1253/#1257): widths and fork copy cap. */
+  readonly settings?: ConsumptionSettings;
   readonly actionId: string;
   readonly at: number;
 }
@@ -132,6 +134,8 @@ export function materializationSeed(
     readonly role: LedgerSession.Role;
     readonly actionId: string;
     readonly at: number;
+    /** Generation settings pinned at genesis (#1253/#1257). */
+    readonly settings?: ConsumptionSettings;
   },
   snapshot: SessionGeneration.Snapshot,
 ): LedgerSession.Materialize {
@@ -154,6 +158,7 @@ export function materializationSeed(
       parentId: null,
       operation: "create",
       snapshot,
+      ...(input.settings === undefined ? {} : { settings: input.settings }),
       at: input.at,
     }),
   };
@@ -374,13 +379,44 @@ const ReceivedEffect = z.object({
  */
 /**
  * The `after` cursor a deferred `action` input's intent carries (#1256 H-3),
- * if any — the ONE typed owner of this projection (r3 L-1); commit.ts imports
- * it rather than duplicating the parse.
+ * if any — the ONE typed owner of this projection (r3 L-1).
  */
 const AfterCursorIntent = z.looseObject({ after: z.number().int().nonnegative().optional() });
-export function afterCursorOf(intent: PlainValue): number | undefined {
+function afterCursorOf(intent: PlainValue): number | undefined {
   const parsed = AfterCursorIntent.safeParse(intent);
   return parsed.success ? parsed.data.after : undefined;
+}
+
+/**
+ * Every input row, consumed or pending (#1257): the SQL projection that
+ * replaced the retired whole-history received-message chain fold. Status
+ * comes from the
+ * same delivery-reference rule the pending read uses.
+ */
+function inputMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
+  const pending = new Set(
+    requiredActionsIn(context)
+      .pendingMessages(sessionId)
+      .map((action) => action.id),
+  );
+  return requiredActionsIn(context)
+    .inputMessages(sessionId)
+    .map((action, index) => {
+      const effect = ReceivedEffect.parse(action.effect.value);
+      return Inbox.Row.parse({
+        id: action.id,
+        sessionId: action.sessionId,
+        kind: effect.inboxKind,
+        content: effect.content,
+        origin: action.intent,
+        ...(effect.delivery === undefined ? {} : { delivery: effect.delivery }),
+        status: pending.has(action.id) ? "pending" : "consumed",
+        consumedBy: null,
+        consumedAt: null,
+        createdAt: action.ts,
+        ordinal: index + 1,
+      });
+    });
 }
 
 function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
@@ -484,6 +520,8 @@ export function configureAction(input: {
   readonly snapshot: SessionGeneration.Snapshot;
   /** `all|one` consumption widths (#1253); present only when the configure pins them. */
   readonly settings?: ConsumptionSettings;
+  /** Fork ancestry (#1257); present only on a forked child's genesis configure. */
+  readonly forkedFrom?: SessionGeneration.ForkAncestry;
   /** The composed off cascade (#1255); present only when a manifest composed. */
   readonly disabled?: ConfigureDisabled;
   readonly at: number;
@@ -498,6 +536,7 @@ export function configureAction(input: {
       value: {
         operation: input.operation,
         ...(input.settings === undefined ? {} : { settings: input.settings }),
+        ...(input.forkedFrom === undefined ? {} : { forkedFrom: input.forkedFrom }),
         ...(input.disabled === undefined ? {} : { disabled: input.disabled.map((entry) => ({ ...entry })) }),
       },
     },
@@ -886,6 +925,7 @@ function makeSessionKernel(context: SessionKernelContext) {
     /** Ordinal of the latest executed compaction, else 0 — the staleness horizon for `action` inputs (#1256 H-3). */
     compactionHead: (sessionId: string): number =>
       requiredActionsIn(context).latestCompaction(sessionId)?.ordinal ?? 0,
+    inputMessages: (sessionId: string): Inbox.Row[] => inputMessagesIn(context, sessionId),
     latestAction: (
       sessionId: string,
       throughRevision = Number.MAX_SAFE_INTEGER,

@@ -29,13 +29,18 @@ export const queryKeys = {
  * keep the populated page when a same-epoch refetch at the same head returns
  * an empty continuation: no new actions is not new authority, and replacing
  * the cached slice would erase the authoritative last-activity timestamp.
+ * Catalog-derived fork children are the one exception (#1257 r4 H-1): a fork
+ * writes no parent action, so the gateway's post-fork refresh arrives as a
+ * same-head empty page whose `children` must still land in the cache.
  */
 function newerPage(previous: SessionRead.Page | undefined, page: SessionRead.Page): SessionRead.Page {
   if (previous === undefined || page.epoch > previous.epoch) return page;
   if (page.epoch < previous.epoch || page.headRevision < previous.headRevision) return previous;
-  return page.headRevision === previous.headRevision &&
-    (page.afterRevision < previous.afterRevision || page.actions.length === 0)
-    ? previous : page;
+  if (page.headRevision === previous.headRevision &&
+    (page.afterRevision < previous.afterRevision || page.actions.length === 0)) {
+    return page.children === undefined ? previous : { ...previous, children: page.children };
+  }
+  return page;
 }
 
 export function sessionReadOptions(client: QueryClient, transport: GatewayChatTransport | null, sessionId: string) {
@@ -63,10 +68,18 @@ export function subscribeSessionReads(client: QueryClient, transport: GatewayCha
 
 export function sessionReadModel(session: LocalSession, page: SessionRead.Page | undefined): Session {
   const authoritative = page?.sessionId === session.durableSessionId ? page : undefined;
+  // Newest boundary anchor; a reverse scan because the desktop lib target predates `findLast`.
+  const latestForkAnchor = [...(authoritative?.actions ?? [])]
+    .reverse()
+    .find((action) => action.forkAnchor !== undefined)?.forkAnchor;
   return {
     ...session,
     phase: authoritative?.phase ?? null,
     phaseSince: authoritative?.phaseSince ?? session.createdAt,
+    ...(authoritative?.ancestry?.aside == null ? {} : { forkAside: authoritative.ancestry.aside }),
+    ...(authoritative?.ancestry === undefined ? {} : { ancestry: authoritative.ancestry }),
+    ...(authoritative?.children === undefined ? {} : { forkChildren: authoritative.children }),
+    ...(latestForkAnchor === undefined ? {} : { latestForkAnchor }),
     lastActivityAt: authoritative?.actions[authoritative.actions.length - 1]?.at ?? session.lastActivityAt,
   };
 }

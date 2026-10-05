@@ -16,7 +16,7 @@ import type { decideSessionAdmission } from "./mailbox";
 import type { Generation } from "./compose";
 import { projectTools } from "./tool";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
-import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, receivedMessages, boundaryConsumption, consumptionSettings, } from "./commit";
+import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { LedgerError } from "./store/errors";
 import { z } from "zod";
 import { hydrateSessionHistory, refreshSessionHistory } from "../inspect/history";
@@ -998,7 +998,9 @@ export function createSessionTurn(
         if (controller.signal.aborted) return yield* Effect.interrupt;
         const hydrated = hydrateSessionHistory(kernel, sessionId);
         const promptId = hydrated.messages.filter((message) => message.role === "user").at(-1)?.id;
-        const origin = receivedMessages(kernel, sessionId).rows.find((item) => item.id === promptId)?.origin;
+        // #1257: the prompt's origin is its action row's intent — a point
+        // read, not the retired whole-chain received-message fold.
+        const origin = promptId === undefined ? undefined : kernel.actionById(promptId)?.intent;
         const inbound = inboundAuthority(origin?.value);
         if (inbound.violation !== undefined) {
           const observations = yield* ObservationService;

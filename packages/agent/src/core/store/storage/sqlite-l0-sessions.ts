@@ -19,7 +19,7 @@ import {
 import { reportCommitted, type ObservationFailurePort } from "./sqlite-l0-observation.js";
 import { writeEffect, type RefuseWrite } from "./write-effect";
 
-function materializeSession(
+export function materializeSession(
   db: Database,
   parsed: LedgerSession.Materialize,
   refuse: RefuseWrite,

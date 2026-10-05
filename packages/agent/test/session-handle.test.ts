@@ -21,14 +21,13 @@ import { type BusEvent, type LedgerAction, L0Observation, PlainValueSchema, type
 import { CommitFailed } from "../src/core/failure";
 import { GenerationOwnership } from "../src/core/ports";
 import { GenerationRawSlots } from "../src/core/run";
-import { receivedMessages } from "../src/core/commit";
 import type { SessionKernel } from "../src/core/entity";
 import { Bus } from "./helpers/bus";
 
 // ---------------------------------------------------------------------------
 // Ported to the entity plane (W5.2 #1197): handle-scoped kernels via
 // `isolated()`, eager fence adoption at controller creation instead of TTL
-// leases, the chain-fold inbox (`commitReceivedMessage`/`receivedMessages`)
+// leases, the SQL inbox projection (`commitReceivedMessage`/`inputMessages`)
 // instead of inbox rows, and per-session `reactivateSession` instead of the
 // boot sweep.
 //
@@ -249,9 +248,9 @@ function tree(sessionId: string): LedgerAction.Node[] {
   return sessionTree(kernel(), sessionId);
 }
 
-/** The chain-fold inbox projection: the old inbox table is the chain now. */
+/** The SQL inbox projection (#1257): the old inbox table is the chain now. */
 function inboxRows(sessionId: string): Inbox.Row[] {
-  return receivedMessages(kernel(), sessionId).rows;
+  return kernel().inputMessages(sessionId);
 }
 
 function pendingInbox(sessionId: string): Inbox.Row[] {

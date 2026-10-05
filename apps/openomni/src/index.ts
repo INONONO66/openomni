@@ -69,6 +69,7 @@ import {
   modelTransport,
   resolveAlarmSweep,
   resolveClusterStorage,
+  resolveSessionFork,
   validateMachinePlane,
   type OpenOmniConfig,
   type RegisteredActor,
@@ -89,6 +90,7 @@ import {
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
+import { createSessionForkExecutor } from "./composition/session-fork";
 import { alarmCapabilityView, createWatchPlane } from "./composition/watch-plane";
 import { ComposedGeneration, composedHolderOf } from "./composition/composed";
 import { appManifest } from "./manifest";
@@ -618,6 +620,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     watchPlane.bind(watchSources);
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
+      // #1257: the app's resolved cap is the input the composition writes
+      // into every new session's genesis generation settings.
+      forkCopyByteCap: resolveSessionFork(config).copyByteCap,
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, { now: services.now, id: services.entropy.id }),
       composed: { current: services.composed.current },
@@ -981,7 +986,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
 
     const wsCallbacks = webSocketCallbacks(runtime, wsHandler, services.observations, (id) =>
       plane.catalog.sessionIndex(id) === undefined ? undefined : plane.openKernel(id),
-    );
+      createSessionForkExecutor(plane, {
+        sessionsDir: config.sessionsDir,
+        now: services.now,
+        id: services.entropy.id,
+      }));
     const server = Bun.serve({
       hostname: config.host,
       port: config.wsPort,

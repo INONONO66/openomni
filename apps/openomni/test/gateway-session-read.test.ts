@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { Bus } from "./helpers/bus";
 import { WebSocketHandler, type WsConnection } from "@openomni/channels";
-import type { LedgerAction, LedgerSession, PlainValue } from "@openomni/protocol";
+import { L0Observation, type LedgerAction, type LedgerSession, type PlainValue } from "@openomni/protocol";
 import { adoptWriter, materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import type { SessionKernel } from "../src/composition/cluster-runtime";
 import { gatewayRuntime, readSessionCursor, webSocketCallbacks } from "../src/gateway";
@@ -110,6 +110,55 @@ test("session pages report tool wall time from committed intent/result pairs", (
     expect(settled.toolWallMs).toBe(30);
   } finally {
     plane.close();
+  }
+});
+
+// A subscribed reader follows the chain: a commit above the sent revision
+// publishes the committed hint and the gateway re-sends the authoritative
+// page; the committed row arrives on the reader's cursor, no polling.
+test("a subscribed reader is re-sent the page when a newer revision commits", async () => {
+  const runtime = gatewayRuntime({ observations: Bus });
+  const sessionId = "ws-follow";
+  const { plane, kernel, commit } = readFixture(sessionId);
+  try {
+    commit([noteAction(sessionId, "note-1", 10)], "idle");
+    const handler = new WebSocketHandler(() => Effect.void, Bus.publish, { now: () => 0, id: testIds("ws-follow") });
+    const frames: string[] = [];
+    let pushed: (() => void) | undefined;
+    const ws: WsConnection = {
+      data: { surfaceKey: "ws::dm:test", authenticated: true, externalId: "follower" },
+      send: (frame) => {
+        frames.push(frame);
+        pushed?.();
+      },
+    };
+    const gatewaySocket = webSocketCallbacks(runtime, handler, Bus, () => kernel);
+    await gatewaySocket.callbacks.message(
+      ws,
+      JSON.stringify({ type: "session_read", sessionId, limit: 256 }),
+    );
+    expect(frames).toHaveLength(1);
+    const repush = new Promise<void>((resolve) => {
+      pushed = resolve;
+    });
+    commit([noteAction(sessionId, "note-2", 20)], "idle");
+    Bus.publish(L0Observation.ActionCommittedEvent, {
+      id: "note-2",
+      sessionId,
+      revision: kernel.row(sessionId).revision,
+      kind: "message",
+    });
+    await repush;
+    const decodeJson: (frame: string) => PlainValue = JSON.parse;
+    expect(decodeJson(frames[1] ?? "")).toMatchObject({
+      type: "session_page",
+      sessionId,
+      actions: [{ actionId: "note-2", kind: "message" }],
+    });
+    gatewaySocket.callbacks.close(ws);
+  } finally {
+    plane.close();
+    await runtime.dispose();
   }
 });
 

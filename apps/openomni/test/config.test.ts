@@ -10,6 +10,7 @@ import {
   loadConfig,
   parseWsPort,
   resolveAlarmSweep,
+  resolveSessionFork,
   resolveClusterStorage,
   validateMachinePlane,
 } from "../src/config";
@@ -26,6 +27,7 @@ const ENV_KEYS = [
   "OPENOMNI_ENTITY_IDLE_MS",
   "OPENOMNI_ALARM_SWEEP_FULL",
   "OPENOMNI_ALARM_SWEEP_IDLE_DAYS",
+  "OPENOMNI_FORK_COPY_BYTE_CAP",
   "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
   "OPENOMNI_WS_TOKEN",
@@ -271,6 +273,30 @@ describe("cluster storage config", () => {
     delete process.env.OPENOMNI_ALARM_SWEEP_IDLE_DAYS;
     expect(loadConfig(home).alarmSweep).toEqual({ full: false, idleDays: 7 });
   });
+
+  // #1257 M-5: the fork copy cap is generation configuration, not a core constant.
+  it("reads the fork copy byte cap from the environment and defaults it to 4 MiB", () => {
+    expect(loadConfig(home).forkCopyByteCap).toBeUndefined();
+    expect(resolveSessionFork(loadConfig(home))).toEqual({ copyByteCap: 4 * 1024 * 1024 });
+
+    process.env.OPENOMNI_FORK_COPY_BYTE_CAP = "65536";
+    const config = loadConfig(home);
+    expect(config.forkCopyByteCap).toBe(65536);
+    expect(resolveSessionFork(config)).toEqual({ copyByteCap: 65536 });
+  });
+
+  it.each([["0"], ["-1"], ["1.5"], ["lots"]])(
+    "refuses OPENOMNI_FORK_COPY_BYTE_CAP=%s with the typed code",
+    (raw) => {
+      process.env.OPENOMNI_FORK_COPY_BYTE_CAP = raw;
+      expect(() => loadConfig(home)).toThrow(
+        expect.objectContaining({
+          name: "OpenOmniConfigurationError",
+          data: containing({ code: "invalid_fork_copy_byte_cap" }),
+        }),
+      );
+    },
+  );
 
   it.each([
     ["OPENOMNI_ALARM_SWEEP_FULL", "yes"],
