@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Bundle } from "@openomni/agent";
 import { gateRowPolicySeeds } from "../src/policy-seed";
-import { AppInvariantError } from "../src/invariant";
 
 const row = (over: Partial<Bundle.BundleGateRow>): Bundle.BundleGateRow => ({
   id: "probe/tool.pre#1",
@@ -41,8 +40,18 @@ test("gate rows project onto the legacy seed shape: obligation, constant verdict
   expect(seeds[0]?.match).toEqual({ encodingVersion: 1, value: { op: "monitor" } });
 });
 
+test("a consulted gate row without budget fields seeds as a guard verdict (#1258)", () => {
+  const seeds = gateRowPolicySeeds([
+    row({ how: { ref: "delegation-policy/spawn-depth", params: { limit: 3 } } }),
+  ]);
+  expect(seeds[0]?.verdict.value).toEqual({
+    type: "guard",
+    ref: "delegation-policy/spawn-depth",
+    config: { limit: 3 },
+  });
+});
+
 test("a row the live plane cannot seed is an invariant failure, never a silent default", () => {
-  expect(() => gateRowPolicySeeds([row({ how: { ref: "kernel/budget-clamp" } })])).toThrow(AppInvariantError);
   expect(() => gateRowPolicySeeds([row({ do: "emit", how: { emit: "message" } })])).toThrow(
     "has no live policy-plane seed shape",
   );
