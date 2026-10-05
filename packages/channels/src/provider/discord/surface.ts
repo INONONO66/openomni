@@ -2,6 +2,7 @@ import { newTraceId } from "../../support/trace";
 import { type Channel, Operational } from "@openomni/protocol";
 import { Dedupe } from "../../support/dedupe";
 import { handoffInbound } from "../../support/inbound-handoff";
+import { requireHandler } from "../../support/handler-frame";
 import { type DeliveryReceipt, DeliveryReconciliation, deliverKeyed } from "../../support/deliver";
 import { DiscordClient } from "./client";
 import {
@@ -138,7 +139,7 @@ export class DiscordAdapter implements Channel.Surface {
       errorMessage: "discord message handling failed",
       rethrowFailure: false,
       handle: async () => {
-        if (message.author.bot || !message.content || !this.botId) return;
+        if (!this.botId) return;
         const inbound = normalizer.normalize(message);
         if (inbound) await this.handleIncoming(inbound, message.channel_id, traceId);
       },
@@ -158,6 +159,6 @@ export class DiscordAdapter implements Channel.Surface {
       context: { channelId },
     });
 
-    await (this.handler as Channel.MessageHandler)(inbound);
+    await requireHandler(this.handler, "discord")(inbound);
   }
 }
