@@ -274,3 +274,24 @@ test("H-2: an unterminated buffer over maxLineBytes poisons the PID as a framing
     ),
   ));
 
+test("M-1: one JSON line split across two stdout writes decodes once complete", () =>
+  runTestPromise(
+    scoped((scope) =>
+      Effect.gen(function* () {
+        const hook = yield* acquireHookProcess({ command: COMMAND, timeoutMs: 60_000 }).pipe(
+          Scope.provide(scope),
+        );
+        // The child answers "split" with the FIRST 6 bytes of its response line
+        // (no newline) and holds the rest until the next request arrives, so
+        // the parent reader observes a frame boundary inside one JSON line.
+        const splitCall = yield* Effect.forkChild(hook.call(request("split")));
+        yield* settledWhen(() => hook.inFlight() === 1);
+        expect(yield* hook.call(request("flush-split"))).toEqual({
+          kind: "gate",
+          verdict: "allow",
+        });
+        expect(yield* Fiber.join(splitCall)).toEqual({ kind: "gate", verdict: "allow" });
+        expect(hook.inFlight()).toBe(0);
+      }),
+    ),
+  ));
