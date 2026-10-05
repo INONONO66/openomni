@@ -1,24 +1,33 @@
-import { canonicalDigest, type Message } from "@openomni/protocol";
+import { canonicalDigest, Message } from "@openomni/protocol";
+import { z } from "zod";
 import { latestCompactionAnchorId } from "./candidate";
 import { AgentInvariantViolation } from "../../core/api";
 
 export type CanonicalConversationEntry = Message.WithParts;
 
-export interface CompactionRecord {
-  readonly summary: string;
-  readonly firstKeptEntryId: string;
-  readonly tokensBefore: number;
-  readonly discarded: {
-    readonly firstEntryId: string;
-    readonly lastEntryId: string;
-    readonly count: number;
-    readonly sha256: string;
-  };
-  readonly revert: {
-    readonly removedEntries: readonly CanonicalConversationEntry[];
-    readonly priorAnchorEntryId: string | null;
-  };
-}
+/** The evidence one executed compaction leaves behind, including its reconstruction recipe. */
+export const CompactionRecord = z.object({
+  summary: z.string(),
+  firstKeptEntryId: z.string(),
+  tokensBefore: z.number(),
+  discarded: z
+    .object({
+      firstEntryId: z.string(),
+      lastEntryId: z.string(),
+      count: z.number().int(),
+      sha256: z.string(),
+    })
+    .strict()
+    .readonly(),
+  revert: z
+    .object({
+      removedEntries: z.array(Message.WithParts).readonly(),
+      priorAnchorEntryId: z.string().nullable(),
+    })
+    .strict()
+    .readonly(),
+}).readonly();
+export type CompactionRecord = z.infer<typeof CompactionRecord>;
 
 interface CompactionPlan {
   readonly projection: readonly CanonicalConversationEntry[];
