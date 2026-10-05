@@ -20,6 +20,7 @@ const compilePolicySnapshot = Core.compilePolicySnapshot;
 import { LedgerAction, type AnyToolDefinition, type LedgerSession, type SessionGeneration } from "@openomni/protocol";
 import { Context, Effect, Layer, Scope, Semaphore } from "effect";
 
+import { catalogDelegationReads, delegationGuardHandlers } from "../bundles/delegation-policy";
 import { catalogDefinitions, type ToolPorts } from "../tools/core/catalog";
 import { AppLedger, type SessionKernel } from "./cluster-runtime";
 import { ComposedGeneration, type ComposedContext } from "./composed";
@@ -34,11 +35,23 @@ import { captureNow } from "./platform";
  * generation's `kernel/*` registrations are declarations of intent to use
  * them, not replacements.
  */
-function composedPolicyRegistry(generation: Bundle.Generation): Core.HandlerTable {
+function composedPolicyRegistry(
+  generation: Bundle.Generation,
+  live: Readonly<Record<string, { decide: Core.NamedGuard["decide"] }>> = {},
+): Core.HandlerTable {
   const transformers = [...Core.KERNEL_POLICY_REGISTRY.transformers];
   const obligations = [...Core.KERNEL_POLICY_REGISTRY.obligations];
   const known = new Set([...transformers, ...obligations].map((entry) => entry.name));
   const guards = [...(Core.KERNEL_POLICY_REGISTRY.guards ?? [])];
+  // #1258: a bundle contract's guard face is a declaration; the composition
+  // binds the live doors here (catalog reads), like catalog tool ports. They
+  // register unconditionally so a persisted guard row always compiles — the
+  // row itself only exists while its bundle is composed on.
+  for (const [name, guard] of Object.entries(live)) {
+    if (known.has(name)) continue;
+    known.add(name);
+    guards.push({ name, decide: guard.decide });
+  }
   for (const [name, handler] of generation.handlers) {
     if (known.has(name)) continue;
     known.add(name);
@@ -133,7 +146,10 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
         return sink;
       }));
       const seed = Layer.mergeAll(Layer.succeedContext(process), catalog, observations);
-      const seeded = Layer.succeed(GenerationHandlers, composedPolicyRegistry(generation)).pipe(Layer.provideMerge(seed));
+      const seeded = Layer.succeed(
+        GenerationHandlers,
+        composedPolicyRegistry(generation, delegationGuardHandlers(catalogDelegationReads(plane.listSessions))),
+      ).pipe(Layer.provideMerge(seed));
       // #1255 P3: the composed ON bundles' Layers acquire INSIDE this
       // generation's Scope in composition order, each provided the seed plus
       // every earlier bundle's outputs — the per-generation resource semantics

@@ -607,6 +607,8 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
               to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
               message: "run process",
               reply_to: "process-binding",
+              // #1258: delegation policy refuses child creation without a spend cap.
+              spend_cap: 1,
             },
           });
           if (output === undefined) return { type: "stop" };

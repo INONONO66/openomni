@@ -1,8 +1,9 @@
 import { Bundle } from "@openomni/agent";
 import { cronBundle } from "./bundles/cron";
+import { delegationPolicyBundle } from "./bundles/delegation-policy";
 import { monitorBundle } from "./bundles/monitor";
 import { sendMessageBundle } from "./bundles/send-message";
-import { ToolCapabilitySeam } from "./bundles/seams";
+import { ActionCapabilitySeam, ToolCapabilitySeam } from "./bundles/seams";
 
 /**
  * The thin tool-capability contract (#1255 P3): the dispatcher stays the
@@ -18,6 +19,19 @@ export const toolCapability = Bundle.Capability.define({
   handlers: { "kernel/budget-clamp": {} },
   verbs: {},
   seam: ToolCapabilitySeam,
+});
+
+/**
+ * The action capability (#1258): owns the `action` deliver input — the nudge
+ * a wake or reply rides into a session. `bundles/delegation-policy` requires
+ * its seam, so composing `action` off cascades delegation policy off too.
+ */
+export const actionCapability = Bundle.Capability.define({
+  name: "action",
+  requires: [],
+  inputs: ["action"],
+  verbs: {},
+  seam: ActionCapabilitySeam,
 });
 
 /**
@@ -39,8 +53,13 @@ export interface AppManifestInput {
 
 export function appManifest(input: AppManifestInput): Bundle.ManifestDefinition {
   return Bundle.Manifest.define({
-    capabilities: [toolCapability, input.alarm],
-    bundles: [monitorBundle(input.wake), cronBundle(), sendMessageBundle()],
+    capabilities: [toolCapability, input.alarm, actionCapability],
+    bundles: [
+      monitorBundle(input.wake),
+      cronBundle(),
+      sendMessageBundle(),
+      delegationPolicyBundle(),
+    ],
     off: input.off ?? [],
   });
 }

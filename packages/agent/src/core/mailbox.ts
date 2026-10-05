@@ -213,7 +213,7 @@ export function createSessionAdmission(
         state: "running",
       });
       observeDrained(pending, turnId, "before_llm", clock(), observations, entropy);
-      if (pending.some((item) => item.kind === "interrupt")) {
+      if (pending.some((item) => item.kind === "interrupt" || item.kind === "cancel")) {
         const action = kernel.actionById(turnId);
         if (action === undefined) return yield* new AgentFailure({ operation: "session.turn", cause: `missing_turn:${turnId}` });
         yield* seal({
@@ -350,7 +350,7 @@ export function createSessionAdmission(
   function resumeTurn(open: SessionHandleStore.OpenTurn): Effect.Effect<SessionRunnerResult, AdmissionError> {
     return Effect.gen(function* () {
       yield* awaitRetainedRunner();
-      if (pendingBacklog(kernel, sessionId).some((item) => item.kind === "interrupt")) {
+      if (pendingBacklog(kernel, sessionId).some((item) => item.kind === "interrupt" || item.kind === "cancel")) {
         const interrupted = { kind: "interrupted" as const };
         yield* seal(open, interrupted);
         return interrupted;

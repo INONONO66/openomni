@@ -346,7 +346,7 @@ export function deliveryActions(
       intent: {
         encodingVersion: 1,
         value:
-          item.kind === "interrupt" || item.kind === "resume"
+          item.kind === "interrupt" || item.kind === "resume" || item.kind === "cancel"
             ? { inboxId: item.id, control: item.kind }
             : { inboxId: item.id, delivery: item.delivery ?? JournalKind.DEFAULT_DELIVERY },
       },
@@ -612,7 +612,9 @@ export function boundaryConsumption(
   );
   const chosen = new Set(
     [
-      ...backlog.filter((item) => item.kind === "interrupt" || item.kind === "resume"),
+      ...backlog.filter(
+        (item) => item.kind === "interrupt" || item.kind === "cancel" || item.kind === "resume",
+      ),
       ...(boundary === "after_tools" || boundary === "turn_end"
         ? width(steer, settings.steering)
         : []),

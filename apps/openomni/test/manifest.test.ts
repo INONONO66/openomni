@@ -16,10 +16,10 @@ async function alarmDefinition(): Promise<Bundle.CapabilityDefinition<"alarm">> 
   return capability.definition;
 }
 
-test("the manifest is THE product list: tool/alarm capabilities, monitor/cron/send-message bundles, empty off by default", async () => {
+test("the manifest is THE product list: tool/alarm/action capabilities, four bundles, empty off by default", async () => {
   const manifest = appManifest({ alarm: await alarmDefinition(), wake: { close: () => undefined } });
-  expect(manifest.capabilities.map((capability) => capability.name)).toEqual(["tool", "alarm"]);
-  expect(manifest.bundles.map((bundle) => bundle.name)).toEqual(["monitor", "cron", "send-message"]);
+  expect(manifest.capabilities.map((capability) => capability.name)).toEqual(["tool", "alarm", "action"]);
+  expect(manifest.bundles.map((bundle) => bundle.name)).toEqual(["monitor", "cron", "send-message", "delegation-policy"]);
   expect(manifest.off).toEqual([]);
 });
 

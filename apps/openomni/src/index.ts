@@ -70,7 +70,11 @@ import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
 import { createMessageInboxCommit, prepareMessage } from "./composition/message-session";
 import { dispatchOutboundMessage } from "./composition/terminal-message";
-import { parentReply } from "./composition/parent-reply";
+import {
+  DELEGATION_DEADLINE,
+  parentReply,
+  type DelegationDeadlineDeps,
+} from "./bundles/delegation-policy";
 import {
   AppLedger,
   createSessionLivePlane,
@@ -283,7 +287,16 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // The native-source alarm plane exists before the manifest: its purpose-free
   // capability CONTRACT is what the manifest lists, while the live wake router
   // below is rebuilt per composed on-set.
-  const watchPlane = createWatchPlane();
+  // #1258: the deadline cancel door exists before the manifest but binds at
+  // boot (it needs the entity client); unbound it fails the wake loudly.
+  let cancelDoor: DelegationDeadlineDeps["cancel"] | undefined;
+  const delegationDeadline: DelegationDeadlineDeps = {
+    cancel: (input) =>
+      cancelDoor === undefined
+        ? Effect.fail({ reason: "outbound cancel door is not composed" })
+        : cancelDoor(input),
+  };
+  const watchPlane = createWatchPlane({ delegation: delegationDeadline });
   // Boot is config -> manifest -> compose -> runtime (#1255): a ComposeRefused
   // here is the typed boot failure, thrown before any listener exists. An
   // injected runtime carries its own composed holder (tests).
@@ -339,6 +352,20 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // The Session entity client: THE delivery path for message and timer
     // traffic (W5.2 plan §1) — the RPC ack means the receiver committed.
     const entityClient = await runAppBoot(runtime, SessionEntity.client);
+    // #1258: bind the deadline cancel door — `signal{control: cancel}` through
+    // the entity's one deliver door, keyed by the alarm occurrence.
+    cancelDoor = ({ child, occurrenceId }) =>
+      entityClient(child)
+        .Deliver({
+          kind: "signal",
+          body: JSON.stringify({ content: "delegation deadline expired", control: "cancel" }),
+          source: JSON.stringify({ kind: "alarm", purpose: DELEGATION_DEADLINE }),
+          idempotencyKey: `${occurrenceId}:cancel`,
+        })
+        .pipe(
+          Effect.asVoid,
+          Effect.mapError((error) => ({ reason: String(error) })),
+        );
 
     const domainRevisions = createRequestDomainRevisions({
       actors: plane.stores.actors,
@@ -603,6 +630,24 @@ export async function startOpenOmni(options: StartOptions = {}) {
         ...tools,
         alarms: await createMonitorPorts(runtime, alarmPlane),
         provisioning: provisioningPort,
+        // #1258: a `to.new` send carrying `deadline_ms` arms the
+        // delegation.deadline purpose through the live activation's arm verb.
+        contacts: {
+          deadline: {
+            arm: ({ sessionId, turnId, child, at }) =>
+              watchPlane.arms
+                .arm(sessionId, turnId)({
+                  purpose: DELEGATION_DEADLINE,
+                  at,
+                  payload: { child, contact: `session:${child}` },
+                  sourceKey: `delegation:${child}`,
+                })
+                .pipe(
+                  Effect.asVoid,
+                  Effect.mapError((refused) => ({ reason: refused.code })),
+                ),
+          },
+        },
       },
       sessionRuntime,
       policyGeneration: () =>

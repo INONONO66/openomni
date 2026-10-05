@@ -164,7 +164,7 @@ export const AlarmRpc = Rpc.make("Alarm", {
  */
 export const DeliverBody = Schema.Struct({
   content: Schema.String,
-  control: Schema.optional(Schema.Literals(["interrupt", "resume"])),
+  control: Schema.optional(Schema.Literals(["interrupt", "resume", "cancel"])),
   delivery: Schema.optional(Schema.Literals(["steer", "followUp"])),
 });
 export type DeliverBody = typeof DeliverBody.Type;

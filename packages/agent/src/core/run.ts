@@ -130,7 +130,7 @@ export interface SessionRuntime {
   readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
   /**
    * Composition-owned child-to-parent reply (#1276): the app injects
-   * `parentReply` (apps/openomni/src/composition/parent-reply). Called at turn
+   * `parentReply` (apps/openomni/src/bundles/delegation-policy). Called at turn
    * seal; a returned message is committed as the child's outbound obligation.
    * Absent = a sealing child never writes toward its parent. #1258 replaces
    * this with the contact contract.
@@ -1094,7 +1094,7 @@ export function createSessionTurn(
       observeDrained(pending, input.turnId, boundary, clock(), observations, entropy);
       return {
         messages: pending.filter((item) => item.kind === "prompt").map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
-        interrupted: pending.some((item) => item.kind === "interrupt"),
+        interrupted: pending.some((item) => item.kind === "interrupt" || item.kind === "cancel"),
         parentActionId: deliveries.at(-1)?.id ?? checkpointId, boundaryActionId: checkpointId,
       };
     });
@@ -1104,7 +1104,7 @@ export function createSessionTurn(
     return Effect.gen(function* () {
       const current = kernel.row(sessionId);
       const latest = kernel.latestAction(sessionId);
-      const interrupts = result.kind === "interrupted" ? pendingBacklog(kernel, sessionId).filter((item) => item.kind === "interrupt") : [];
+      const interrupts = result.kind === "interrupted" ? pendingBacklog(kernel, sessionId).filter((item) => item.kind === "interrupt" || item.kind === "cancel") : [];
       const deliveries = deliveryActions(
         interrupts,
         { kind: "turn", turnId: open.turnId },
