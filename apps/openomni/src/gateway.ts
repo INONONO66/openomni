@@ -273,8 +273,10 @@ export function readSessionCursor(
     })),
     usage: attemptUsage(page.actions),
     // Fork ancestry projection (#1257): read off the genesis configure this
-    // page already captured; inspect surface only, never model context.
-    ancestry: sessionAncestry(after.parentId, genesis),
+    // page already captured; inspect surface only, never model context. A
+    // session with no ancestry facts (no parent edge, no fork pin) omits the
+    // key entirely, keeping pre-#1257 pages byte-identical on the wire.
+    ...ancestryField(after.parentId, genesis),
     toolWallMs: toolWallMs(page.actions.flatMap((action) => {
       if (action.kind !== "tool" || action.parentId === null) return [];
       const effect = action.effect.value;
@@ -287,15 +289,18 @@ export function readSessionCursor(
 }
 
 /** Fork ancestry projection for one page (#1257): genesis pin plus aside text. */
-function sessionAncestry(
+function ancestryField(
   parentId: string | null,
   genesis: LedgerAction.Node | undefined,
-): NonNullable<SessionRead.Page["ancestry"]> {
+): { ancestry?: NonNullable<SessionRead.Page["ancestry"]> } {
   const value = genesis?.kind === "session.configure" ? genesis.intent.value : undefined;
   const holder = value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
   const parsed = SessionGeneration.ForkAncestry.safeParse(holder?.forkedFrom);
   const forkedFrom = parsed.success ? parsed.data : null;
-  return { parentId, forkedFrom, aside: forkedFrom === null ? null : Inspect.forkAside(forkedFrom) };
+  if (parentId === null && forkedFrom === null) return {};
+  return {
+    ancestry: { parentId, forkedFrom, aside: forkedFrom === null ? null : Inspect.forkAside(forkedFrom) },
+  };
 }
 
 export function webSocketCallbacks(

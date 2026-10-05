@@ -87,12 +87,12 @@ test("session_fork forks at a terminal anchor and the child page projects ancest
   expect(ancestry.parentId).toBe(sessionId);
   expect(typeof ancestry.aside).toBe("string");
   expect(String(ancestry.aside)).toContain(sessionId);
-  // The parent's own page projects a bare ancestry: no pin, no aside.
+  // The root parent has no ancestry facts: its page omits the key entirely.
   const parentPage = nextFrame(socket, (frame) =>
     frame.type === "session_snapshot" && frame.sessionId === sessionId);
   socket.send(JSON.stringify({ type: "session_read", sessionId, limit: 256 }));
   const parent = await parentPage;
-  expect(parent.ancestry).toMatchObject({ forkedFrom: null, aside: null });
+  expect("ancestry" in parent).toBeFalse();
   await closeSocket(socket);
 });
 
