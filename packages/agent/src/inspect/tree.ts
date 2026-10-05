@@ -4,12 +4,14 @@
  * tree and the history-only aside text. Nothing in this module feeds model
  * context — `foldSessionHistory` never reads `session.configure` intents into
  * messages, and compaction folds over that same history — so the aside is
- * invisible to the model unless the opt-in `forkAsideRewrite` gate handler is
- * explicitly registered on `prompt.pre` and promotes it.
+ * invisible to the model unless the opt-in `forkAsideTransformer` is
+ * registered in a composition's handler table and an explicit `prompt.pre`
+ * policy row (`verdict {type: "transform", ref: "inspect/fork-aside"}`)
+ * promotes it through the compiled gate.
  */
 import { SessionGeneration } from "@openomni/protocol";
 import type { SessionKernel } from "../core/entity";
-import type { GateHandler } from "../core/gate/fold";
+import type { NamedTransformer } from "../core/gate/registry";
 
 /** Reads the fork pin off a session's genesis configure; null for a root. */
 export function forkAncestryOf(
@@ -81,18 +83,29 @@ export function inspectTree(
 }
 
 /**
- * Opt-in promotion (#1257): a `prompt.pre` rewrite handler that prepends the
- * fork aside to the prompt value. Constructed here but registered nowhere by
- * default — only an explicit policy row with `how.ref` naming a registration
- * of this handler moves the aside into model context.
+ * Opt-in promotion (#1257): the registration-ready `prompt.pre` transformer
+ * that prepends the fork aside to a string prompt value. Registered nowhere
+ * by default — only a composition that puts it in the handler table AND
+ * commits a policy row `{type: "transform", ref: "inspect/fork-aside"}` on
+ * `prompt.pre` moves the aside into model context; anything else (a root
+ * session, a non-string value) passes through unchanged.
  */
-export function forkAsideRewrite(
+export const FORK_ASIDE_REF = "inspect/fork-aside";
+
+export function forkAsideTransformer(
   ancestryOf: (sessionId: string) => SessionGeneration.ForkAncestry | null,
   sessionId: string,
-): GateHandler {
-  return ({ value }) => {
-    const ancestry = ancestryOf(sessionId);
-    if (ancestry === null || typeof value !== "string") return { payload: { promoted: false } };
-    return { value: `${forkAside(ancestry)}\n\n${value}`, payload: { promoted: true } };
+): NamedTransformer {
+  return {
+    name: FORK_ASIDE_REF,
+    apply: (args) => {
+      const ancestry = ancestryOf(sessionId);
+      if (ancestry === null || args === null || typeof args !== "object" || Array.isArray(args))
+        return args;
+      // The prompt.pre point's one rewritable text field is `body`.
+      const body = args.body;
+      if (typeof body !== "string") return args;
+      return { ...args, body: `${forkAside(ancestry)}\n\n${body}` };
+    },
   };
 }
