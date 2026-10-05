@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791221871260,
+  "lastUpdate": 1791223294803,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -79233,6 +79233,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 174007,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd8d6417250ed8535b3bc1a1280fa2aaec81de95",
+          "message": "feat(openomni): send_message reaches every contact; delegation-policy caps as bundle rows (#1258) (#1294)\n\n* chore(#1258): open epic1260/1258-send-message-contacts on main ab62ca98\n\n* feat(agent,protocol): consulted guard gate rows — guard verdict, registry guards, when-context for handlers (#1258)\n\n* test(openomni): guard rows seed through the live policy plane (#1258)\n\n* feat(openomni): move send_message into bundles/send-message with contact registry and connectors (#1258)\n\n* feat(openomni): delegation-policy bundle — guard caps at tool.pre, delegation.deadline purpose, parentReply move; cancel control through deliver (#1258)\n\n* test(openomni): contact routing, delegation caps, deadline wake, boot-bind and idempotent first-prompt replay (#1258)\n\n* docs: #1258 receipt, AGENTS stamp and WHERE-TO-LOOK rows, delegation ghost paths removed (#1258)\n\n* fix(openomni): type-only Bundle import in delegation-policy test (#1258)\n\n* chore(openomni): keep actionCapability and DeadlinePayload module-local (#1258)\n\n* fix(openomni): route send-message bundle effects through the injected contact runner; module-local registry exports; full new_session target in test (#1258)\n\n* chore(tools): refresh send_message schema snapshot (#1258, lead-authorized)\n\n* fix(openomni): cell-door policy refusal folds to the typed failed tool result; cell child creation grants spend_cap (#1258)\n\n* feat(openomni): spawn_children counts active children via open-turn/pending-inbox liveness; SLOP row for the one send road (#1258)\n\n* test(#1258): cover the cell-door ToolRefused catchDefect fold (PR #1294 patch coverage)\n\nA real-boot e2e: a capless to.new send inside an eval cell is denied by the\nseeded spend-cap consult guard; tool.ts throws ToolRefused at the cell door\nand composition/codemode.ts folds the defect to the typed failed\nToolCallResult — the cell raises ToolError, the turn settles, no worker is\ncreated. Remaining lines from patch-uncovered-1294: legacy-rows 238-244\n(guard case) vanished in the unification; generation-layers guard binding is\nexercised by the delegation/send-message suites and this test.\n\n* test(hooks-json): the merged manifest's five bundles and the action cascade include send-message/delegation-policy\n\n* chore(conformance): regenerate schema snapshots — consult absorbs guard\n\nlint-tools --update + biome format: RowVerdict.out#guard removed (the type\nonly ever existed on the PR branch; lead ruling folds it into consult),\nRowVerdict.out#consult added, and the #1256/#1257-era fields (Inbox after,\nconsumedStale) restored that 1258's whole-file regen on ab62ca98 had dropped.\nlint-tools exit 0 after regen.\n\n* test(#1258): cover codemode die arm and generation-layers transformer/guard arms",
+          "timestamp": "2026-10-05T17:59:03Z",
+          "tree_id": "8f88cdabb6b6fec17ef94a3eb01a885f170c42cf",
+          "url": "https://github.com/INONONO66/openomni/commit/cd8d6417250ed8535b3bc1a1280fa2aaec81de95"
+        },
+        "date": 1791223292943,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 649,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1059,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 805,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 995837,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 268969,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4404008,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 78,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 610,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 444,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 87727,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 450332,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 290450,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2032,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 6754688,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 785181,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 11128,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 107619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 522923,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 118952,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 9529060,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 60,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 84939,
             "unit": "ns/op"
           }
         ]
