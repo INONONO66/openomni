@@ -30,21 +30,13 @@ export function assertToolExecutor(config: ChatAgentConfig): void {
 }
 
 /**
- * Config-time validation: building the metadata map throws on a key
- * collision (see {@link buildToolMetadataMap}). Run alongside
+ * Config-time validation: claiming the metadata keys throws on a key
+ * collision. Run alongside
  * `assertToolExecutor` so an ambiguous catalog refuses the run before it is
  * opened, instead of surfacing mid-turn as a retryable "tool" error.
  */
 export function assertUnambiguousToolMetadata(config: ChatAgentConfig): void {
-  buildToolMetadataMap(config.tools);
-}
-
-type ToolPolicyMetadata = Pick<NonNullable<ChatAgentConfig["tools"]>[number], "descriptor"> & {
-  readonly labels?: readonly string[];
-};
-
-function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, ToolPolicyMetadata> {
-  const metadata = new Map<string, ToolPolicyMetadata>();
+  const tools = config.tools;
   // Every key names the tool that claimed it. Two tools resolving to the same
   // key (e.g. `a_b` alongside `a.b`, whose underscore-mangled alias is also
   // `a.b`) used to be a silent last-writer-wins — the later tool's labels
@@ -54,7 +46,7 @@ function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, Tool
   // the same name (the underscore-mangling seam can manufacture that) must
   // collide too, or the later one silently answers the earlier one's lookups.
   const owners = new Map<string, { readonly name: string; readonly tool: object }>();
-  const claim = (key: string, tool: { name: string }, value: ToolPolicyMetadata): void => {
+  const claim = (key: string, tool: { name: string }): void => {
     const owner = owners.get(key);
     if (owner !== undefined && owner.tool !== tool) {
       throw new AgentInvariantViolation(
@@ -62,22 +54,16 @@ function buildToolMetadataMap(tools: ChatAgentConfig["tools"]): Map<string, Tool
       );
     }
     owners.set(key, { name: tool.name, tool });
-    metadata.set(key, value);
   };
   for (const tool of tools ?? []) {
     const labels = tool.labels ?? tool.descriptor?.labels;
     if (labels === undefined && tool.descriptor === undefined) continue;
-    const value = {
-      ...(labels !== undefined && { labels }),
-      ...(tool.descriptor !== undefined && { descriptor: tool.descriptor }),
-    };
-    claim(tool.name, tool, value);
+    claim(tool.name, tool);
     const canonical = labels?.find((label) => label.startsWith("tool:"))?.slice(5);
-    if (canonical) claim(canonical, tool, value);
+    if (canonical) claim(canonical, tool);
     const dotted = tool.name.replace(/_/g, ".");
-    if (dotted !== tool.name) claim(dotted, tool, value);
+    if (dotted !== tool.name) claim(dotted, tool);
   }
-  return metadata;
 }
 
 interface PreparedTurnTools {
@@ -149,12 +135,7 @@ export function settleModelTools(
             }),
           );
         }, { concurrency: BOUNDED_CONCURRENCY });
-  const results = calls.map((call) => {
-    const result = executed.find((result) => result.toolCallId === call.id);
-    if (result === undefined) throw new AgentInvariantViolation(`missing tool result: ${call.id}`);
-    return result;
-  });
-  const byId = new Map(results.map((result) => [result.toolCallId, result]));
+  const byId = new Map(executed.map((result) => [result.toolCallId, result]));
   const settledAt = yield* Clock.currentTimeMillis;
   // The out-of-process wave bills its real wall time once; the in-process
   // executor path already billed per call inside prepareTurnTools.
@@ -188,7 +169,7 @@ export function settleModelTools(
     };
   });
   turn.turnAssistant.message = { ...assistant, parts };
-  for (const result of results) turn.trackingSink.onToolResult(result);
+  for (const result of executed) turn.trackingSink.onToolResult(result);
   turn.trackingSink.onMessage(turn.turnAssistant.message);
   // Exhaustion is judged (and its telemetry published) once, in handleStop's
   // stop judgment — an early fail here would terminate the run without the

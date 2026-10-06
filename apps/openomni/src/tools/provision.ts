@@ -56,7 +56,7 @@ export const PROVISION_POLICY_ROWS: readonly Omit<PolicyRow.Row, "generation">[]
   "bundle_enable",
   "bundle_disable",
 ].map((operation) => ({
-  name: `provision-${operation.replace("_", "-")}-consent`,
+  name: `provision-${operation.replaceAll("_", "-")}-consent`,
   kind: "tool",
   phase: "pre",
   priority: 1_000,

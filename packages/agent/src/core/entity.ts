@@ -8,7 +8,7 @@ import { Entity, type Envelope, type Sharding } from "effect/cluster";
 import { LeaseLost, SessionAdmissionRefused, type SessionError } from "./failure";
 import { createSessionAdmission, decideSessionAdmission } from "./mailbox";
 import { type SessionAdmissionSnapshot, type SessionEntityAuthority, type SessionEntityPorts, type SessionControllerState, type ResolvedSessionRuntime, type SessionRunner, type SessionRunnerResult, createSessionTurn } from "./run";
-import { deliveryActions, pendingBacklog, receivedMessageAction } from "./commit";
+import { deliveryActions, receivedMessageAction } from "./commit";
 import { createRawSlots } from "./gate/decide";
 import { decideRequestTransition } from "./request";
 import { AdmissionFailure, type AlarmOccurrence, type AlarmReceipt, AlarmRpc, DeadlineAlarmBody, DeliverBody, type DeliverReceipt, DeliverRefused, DeliverRpc, type ReadPage, ReadRpc, ResolveRefused, ResolveRpc } from "./messages";
@@ -288,7 +288,7 @@ function armedOccurrenceOf(action: LedgerAction.Append): AlarmFired | undefined 
 function admissionSnapshot(handle: ActivationHandle): SessionAdmissionSnapshot {
   const { kernel, authority, env } = handle;
   const row = kernel.row(authority.sessionId);
-  const pending = pendingBacklog(kernel, authority.sessionId);
+  const pending = kernel.pendingMessages(authority.sessionId);
   const open = kernel.latestOpenTurn(authority.sessionId);
   const terminal = kernel.latestTurnTerminal(authority.sessionId);
   return {
@@ -438,7 +438,7 @@ function deliverCandidate(
     consumedBy: null,
     consumedAt: null,
     createdAt: env.clock(),
-    ordinal: pendingBacklog(kernel, authority.sessionId).length + 1,
+    ordinal: kernel.pendingMessages(authority.sessionId).length + 1,
   });
 }
 
@@ -931,7 +931,7 @@ function requestCommand(
 function armResumeOnPassivation(handle: ActivationHandle): Effect.Effect<void> {
   return Effect.suspend(() => {
     const { kernel, authority, env, drain: config } = handle;
-    if (pendingBacklog(kernel, authority.sessionId).length === 0) return Effect.void;
+    if (kernel.pendingMessages(authority.sessionId).length === 0) return Effect.void;
     const alarmId = `${authority.sessionId}:resume`;
     return retryRevision(() => Effect.suspend(() => {
       const row = kernel.row(authority.sessionId);

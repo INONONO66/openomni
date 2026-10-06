@@ -16,7 +16,7 @@ import type { decideSessionAdmission } from "./mailbox";
 import type { Generation } from "./compose";
 import { projectTools } from "./tool";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
-import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, pendingBacklog, boundaryConsumption, consumptionSettings, } from "./commit";
+import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { LedgerError } from "./store/errors";
 import { z } from "zod";
 import { hydrateSessionHistory, refreshSessionHistory } from "../inspect/history";
@@ -51,8 +51,6 @@ interface SessionGetOptions {
   readonly turns?: number;
 }
 
-export interface SessionActionCommitPort extends ExecutionLedger {}
-
 export interface SessionRunnerInput {
   /** Authenticated inbox treatment, independent of model-visible message text. */
   readonly authority?: "act" | "evidence_only";
@@ -61,7 +59,7 @@ export interface SessionRunnerInput {
   readonly role: LedgerSession.Role;
   readonly turnId: string;
   readonly actionId: string;
-  readonly ledger: SessionActionCommitPort;
+  readonly ledger: ExecutionLedger;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly trackWave?: (wave: Promise<void>) => void;
   readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
@@ -787,6 +785,7 @@ export function sessionStopEvidence(
         blocked ||= effectBlocked(action);
         ordinal = action.ordinal;
       }
+      if (page.nextRevision === null) break;
     }
     const obligations = yield* (openIntent?.({ sessionId, turnId, revision }) ?? Effect.succeed([]));
     const pending = approvals()?.pending() ?? [];
@@ -949,7 +948,7 @@ export function createSessionTurn(
   entropy: () => string,
   scope: Scope.Scope,
   ports: {
-    readonly createExecutionLedger: (turnId?: string) => SessionActionCommitPort;
+    readonly createExecutionLedger: (turnId?: string) => ExecutionLedger;
     readonly evaluatePromptPolicies: (items: readonly Inbox.Row[]) => Effect.Effect<{ readonly refusal: SessionPolicyRefusal | undefined; readonly contents: ReadonlyMap<string, string> }, ExecutionError, RunnerServices>;
     readonly consumePolicyBlockedInbox: (items: readonly Inbox.Row[]) => Effect.Effect<void, ExecutionError>;
     readonly hibernate: (current: LedgerSession.Row) => Effect.Effect<void, SessionError>;
@@ -1067,7 +1066,7 @@ export function createSessionTurn(
       // `action` with `after` behind the compaction head is closed durably
       // here, never delivered mid-turn.
       const { consumed: pending, stale } = boundaryConsumption(
-        pendingBacklog(kernel, sessionId),
+        kernel.pendingMessages(sessionId),
         boundary,
         consumptionSettings(kernel, sessionId),
         kernel.compactionHead(sessionId),
@@ -1113,7 +1112,7 @@ export function createSessionTurn(
     return Effect.gen(function* () {
       const current = kernel.row(sessionId);
       const latest = kernel.latestAction(sessionId);
-      const interrupts = result.kind === "interrupted" ? pendingBacklog(kernel, sessionId).filter((item) => item.kind === "interrupt" || item.kind === "cancel") : [];
+      const interrupts = result.kind === "interrupted" ? kernel.pendingMessages(sessionId).filter((item) => item.kind === "interrupt" || item.kind === "cancel") : [];
       const deliveries = deliveryActions(
         interrupts,
         { kind: "turn", turnId: open.turnId },

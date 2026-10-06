@@ -572,11 +572,6 @@ export function receivedMessageAction(input: {
   };
 }
 
-/** Pending admission over a per-session file is the kernel's chain fold (plan F1). */
-export function pendingBacklog(kernel: SessionKernel, sessionId: string): Inbox.Row[] {
-  return kernel.pendingMessages(sessionId);
-}
-
 /**
  * #1256 H-3: the staleness split a turn start applies to its backlog. A
  * deferred `action` input carries the journal ordinal (`after`) its payload

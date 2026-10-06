@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
@@ -96,7 +97,7 @@ const CUSTOM_LOADERS = new Map<string, () => CustomLoaderResult>([
 // SHA-256 (not a fast non-cryptographic hash): a key collision would hand
 // one credential's cached SDK instance to a different credential.
 function authFingerprint(auth: Auth.Info): string {
-  return new Bun.CryptoHasher("sha256").update(JSON.stringify(auth)).digest("hex");
+  return createHash("sha256").update(JSON.stringify(auth)).digest("hex");
 }
 
 /**
@@ -110,7 +111,7 @@ function transportFingerprint(transport: Transport | undefined): string {
     headers === undefined
       ? ""
       : JSON.stringify(Object.entries(headers).sort(([a], [b]) => (a < b ? -1 : 1)));
-  return `${transport.baseUrl ?? ""}|${new Bun.CryptoHasher("sha256").update(canonicalHeaders).digest("hex")}`;
+  return `${transport.baseUrl ?? ""}|${createHash("sha256").update(canonicalHeaders).digest("hex")}`;
 }
 
 function sdkCacheKey(

@@ -2,7 +2,7 @@ import { Effect, Fiber, Option, type Scope } from "effect";
 import { FenceRefused } from "../core/store/errors";
 import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "../core/failure";
-import { toolSnapshot, internalOrigin, turnTerminalAction, pendingBacklog, receivedMessageAction } from "../core/commit";
+import { toolSnapshot, internalOrigin, turnTerminalAction, receivedMessageAction } from "../core/commit";
 import { createSessionTurn } from "../core/run";
 import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "../core/mailbox";
 import { adoptSessionAuthority, createSessionConfiguration } from "../core/run";
@@ -190,7 +190,7 @@ export function createController(
 
     function reconcile(): Effect.Effect<SessionRunnerResult | undefined, SessionError> {
       return Effect.gen(function* () {
-        if (pendingBacklog(kernel, sessionId).some((item) => item.kind === "interrupt")) state.controller?.abort();
+        if (kernel.pendingMessages(sessionId).some((item) => item.kind === "interrupt")) state.controller?.abort();
         if (state.closed || state.released) return undefined;
         if (state.active === undefined) {
           state.active = yield* Effect.forkIn(driveAvailable().pipe(Effect.onExit(() => Effect.gen(function* () {
@@ -206,7 +206,7 @@ export function createController(
       return Effect.gen(function* () {
         const decision = decideSessionAdmission({
           row: kernel.row(sessionId),
-          pending: pendingBacklog(kernel, sessionId),
+          pending: kernel.pendingMessages(sessionId),
           open: kernel.latestOpenTurn(sessionId),
           terminal: kernel.latestTurnTerminal(sessionId),
         });
@@ -246,7 +246,7 @@ export function createController(
     function hibernate(_current: LedgerSession.Row): Effect.Effect<void, SessionError> {
       return Effect.suspend(() => {
         if (state.released || state.active !== undefined || state.rawSlots.pending() > 0) return Effect.void;
-        if (!state.closed && pendingBacklog(kernel, sessionId).length > 0) return Effect.void;
+        if (!state.closed && kernel.pendingMessages(sessionId).length > 0) return Effect.void;
         state.released = true;
         lifecycle.release();
         return runtime.onHibernate?.(sessionId) ?? Effect.void;

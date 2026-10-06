@@ -8,9 +8,10 @@ import { createExecutor, type ExecutionResult } from "./gate/decide";
 import { recordedCompaction, requireCompactionIntent, restoreContextRequest, restoredContextProjection } from "../plugins/compaction/restore";
 import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
-import type { ResolvedSessionRuntime, SessionRunnerResult, SessionActionCommitPort } from "./run";
+import type { ResolvedSessionRuntime, SessionRunnerResult } from "./run";
+import type { ExecutionLedger } from "./gate/decide";
 import type { SessionKernel } from "./entity";
-import { turnIntentAction, turnResumeAction, deliveryActions, inputRowKind, policyRefusalResult, generationForOpen, pendingBacklog, boundaryConsumption, consumptionSettings, } from "./commit";
+import { turnIntentAction, turnResumeAction, deliveryActions, inputRowKind, policyRefusalResult, generationForOpen, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { SessionControllerState } from "./run";
 import { observeDrained } from "./bus";
 import { commitSessionRequest } from "./request";
@@ -186,7 +187,7 @@ export function createSessionAdmission(
       // deferred `action` input pointing before the compaction head is never
       // consumed; this turn closes it via `turn.consumed.stale`.
       const { consumed: pending, stale } = boundaryConsumption(
-        pendingBacklog(kernel, sessionId),
+        kernel.pendingMessages(sessionId),
         "turn_end",
         consumptionSettings(kernel, sessionId),
         kernel.compactionHead(sessionId),
@@ -314,7 +315,7 @@ export function createSessionAdmission(
     });
   }
 
-  function createExecutionLedger(turnId?: string): SessionActionCommitPort {
+  function createExecutionLedger(turnId?: string): ExecutionLedger {
     const executionFence = state.fence;
     return {
       actionById: kernel.actionById,
@@ -379,7 +380,7 @@ export function createSessionAdmission(
   function resumeTurn(open: SessionHandleStore.OpenTurn): Effect.Effect<SessionRunnerResult, AdmissionError> {
     return Effect.gen(function* () {
       yield* awaitRetainedRunner();
-      if (pendingBacklog(kernel, sessionId).some((item) => item.kind === "interrupt" || item.kind === "cancel")) {
+      if (kernel.pendingMessages(sessionId).some((item) => item.kind === "interrupt" || item.kind === "cancel")) {
         const interrupted = { kind: "interrupted" as const };
         yield* seal(open, interrupted);
         return interrupted;

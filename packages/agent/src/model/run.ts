@@ -1,6 +1,7 @@
 import type { BusEvent, Message, PlainObject, Tool } from "@openomni/protocol";
 import { LlmCall, type Transcript } from "@openomni/protocol";
 import { Effect } from "effect";
+import { streamText } from "ai";
 import { LlmRunFailure, InvalidProviderData, type LlmError } from "./errors";
 import type { Sink } from "./sink";
 import { Processor } from "./processor";
@@ -226,7 +227,6 @@ export function run(
 
   let credential: ReturnType<typeof Auth.reference> | undefined;
   const createStream: Processor.ProcessorOptions["createStream"] = (streamInput) => Effect.gen(function* () {
-    const ai = yield* Effect.tryPromise({ try: () => import("ai"), catch: decodeLlmFailure("provider.import") });
     const auth = yield* Auth.resolve(
       model.providerID,
       input.authFilePath,
@@ -237,7 +237,7 @@ export function run(
     credential = Auth.reference(auth);
 
     const streamResult = yield* Effect.try({
-      try: () => ai.streamText(streamArguments(input, streamInput.system, abortSignal, wireNames, getLanguage(model, auth, input.transport))),
+      try: () => streamText(streamArguments(input, streamInput.system, abortSignal, wireNames, getLanguage(model, auth, input.transport))),
       catch: decodeLlmFailure("provider.stream"),
     });
     return { fullStream: adaptStream(streamResult.fullStream) };
