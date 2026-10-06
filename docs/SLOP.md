@@ -554,4 +554,12 @@ One row per #1303 rung.
 
 | Rung | Branch | Disposition and verification |
 | --- | --- | --- |
+| 2: #1316 tool dispatcher plugin | `stab/2-tool-dispatcher-plugin` | `createDispatcher`/`createTurnDispatcher` moved from `packages/agent/src/core/tool.ts` to `packages/agent/src/plugins/tool/dispatch.ts` (imports only `core/api.ts`; surfaced via `Bundle`); `monitor` and `delegation-policy` gained `requires: ToolCapabilitySeam` so `off: ["tool"]` cascades them (plus `send-message`) off typed instead of `unknown_point`. `rg -c 'createTurnDispatcher' -g '*.ts' packages/agent/src/core` → no output; `rg -c 'Core.createTurnDispatcher' -g '*.ts' apps packages` → no output; `bun test packages/agent/test/plugins/tool-plugin.test.ts` → 4 pass; `apps/openomni/test/manifest.test.ts` tool-off cascade green; `check-deps`/`check-import-cycles`/`check-dead-exports` exit 0; patch coverage: all changed executable lines covered. |
+
+## §M epic #1303 stabilization ladder (post-#1260)
+
+One row per #1303 rung.
+
+| Rung | Branch | Disposition and verification |
+| --- | --- | --- |
 | 3: #1304 action plugin source | `stab/3-action-plugin-source` | The `action` capability moved from `apps/openomni/src/manifest.ts` into `packages/agent/src/plugins/action/index.ts` (`actionCapability()` + `ActionSeam`, exported via the `Bundle` namespace); the app-owned `ActionCapabilitySeam` deleted and `delegation-policy` re-pointed at `Bundle.ActionSeam`. `rg -c 'ActionCapabilitySeam' -g '*.ts' packages apps` → no output; `rg -c 'action plugin \(scaffold\)' packages/agent/src/plugins/action` → no output; `bun test packages/agent/test/action-plugin.test.ts` → 2 pass; `apps/openomni/test/hooks-json.test.ts` off-cascade unchanged (action, hook, hooks-json, delegation-policy all `because: "action"`); `check-deps`/`check-dead-exports` exit 0. |
