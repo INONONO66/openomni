@@ -21,12 +21,16 @@ import { dirname, isAbsolute, posix, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 
 // Only modules the transpiler can read are gated; stylesheets and other
-// assets under src/ carry no executable lines.
-const GATED = /^(?:(?:packages|apps)\/[^/]+\/src\/.+\.[cm]?[jt]sx?|script\/[^/]+\.ts)$/;
+// assets under src/ carry no executable lines. Nested script directories are
+// production tooling (#1318): `script/quality-ci-input.ts` imports
+// `script/quality-metrics/input.ts`, so those trees are gated too. Fixture
+// trees under `script/fixtures/` are test inputs, never tooling.
+const GATED = /^(?:(?:packages|apps)\/[^/]+\/src\/.+\.[cm]?[jt]sx?|script\/(?:[^/]+|quality-metrics\/[^/]+|quality-mutation\/[^/]+)\.ts)$/;
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$|\.d\.ts$/;
+const SCRIPT_FIXTURE = /^script\/fixtures\//;
 
 export function gatedPath(path: string): boolean {
-  return GATED.test(path) && !TEST_FILE.test(path);
+  return GATED.test(path) && !TEST_FILE.test(path) && !SCRIPT_FIXTURE.test(path);
 }
 
 /** repo prefix of an lcov file: `.../<packages/x|apps/x|script>/coverage/...` */

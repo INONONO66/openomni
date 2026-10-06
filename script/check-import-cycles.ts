@@ -1,4 +1,7 @@
 /**
+ * Invariant (#1318): no eager value-import cycle exists. Distinct from
+ * inventory wiring, allowed edges and dead exports.
+ *
  * Import-cycle ratchet. Baseline: 0 value-import cycles.
  *
  * Builds the eager value-import graph over every src file in packages/* and

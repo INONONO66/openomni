@@ -28,8 +28,54 @@ test("gatedPath admits product src and tooling, refuses tests and docs", () => {
   expect(gatedPath("script/check-deps.test.ts")).toBe(false);
   expect(gatedPath("packages/agent/src/executor.test.ts")).toBe(false);
   expect(gatedPath("packages/agent/test/helper.ts")).toBe(false);
-  expect(gatedPath("script/quality-metrics/tool.ts")).toBe(false);
+  // #1318: nested script trees are production tooling and ARE gated ...
+  expect(gatedPath("script/quality-metrics/input.ts")).toBe(true);
+  expect(gatedPath("script/quality-metrics/input.test.ts")).toBe(false);
+  expect(gatedPath("script/quality-mutation/tool.ts")).toBe(true);
+  // ... while fixture trees stay test inputs, never tooling.
+  expect(gatedPath("script/fixtures/x/src/a.ts")).toBe(false);
+  expect(gatedPath("script/fixtures/tsconfig-inheritance/valid/src/entry.ts")).toBe(false);
   expect(gatedPath("docs/ci.md")).toBe(false);
+});
+
+test("#1318 planted escape: an uncovered line in a nested script path fails the gate", () => {
+  const dir = mkdtempSync(join(tmpdir(), "patch-cov-nested-"));
+  try {
+    git(dir, "init", "-q");
+    git(dir, "config", "user.email", "qa@example.com");
+    git(dir, "config", "user.name", "qa");
+    git(dir, "commit", "--allow-empty", "-qm", "base");
+    const base = git(dir, "rev-parse", "HEAD");
+    mkdirSync(join(dir, "script/quality-metrics"), { recursive: true });
+    writeFileSync(
+      join(dir, "script/quality-metrics/input.ts"),
+      "export const covered = 1;\nexport const planted = 2;\n",
+    );
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "nested tooling");
+    mkdirSync(join(dir, "script/coverage"), { recursive: true });
+    writeFileSync(
+      join(dir, "script/coverage/lcov.info"),
+      "SF:quality-metrics/input.ts\nDA:1,1\nDA:2,0\nend_of_record\n",
+    );
+    const glob = ["--glob", "script/coverage/lcov.info"];
+    expect(checkPatchCoverage(base, ["script/coverage/lcov.info"], dir)).toEqual([
+      "script/quality-metrics/input.ts:2",
+    ]);
+    expect(main(["--base", base, ...glob], dir)).toBe(1);
+    // A fixture-tree change under script/fixtures/ is NOT gated.
+    mkdirSync(join(dir, "script/fixtures/case/src"), { recursive: true });
+    writeFileSync(join(dir, "script/fixtures/case/src/a.ts"), "export const fixture = 3;\n");
+    writeFileSync(
+      join(dir, "script/coverage/lcov.info"),
+      "SF:quality-metrics/input.ts\nDA:1,1\nDA:2,1\nend_of_record\n",
+    );
+    git(dir, "add", ".");
+    git(dir, "commit", "-qm", "fixture tree");
+    expect(main(["--base", base, ...glob], dir)).toBe(0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("lcovPrefix maps artifact layouts to repo prefixes", () => {
