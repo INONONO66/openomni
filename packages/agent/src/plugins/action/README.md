@@ -1,3 +1,5 @@
-# action plugin (scaffold)
+# action plugin
 
-This directory is the `plugins/action` dependency band declared in `script/check-deps.ts` (`AGENT_PLUGINS`). #1252 lands the plugin and its exports. It holds no source until then: an unconsumed export would be dead code under the literal-zero rule and uncovered under the patch-coverage gate, and a test-only consumer would be pretend coverage.
+Owns the `action` capability (#1304): the `action` journal kind with its identity reducer, the `action` deliver input, the `action.pre` gate point, and the `ActionSeam` (`@openomni/action/Action`) that `Bundle.actionCapability()` publishes.
+
+It does not compose itself and writes no rows: the product manifest composes it next to `Bundle.hookCapability()`, and hook results re-enter the session as `action` rows through the entity deliver path.
