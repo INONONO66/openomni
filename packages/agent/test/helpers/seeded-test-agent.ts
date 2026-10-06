@@ -1,5 +1,5 @@
 import { testExecutor } from "./executor";
-import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, } from "./chat-services";
+import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, fixtureCompactionSeam } from "./chat-services";
 import { compilePolicySnapshot, KERNEL_POLICY_REGISTRY, SEEDED_POLICY_ROWS } from "../../src/core/gate/compile";
 import { Effect } from "effect";
 import type { Sink } from "../../src/model";
@@ -36,7 +36,7 @@ export function seededTestAgent(retryAlarm: NonNullable<ExecutorOptions["retryAl
         },
       });
       return Effect.gen(function* () {
-        const fixture: ChatFixture = { executor, execution: executor, ...config };
+        const fixture: ChatFixture = { executor, execution: executor, compactionSeam: fixtureCompactionSeam, ...config };
         const { events: _events, llm: _llm, ...acquiredConfig } = fixture;
         return yield* runAgent(input, acquiredConfig, sink).pipe(
           Effect.provide(chatServices(fixture)),

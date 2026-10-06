@@ -3,17 +3,10 @@ import { type Context, Effect, Layer } from "effect";
 import type { ChatAgentConfig, ObservedChatAgentConfig } from "../../src/core/types";
 import type { createSessionChatRunner } from "../../src/core/run";
 import { ObservationSink } from "../../src/core/ports";
-import { foldSessionHistory, hydrateSessionHistory } from "../../src/inspect/history";
-import { compactionSeamService } from "../../src/plugins/compaction";
+import { fixtureCompactionSeam } from "./fixture-compaction";
 import { observationService } from "./service-layers";
 
-// #1307: composition wires the compaction seam into ChatAgentConfig; chat
-// fixtures get the real service by default. A fixture that wants the
-// capability OFF sets `compactionSeam: undefined` explicitly.
-export const fixtureCompactionSeam = compactionSeamService({
-  fold: foldSessionHistory,
-  hydrate: hydrateSessionHistory,
-});
+export { fixtureCompactionSeam } from "./fixture-compaction";
 
 export interface ChatFixture extends ObservedChatAgentConfig {
   readonly llm?: Partial<Context.Service.Shape<typeof Llm>>;
