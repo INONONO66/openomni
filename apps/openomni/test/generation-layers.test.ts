@@ -141,11 +141,11 @@ test("a capability omitted from the composition removes its points: tool rows fa
       const plane = yield* AppLedger;
       // Boot fails closed: the kernel seed itself carries tool rows and this
       // composition registers no tool points.
-      let seedError: unknown;
+      let seedError: Error | undefined;
       try {
         seedKernelPolicyRows(plane.catalog.policies, [], composedPointTable(reduced));
       } catch (error) {
-        seedError = error;
+        seedError = error instanceof Error ? error : new Error(String(error));
       }
       expect(Core.GateComposeError.isInstance(seedError) ? seedError.data : seedError)
         .toMatchObject({ code: "unknown_point", point: "tool.pre" });

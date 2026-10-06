@@ -1,13 +1,11 @@
-import type { LedgerAction } from "@openomni/protocol";
+import type { LedgerAction, PlainObject, PlainValue } from "@openomni/protocol";
 
 type Row = Pick<LedgerAction.Append, "kind" | "intent" | "effect" | "parentId"> & {
   readonly id: string;
 };
 
-function record(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+function record(value: PlainValue): PlainObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
 /**

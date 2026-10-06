@@ -96,9 +96,13 @@ const staleAlarmEnvelope = (sessionId: string, n: number): SessionRequest =>
     }),
   );
 
+/** Exactly what the replier's `complete` carries; `succeed` wraps into it. */
+type ReplyExit = Parameters<SessionReplier["complete"]>[1];
+type ReplyError = Parameters<SessionReplier["fail"]>[1] | Parameters<SessionReplier["failCause"]>[1];
+
 interface Reply {
   readonly tag: string;
-  readonly exit: Exit.Exit<unknown, unknown>;
+  readonly exit: ReplyExit;
 }
 
 interface WriterWorld {
@@ -106,7 +110,7 @@ interface WriterWorld {
   readonly queue: Queue.Queue<SessionRequest>;
   readonly replier: SessionReplier;
   readonly replies: Queue.Queue<Reply>;
-  readonly failures: Queue.Queue<{ readonly tag: string; readonly error: unknown }>;
+  readonly failures: Queue.Queue<{ readonly tag: string; readonly error: ReplyError }>;
   readonly kernel: SessionKernel;
 }
 
@@ -176,7 +180,7 @@ function makeWriterWorld(
     };
     const queue = yield* Queue.make<SessionRequest>();
     const replies = yield* Queue.make<Reply>();
-    const failures = yield* Queue.make<{ readonly tag: string; readonly error: unknown }>();
+    const failures = yield* Queue.make<{ readonly tag: string; readonly error: ReplyError }>();
     const replier: SessionReplier = {
       succeed: (request, value) =>
         Queue.offer(replies, { tag: request.tag, exit: Exit.succeed(value) }).pipe(Effect.asVoid),

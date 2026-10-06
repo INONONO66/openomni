@@ -182,7 +182,7 @@ export function dispatchingRunner(
   });
 }
 
-export function foreign(operation: string, cause: unknown) {
+export function foreign(operation: string, cause: string | Error) {
   return new AgentFailure({ operation, cause: String(cause) });
 }
 
@@ -190,8 +190,10 @@ export function foreign(operation: string, cause: unknown) {
 export function failure<A, E, R>(program: Effect.Effect<A, E, R>) {
   return program.pipe(
     Effect.exit,
-    Effect.map((exit: Exit.Exit<A, E>): unknown => {
+    Effect.map((exit: Exit.Exit<A, E>) => {
       if (Exit.isSuccess(exit)) throw new Error("expected a failed Effect");
+      // The squashed value is whatever the program failed or died with; the
+      // caller's assertion narrows it.
       return Cause.squash(exit.cause);
     }),
   );

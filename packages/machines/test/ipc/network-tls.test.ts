@@ -78,7 +78,7 @@ describe("TLS-over-TCP IPC transport", () => {
   });
 
   /** Bind a rogue listener, then dial it with the PINNED client; yields the typed failure. */
-  async function dialRogue(rogue: net.Server): Promise<unknown> {
+  async function dialRogue(rogue: net.Server): Promise<Error> {
     await new Promise<void>((resolve) => rogue.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => new Promise<void>((resolve) => rogue.close(() => resolve())));
     const address = rogue.address() as net.AddressInfo;
