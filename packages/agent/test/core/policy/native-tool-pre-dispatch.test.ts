@@ -10,7 +10,8 @@ import { createHandlerTable } from "../../../src/core/gate/compile";
 import { requestLedger, crashAfterRequestOpen, failure } from "../../helpers/effect-g1";
 import { z } from "zod";
 import { createExecutor } from "../../../src/core/gate/decide";
-import { createDispatcher, defineTool } from "../../../src/core/tool";
+import { defineTool } from "../../../src/core/tool";
+import { createDispatcher } from "../../../src/plugins/tool";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
 
 test("approval recovery executes recorded admitted bytes without transforming again", () => isolated(Effect.scoped(Effect.gen(function* () {

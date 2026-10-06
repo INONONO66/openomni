@@ -1,9 +1,9 @@
 import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
-import { Core, Testing } from "@openomni/agent";
+import { Bundle, Core, Testing } from "@openomni/agent";
 const session = Testing.session;
-const createTurnDispatcher = Core.createTurnDispatcher;
+const createTurnDispatcher = Bundle.createTurnDispatcher;
 const defineTool = Core.defineTool;
 const eraseTool = Core.eraseTool;
 const projectTools = Core.projectTools;

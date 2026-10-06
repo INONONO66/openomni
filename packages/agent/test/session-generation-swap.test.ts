@@ -16,7 +16,8 @@ import { GenerationHandlers } from "../src/core/compose";
 import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import { executeToolBody } from "../src/core/tool";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
-import { createTurnDispatcher, projectTools } from "../src/core/tool";
+import { projectTools } from "../src/core/tool";
+import { createTurnDispatcher } from "../src/plugins/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 
 /** Chain oracle over the active isolation's kernel. */

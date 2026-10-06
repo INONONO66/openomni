@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { Core } from "@openomni/agent";
-const createDispatcher = Core.createDispatcher;
+import { Bundle, Core } from "@openomni/agent";
+const createDispatcher = Bundle.createDispatcher;
 const createExecutor = Core.createExecutor;
 import type {
   AnyToolDefinition,

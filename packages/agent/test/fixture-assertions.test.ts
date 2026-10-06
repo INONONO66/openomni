@@ -5,7 +5,7 @@ import { expect, it } from "bun:test";
 import { expectFailedToolCommit, expectUncalledBudget } from "./helpers/execution-assertions";
 import { recordingExecutor } from "./helpers/effect-g1";
 import { timedQueryTool } from "./helpers/query-tool";
-import { createDispatcher } from "../src/core/tool";
+import { createDispatcher } from "../src/plugins/tool";
 import { isolated } from "./helpers/isolated";
 
 it("shared budget assertions reject wrong reasons and unexpected provider calls", () => {

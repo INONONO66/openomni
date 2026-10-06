@@ -24,7 +24,7 @@ import { reactivateSession } from "./wake-session";
 import { commitReceivedMessage } from "./ingress";
 
 import { receiveOutbound } from "./receive-outbound";
-import { createTurnDispatcher } from "../../src/core/tool";
+import { createTurnDispatcher } from "../../src/plugins/tool";
 import { requestLedger } from "./request-ledger";
 import { compiledPolicy } from "./compiled-policy";
 import { runChatAttempts } from "./chat-attempts";

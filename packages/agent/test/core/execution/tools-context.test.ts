@@ -7,7 +7,8 @@ import { describe, expect, it } from "bun:test";
 import { stringQueryTool } from "../../helpers/query-tool";
 import type { ToolExecutionContext } from "@openomni/protocol";
 import { z } from "zod";
-import { createDispatcher, defineTool, eraseTool } from "../../../src/core/tool";
+import { defineTool, eraseTool } from "../../../src/core/tool";
+import { createDispatcher } from "../../../src/plugins/tool";
 import { recordingExecutor } from "../../helpers/g0-effect";
 
 describe("tool execution context", () => {
