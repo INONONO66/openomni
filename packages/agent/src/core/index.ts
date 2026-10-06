@@ -6,7 +6,7 @@ export { failureFacts } from "./retry";
 export * from "./failure";
 export * from "./ports";
 export * from "./alarm-ports";
-export type { CompactionOptions } from "../plugins/compaction";
+export type { CompactionOptions, CompactionSeamService } from "./compaction-ports";
 export {
   createExecutor, ExecutionApprovalError, ExecutorContext, executorContext, ExecutorContextError,
   currentInvocation, forkInvocation,

@@ -94,7 +94,14 @@ export function createResident(options: ResidentOptions) {
     (input) => Effect.gen(function* () {
       const dispatcher = yield* createTurnDispatcher(input, options.sessionRuntime);
       const observations = yield* ObservationSink;
-      const compaction = options.compaction === undefined ? undefined : yield* options.compaction;
+      // #1307: compaction runs only while the composed generation keeps the
+      // capability on. Off = the typed disabled entry is already journaled by
+      // compose; the loop gets neither options nor seam and skips the paths.
+      const compactionOff =
+        options.composed?.current().generation.disabled.some((entry) => entry.name === "compaction") === true;
+      const compactionSeam = compactionOff ? undefined : options.sessionRuntime.compaction;
+      const compaction =
+        compactionOff || options.compaction === undefined ? undefined : yield* options.compaction;
       const traceId = traceIdFromUuid(ports.id());
       const observation = observeComponent({
         traceId,
@@ -129,6 +136,7 @@ export function createResident(options: ResidentOptions) {
               ? {}
               : { modelFallbacks: [...options.modelFallbacks] }),
             ...(compaction === undefined ? {} : { compaction }),
+            ...(compactionSeam === undefined ? {} : { compactionSeam }),
             // #1276: product choice injected into the core seam.
             restoreModelSelection,
             ...chatProviderConfig(options),

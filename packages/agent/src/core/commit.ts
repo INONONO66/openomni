@@ -17,19 +17,30 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
-import { pinCompactionAction } from "../plugins/compaction/successor";
+import type { CompactionSeamService } from "./compaction-ports";
 import type * as SessionHandleStore from "./store/fence";
 import { z } from "zod";
 import { RunReasonCode } from "./reason-codes";
-import { GenerationUnavailable } from "./failure";
+import { AgentInvariantViolation, GenerationUnavailable } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { SessionRunnerResult, SessionTool } from "./run";
 
 // ─── from session-fold-commit.ts (#1247) ───
+/** Fails closed: a compaction append without the composed seam cannot be pinned. */
+function requireNoCompactionPin(action: LedgerAction.Append): LedgerAction.Append {
+  if (action.kind === "compaction")
+    throw new AgentInvariantViolation("compaction append without a composed compaction seam");
+  return action;
+}
+
 /** Synchronous decoration preserves durable admission's existing suspension schedule. */
 export function commitFoldBatch(
   kernel: SessionKernel,
   input: LedgerSession.Commit,
+  // #1307: the composed compaction seam decorates compaction appends with
+  // their successor proof. Absent seam + compaction append = typed defect —
+  // the kernel never pins without the capability, and never commits unpinned.
+  seam?: Pick<CompactionSeamService, "pinAction">,
 ): Effect.Effect<CommitReceipt, LedgerError> {
   return Effect.gen(function* () {
     const checkpoint = readHistoryCheckpoint(kernel, input.sessionId, input.expectedRevision);
@@ -42,12 +53,11 @@ export function commitFoldBatch(
     const actions: LedgerAction.Append[] = [];
     for (const draft of input.actions) {
       const sourceRevision = input.expectedRevision + actions.length;
-      const action = pinCompactionAction(
-        kernel,
-        pinContext(draft, state, sourceRevision),
-        state,
-        sourceRevision,
-      );
+      const contextPinned = pinContext(draft, state, sourceRevision);
+      const action =
+        seam !== undefined
+          ? seam.pinAction(kernel, contextPinned, state, sourceRevision)
+          : requireNoCompactionPin(contextPinned);
       actions.push(action);
       const ordinal = input.expectedRevision + actions.length;
       state = foldHistoryState(

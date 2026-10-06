@@ -76,7 +76,16 @@ export interface AppManifestInput {
 
 export function appManifest(input: AppManifestInput): Bundle.ManifestDefinition {
   return Bundle.Manifest.define({
-    capabilities: [toolCapability, actionCapability, Bundle.hookCapability(), input.alarm],
+    // #1307: compaction is a declared, removable capability; `off:
+    // ["compaction"]` records the typed disabled entry and the kernel runs
+    // without it instead of falling back silently.
+    capabilities: [
+      toolCapability,
+      actionCapability,
+      Bundle.hookCapability(),
+      Bundle.compactionCapability(),
+      input.alarm,
+    ],
     bundles: [
       monitorBundle(input.wake),
       cronBundle(),

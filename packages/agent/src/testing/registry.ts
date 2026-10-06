@@ -6,7 +6,23 @@ import * as SessionHandleStore from "../core/store/fence";
 import { toolSnapshot } from "../core/commit";
 import { resolveSessionRuntime, installSessionHandlePlane, type SessionRuntime, type ResolvedSessionRuntime, type SessionCreateOptions, type SessionHandle, type SessionController, type SessionControllerLifecycle, type SessionRunner, type SessionSystem, type RegistryEntry } from "../core/run";
 import type { SessionKernel } from "../core/entity";
+import { foldSessionHistory, hydrateSessionHistory } from "../inspect/history";
+import { compactionSeamService } from "../plugins/compaction";
 import { createController } from "./controller";
+
+// #1307: in a product the composition wires the compaction seam into the
+// runtime; harness-built runtimes get the real service by default so tests
+// keep exercising pin + restore. A test that wants the capability OFF sets
+// the key explicitly (`compaction: undefined`): defaulting fills only a
+// runtime that never mentions the key.
+const testingCompactionSeam = compactionSeamService({
+  fold: foldSessionHistory,
+  hydrate: hydrateSessionHistory,
+});
+
+function withTestingCompaction(runtime: SessionRuntime): SessionRuntime {
+  return "compaction" in runtime ? runtime : { ...runtime, compaction: testingCompactionSeam };
+}
 
 // ─── from session-handle.ts (#1247) ───
 const registries = new WeakMap<SessionRuntime, SessionRegistry>();
@@ -15,7 +31,7 @@ function registryFor(runtime: SessionRuntime) {
   return Effect.gen(function* () {
     let registry = registries.get(runtime);
     if (registry === undefined) {
-      const created = new SessionRegistry(yield* resolveSessionRuntime(runtime), yield* Effect.scope);
+      const created = new SessionRegistry(yield* resolveSessionRuntime(withTestingCompaction(runtime)), yield* Effect.scope);
       registries.set(runtime, created);
       installSessionHandlePlane(runtime, {
         get: (id) => registries.get(runtime)?.get(id),

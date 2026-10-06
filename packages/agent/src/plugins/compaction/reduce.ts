@@ -1,11 +1,6 @@
 import type { Message } from "@openomni/protocol";
 
-export interface ToolOutputElision {
-  /** Outputs at or below this length are left alone — nothing worth reclaiming. */
-  readonly minOutputChars: number;
-  /** How much of the head survives as an excerpt, so the record still says what happened. */
-  readonly keepHeadChars: number;
-}
+import type { ToolOutputElision } from "../../core/api";
 
 interface ReductionResult {
   readonly messages: Message.WithParts[];

@@ -409,6 +409,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     };
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
+      // #1307: the composed compaction capability's verbs — the kernel's
+      // commit pinning and restore paths reach the plugin only through this.
+      compaction: Bundle.compactionCapability().verbs,
       openKernel: plane.openKernel,
       listSessions: plane.listSessions,
       dispatchOutbound: dispatchOutboundMessage(
