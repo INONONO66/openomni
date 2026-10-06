@@ -8,7 +8,7 @@ import { spyOn } from "bun:test";
 import type { PlainObject } from "@openomni/protocol";
 import type { CatalogOrigin } from "../../src/tools/core/catalog";
 import { catalogDefinitions, type ToolPorts } from "../../src/tools/core/catalog";
-import { Bundle, Core } from "@openomni/agent";
+import { Bundle } from "@openomni/agent";
 const createTurnDispatcher = Bundle.createTurnDispatcher;
 import { fixtureLedger, executorServices } from "./executor";
 

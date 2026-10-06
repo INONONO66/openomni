@@ -9,7 +9,8 @@
 import { Effect } from "effect";
 import { z } from "zod";
 import {
-  canonicalDigest, PlainValueSchema, SessionGeneration, toolResultJsonSchema,
+  canonicalDigest, PlainValueSchema, toolResultJsonSchema,
+  type SessionGeneration,
   type AnyToolDefinition, type LedgerAction, type LedgerSession, type PlainValue,
   type Tool, type ToolExecutionContext,
 } from "@openomni/protocol";

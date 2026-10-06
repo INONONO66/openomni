@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Cause, Effect, Layer } from "effect";
-import { Bundle, Core } from "@openomni/agent";
+import { Bundle } from "@openomni/agent";
 const createTurnDispatcher = Bundle.createTurnDispatcher;
 import { createCodemode } from "@openomni/codemode";
 import { attachMachineDaemon, createMachineHost, MachinesFailure } from "@openomni/machines";
