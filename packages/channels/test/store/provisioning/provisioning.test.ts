@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { createDecipheriv, type DecipherGCM } from "node:crypto";
-import { expectNamedFailure } from "../../../../agent/test/store/helpers/errors";
-import { useSqliteStores } from "../../../../agent/test/store/helpers/storage";
+import { expectNamedFailure } from "../helpers/errors";
+import { useSqliteChannelStore } from "../helpers/sqlite";
 import { inspect } from "node:util";
 import { Provisioning } from "@openomni/protocol";
 import { createChannelInstanceStore, createPersonStore, createSecretStore, Vault, } from "../../../src/index.js";
@@ -38,10 +38,10 @@ function secretRow(id: string, envelope: Vault.Envelope): Provisioning.Secret {
 }
 
 describe("provisioning stores", () => {
-  const stores = useSqliteStores("provisioning");
-  const persons = () => createPersonStore(stores.catalog);
-  const instances = () => createChannelInstanceStore(stores.catalog);
-  const secrets = () => createSecretStore(stores.catalog);
+  const stores = useSqliteChannelStore("provisioning");
+  const persons = () => createPersonStore(stores.store);
+  const instances = () => createChannelInstanceStore(stores.store);
+  const secrets = () => createSecretStore(stores.store);
 
   test("Person roundtrips, lists, and removes", () => {
     const declared = persons().put(person("person:alice", "collaborator"));
@@ -109,7 +109,7 @@ describe("provisioning stores", () => {
     secrets().put(
       secretRow("secret:leak-probe", Vault.seal(new TextEncoder().encode(plaintext), kek)),
     );
-    const fileBytes = await readFile(stores.catalogPath);
+    const fileBytes = await readFile(stores.path);
     expect(fileBytes.includes(plaintext)).toBe(false);
   });
 

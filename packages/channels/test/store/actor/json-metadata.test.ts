@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { createActorRegistry } from "../../../src/index.js";
-import { useSqliteStores } from "../../../../agent/test/store/helpers/storage";
+import { useSqliteChannelStore } from "../helpers/sqlite";
 
-const stores = useSqliteStores("actor-metadata");
-const registry = () => createActorRegistry(stores.catalog);
+const stores = useSqliteChannelStore("actor-metadata");
+const registry = () => createActorRegistry(stores.store);
 
 test("identity and endpoint JSON metadata survive reopening without shape loss", () => {
   const identity = registry().registerIdentity({

@@ -12,5 +12,3 @@ export { decisionFromEvaluation, evaluatePermission } from "./core/gate/match";
 export type { PolicyEvaluationInput } from "./core/gate/compile";
 export { requireSubAdapter, withStoreTimestamps } from "./core/store/storage/timestamped-store";
 export { createDecisionFactPort } from "./core/store/decision";
-export { createSurfaceKeyStore } from "./core/store/surface-key";
-export { StoredEndpoint, StoredIdentity } from "./core/store/storage/actor-schema";

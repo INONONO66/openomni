@@ -6,9 +6,9 @@ import { AssertionError } from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
-import { Core, type Model } from "@openomni/agent";
+import type { Model } from "@openomni/agent";
 type Sink = Model.Sink;
-const createSurfaceKeyStore = Core.createSurfaceKeyStore;
+import { createSurfaceKeyStore } from "@openomni/channels";
 import { loadConfig, type OpenOmniConfig } from "../src/config";
 import { sessionFilePath } from "../src/composition/cluster-runtime";
 import { planeOf } from "./helpers/ledger";
@@ -307,7 +307,7 @@ describe("OpenOmni Resident WebSocket", () => {
       { role: "assistant", text: REPLY },
     ]);
 
-    const surfaceKeys = createSurfaceKeyStore(plane.catalog).listBySession(session.id);
+    const surfaceKeys = createSurfaceKeyStore(plane.channel).listBySession(session.id);
     expect(surfaceKeys).toHaveLength(1);
     expect(surfaceKeys[0]).toStartWith("ws:");
   });

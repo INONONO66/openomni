@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { Core, type Model } from "@openomni/agent";
+import type { Core, Model } from "@openomni/agent";
 type SessionRunner = Core.SessionRunner;
-import { decodeChannelFailure } from "@openomni/channels";
+import { createSurfaceKeyStore, decodeChannelFailure } from "@openomni/channels";
 type RunInput = Model.RunInput;
 type Sink = Model.Sink;
-const createSurfaceKeyStore = Core.createSurfaceKeyStore;
 import type { Tool } from "@openomni/protocol";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { createResidentGateway } from "../src/gateway";
@@ -57,7 +56,7 @@ for (const scenario of [
       id: "openomni-resident-ws", surface: "ws", defaultTier: "owner", createdBy: "owner",
       kind: scenario.authority === "evidence_only" ? "broadcast_channel" : "trusted_channel",
     });
-    createSurfaceKeyStore(resident.plane.catalog).claim("ws:ws:dm:authority", "authority-session");
+    createSurfaceKeyStore(resident.plane.channel).claim("ws:ws:dm:authority", "authority-session");
     const admission = await runEffect(gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },
       { eventId: "input", surface: "ws", channelId: "authority", addressees: [], dm: true,

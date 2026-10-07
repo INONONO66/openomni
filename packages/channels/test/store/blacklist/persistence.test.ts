@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createBlacklistStore } from "../../../src/index.js";
-import { testNow, useSqliteStores } from "../../../../agent/test/store/helpers/storage";
+import { testNow, useSqliteChannelStore } from "../helpers/sqlite";
 
 describe("BlacklistStore SQLite persistence", () => {
-  const stores = useSqliteStores("blacklist");
-  const blacklist = () => createBlacklistStore(stores.catalog);
+  const stores = useSqliteChannelStore("blacklist");
+  const blacklist = () => createBlacklistStore(stores.store);
 
   test("round-trips raw blacklist facts across storage reconfiguration", () => {
     const stored = blacklist().put({

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { Provisioning, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
-import { sqliteJsonData } from "../json";
+import { sqliteJsonData } from "./json";
 
 const PersonRow = sqliteJsonData(Provisioning.Person);
 const ChannelInstanceRow = sqliteJsonData(Provisioning.ChannelInstance);

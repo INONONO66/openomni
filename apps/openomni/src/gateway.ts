@@ -571,17 +571,17 @@ export function channelTransaction(
     });
 }
 
-/** The perimeter's store source over the app plane: catalog adapters plus the ingress session's decision facts. */
+/** The perimeter's store source over the app plane (#1317): the channels-owned store plus the ingress session's decision facts. */
 export function channelStoreSource(plane: AppLedgerPlane, now: () => number): ChannelStoreSource {
   const ingress = plane.sessionStore(GATEWAY_INGRESS_SESSION);
   return {
     now,
-    actorRegistry: plane.catalog.actorRegistry,
-    blacklist: plane.catalog.blacklist,
-    channelGrant: plane.catalog.channelGrant,
-    replyGrant: plane.catalog.replyGrant,
-    egressBudget: plane.catalog.egressBudget,
-    surfaceKey: plane.catalog.surfaceKey,
+    actorRegistry: plane.channel.actorRegistry,
+    blacklist: plane.channel.blacklist,
+    channelGrant: plane.channel.channelGrant,
+    replyGrant: plane.channel.replyGrant,
+    egressBudget: plane.channel.egressBudget,
+    surfaceKey: plane.channel.surfaceKey,
     decisionFacts: ingress.decisionFacts,
     transaction: ingress.transaction,
   };

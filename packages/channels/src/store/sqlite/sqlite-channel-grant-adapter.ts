@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { Actor, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { sqliteJsonData } from "../json";
+import { sqliteJsonData } from "./json";
 
 const ChannelGrantRow = sqliteJsonData(Actor.ChannelGrant);
 

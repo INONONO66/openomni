@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createActorRegistry } from "../../../src/index.js";
-import { useSqliteStores } from "../../../../agent/test/store/helpers/storage";
+import { useSqliteChannelStore } from "../helpers/sqlite";
 
 describe("ActorRegistry SQLite persistence", () => {
-  const stores = useSqliteStores("actor-registry");
-  const registry = () => createActorRegistry(stores.catalog);
+  const stores = useSqliteChannelStore("actor-registry");
+  const registry = () => createActorRegistry(stores.store);
   const registerOwnerEndpoint = () => {
     registry().registerIdentity({
       id: "act_owner",
@@ -145,7 +145,7 @@ describe("ActorRegistry SQLite persistence", () => {
   test("an old-format row whose data blob carries relationship parses and round-trips (#498 A1)", () => {
     // Given — a row persisted BEFORE the relationship removal: migration 0018
     // dropped the column, but the JSON blob keeps the retired key forever.
-    const db = new Database(stores.catalogPath);
+    const db = new Database(stores.path);
     db.query(
       `INSERT INTO actor_identity (id, data, kind, trust_tier, time_created, time_updated)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -237,7 +237,7 @@ describe("ActorRegistry SQLite persistence", () => {
   });
 
   test("removing an endpoint preserves its identity and removes address lookup", () => {
-    const registry = createActorRegistry(stores.catalog);
+    const registry = createActorRegistry(stores.store);
     registry.registerIdentity({ id: "actor", kind: "human", trustTier: "observer" });
     registry.registerEndpoint({
       id: "endpoint",
@@ -245,7 +245,7 @@ describe("ActorRegistry SQLite persistence", () => {
       channel: "discord",
       externalId: "external",
     });
-    const adapter = stores.catalog.actorRegistry;
+    const adapter = stores.store.actorRegistry;
     expect(adapter.removeEndpoint("endpoint")).toBe(true);
     expect(registry.getIdentity("actor")?.id).toBe("actor");
     expect(registry.resolveEndpoint("discord", "external")).toBeUndefined();

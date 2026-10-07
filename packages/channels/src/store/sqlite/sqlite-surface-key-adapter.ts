@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { z } from "zod";
-import { LedgerInvariant } from "../errors";
+import { ChannelStoreInvariant } from "./errors";
 import type { Storage as ProtocolStorage } from "@openomni/protocol";
 
 const SessionIdRow = z.object({ session_id: z.string() }).nullable();
@@ -38,7 +38,7 @@ export function createSqliteSurfaceKeyAdapter(db: Database, now: () => number): 
             // same immediate transaction, so the key MUST exist here. Falling
             // back to the candidate sessionId would fabricate an ownership
             // answer.
-            throw new LedgerInvariant({
+            throw new ChannelStoreInvariant({
               operation: "surfaceKey.claim",
               message: `surface_key row missing after INSERT OR IGNORE: ${key}`,
             });
