@@ -27,7 +27,7 @@ import { Bus } from "./helpers/bus";
 
 test("shutdown stops ingress before session cleanup and awaits cleanup before storage and exit", async () => {
   let now = 100;
-  const runtime = gatewayRuntime({ observations: Bus, now: () => now });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus, now: () => now });
   const events: (string | number)[] = [];
   const closing = Promise.withResolvers<void>();
   const settled = Promise.withResolvers<void>();
@@ -78,7 +78,7 @@ test("shutdown stops ingress before session cleanup and awaits cleanup before st
 });
 
 test("a cleanup failure is an observed shutdown incident and cannot produce a successful exit", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   const failure = new AppLifecycleFailure({ operation: "sessions.close", cause: "commit_refused" });
   await runAppBoot(
     runtime,
@@ -162,7 +162,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
       return value !== null && typeof value === "object" && !Array.isArray(value) && value.terminal === "outcome_unknown";
     })).toBe(true);
     await expect(runtime.dispose()).rejects.toMatchObject({ _tag: "AppLifecycleFailure", operation: "shutdown.raw_unsettled" });
-    expect(gatewayRuntime({ observations: Bus })).toBe(runtime);
+    expect(gatewayRuntime({ composed: composedHolder(), observations: Bus })).toBe(runtime);
     if (settleAfterTurn) await turn;
     raw.resolve("late raw settlement");
     await turn;

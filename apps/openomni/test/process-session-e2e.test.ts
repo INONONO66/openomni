@@ -1,3 +1,4 @@
+import { composedHolder } from "./helpers/bundle-fixture";
 import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { expect, mock, spyOn, test } from "bun:test";
@@ -40,7 +41,7 @@ function processPlane(fixture: { directory: string }): ProcessPlane {
   return {
     catalogPath,
     sessionsDir,
-    runtime: gatewayRuntime({ observations: Bus, catalogPath, sessionsDir, clusterStoragePath: ":memory:" }),
+    runtime: gatewayRuntime({ composed: composedHolder(), observations: Bus, catalogPath, sessionsDir, clusterStoragePath: ":memory:" }),
   };
 }
 

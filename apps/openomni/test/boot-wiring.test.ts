@@ -1,3 +1,4 @@
+import { composedHolder } from "./helpers/bundle-fixture";
 import { describe, expect, test } from "bun:test";
 import {
   type ChannelDeliveryRoute,
@@ -324,7 +325,7 @@ describe("channel supervisor", () => {
       rows: [row(channel, "0:0", "channel:telegram:main")],
       statuses: [],
     }));
-    const runtime = gatewayRuntime({ observations: Bus });
+    const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
     await runAppBoot(
       runtime,
       bootResource(Effect.succeed(supervisor), (resource) =>

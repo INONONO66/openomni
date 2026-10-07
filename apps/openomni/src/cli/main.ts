@@ -8,8 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { listenForAbort, type Machine } from "@openomni/protocol";
-import { gatewayRuntime } from "../gateway";
-import { loadConfig, resolveClusterStorage } from "../config";
+import { loadConfig } from "../config";
 import { installShutdownHandlers, startOpenOmni } from "..";
 import { type CliDeps, runCli } from "./commands";
 import { attachConfiguredMachine } from "./machine";
@@ -97,8 +96,9 @@ export function createCliDeps(home: string = homedir(), options: CliRuntimeOptio
     applyEnvFile(envPath);
     mkdirSync(join(home, ".openomni"), { recursive: true });
     const config = loadConfig(home);
-    const runtime = gatewayRuntime(resolveClusterStorage(config, home));
-    const app = await startOpenOmni({ config, runtime });
+    // #1255/#1308: boot owns config -> manifest -> compose -> runtime; the CLI
+    // hands over config only, so there is exactly ONE composition root.
+    const app = await startOpenOmni({ config });
     installShutdownHandlers({
       stop: app.stop,
       exit: (code) => process.exit(code),

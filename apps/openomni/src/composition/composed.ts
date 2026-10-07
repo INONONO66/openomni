@@ -62,14 +62,3 @@ export class ComposedGeneration extends Context.Service<
   ComposedGeneration,
   ComposedHolder
 >()("@openomni/openomni/ComposedGeneration") {}
-
-const EMPTY_MANIFEST = Bundle.Manifest.define({ capabilities: [], bundles: [], off: [] });
-
-/**
- * The empty composition an injected runtime starts from: no capabilities, no
- * bundles. Its generation is valid (core points only) so every consumer reads
- * one honest table set instead of special-casing "not composed yet".
- */
-export function emptyComposition(): ComposedContext {
-  return { manifest: EMPTY_MANIFEST, generation: Bundle.composeSync(EMPTY_MANIFEST) };
-}

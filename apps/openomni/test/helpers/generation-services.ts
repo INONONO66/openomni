@@ -9,13 +9,15 @@ const LlmLive = Model.LlmLive;
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
 import { AppLedger, createAppLedger, type AppLedgerPlane } from "../../src/composition/cluster-runtime";
-import { ComposedGeneration, composedHolderOf, emptyComposition, monitorPortsSlot, type ComposedContext } from "../../src/composition/composed";
+import { ComposedGeneration, composedHolderOf, monitorPortsSlot, type ComposedContext } from "../../src/composition/composed";
+import { Bundle } from "@openomni/agent";
 import { GenerationLayersLive } from "../../src/composition/generation-layers";
 import { AppPointTable, composedPointTable } from "../../src/composition/point-table";
 import { wallClockLayer } from "../../src/composition/platform";
 import { testClock, testEntropy } from "./test-entropy";
 
-const composedEmpty = emptyComposition();
+const EMPTY_MANIFEST = Bundle.Manifest.define({ capabilities: [], bundles: [], off: [] });
+const composedEmpty: ComposedContext = { manifest: EMPTY_MANIFEST, generation: Bundle.composeSync(EMPTY_MANIFEST) };
 
 /** Tests grant configure EXPLICITLY; the app composition wires the real pinned pre-policy. */
 export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);

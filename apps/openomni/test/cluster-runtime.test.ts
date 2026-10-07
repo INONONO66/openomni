@@ -1,3 +1,4 @@
+import { composedHolder } from "./helpers/bundle-fixture";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -119,7 +120,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
         return input.detach(Effect.never);
       }),
   };
-  const runtime = gatewayRuntime({
+  const runtime = gatewayRuntime({ composed: composedHolder(),
     observations: Bus,
     catalogPath,
     sessionsDir,
