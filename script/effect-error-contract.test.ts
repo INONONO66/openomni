@@ -22,6 +22,7 @@ const model = {
   ModelResolutionError: new Model.ModelResolutionError({ ...message, provider: "provider", model: "model", reason: "model_not_found" }),
   AuthInvalidFileError: new Model.AuthInvalidFileError({ ...message, path: "auth.json" }),
   AuthResolutionError: new Model.AuthResolutionError({ ...message, provider: "provider", reason: "missing_auth" }),
+  ModelCatalogError: new Model.ModelCatalogError({ ...message, source: "cache", path: "models.json" }),
   ProxyModelsError: new Model.ProxyModelsError({ ...message, url: "https://fixture.invalid" }),
   TransportFailure: new Model.TransportFailure({ ...diagnostic, ...message }),
   InvalidProviderData: new Model.InvalidProviderData({ ...diagnostic, ...message }),
