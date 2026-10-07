@@ -55,7 +55,7 @@ export async function appFixture(options: AppFixtureOptions) {
     options.runtime ??
     gatewayRuntime({
       observations: Bus,
-      composed: await productComposedHolder(options.config.bundlesOff, options.config.hooksPath),
+      composed: await productComposedHolder(options.config.off, options.config.hooksPath),
       ...(options.config.catalogPath === undefined
         ? {}
         : { catalogPath: options.config.catalogPath }),

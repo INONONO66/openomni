@@ -687,14 +687,19 @@ describe("machines self enrollment config (#1271)", () => {
   });
 });
 
-describe("bundles off tuple (#1255)", () => {
-  it("unset means absent: every declared bundle stays on", () => {
-    expect(loadConfig().bundlesOff).toBeUndefined();
+describe("off tuple (#1255, #1306)", () => {
+  it("unset means absent: everything declared stays on", () => {
+    expect(loadConfig().off).toBeUndefined();
   });
 
-  it("parses the Owner's off names", () => {
-    process.env.OPENOMNI_BUNDLES_OFF = '["monitor","cron"]';
-    expect(loadConfig().bundlesOff).toEqual(["monitor", "cron"]);
+  it("parses the Owner's off names: bundles and capabilities ride one list", () => {
+    process.env.OPENOMNI_BUNDLES_OFF = '["monitor","cron","hook","tool"]';
+    expect(loadConfig().off).toEqual(["monitor", "cron", "hook", "tool"]);
+  });
+
+  it("keeps names the manifest never declared: compose ignores them, parsing does not", () => {
+    process.env.OPENOMNI_BUNDLES_OFF = '["not-a-capability"]';
+    expect(loadConfig().off).toEqual(["not-a-capability"]);
   });
 
   it("refuses the boot on malformed JSON or an empty name (fail-closed)", () => {
