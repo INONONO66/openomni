@@ -1,5 +1,44 @@
 # Implementation Status
 
+## #1306 full-app boot tests for every capability off (epic #1303, rung 7)
+
+On `stab/7-capability-off-boot-tests` (2026-10-07, base `03cd0c274` = rung 2
+head merged with rung 1 head). The five removable capabilities now boot the
+WHOLE app off through the product manifest, and the off list is one config
+key:
+
+- `apps/openomni/src/config.ts`: `bundlesOff` renamed `off` — the same
+  `OPENOMNI_BUNDLES_OFF` JSON tuple now carries bundle and capability names
+  alike; compose ignores names the manifest never declared. Measured:
+  `rg -c 'bundlesOff' -g '*.ts' packages apps` 10 hits in 6 files before, no
+  output after.
+- `apps/openomni/src/resident.ts`: a composition with a nonempty `disabled`
+  cascade leaves session genesis unstamped (`manifestHash` absent), so the
+  first turn's existing single-writer adoption appends the
+  `session.configure{operation: "compose", disabled: [{name, because}]}` row;
+  an empty cascade keeps the genesis stamp and appends nothing. A composed-off
+  `tool` capability returns zero model tool faces (`toolChoice: "none"`), so
+  `eval`/`bash`/`read` vanish with the dispatcher's capability.
+- `apps/openomni/test/capability-off-boot.test.ts` (8 pass / 0 fail): one
+  boot per row through `suite.boot` with injected clock and entropy. Measured
+  cascades on this base: alarm → alarm, monitor, cron, delegation-policy;
+  action → action, hook, hooks-json, delegation-policy; hook → hook,
+  hooks-json; compaction → compaction; tool → tool, monitor, send-message,
+  delegation-policy (the issue text predates delegation-policy's alarm seam
+  and send-message's tool seam). Each row asserts the compose row's
+  `disabled` with `toEqual`, the absent surface (points, handlers,
+  capabilities, inputs, tool faces) and a typed `unknown_kind` refusal with
+  the journal length unchanged; extra rows cover `["monitor", "hook"]` (each
+  cascade keeps its own root), an unknown off name (empty cascade, no
+  adoption row) and a two-boot byte-golden check on the alarm row.
+- App tests reach plugins only through the `Bundle` barrel:
+  `createWatchVerb` is re-exported from `plugins/alarm` and
+  `alarm-plane.test.ts` drops the deep import —
+  `rg -c 'src/plugins/' -g '*.ts' apps/openomni/test` returns no output.
+
+No new journal kind, point, tool or verb; the five-plugin layout table and
+`plugins-layout.test.ts` are untouched.
+
 ## #1307 compaction behind a core seam, declared in the manifest (epic #1303, rung 1)
 
 On `stab/1-compaction-plugin-ownership` (2026-10-07, base `c73bc03b3`). The
