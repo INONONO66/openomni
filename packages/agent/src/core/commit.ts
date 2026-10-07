@@ -33,6 +33,32 @@ function requireNoCompactionPin(action: LedgerAction.Append): LedgerAction.Appen
   return action;
 }
 
+/** Pins through the composed seam, or fails closed on an unpinnable compaction append. */
+function pinThroughSeam(
+  seam: Pick<CompactionSeamService, "pinAction"> | undefined,
+  kernel: SessionKernel,
+  action: LedgerAction.Append,
+  state: FoldCheckpoint.State,
+  sourceRevision: number,
+): LedgerAction.Append {
+  return seam !== undefined
+    ? seam.pinAction(kernel, action, state, sourceRevision)
+    : requireNoCompactionPin(action);
+}
+
+/** An executed compaction result forces an immediate checkpoint after it. */
+function executedCompactionResult(action: LedgerAction.Append): boolean {
+  const effect = action.effect.value;
+  return (
+    action.kind === "compaction" &&
+    effect !== null &&
+    typeof effect === "object" &&
+    !Array.isArray(effect) &&
+    effect.phase === "result" &&
+    effect.terminal === "executed"
+  );
+}
+
 /** Synchronous decoration preserves durable admission's existing suspension schedule. */
 export function commitFoldBatch(
   kernel: SessionKernel,
@@ -54,10 +80,7 @@ export function commitFoldBatch(
     for (const draft of input.actions) {
       const sourceRevision = input.expectedRevision + actions.length;
       const contextPinned = pinContext(draft, state, sourceRevision);
-      const action =
-        seam !== undefined
-          ? seam.pinAction(kernel, contextPinned, state, sourceRevision)
-          : requireNoCompactionPin(contextPinned);
+      const action = pinThroughSeam(seam, kernel, contextPinned, state, sourceRevision);
       actions.push(action);
       const ordinal = input.expectedRevision + actions.length;
       state = foldHistoryState(
@@ -66,14 +89,7 @@ export function commitFoldBatch(
         state,
       );
       if (action.kind !== "fold.checkpoint") count += 1;
-      const effect = action.effect.value;
-      const compaction =
-        action.kind === "compaction" &&
-        effect !== null &&
-        typeof effect === "object" &&
-        !Array.isArray(effect) &&
-        effect.phase === "result" &&
-        effect.terminal === "executed";
+      const compaction = executedCompactionResult(action);
       if (count < 256 && !compaction) continue;
       actions.push(
         foldCheckpointAction({

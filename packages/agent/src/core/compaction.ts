@@ -1,6 +1,8 @@
 import { Effect, type Scope } from "effect";
 import type { ExecutionError } from "./failure";
 import type {
+  CompactionCandidate,
+  CompactionExecutionOutcome,
   CompactionSeamService,
   CompactionSessionPort,
   ResolvedCompactionOptions,
@@ -61,6 +63,37 @@ function deferCompaction(measuredTokens: number | undefined, compaction: Compact
   return measuredTokens !== undefined && compaction?.inFlight() === true && measuredTokens < graceTokens;
 }
 
+/** A threshold trigger without a measurement, or one below the seam's line, is a skip. */
+function thresholdNotReached(
+  seam: Pick<CompactionSeamService, "shouldCompact">,
+  state: RunState,
+  options: ResolvedCompactionOptions,
+  measuredTokens: number | undefined,
+): boolean {
+  return (
+    measuredTokens === undefined ||
+    !seam.shouldCompact(measuredTokens, options, state.lastCompactionYield)
+  );
+}
+
+/** Folds the execution outcome into run state; the caller already owns the trigger. */
+function settleCompactionResult(
+  state: RunState,
+  compaction: CompactionSessionPort | undefined,
+  result: CompactionExecutionOutcome,
+  candidate: CompactionCandidate | undefined,
+): Effect.Effect<CompactionApplyResult> {
+  return Effect.gen(function* () {
+    if (candidate !== undefined) compaction?.consume();
+    state.lastCompactionIneffective = result.ineffective;
+    if (result.yield !== undefined) state.lastCompactionYield = result.yield;
+    if (result.summarizerFailed === true && compaction !== undefined) yield* compaction.disable();
+    if (!result.compacted) return "none";
+    applyCompactionMessages(state, result.messages);
+    return "compacted";
+  });
+}
+
 export function applyCompaction(
   state: RunState,
   config: ChatAgentConfig,
@@ -77,11 +110,7 @@ export function applyCompaction(
   if (options === undefined) return "none";
   const measuredTokens = state.lastCallContextTokens;
   const geometry = compactionGeometry(seam, state, options);
-  if (
-    trigger === "threshold" &&
-    (measuredTokens === undefined ||
-      !seam.shouldCompact(measuredTokens, options, state.lastCompactionYield))
-  )
+  if (trigger === "threshold" && thresholdNotReached(seam, state, options, measuredTokens))
     return "none";
   if (deferCompaction(measuredTokens, compaction, geometry.graceTokens)) return "deferred";
 
@@ -99,13 +128,7 @@ export function applyCompaction(
       ...(candidate === undefined ? {} : { candidate }),
     },
   });
-  if (candidate !== undefined) compaction?.consume();
-  state.lastCompactionIneffective = result.ineffective;
-  if (result.yield !== undefined) state.lastCompactionYield = result.yield;
-  if (result.summarizerFailed === true && compaction !== undefined) yield* compaction.disable();
-  if (!result.compacted) return "none";
-  applyCompactionMessages(state, result.messages);
-  return "compacted";
+  return yield* settleCompactionResult(state, compaction, result, candidate);
   });
 }
 

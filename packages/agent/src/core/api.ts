@@ -1,7 +1,7 @@
 // The single import target for capability plugins (#1276): re-exports exactly
 // the core ports and types the removable capability plugins consume. #1255
 // grows this into the core context handed to loaded capabilities.
-export type { ExecutionRequest, Executor } from "./gate/decide";
+export type { ExecutionRequest } from "./gate/decide";
 export {
   AgentFailure, AgentInvariantViolation, CompactionExecutionError, ContextRestoreError,
   type ExecutionError, pretty,

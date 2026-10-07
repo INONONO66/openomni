@@ -46,7 +46,7 @@ export function restoreContextRequest(
 }
 
 /** Validate the caller's target before querying any result children or acquiring a lease. */
-export function requireCompactionIntent(
+function requireCompactionIntent(
   action: LedgerAction.Node | undefined,
 ): Effect.Effect<LedgerAction.Node, ContextRestoreError> {
   if (action === undefined || action.kind !== "compaction")

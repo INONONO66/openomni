@@ -10,20 +10,14 @@ export type {
   ResolvedCompactionOptions,
   SummarizationBudget,
 } from "../../core/api";
+import type { CompactionExecutionOutcome } from "../../core/api";
 
-export interface CompactionResult {
+/** The plugin's full result: the seam outcome plus mechanism-local fields. */
+export interface CompactionResult extends CompactionExecutionOutcome {
   readonly record?: CompactionRecord;
-  messages: Message.WithParts[];
-  compacted: boolean;
   removedCount: number;
   /** L4: what happened to the speculative candidate, when one was offered. */
   candidate?: "promoted" | "discarded";
-  /** The synchronous merge failed and used the deterministic snap-cut fallback. */
-  summarizerFailed?: boolean;
-  /** Estimated structural yield of the replacement, used by the next geometry decision. */
-  yield?: CompactionYield;
-  /** A compacted replacement that saved too little to justify another early round. */
-  ineffective?: boolean;
   /** Set when the trigger fired but no provider-valid cut exists: no summary
    * anchor and no user boundary at or before the cutoff. The caller records
    * it; killing the run over housekeeping would be worse than a full window. */

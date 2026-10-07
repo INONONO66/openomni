@@ -16,7 +16,6 @@ import { CompactionSession } from "./speculate";
 import { createCompactionPin, type CompactionHistoryPorts } from "./successor";
 
 export { Compaction } from "./compact";
-export type { CompactionOptions } from "./compact";
 export { CompactionSession } from "./speculate";
 export type { CompactionHistoryPorts } from "./successor";
 
