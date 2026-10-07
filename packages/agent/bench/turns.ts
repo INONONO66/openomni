@@ -1,5 +1,5 @@
 import { runAgentSync } from "../test/helpers/executor";
-import { chatServices } from "../test/helpers/chat-services";
+import { chatServices, fixtureStopEvidence } from "../test/helpers/chat-services";
 import { allowConfigure, kernelRuntime, type SessionFixture, withSessionServices } from "../test/helpers/session-services";
 import { catalogLayer, executorLayer } from "../test/helpers/service-layers";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
@@ -100,7 +100,7 @@ export async function firstDelta(now: () => number) {
           parentActionId: null,
         },
       });
-      return yield* runAgent(input, { model, executor, execution: executor }, sink);
+      return yield* runAgent(input, { model, executor, execution: executor, stopEvidence: fixtureStopEvidence }, sink);
     }).pipe(Effect.provide(services)),
   );
   return { overriddenDuration: await first.promise };
