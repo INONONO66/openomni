@@ -807,7 +807,7 @@ test("refused alarm sends (sqlite trigger fault) fail one session's rescan and a
   // production log sentence — rewording the log must not break this test.
   const INJECTED_RESEND = "injected resend refusal";
   const original = console.log.bind(console);
-  const logs = spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+  const logs = spyOn(console, "log").mockImplementation((...args: Parameters<typeof console.log>) => {
     const line = args.map(String).join(" ");
     if (line.includes(INJECTED_RESEND)) resendLogged.resolve();
     else original(...args);

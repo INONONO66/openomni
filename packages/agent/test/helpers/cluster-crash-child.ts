@@ -13,15 +13,19 @@
  *          crashed envelope is redelivered from SqlMessageStorage; the chain
  *          dedupes it (action.id = messageId, plan D3). Prints REDELIVERED
  *          (dedupe evidence), SHAPES (real turn action kinds, F12 chain-level
- *          proxy), and DELIVER_AT (a deadline alarm occurrence's residual
- *          against its not-before instant).
+ *          proxy), and DELIVER_AT (the recorded stale alarm fact's commit
+ *          clock time against the occurrence's armed clock time — not-before
+ *          evidence from recorded facts, never elapsed wall time).
  *
  * All Effects run through the allowlisted `runAgent` helper.
  */
-import { Effect } from "effect";
+import { L0Observation } from "@openomni/protocol";
+import { Clock, Effect } from "effect";
 import {
   blockingRunner,
+  boundedAwait,
   clusterMessages,
+  completionSignal,
   readChain,
   resolvedRunner,
   runCluster,
@@ -70,8 +74,21 @@ if (mode === "crash") {
     }),
   );
 } else {
+  // Signals are created BEFORE the sink that fires them is installed and
+  // resolved from the exact committed fact (#1254 r5 M1 pattern).
+  const turnSealed = completionSignal();
   await runCluster(
-    { sessionsDir, catalogFile, runner: resolvedRunner("recovered") },
+    {
+      sessionsDir,
+      catalogFile,
+      runner: resolvedRunner("recovered"),
+      observationSink: {
+        publish: (event, data) => {
+          if (event.name !== L0Observation.ActionCommittedEvent.name) return;
+          if (L0Observation.ActionCommitted.parse(data).kind === "turn") turnSealed.fire();
+        },
+      },
+    },
     Effect.gen(function* () {
       // 1. The unacknowledged envelope from the crashed process is redelivered
       //    and processed on this runner (bounded DB-row wait, check2 pattern).
@@ -96,25 +113,25 @@ if (mode === "crash") {
       );
 
       // 3. Real action shapes committed by the entity turn (F12 chain-level
-      //    evidence) and the whole chain re-verifies hash-by-hash. The turn
-      //    seal commits after the runner resolves, so await it durably.
-      yield* Effect.promise(() =>
-        waitUntil(
-          "turn actions sealed on the chain",
-          () => readChain(sessionFile, sessionId).some((row) => row.kind === "turn"),
-          30_000,
-        ),
-      );
+      //    evidence) and the whole chain re-verifies hash-by-hash. The seal is
+      //    awaited as the exact committed turn fact from the observation sink.
+      yield* Effect.promise(() => boundedAwait("turn actions sealed on the chain", turnSealed.done, 30_000));
       const kinds = readChain(sessionFile, sessionId).map((row) => row.kind);
       console.log(`SHAPES count=${kinds.length} kinds=${kinds.join(",")}`);
       console.log(`CHAIN_OK ${verifyChain(sessionFile, sessionId)}`);
 
       // 4. DeliverAt: a deadline occurrence for an unknown request folds to a
       //    recorded stale alarm fact (#1253), but must not be handed to the
-      //    entity before its not-before instant.
-      const tSend = Date.now();
-      yield* sendDeadline(sessionId, "no-such-request", tSend + 1500);
-      console.log(`DELIVER_AT residual_ms=${Date.now() - tSend}`);
+      //    entity before its not-before instant. The Alarm RPC replies only
+      //    after the fold, so the recorded fact exists here; its commit clock
+      //    time is the fired instant — no elapsed-time measurement.
+      const armedAt = yield* Clock.currentTimeMillis;
+      yield* sendDeadline(sessionId, "no-such-request", armedAt + 1500);
+      const fact = readChain(sessionFile, sessionId).find(
+        (row) => row.id === "no-such-request:deadline:stale",
+      );
+      if (fact === undefined) throw new Error("missing recorded stale alarm fact");
+      console.log(`DELIVER_AT fired_at=${fact.ts} armed_at=${armedAt}`);
     }),
   );
   process.exit(0);

@@ -22,8 +22,10 @@ import { openSessionStore } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
 import {
   blockingRunner,
+  boundedAwait,
   clusterMessages,
   clusterTempDir,
+  completionSignal,
   readChain,
   resolvedRunner,
   runCluster,
@@ -49,31 +51,6 @@ async function withKernel<A>(read: (kernel: SessionHandleStore.SessionKernel) =>
     store.close();
     catalog.close();
   }
-}
-
-/**
- * #1254 r5 M1: completion signals replace the waitUntil polls. A signal is
- * created BEFORE the seam that fires it is installed (the blocking runner's
- * entry callback / the store's post-commit observation sink) and resolved
- * from that exact seam, so completion is subscribed, never polled.
- */
-function completionSignal(): { readonly done: Promise<void>; readonly fire: () => void } {
-  let resolveDone: () => void = () => undefined;
-  const done = new Promise<void>((resolve) => {
-    resolveDone = resolve;
-  });
-  return { done, fire: () => resolveDone() };
-}
-
-const SIGNAL_CAP_MS = 15_000;
-
-/** Bounded await of one signal: the cap is a failure guard, never a synchronizer. */
-function boundedAwait(label: string, done: Promise<void>): Promise<void> {
-  let cap: ReturnType<typeof setTimeout> | undefined;
-  const guard = new Promise<never>((_, reject) => {
-    cap = setTimeout(() => reject(new Error(`timed out awaiting ${label}`)), SIGNAL_CAP_MS);
-  });
-  return Promise.race([done, guard]).finally(() => clearTimeout(cap));
 }
 
 test("passivation arms resume for unconsumed input; the resume wake continues the session", async () => {

@@ -1,3 +1,6 @@
+// Invariant (#1318): dependency edges follow the topology table — a package
+// imports only the workspaces the table allows, nothing undeclared. Distinct
+// from inventory wiring, import cycles and dead exports.
 import { Glob } from "bun";
 import { realpathSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

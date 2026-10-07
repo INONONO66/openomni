@@ -60,7 +60,9 @@ async function withSession(
     readonly kernel: SessionHandleStore.SessionKernel;
     readonly commit: (
       actions: readonly ReturnType<typeof firedAction>[],
-    ) => Promise<Result.Result<unknown, LedgerError>>;
+    ) => Promise<
+      Result.Result<Effect.Success<ReturnType<SessionHandleStore.SessionKernel["commit"]>>, LedgerError>
+    >;
   }) => Promise<void>,
 ): Promise<void> {
   const catalog = openCatalogStore(catalogFile, { now: () => 1 });
@@ -289,11 +291,11 @@ describe("catalog schema v2 (has_armed)", () => {
 
       const reopened = openCatalogStore(path, { now: () => 1 });
       try {
-        let refusal: unknown;
+        let refusal: Error | undefined;
         try {
           reopened.markArmed("s-any", true);
         } catch (error) {
-          refusal = error;
+          refusal = error instanceof Error ? error : new Error(String(error));
         }
         expect(refusal).toBeInstanceOf(CatalogVersionRefused);
         if (refusal instanceof CatalogVersionRefused) {

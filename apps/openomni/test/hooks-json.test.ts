@@ -228,7 +228,7 @@ test("no hooks config composes the bundle with zero rows and the action input ad
 });
 
 /** Runs the refusing thunk and returns the TYPED refusal (#1256 r3 M-4). */
-function refusalOf(run: () => unknown): AppInvariantError {
+function refusalOf(run: () => void): AppInvariantError {
   try {
     run();
   } catch (error) {
@@ -405,7 +405,10 @@ test("a hooks file with an unmapped event refuses the boot before any listener e
   // the offending event name, not a prose match.
   const refusal = await suite
     .boot({ config, llm: { resolveModel: fakeProviderModel } })
-    .then(() => undefined, (error: unknown) => error);
+    .then(
+      () => undefined,
+      (error) => (error instanceof Error ? error : new Error(String(error))),
+    );
   expect(refusal).toBeInstanceOf(AppInvariantError);
   if (!(refusal instanceof AppInvariantError)) throw new Error("expected AppInvariantError");
   expect(refusal.code).toBe("unmapped_event");
@@ -512,7 +515,7 @@ test("capability-removed one-turn gate: the cascade is journaled in session.conf
   const second = await offCascadeConfigureRows("hooks-json-off-b-");
   // The compose adoption row records the cascade with its root `because`.
   const compose = first
-    .map((row) => JSON.parse(row.intent) as { operation?: string; disabled?: unknown })
+    .map((row) => JSON.parse(row.intent) as { operation?: string; disabled?: { name: string; because: string }[] })
     .find((intent) => intent.operation === "compose");
   expect(compose?.disabled).toEqual([
     { name: "hook", because: "hook" },
@@ -1102,7 +1105,7 @@ test("H-1 e2e: a steering prompt denied mid-turn is refused at the RUN boundary 
   const config = suite.config("hooks-json-boundary-state-", { hooksPath });
   let calls = 0;
   let residentSessionId: string | undefined;
-  let steer: (sessionId: string) => Promise<unknown> = () =>
+  let steer: (sessionId: string) => Promise<{ readonly seq: number; readonly existed: boolean }> = () =>
     Promise.reject(new Error("steer door wired after boot"));
   const app = await suite.boot({
     config,

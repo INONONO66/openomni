@@ -56,7 +56,7 @@ function compactThreshold(messages: Message.WithParts[], options: ResolvedCompac
 }
 
 // Shared with rejection tests so the anchor metadata assertion cannot silently weaken.
-function parseKeptWindow(value: unknown) {
+function parseKeptWindow(value: Message.MetadataValue | PlainValue | readonly PlainValue[] | undefined) {
   return z.array(z.object({ time: z.number(), text: z.string() })).parse(value);
 }
 

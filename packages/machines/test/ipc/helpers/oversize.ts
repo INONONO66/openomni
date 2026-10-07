@@ -7,8 +7,8 @@ import { captureError, within } from "./signal";
  * fast FIN (#606, #1270 F8): the call fails as a connection loss and the
  * server reports the disconnect — long before the 30s call timeout.
  */
-export async function expectOversizeFailFast(
-  client: { call(method: string, params: unknown, timeoutMs: number): Promise<unknown> },
+export async function expectOversizeFailFast<Reply>(
+  client: { call(method: string, params: { data: string }, timeoutMs: number): Promise<Reply> },
   disconnected: Promise<string>,
 ): Promise<void> {
   const call = client.call("big", { data: "y".repeat(17 * 1024 * 1024) }, 30_000);

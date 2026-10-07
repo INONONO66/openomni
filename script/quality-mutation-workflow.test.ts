@@ -70,4 +70,9 @@ test("full mutation is an explicit scheduled workflow, never a silently skipped 
   expect(joinRun).toBeDefined();
   expect(jsonString(jsonObject(joinRun ?? {}).run)).not.toContain("--baseline");
   expect(jsonString(jsonObject(joinRun ?? {}).run)).toContain("--shards");
+  // A missing campaign receipt fails the scheduled run instead of warning.
+  const receiptUpload = joinSteps.find(
+    (step) => jsonString(jsonObject(step.with ?? {}).name ?? "") === "quality-mutation-receipt",
+  );
+  expect(jsonObject(jsonObject(receiptUpload ?? {}).with)["if-no-files-found"]).toBe("error");
 });

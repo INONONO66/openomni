@@ -16,8 +16,7 @@ export function fixedClock(now: () => number): Clock.Clock {
     currentTimeNanos: nanos,
     monotonicTimeNanosUnsafe: () => BigInt(now()) * 1_000_000n,
     monotonicTimeNanos: nanos,
-    sleep: (duration) =>
-      Effect.promise(() => new Promise((resolve) => setTimeout(resolve, Duration.toMillis(duration)))),
+    sleep: (duration) => Effect.promise(() => Bun.sleep(Duration.toMillis(duration))),
   };
 }
 

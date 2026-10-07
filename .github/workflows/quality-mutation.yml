@@ -141,7 +141,7 @@ jobs:
         with:
           name: quality-mutation-progress-${{ needs.plan.outputs.count }}-${{ matrix.shard }}
           path: mutation-progress/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
       - name: Preserve shard receipt for the join step
         if: always()
@@ -149,7 +149,7 @@ jobs:
         with:
           name: quality-mutation-shard-${{ matrix.shard }}
           path: quality-mutation-results/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
   join:
     name: Join shard receipts and enforce measured baseline
@@ -178,5 +178,5 @@ jobs:
         with:
           name: quality-mutation-receipt
           path: quality-mutation-results/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14

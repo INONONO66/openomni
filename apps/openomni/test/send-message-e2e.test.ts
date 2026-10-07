@@ -67,7 +67,11 @@ test.each([
   const actions = plane
     .listSessions()
     .flatMap((row) => sessionTree(row.id, plane.sessionStore(row.id).actions));
-  expect(actions.filter((action) => action.kind === "message" && (action.effect.value as { outbound?: unknown } | null)?.outbound !== undefined)).toEqual([]);
+  const outbound = (action: (typeof actions)[number]): boolean => {
+    const value = action.effect.value;
+    return value !== null && typeof value === "object" && !Array.isArray(value) && "outbound" in value;
+  };
+  expect(actions.filter((action) => action.kind === "message" && outbound(action))).toEqual([]);
 });
 
 test("an explicit model send_message routes through MessagePort.ingest to the external surface", async () => {

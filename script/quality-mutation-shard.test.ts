@@ -73,9 +73,10 @@ test("shard slices resume append-only progress and join into the single full rec
   cpSync(dependencies, join(input.root, "node_modules"), { recursive: true, dereference: true });
   const progress0 = join(input.root, "progress", "shard-0.jsonl");
   const shard0 = ["--shard", "0", "--shard-count", "2", "--progress", progress0];
-  // Budget-exhausted first run: clean partial stop, exit 0, nothing executed.
+  // Budget-exhausted first run: clean partial stop, exit 1, nothing executed.
+  // An incomplete shard with zero errors is a failure, never a green exit.
   const partial = await runnerMain([...runnerArgv(input), ...shard0, "--budget", "1"]);
-  expect(partial.exitCode).toBe(0);
+  expect(partial.exitCode).toBe(1);
   expect(partial.document.full).toBe(false);
   expect(partial.document.complete).toBe(false);
   expect(partial.shard.budgetExhausted).toBe(true);
@@ -85,7 +86,7 @@ test("shard slices resume append-only progress and join into the single full rec
   const inventoryHash = String(headerOf(progress0).inventorySha256);
   // The one spawned run of the runner CLI: same partial resume, real exit code.
   const spawned = await execute([process.execPath, runner, ...runnerArgv(input), ...shard0, "--budget", "1"], input.root, 120000);
-  expect(spawned.exitCode).toBe(0);
+  expect(spawned.exitCode).toBe(1);
   expect(record(record(decode(spawned.stdout)).shard).budgetExhausted).toBe(true);
   // A test selection outside the frozen inventory fails closed.
   const absentTest = await runnerMain([...runnerArgv(input), "--test", "missing.test.ts", "--budget", "1"]);
@@ -105,7 +106,7 @@ test("shard slices resume append-only progress and join into the single full rec
   const foreignProgress = join(foreign.root, "foreign-progress.jsonl");
   cpSync(progress0, foreignProgress);
   const discarded = await runnerMain([...runnerArgv(foreign), "--shard", "0", "--shard-count", "2", "--progress", foreignProgress, "--budget", "1"]);
-  expect(discarded.exitCode).toBe(0);
+  expect(discarded.exitCode).toBe(1);
   expect(discarded.stderr).toContain("progress artifact for inventory");
   expect(discarded.stderr).toContain("discarded (current ");
   const staleHash = headerOf(progress0).inventorySha256;
@@ -225,13 +226,13 @@ test("shard slices resume append-only progress and join into the single full rec
   const survivors = jsonNumber(jsonObject(joined.counts).survived);
   expect(Array.isArray(merged.findings) && merged.findings.length).toBe(survivors);
   expect(joinCode).toBe(survivors > 0 ? 1 : 0);
-  // Join with a partial shard document: incomplete summary, exit 0, no receipt.
+  // Join with a partial shard document: incomplete summary, exit 1, no receipt.
   const partialDir = join(input.root, "join-partial");
   mkdirSync(join(partialDir, "quality-mutation-shard-1"), { recursive: true });
   cpSync(join(joinDir, "quality-mutation-shard-1", "native.json"), join(partialDir, "quality-mutation-shard-1", "native.json"));
   mkdirSync(join(partialDir, "quality-mutation-shard-0"), { recursive: true });
   writeFileSync(join(partialDir, "quality-mutation-shard-0", "native.json"), JSON.stringify({ command: ["runner"], exitCode: partial.exitCode, document: partial.document }));
-  expect(joinMain(["--root", input.root, "--contract", "contract.json", "--shards", partialDir, "--output", "joined-partial"])).toBe(0);
+  expect(joinMain(["--root", input.root, "--contract", "contract.json", "--shards", partialDir, "--output", "joined-partial"])).toBe(1);
   expect(existsSync(join(input.root, "joined-partial"))).toBe(false);
   // Stale identity fails closed inside the real join function.
   expect(() =>
@@ -240,8 +241,9 @@ test("shard slices resume append-only progress and join into the single full rec
   // Spawned exit codes for the join entry point.
   const script = join(import.meta.dir, "quality-mutation-join.ts");
   const incomplete = Bun.spawnSync([process.execPath, script, "--root", input.root, "--contract", "contract.json", "--shards", partialDir, "--output", "joined-spawn"], { timeout: 120000 });
-  expect(incomplete.exitCode).toBe(0);
+  expect(incomplete.exitCode).toBe(1);
   expect(incomplete.stderr.toString()).toContain("campaign incomplete: shards 1/2 complete");
+  expect(incomplete.stderr.toString()).toContain("incomplete campaign is a failure");
   const missingBaseline = Bun.spawnSync([process.execPath, script], { timeout: 120000 });
   expect(missingBaseline.exitCode).toBe(1);
 }, 600000);

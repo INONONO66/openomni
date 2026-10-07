@@ -51,12 +51,15 @@ test("rejects written type keywords in production source", () => {
   });
 });
 
-test("accepts keyword words outside type syntax and ignores tests", () => {
+test("accepts keyword words outside type syntax, in sources and in tests", () => {
   const root = fixture(
     "apps/desktop/src/fixture.tsx",
     'const text = "any unknown"; // any unknown\nconst value: string = text;\n',
   );
-  writeFileSync(join(root, "apps/desktop/src/fixture.test.ts"), "type Test = any;\n");
+  writeFileSync(
+    join(root, "apps/desktop/src/fixture.test.ts"),
+    'const note = "unknown keyword in a literal"; // any unknown\nconst other: string = note;\n',
+  );
 
   const result = run(root);
 
@@ -64,6 +67,49 @@ test("accepts keyword words outside type syntax and ignores tests", () => {
     code: 0,
     stdout: "OK: written any/unknown types: 0\n",
     stderr: "",
+  });
+});
+
+// #1318 planted escape: the written-type gate scans test sources.
+test("rejects a written unknown planted in a package test file", () => {
+  const root = fixture("packages/ipc/test/fixture.test.ts", "let planted: unknown;\n");
+  writeFileSync(join(root, "packages/ipc/test/helpers.ts"), "export const helper: string = \"h\";\n");
+
+  const result = run(root);
+
+  expect(result).toEqual({
+    code: 1,
+    stdout: "",
+    stderr: "VIOLATION [written-types] packages/ipc/test/fixture.test.ts:1 unknown\n",
+  });
+});
+
+test("rejects written keywords in app test helpers and script test files alike", () => {
+  const root = fixture("apps/desktop/test/helpers/page.ts", "export type Page = { body: any };\n");
+  mkdirSync(join(root, "script"), { recursive: true });
+  writeFileSync(join(root, "script/fixture.test.ts"), "const value = 1 as unknown;\n");
+
+  const result = run(root);
+
+  expect(result).toEqual({
+    code: 1,
+    stdout: "",
+    stderr:
+      "VIOLATION [written-types] apps/desktop/test/helpers/page.ts:1 any\n" +
+      "VIOLATION [written-types] script/fixture.test.ts:1 unknown\n",
+  });
+});
+
+test("a declaration file is handled as today: scanned wherever the globs reach", () => {
+  // `.d.ts` was never exempt under src/ and gains no new exemption under test/.
+  const root = fixture("packages/ipc/test/ambient.d.ts", "declare const injected: unknown;\n");
+
+  const result = run(root);
+
+  expect(result).toEqual({
+    code: 1,
+    stdout: "",
+    stderr: "VIOLATION [written-types] packages/ipc/test/ambient.d.ts:1 unknown\n",
   });
 });
 

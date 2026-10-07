@@ -49,11 +49,11 @@ test("#1252 newer catalog schemaVersion: reads work, Deliver/fork refused typed,
       expect(reopened.childSessionsPage("s-1", "", 10)).toEqual([]);
 
       // Fork (session indexing) is refused with the typed error.
-      let indexRefusal: unknown;
+      let indexRefusal: Error | undefined;
       try {
         reopened.indexSession({ id: "s-2", parentId: "s-1", role: "worker", createdAt: 2 });
       } catch (error) {
-        indexRefusal = error;
+        indexRefusal = error instanceof Error ? error : new Error(String(error));
       }
       expect(indexRefusal).toBeInstanceOf(CatalogVersionRefused);
       if (indexRefusal instanceof CatalogVersionRefused) {
@@ -66,11 +66,11 @@ test("#1252 newer catalog schemaVersion: reads work, Deliver/fork refused typed,
       }
 
       // Deliver (activation fence rotation) is refused with the typed error.
-      let fenceRefusal: unknown;
+      let fenceRefusal: Error | undefined;
       try {
         reopened.rotateFence("s-1");
       } catch (error) {
-        fenceRefusal = error;
+        fenceRefusal = error instanceof Error ? error : new Error(String(error));
       }
       expect(fenceRefusal).toBeInstanceOf(CatalogVersionRefused);
       if (fenceRefusal instanceof CatalogVersionRefused) {

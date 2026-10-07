@@ -8,6 +8,7 @@ import {
   JournalKind,
   RequestPhase,
   SignalControl,
+  type PlainValue,
 } from "../src/index.js";
 
 const payload = { encodingVersion: 1, value: { text: "hello" } } as const;
@@ -58,7 +59,7 @@ describe("journal kind census (#1252)", () => {
   // The production append site enforces these schemas (kernel.commit refuses
   // the whole batch): packages/agent/test/journal-fail-closed.test.ts.
   test("declared schemas refuse mismatched row bodies (enforced at the append site)", () => {
-    const cases: ReadonlyArray<[string, Record<string, unknown>]> = [
+    const cases: ReadonlyArray<[string, Record<string, PlainValue>]> = [
       ["prompt", { ...body, intent: { ...payload, value: { delivery: "later" } } }],
       ["action", { ...body, intent: { ...payload, value: { after: -1 } } }],
       ["request", { ...body, effect: { ...payload, value: { phase: "replied" } } }],

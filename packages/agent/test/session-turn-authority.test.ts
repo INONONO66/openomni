@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import type { BusEvent, PlainValue } from "@openomni/protocol";
+import { PlainValueSchema, type BusEvent, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { isolated } from "./helpers/isolated";
 import { seedPolicy } from "./helpers/seed-policy";
 import {
@@ -42,7 +42,7 @@ test("known trusted origins keep acting with no violation", () => {
 // Integration seam: a real turn over mail of unknown provenance runs the
 // runner with evidence authority and records the violation observation.
 test("a turn over unknown-provenance mail runs as evidence and records the violation fact", () => {
-  const published: { name: string; data: Record<string, unknown> }[] = [];
+  const published: { name: string; data: PlainObject }[] = [];
   const authorities: (string | undefined)[] = [];
   const runner: SessionRunner = (input) =>
     Effect.sync(() => {
@@ -53,7 +53,11 @@ test("a turn over unknown-provenance mail runs as evidence and records the viola
     authorizeConfigure: allowConfigure,
     observations: {
       publish: <T>(event: BusEvent.Descriptor<T>, data: T) => {
-        published.push({ name: event.name, data: data as Record<string, unknown> });
+        const value = PlainValueSchema.parse(data);
+        published.push({
+          name: event.name,
+          data: value !== null && typeof value === "object" && !Array.isArray(value) ? value : {},
+        });
       },
     },
     clock: () => 1_000,

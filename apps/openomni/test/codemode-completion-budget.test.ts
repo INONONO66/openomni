@@ -94,7 +94,7 @@ test("two cells in one turn each own a full completion budget", async () => {
 test("a non-ToolRefused defect inside the cell door dies instead of folding to a failed result", async () => {
   const path = socketPath();
   let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
-  const causes: Cause.Cause<unknown>[] = [];
+  const causes: Cause.Cause<MachinesFailure>[] = [];
   const settled: Machine.ToolCallResult[] = [];
   const host = await acquireEffect(createMachineHost({
     listen: { unix: path },

@@ -191,13 +191,16 @@ const TABLES = [
   "channel_grant", "reply_grant", "egress_debit", "blacklist", "surface_key",
 ] as const;
 
+/** What the replacer sees: a row column, a row, or the row array. */
+type DumpValue = string | number | bigint | object | null;
+
 /** Raw `SELECT *` dump per table: the durable bytes, below every adapter. */
 function rowBytes(db: Database): Record<string, string> {
   const dump: Record<string, string> = {};
   for (const table of TABLES) {
     dump[table] = JSON.stringify(
       db.query(`SELECT * FROM ${table} ORDER BY 1`).all(),
-      (_k, v: unknown) => (v instanceof Uint8Array ? Array.from(v) : v),
+      (_k, v: DumpValue) => (v instanceof Uint8Array ? Array.from(v) : v),
     );
   }
   return dump;

@@ -1,3 +1,6 @@
+// Invariant (#1318): the quality inventory matches the workspace wiring —
+// every workspace is enumerated, typed, tested and knip-covered exactly as
+// the topology table declares. Distinct from edges, cycles and dead exports.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {

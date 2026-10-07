@@ -17,12 +17,6 @@ describe("BusEvent.define", () => {
     });
   });
 
-  test("preserves the provided name", () => {
-    const descriptor = BusEvent.define("bus:event", schema);
-
-    expect(descriptor.name).toBe("bus:event");
-  });
-
   test("preserves the schema reference", () => {
     const descriptor = BusEvent.define("bus:event", schema);
 

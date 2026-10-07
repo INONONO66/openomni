@@ -878,7 +878,7 @@ describe("session reads over the gateway socket", () => {
     return {
       readSeen: readSeen.promise,
       requests: () => requests,
-      respond(page: Readonly<Record<string, unknown>>) {
+      respond(page: typeof terminalPage) {
         if (heldSocket === undefined) throw new Error("no read was received");
         heldSocket.send(JSON.stringify(page));
       },
