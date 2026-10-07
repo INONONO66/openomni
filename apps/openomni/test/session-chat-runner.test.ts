@@ -1,27 +1,27 @@
-import { attemptIntentIds, isAttemptRow, isLogicalLlm } from "./helpers/llm-rows";
-import { runAgentSync } from "./helpers/executor";
-import { sessionTree } from "./helpers/session-tree";
-import { pinnedModelSelection, restoreModelSelection } from "./helpers/composition-fixtures";
-import { testTurnDispatcher } from "./helpers/service-layers";
-import { fixtureStopEvidence, prepareChatFixture } from "./helpers/chat-services";
-import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
-import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
+import { attemptIntentIds, isAttemptRow, isLogicalLlm } from "../../../packages/agent/test/helpers/llm-rows";
+import { runAgentSync } from "../../../packages/agent/test/helpers/executor";
+import { sessionTree } from "../../../packages/agent/test/helpers/session-tree";
+import { pinnedModelSelection, restoreModelSelection } from "../src/composition/model-selection";
+import { testTurnDispatcher } from "../../../packages/agent/test/helpers/service-layers";
+import { fixtureStopEvidence, prepareChatFixture } from "../../../packages/agent/test/helpers/chat-services";
+import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "../../../packages/agent/test/helpers/session-services";
+import { KERNEL_POLICY_REGISTRY } from "../../../packages/agent/src/core/gate/compile";
 import { Cause, Effect, Exit } from "effect";
-import { isolated, isolatedLedger } from "./helpers/isolated";
-import { providerFailure } from "./helpers/mock-llm";
-import { seedPolicy } from "./helpers/seed-policy";
+import { isolated, isolatedLedger } from "../../../packages/agent/test/helpers/isolated";
+import { providerFailure } from "../../../packages/agent/test/helpers/mock-llm";
+import { seedPolicy } from "../../../packages/agent/test/helpers/seed-policy";
 import { describe, expect, it } from "bun:test";
 
-import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../src/core/gate/compile";
+import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../../packages/agent/src/core/gate/compile";
 import { SessionTurn, type LedgerAction, type Model } from "@openomni/protocol";
-import { closeSessions, createSessionChatRunner } from "../src/core/run";
-import type { Executor } from "../src/core/gate/decide";
-import { Bus } from "./helpers/bus";
-import type { SessionHandle, SessionRunnerInput } from "../src/core/run";
-import { session } from "../src/testing/registry";
-import { turnExecutor, nullRetryAlarm, foreign } from "./helpers/effect-g2";
-import { recordingChatRunner } from "./helpers/session-chat";
-import { completeModel, createMockLlmConfig, createStopOutcome, type MockLlmFn, mockProviderData, mockProviderModel, } from "./helpers/mock-llm";
+import { closeSessions, createSessionChatRunner } from "../../../packages/agent/src/core/run";
+import type { Executor } from "../../../packages/agent/src/core/gate/decide";
+import { Bus } from "../../../packages/agent/test/helpers/bus";
+import type { SessionHandle, SessionRunnerInput } from "../../../packages/agent/src/core/run";
+import { session } from "../../../packages/agent/src/testing/registry";
+import { turnExecutor, nullRetryAlarm, foreign } from "../../../packages/agent/test/helpers/effect-g2";
+import { recordingChatRunner } from "../../../packages/agent/test/helpers/session-chat";
+import { completeModel, createMockLlmConfig, createStopOutcome, type MockLlmFn, mockProviderData, mockProviderModel, } from "../../../packages/agent/test/helpers/mock-llm";
 
 const policy = compilePolicySnapshot({
   registry: KERNEL_POLICY_REGISTRY,
@@ -172,7 +172,7 @@ function runDurably(
     };
     seedPolicy();
     const chatRunner = createSessionChatRunner({
-      prepare: (input: import("../src/core/run").SessionRunnerInput) =>
+      prepare: (input: import("../../../packages/agent/src/core/run").SessionRunnerInput) =>
         Effect.gen(function* () {
           return prepareChatFixture({
             config: {
@@ -344,7 +344,7 @@ describe("session chat runner", () => {
           let calls = 0;
 
           const { actions, inboxIds } = yield* runDurably(
-            async (input: import("../src/model").RunInput, sink: import("../src/model").Sink) => {
+            async (input: import("../../../packages/agent/src/model").RunInput, sink: import("../../../packages/agent/src/model").Sink) => {
               calls += 1;
               return calls === 1 ? { type: "continue" } : completeModel(input, sink);
             },
@@ -407,7 +407,7 @@ describe("session chat runner", () => {
           let calls = 0;
 
           const { actions } = yield* runDurably(
-            async (input: import("../src/model").RunInput, sink: import("../src/model").Sink) => {
+            async (input: import("../../../packages/agent/src/model").RunInput, sink: import("../../../packages/agent/src/model").Sink) => {
               calls += 1;
               return calls === 1
                 ? { type: "error", error: providerFailure("transient provider outage") }
@@ -457,7 +457,7 @@ describe("session chat runner", () => {
           const answered: string[] = [];
 
           const { actions } = yield* runDurably(
-            async (input: import("../src/model").RunInput, sink: import("../src/model").Sink) => {
+            async (input: import("../../../packages/agent/src/model").RunInput, sink: import("../../../packages/agent/src/model").Sink) => {
               answered.push(input.model.id);
               return answered.length === 1
                 ? { type: "error", error: providerFailure("transient provider outage") }

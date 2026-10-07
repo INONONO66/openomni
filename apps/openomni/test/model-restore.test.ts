@@ -1,19 +1,19 @@
-import { messageSource } from "../helpers/message-source";
-import { recordingResolveModel } from "../helpers/resolve-model";
-import { testExecutor } from "../helpers/executor";
-import { restoreModelSelection } from "../helpers/composition-fixtures";
-import { chatServices, fixtureStopEvidence } from "../helpers/chat-services";
+import { messageSource } from "../../../packages/agent/test/helpers/message-source";
+import { recordingResolveModel } from "../../../packages/agent/test/helpers/resolve-model";
+import { testExecutor } from "../../../packages/agent/test/helpers/executor";
+import { restoreModelSelection } from "../src/composition/model-selection";
+import { chatServices, fixtureStopEvidence } from "../../../packages/agent/test/helpers/chat-services";
 import { Effect } from "effect";
-import { isolated } from "../helpers/isolated";
-import { recordingLedger } from "../helpers/effect-g2";
+import { isolated } from "../../../packages/agent/test/helpers/isolated";
+import { recordingLedger } from "../../../packages/agent/test/helpers/effect-g2";
 import { describe, expect, it } from "bun:test";
-import type { Sink } from "../../src/model";
+import type { Sink } from "../../../packages/agent/src/model";
 import type { LedgerAction, Model, PlainObject, PolicyRow } from "@openomni/protocol";
-import { runAgent } from "../../src/core/turn";
-import { createAssistantMessage } from "../../src/core/message-factory";
-import { compiledPolicy, opPhaseOf } from "../helpers/compiled-policy";
-import { createStopOutcome } from "../helpers/mock-llm";
-import { runInput } from "../helpers/run-input";
+import { runAgent } from "../../../packages/agent/src/core/turn";
+import { createAssistantMessage } from "../../../packages/agent/src/core/message-factory";
+import { compiledPolicy, opPhaseOf } from "../../../packages/agent/test/helpers/compiled-policy";
+import { createStopOutcome } from "../../../packages/agent/test/helpers/mock-llm";
+import { runInput } from "../../../packages/agent/test/helpers/run-input";
 
 const primary = { provider: "anthropic", id: "primary-model" };
 const fallback = { provider: "openai", id: "fallback-model" };
@@ -70,7 +70,7 @@ async function turn(options: {
         restoreModelSelection,
         stopEvidence: fixtureStopEvidence,
         llm: {
-          run: (_input: import("../../src/model").RunInput, sink: Sink) =>
+          run: (_input: import("../../../packages/agent/src/model").RunInput, sink: Sink) =>
             Effect.promise(async () => {
               sink.onMessage(createAssistantMessage("done", "", "session", messageSource));
               return createStopOutcome();
