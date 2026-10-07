@@ -16,7 +16,7 @@ async function alarmDefinition(): Promise<Bundle.CapabilityDefinition<"alarm">> 
   return capability.definition;
 }
 
-test("the manifest is THE product list: tool/action/hook/alarm capabilities, five bundles, empty off by default", async () => {
+test("the manifest is THE product list: tool/action/hook/compaction/alarm capabilities, five bundles, empty off by default", async () => {
   const manifest = appManifest({
     alarm: await alarmDefinition(),
     wake: { close: () => undefined },
@@ -25,6 +25,7 @@ test("the manifest is THE product list: tool/action/hook/alarm capabilities, fiv
     "tool",
     "action",
     "hook",
+    "compaction",
     "alarm",
   ]);
   expect(manifest.bundles.map((bundle) => bundle.name)).toEqual([
@@ -66,4 +67,15 @@ test('off: ["tool"] composes with a typed cascade: monitor, send-message and del
   expect(generation.disabled).toContainEqual({ name: "delegation-policy", because: "tool" });
   expect(generation.rows.map((row) => row.id)).not.toContain("monitor/tool.pre#1");
   expect(generation.rows.filter((row) => row.on === "tool.pre" || row.on === "tool.post")).toEqual([]);
+});
+
+test("off: [\"compaction\"] composes with the typed disabled record, not a build break (#1307)", async () => {
+  const manifest = appManifest({
+    alarm: await alarmDefinition(),
+    wake: { close: () => undefined },
+    off: ["compaction"],
+  });
+  const generation = await runEffect(Bundle.compose(manifest));
+  expect(generation.disabled).toContainEqual({ name: "compaction", because: "compaction" });
+  expect(generation.capabilities).not.toContain("compaction");
 });

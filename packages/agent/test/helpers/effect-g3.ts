@@ -1,4 +1,4 @@
-import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices } from "./chat-services";
+import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, fixtureCompactionSeam } from "./chat-services";
 import { KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
 import { Effect, Cause, Exit } from "effect";
 
@@ -15,7 +15,7 @@ export function createTestAgent(config: ChatAgentConfig) {
     const { executor } = recordingExecutor({
       policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 1, rows: SEEDED_POLICY_ROWS.map((row: Omit<PolicyRow.Row, "generation">) => ({ ...row, generation: 1 })) }),
     });
-    return Effect.gen(function* () { const fixture: ChatFixture = { executor, execution: executor, ...config }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(input, acquiredConfig, sink).pipe(Effect.provide(chatServices(fixture))); });
+    return Effect.gen(function* () { const fixture: ChatFixture = { executor, execution: executor, compactionSeam: fixtureCompactionSeam, ...config }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(input, acquiredConfig, sink).pipe(Effect.provide(chatServices(fixture))); });
   } };
 }
 export function runTestAgent(input: ChatAgentInput, config: ChatAgentConfig, sink?: Sink) {

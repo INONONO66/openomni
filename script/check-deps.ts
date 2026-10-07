@@ -899,24 +899,21 @@ export function agentBandViolations(filePath: string, source: string): string[] 
  * the same PR. #1255 drives every entry to zero.
  */
 const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
-  ["packages/agent/src/core/commit.ts", 2],
-  ["packages/agent/src/core/compaction.ts", 3],
+  // #1307 moved every core -> plugins/compaction edge behind the compaction
+  // seam and inverted the plugin -> inspect/history edge; the remaining pins
+  // are core -> inspect/history and core/model edges (#1255 owns those).
+  ["packages/agent/src/core/commit.ts", 1],
   ["packages/agent/src/core/failure.ts", 1],
   ["packages/agent/src/core/gate/decide.ts", 2],
-  ["packages/agent/src/core/index.ts", 1],
-  // core -> plugins/compaction/restore edge; #1255 owns the inversion and
-  // #1252/#1253 delete the file with the single write path.
-  ["packages/agent/src/core/mailbox.ts", 2],
+  ["packages/agent/src/core/mailbox.ts", 1],
   ["packages/agent/src/core/ports.ts", 1],
   // pre-existing value import (instanceof LlmRunFailure); undercounted by the
   // slash-only classifier before #1276 (r2 addendum measurement correction).
   ["packages/agent/src/core/retry.ts", 1],
   ["packages/agent/src/core/run.ts", 2],
-  ["packages/agent/src/core/turn.ts", 6],
-  ["packages/agent/src/core/types.ts", 2],
+  ["packages/agent/src/core/turn.ts", 1],
+  ["packages/agent/src/core/types.ts", 1],
   ["packages/agent/src/model/errors.ts", 1],
-  // plugin -> inspect/history edge; #1255 owns the inversion.
-  ["packages/agent/src/plugins/compaction/successor.ts", 1],
 ]);
 
 

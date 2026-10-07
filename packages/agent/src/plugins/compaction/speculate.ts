@@ -5,19 +5,15 @@ import { prepareSummarizerInput } from "./estimate";
 import { withSummarizerDeadline } from "./summary";
 import type { CompactionOptions } from "./compact";
 
-/** A warm summary is pinned to the cut anchor, not to later appends. */
-export interface CompactionCandidate {
-  readonly prefixIds: readonly string[];
-  readonly prefixFingerprint: string;
-  readonly firstKeptId: string;
-  readonly compactionAnchorId: string | undefined;
-  readonly anchorBody: string;
-}
+// #1307: the candidate shape is a seam type (the kernel passes it through
+// dispatch); the core owns it and this module re-exports the old name.
+export type { CompactionCandidate } from "../../core/api";
+import type { CompactionCandidate, CompactionSessionConfig, CompactionSessionPort } from "../../core/api";
 
 const MAX_PREPARE_FAILURES = 2;
 
 /** Speculation is a child of the owning run Scope, never a detached Promise. */
-export class CompactionSession {
+export class CompactionSession implements CompactionSessionPort {
   readonly #protectRecentMessages: number;
   readonly #summarize: NonNullable<CompactionOptions["onSummarize"]>;
   #candidate: CompactionCandidate | undefined;
@@ -28,11 +24,7 @@ export class CompactionSession {
   /** Resolved once a preparation has entered its summarizer call; resolved before any prepare. */
   #entered = Deferred.makeUnsafe<void>();
 
-  constructor(config: {
-    readonly protectRecentMessages: number;
-    readonly summarize: NonNullable<CompactionOptions["onSummarize"]>;
-    readonly summarizerDeadlineMs?: number;
-  }) {
+  constructor(config: CompactionSessionConfig) {
     this.#protectRecentMessages = config.protectRecentMessages;
     this.#summarize = withSummarizerDeadline(config.summarize, config.summarizerDeadlineMs);
     Deferred.doneUnsafe(this.#entered, Exit.void);

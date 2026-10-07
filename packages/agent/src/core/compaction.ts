@@ -1,8 +1,12 @@
 import { Effect, type Scope } from "effect";
 import type { ExecutionError } from "./failure";
-import { Compaction, type CompactionSession } from "../plugins/compaction";
-import { executeCompaction } from "../plugins/compaction/execute-cut";
-import { resolveCompactionGeometry } from "../plugins/compaction/geometry";
+import type {
+  CompactionCandidate,
+  CompactionExecutionOutcome,
+  CompactionSeamService,
+  CompactionSessionPort,
+  ResolvedCompactionOptions,
+} from "./compaction-ports";
 import type { ObservedChatAgentConfig as ChatAgentConfig } from "./types";
 import type { Message } from "@openomni/protocol";
 import type { AgentRunBase, RunState } from "./turn";
@@ -13,7 +17,7 @@ type CompactionApplyResult = "compacted" | "deferred" | "none";
 function resolvedCompaction(
   state: RunState,
   config: ChatAgentConfig,
-): (NonNullable<ChatAgentConfig["compaction"]> & { contextWindowTokens: number }) | undefined {
+): ResolvedCompactionOptions | undefined {
   if (config.compaction === undefined) return undefined;
   const contextWindowTokens = config.compaction.contextWindowTokens ?? state.contextWindowTokens;
   if (contextWindowTokens === undefined) return undefined;
@@ -23,13 +27,15 @@ function resolvedCompaction(
 export function prepareCompactionAfterContinue(
   state: RunState,
   config: ChatAgentConfig,
-  compaction: CompactionSession | undefined,
+  compaction: CompactionSessionPort | undefined,
 ): Effect.Effect<void, never, Scope.Scope> {
   return Effect.suspend(() => {
+  const seam = config.compactionSeam;
   const options = resolvedCompaction(state, config);
   const measuredTokens = state.lastCallContextTokens;
-  if (options === undefined || measuredTokens === undefined || compaction === undefined) return Effect.void;
-  const geometry = compactionGeometry(state, options);
+  if (seam === undefined || options === undefined || measuredTokens === undefined || compaction === undefined)
+    return Effect.void;
+  const geometry = compactionGeometry(seam, state, options);
   return compaction.prepare(
     state.messages,
     measuredTokens,
@@ -40,10 +46,11 @@ export function prepareCompactionAfterContinue(
 }
 
 function compactionGeometry(
+  seam: CompactionSeamService,
   state: RunState,
-  options: NonNullable<ReturnType<typeof resolvedCompaction>>,
+  options: ResolvedCompactionOptions,
 ) {
-  return resolveCompactionGeometry({
+  return seam.geometry({
     contextWindowTokens: options.contextWindowTokens,
     ...(options.reserveTokens === undefined ? {} : { reserveTokens: options.reserveTokens }),
     ...(state.lastCompactionYield === undefined
@@ -52,32 +59,63 @@ function compactionGeometry(
   });
 }
 
-function deferCompaction(measuredTokens: number | undefined, compaction: CompactionSession | undefined, graceTokens: number): boolean {
+function deferCompaction(measuredTokens: number | undefined, compaction: CompactionSessionPort | undefined, graceTokens: number): boolean {
   return measuredTokens !== undefined && compaction?.inFlight() === true && measuredTokens < graceTokens;
+}
+
+/** A threshold trigger without a measurement, or one below the seam's line, is a skip. */
+function thresholdNotReached(
+  seam: Pick<CompactionSeamService, "shouldCompact">,
+  state: RunState,
+  options: ResolvedCompactionOptions,
+  measuredTokens: number | undefined,
+): boolean {
+  return (
+    measuredTokens === undefined ||
+    !seam.shouldCompact(measuredTokens, options, state.lastCompactionYield)
+  );
+}
+
+/** Folds the execution outcome into run state; the caller already owns the trigger. */
+function settleCompactionResult(
+  state: RunState,
+  compaction: CompactionSessionPort | undefined,
+  result: CompactionExecutionOutcome,
+  candidate: CompactionCandidate | undefined,
+): Effect.Effect<CompactionApplyResult> {
+  return Effect.gen(function* () {
+    if (candidate !== undefined) compaction?.consume();
+    state.lastCompactionIneffective = result.ineffective;
+    if (result.yield !== undefined) state.lastCompactionYield = result.yield;
+    if (result.summarizerFailed === true && compaction !== undefined) yield* compaction.disable();
+    if (!result.compacted) return "none";
+    applyCompactionMessages(state, result.messages);
+    return "compacted";
+  });
 }
 
 export function applyCompaction(
   state: RunState,
   config: ChatAgentConfig,
   agentBase: AgentRunBase,
-  compaction: CompactionSession | undefined,
+  compaction: CompactionSessionPort | undefined,
   trigger: "threshold" | "yield",
 ): Effect.Effect<CompactionApplyResult, ExecutionError, Entropy> {
   return Effect.gen(function* () {
+  // No seam = the compaction capability is off: the kernel skips the seam
+  // and records nothing new; it never falls back to a built-in copy (#1307).
+  const seam = config.compactionSeam;
+  if (seam === undefined) return "none";
   const options = resolvedCompaction(state, config);
   if (options === undefined) return "none";
   const measuredTokens = state.lastCallContextTokens;
-  const geometry = compactionGeometry(state, options);
-  if (
-    trigger === "threshold" &&
-    (measuredTokens === undefined ||
-      !Compaction.shouldCompact(measuredTokens, options, state.lastCompactionYield))
-  )
+  const geometry = compactionGeometry(seam, state, options);
+  if (trigger === "threshold" && thresholdNotReached(seam, state, options, measuredTokens))
     return "none";
   if (deferCompaction(measuredTokens, compaction, geometry.graceTokens)) return "deferred";
 
   const candidate = compaction?.candidate();
-  const result = yield* executeCompaction({
+  const result = yield* seam.execute({
     history: state.messages,
     options,
     identity: agentBase,
@@ -90,13 +128,7 @@ export function applyCompaction(
       ...(candidate === undefined ? {} : { candidate }),
     },
   });
-  if (candidate !== undefined) compaction?.consume();
-  state.lastCompactionIneffective = result.ineffective;
-  if (result.yield !== undefined) state.lastCompactionYield = result.yield;
-  if (result.summarizerFailed === true && compaction !== undefined) yield* compaction.disable();
-  if (!result.compacted) return "none";
-  applyCompactionMessages(state, result.messages);
-  return "compacted";
+  return yield* settleCompactionResult(state, compaction, result, candidate);
   });
 }
 

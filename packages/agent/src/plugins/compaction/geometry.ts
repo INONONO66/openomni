@@ -1,22 +1,11 @@
-export interface CompactionYield {
-  readonly savedTokens: number;
-  readonly tokensBefore: number;
-}
+// #1307: the geometry shapes are seam types the kernel also reads; the core
+// owns them and this module implements against them.
+import type {
+  CompactionGeometry,
+  CompactionGeometryInput as CompactionGeometryOptions,
+} from "../../core/api";
 
-interface CompactionGeometryOptions {
-  readonly contextWindowTokens: number;
-  readonly reserveTokens?: number;
-  readonly previousYield?: CompactionYield;
-}
-
-interface CompactionGeometry {
-  readonly thresholdRatio: number;
-  readonly thresholdTokens: number;
-  readonly reserveTokens: number;
-  readonly leadTokens: number;
-  readonly prepareTokens: number;
-  readonly graceTokens: number;
-}
+export type { CompactionYield } from "../../core/api";
 
 const MIN_THRESHOLD_RATIO = 0.4;
 const MAX_THRESHOLD_RATIO = 0.85;

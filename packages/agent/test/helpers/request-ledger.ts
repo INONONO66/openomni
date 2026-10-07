@@ -12,6 +12,7 @@ import { commitSessionRequest } from "../../src/core/mailbox";
 import { commitFoldBatch } from "../../src/core/commit";
 import type { LedgerAction, LedgerSession, SessionTransition } from "@openomni/protocol";
 import { collector } from "./observation-collector";
+import { fixtureCompactionSeam } from "./fixture-compaction";
 export { bounded } from "./bounded";
 
 export function requestLedger(
@@ -32,7 +33,7 @@ export function requestLedger(
   const commit =
     input.legacy === true
       ? kernel.commit
-      : (batch: LedgerSession.Commit) => commitFoldBatch(kernel, batch);
+      : (batch: LedgerSession.Commit) => commitFoldBatch(kernel, batch, fixtureCompactionSeam);
   const opened = Result.getOrThrowWith(
     runTestSync(
       Effect.result(
@@ -57,7 +58,7 @@ export function requestLedger(
   };
   const ledger: ExecutionLedger = {
     ...fencedExecutionLedger(kernel, id, { owner, fence }, clock, (batch) =>
-      commitFoldBatch(kernel, batch),
+      commitFoldBatch(kernel, batch, fixtureCompactionSeam),
     ),
     transition(payload: SessionTransition.Payload, inputId: string, at: number) {
       return Effect.gen(function* () {
@@ -91,7 +92,7 @@ export function requestLedger(
           actions: [...actions],
           state: row.state,
           ...overrides,
-        }),
+        }, fixtureCompactionSeam),
       );
     },
     ledger,

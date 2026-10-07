@@ -3,9 +3,8 @@ import { CommitRefused, type LedgerError } from "./store/errors";
 import * as SessionHandleStore from "./store/fence";
 import type { CommitReceipt } from "./store/services";
 import { ObservationSink, type RunnerServices } from "./ports";
-import { canonicalDigest, Journal, PlainValueSchema, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
+import { canonicalDigest, Journal, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
 import { createExecutor, type ExecutionResult } from "./gate/decide";
-import { recordedCompaction, requireCompactionIntent, restoreContextRequest, restoredContextProjection } from "../plugins/compaction/restore";
 import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { ResolvedSessionRuntime, SessionRunnerResult } from "./run";
@@ -125,7 +124,7 @@ export function createSessionAdmission(
       actions: [...input.actions],
       state: input.state,
       ...(input.generation === undefined ? {} : { generation: input.generation }),
-    });
+    }, runtime.compaction);
   }
 
   /**
@@ -361,18 +360,23 @@ export function createSessionAdmission(
       yield* awaitRetainedRunner();
       const current = kernel.row(sessionId);
       return yield* Effect.scoped(Effect.gen(function* () {
-        const source = yield* requireCompactionIntent(kernel.actionById(compactionId));
-        if (source.sessionId !== sessionId) return yield* new AgentFailure({ operation: "session.restore", cause: "foreign_compaction" });
-        const record = yield* recordedCompaction(compactionId, kernel.resultFor(sessionId, compactionId));
-        const history = hydrateSessionHistory(kernel, sessionId).history;
-        const restored = restoredContextProjection(history, compactionId, record);
-        const projectionHash = canonicalDigest({ foldVersion: 1, projection: PlainValueSchema.parse(history) });
+        // #1307: restore is a compaction-owned projection — without the
+        // composed seam the restore refuses typed instead of improvising.
+        const seam = runtime.compaction;
+        if (seam === undefined) return yield* new AgentFailure({ operation: "session.restore", cause: "compaction_seam_missing" });
+        const plan = yield* seam.prepareRestore({
+          sessionId,
+          compactionId,
+          action: kernel.actionById(compactionId),
+          result: kernel.resultFor(sessionId, compactionId),
+          history: hydrateSessionHistory(kernel, sessionId).history,
+        });
         const captured = yield* runtime.generations.capture({ sessionId, generation: kernel.latestGenerationFor(sessionId).generation });
         const executor = yield* captured.provide(createExecutor({
           ledger: createExecutionLedger(),
           identity: { sessionId, role: current.role, parentActionId: compactionId },
         })).pipe(Effect.provide(runtime.services));
-        return yield* captured.provide(executor.run(restoreContextRequest(compactionId, projectionHash), () => Effect.succeed(restored)));
+        return yield* captured.provide(executor.run(plan.request, () => Effect.succeed(plan.restored)));
       }));
     });
   }

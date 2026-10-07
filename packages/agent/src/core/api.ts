@@ -1,6 +1,6 @@
 // The single import target for capability plugins (#1276): re-exports exactly
-// the core ports and types `plugins/compaction` consumes today. #1255 grows
-// this into the core context handed to loaded capabilities.
+// the core ports and types the removable capability plugins consume. #1255
+// grows this into the core context handed to loaded capabilities.
 export type { ExecutionRequest, Executor } from "./gate/decide";
 export {
   AgentFailure, AgentInvariantViolation, CompactionExecutionError, ContextRestoreError,
@@ -41,3 +41,13 @@ export {
   type DispatcherOptions, type ToolDispatchDefinition, type ToolDispatchResult,
   type ToolErrorKind,
 } from "./tool";
+// #1307 compaction seam: the one contract the compaction plugin implements
+// and the kernel consumes; the plugin imports its core types from here.
+export {
+  CompactionSeam,
+  type CompactionCandidate, type CompactionExecutionInput, type CompactionExecutionOutcome,
+  type CompactionGeometry, type CompactionGeometryInput, type CompactionOptions,
+  type CompactionRestoreInput, type CompactionRestorePlan, type CompactionSeamService,
+  type CompactionSessionConfig, type CompactionSessionPort, type CompactionYield,
+  type ResolvedCompactionOptions, type SummarizationBudget, type ToolOutputElision,
+} from "./compaction-ports";

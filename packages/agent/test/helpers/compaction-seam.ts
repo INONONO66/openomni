@@ -5,6 +5,7 @@ import { resolveCompactionGeometry } from "../../src/plugins/compaction/geometry
 import { applyCompaction } from "../../src/core/compaction";
 import type { CompactionSession } from "../../src/plugins/compaction/speculate";
 import type {} from "../../src/core/types";
+import { fixtureCompactionSeam } from "./fixture-compaction";
 import { runInput } from "./run-input";
 import { testMessageSource } from "./message-source";
 
@@ -15,6 +16,6 @@ export function stateAtGrace(window: number, offset: number) {
 }
 
 export function applyThreshold(state: RunState, config: ChatAgentConfig, session: CompactionSession) {
-  return applyCompaction(state, config,
+  return applyCompaction(state, { compactionSeam: fixtureCompactionSeam, ...config },
     { traceId: "trace", sessionId: state.sessionId, runId: "run", actorId: "actor" }, session, "threshold");
 }

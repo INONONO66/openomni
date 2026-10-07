@@ -13,7 +13,7 @@ import type {
   Tool,
 } from "@openomni/protocol";
 import type { RunInput } from "../model";
-import type { CompactionOptions } from "../plugins/compaction";
+import type { CompactionOptions, CompactionSeamService } from "./compaction-ports";
 import type { Executor } from "./gate/decide";
 
 export type TokenUsage = Token.AgentUsage;
@@ -49,6 +49,13 @@ export interface ChatAgentConfig {
   execution?: AgentExecutionLifecycle;
   /** Direct, run-scoped history compaction strategy. */
   compaction?: CompactionOptions;
+  /**
+   * The composed compaction capability's verbs (#1307). Absent = the
+   * capability is off: the loop runs without window-yield geometry, measured
+   * context tracking, overflow estimates, or compaction itself — nothing is
+   * recorded and nothing falls back.
+   */
+  compactionSeam?: CompactionSeamService;
   tools?: AgentToolSpec[];
   model: Model.Ref;
   /**

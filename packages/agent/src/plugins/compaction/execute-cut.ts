@@ -1,23 +1,11 @@
 import { Effect } from "effect";
-import { CompactionExecutionError, type ExecutionError, type Executor, RunEvents, type Entropy } from "../../core/api";
+import { CompactionExecutionError, type CompactionExecutionInput, type ExecutionError, RunEvents, type Entropy } from "../../core/api";
 import type { CompactionResult } from "./contract";
 import { canonicalDigest, PlainValueSchema, type BusEvent } from "@openomni/protocol";
 import { Compaction } from "./compact";
 
-type CompactionArguments = Parameters<typeof Compaction.compact>;
-
-interface CompactionExecution {
-  readonly history: CompactionArguments[0];
-  readonly options: CompactionArguments[1];
-  readonly identity: CompactionArguments[2];
-  readonly events: BusEvent.Sink;
-  readonly dispatch: CompactionArguments[4];
-  readonly executor?: Executor;
-  readonly signal?: AbortSignal;
-}
-
 /** Execute the existing strategy under admission; only the receipt releases observations. */
-export function executeCompaction(input: CompactionExecution): Effect.Effect<CompactionResult, ExecutionError, Entropy> {
+export function executeCompaction(input: CompactionExecutionInput): Effect.Effect<CompactionResult, ExecutionError, Entropy> {
   return Effect.gen(function* () {
   const snapshot = structuredClone(input.history);
   const completed: (() => void)[] = [];
