@@ -73,7 +73,7 @@ export const UI_NAMES = {
   TurnMeta: "Turn.Meta",
   /** A boundary in the ledger — a compaction, a resume. */
   EpochRule: "EpochRule",
-  /** Rendered markdown: prose, bullets, a heading, or a fence. */
+  /** Rendered markdown: a paragraph of prose. */
   MarkdownBlock: "MarkdownBlock",
   /** A code block: one quiet tonal step, bounded by a hairline. */
   CodeFence: "CodeFence",

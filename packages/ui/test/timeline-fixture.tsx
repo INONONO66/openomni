@@ -34,18 +34,13 @@ const lease: readonly TranscriptNode[] = [
     id: "la1",
     streaming: false,
     blocks: [
-      { kind: "h2", text: "Lease contract" },
       {
         kind: "p",
         text: "The generation only advances when a lease is newly acquired. Per the contract the value is owned by the lease issuer rather than the store, and the write path only ever compares it.",
       },
       {
-        kind: "bullets",
-        items: [
-          "generation is owned by the lease issuer, never by the store",
-          "the write path compares, it never increments",
-          "a fenced write reports the last generation it saw",
-        ],
+        kind: "p",
+        text: "The write path compares and never increments, and a fenced write reports the last generation it saw.",
       },
     ],
   },
@@ -86,12 +81,9 @@ const lease: readonly TranscriptNode[] = [
  * The caret assertions need a live turn and the rest need a settled one, so the
  * two fixtures here deliberately differ in exactly that.
  *
- * A trailing PROSE block is appended, because the caret rides the tail of the
- * last block and only prose and headings carry one — a blinking cursor welded
- * to the end of a bullet or inside a code fence would claim the list item or
- * the line is still being written, which is not what streaming means. The
- * shared transcript ends on bullets, so without this the streaming fixture
- * would render no caret and the assertion would be pinning the wrong thing.
+ * A trailing PROSE block is appended, so the caret — which rides the tail of
+ * the LAST block of a streaming answer — demonstrably sits on the appended
+ * paragraph and nowhere else.
  */
 const ledger: readonly TranscriptNode[] = transcript.map((node) =>
   node.kind === "assistant"

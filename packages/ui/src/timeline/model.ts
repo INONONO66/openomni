@@ -1,6 +1,3 @@
-import type { CodeTone } from "../primitives/code";
-import type { GutterMark } from "../primitives/gutter";
-
 /**
  * The transcript's INPUT SHAPE — what a ledger column has to be handed in order
  * to be laid out, and nothing else.
@@ -32,26 +29,18 @@ import type { GutterMark } from "../primitives/gutter";
  */
 export type ToolStatus = "done" | "running" | "waiting" | "failed" | "denied";
 
-/** One rendered source line: its tokens, plus what changed about it. */
-export interface TranscriptCodeLine {
-  readonly tokens: readonly { readonly text: string; readonly tone: CodeTone }[];
-  /** The `+`/`-` column. A CHARACTER, never a tint. */
-  readonly mark?: GutterMark;
-}
-
-/** One block of an agent's answer: prose, a list, a heading, or a fence. */
+/**
+ * One block of an agent's answer: a paragraph of prose, and nothing else.
+ *
+ * A discriminated union with required payload per kind (#1312): the former
+ * optional `text`/`items`/`lines` let a payload-less block type-check and
+ * render an empty element, and the `h2`/`bullets`/`code` variants had no
+ * production producer (the desktop adapter emits paragraphs only). Adding a
+ * variant later means adding its producer in the same PR.
+ */
 export interface TranscriptMarkdown {
-  readonly kind: "h2" | "p" | "bullets" | "code";
-  readonly text?: string;
-  readonly items?: readonly string[];
-  readonly lang?: string;
-  readonly lines?: readonly TranscriptCodeLine[];
-  /**
-   * The first line's real number in its source file. A fence excerpted from
-   * line 138 and renumbered from 1 has a gutter that lies about where the code
-   * lives, which is worse than no gutter at all.
-   */
-  readonly startLine?: number;
+  readonly kind: "p";
+  readonly text: string;
 }
 
 /** The Owner's turn. Right-aligned prose; no fill, no border, no marker. */

@@ -12,7 +12,7 @@ const VOICE: Record<VoiceName, string> = { prose: PROSE, code: CODE, meta: META 
 
 type VoiceProps = {
   readonly voice: VoiceName;
-  readonly as?: "span" | "p" | "div" | "h2" | "li" | "button";
+  readonly as?: "span" | "p" | "div" | "button";
   readonly className?: string;
   readonly children?: ReactNode;
 } & Omit<React.ComponentPropsWithoutRef<"span">, "className" | "children">;

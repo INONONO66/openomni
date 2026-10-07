@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Console } from "../src/console";
+import { CodeFence, CodeToken } from "../src/primitives/code";
+import { GutterLine } from "../src/primitives/gutter";
 import type { TranscriptNode } from "../src/timeline/model";
 import {
   BLOCK_GAP,
@@ -519,28 +521,44 @@ describe("the transcript opens on its newest turn", () => {
  * system chose. An exception with no boundary is just a palette arriving
  * slowly, so the boundary is asserted here: the two tokens may be spent inside a
  * code block's diff rows and nowhere else on the screen.
+ *
+ * `TranscriptMarkdown` is prose-only now (#1312), so a transcript can no
+ * longer carry a fence at all: the rendered half of the law is pinned on the
+ * gutter primitive directly, and the whole-screen half tightens to "no diff
+ * token anywhere in the transcript".
  */
+const FENCE = renderToStaticMarkup(
+  <CodeFence lang="rust">
+    <GutterLine mark="add" number={138}>
+      <CodeToken tone="plain">let lease = acquire();</CodeToken>
+    </GutterLine>
+    <GutterLine mark="remove" number={139}>
+      <CodeToken tone="plain">if stale.generation {"{"}</CodeToken>
+    </GutterLine>
+  </CodeFence>,
+);
+
 describe("the diff exception stays scoped to diff rows", () => {
   test("Given a diff line, When rendered, Then the marker and the sign carry the hue", () => {
     // The exception has to be REAL, or the scoping test below passes vacuously
     // on a surface that simply never uses the tokens.
-    const at = SCREEN.indexOf('data-mark-bar="add"');
+    const at = FENCE.indexOf('data-mark-bar="add"');
     expect(at).toBeGreaterThanOrEqual(0);
 
-    const bar = SCREEN.slice(SCREEN.lastIndexOf("<span", at), at);
+    const bar = FENCE.slice(FENCE.lastIndexOf("<span", at), at);
     expect(bar).toContain("bg-diff-add");
 
-    const sign = SCREEN.indexOf('data-mark-char="remove"');
+    const sign = FENCE.indexOf('data-mark-char="remove"');
     expect(sign).toBeGreaterThanOrEqual(0);
-    expect(SCREEN.slice(SCREEN.lastIndexOf("<span", sign), sign)).toContain("text-diff-remove");
+    expect(FENCE.slice(FENCE.lastIndexOf("<span", sign), sign)).toContain("text-diff-remove");
   });
 
-  test("Given the whole screen, When diff tokens are counted, Then each sits on a diff row", () => {
-    // THE scoping gate. Every `diff-*` utility on the screen must belong to an
+  test("Given a rendered fence, When diff tokens are counted, Then each sits on a diff row", () => {
+    // THE scoping gate. Every `diff-*` utility in the fence must belong to an
     // element that also carries a diff-row attribute — the row itself
     // (`data-mark`), its marker bar, or its sign. A `text-diff-add` on a status
     // word, a button, or a prose run has none of those and trips immediately.
-    const uses = [...SCREEN.matchAll(/<[^>]*?(?:bg|text|border)-diff-(?:add|remove)[^>]*>/g)].map(
+    const uses = [...FENCE.matchAll(/<[^>]*?(?:bg|text|border)-diff-(?:add|remove)[^>]*>/g)].map(
       ([tag]) => tag,
     );
 
@@ -552,6 +570,13 @@ describe("the diff exception stays scoped to diff rows", () => {
     // Anti-vacuity: the pattern must actually reject a token spent elsewhere,
     // or the loop above passes on any markup at all.
     expect('<span class="text-diff-add">running</span>').not.toMatch(/\sdata-mark[-=]/);
+  });
+
+  test("Given the whole screen, When scanned, Then no diff token appears at all", () => {
+    // The transcript's markdown union is prose-only (#1312): a diff token in
+    // the console markup now means a surface outside the gutter started
+    // spending the scoped exception.
+    expect(SCREEN).not.toMatch(/(?:bg|text|border)-diff-(?:add|remove)/);
   });
 
   test("Given the source tree, When diff tokens are traced, Then only the gutter names them", () => {
