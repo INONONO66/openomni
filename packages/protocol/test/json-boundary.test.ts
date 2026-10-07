@@ -83,6 +83,18 @@ describe("JSON-shaped wire boundary", () => {
     }
   });
 
+  test("rejects a value whose property descriptors cannot be read", () => {
+    const hostile = new Proxy(
+      {},
+      {
+        ownKeys: () => {
+          throw new Error("unreadable keys");
+        },
+      },
+    );
+    expect(JsonShapedValueSchema.safeParse(hostile).success).toBe(false);
+  });
+
   test("accepts a nested record and keeps explicit undefined record slots expressible", () => {
     const nested = { a: { b: [1, "two", null, { c: false }] }, d: "edge" };
     expect(JsonShapedValueSchema.parse(nested)).toEqual(nested);
