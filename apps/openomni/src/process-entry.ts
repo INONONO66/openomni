@@ -1,5 +1,5 @@
 import type { Readable } from "node:stream";
-import { Core } from "@openomni/agent";
+import { Bundle, Core } from "@openomni/agent";
 const Entropy = Core.Entropy;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -43,6 +43,10 @@ import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
 import { parentReply } from "./bundles/delegation-policy";
 import { createProcessReplyChannel } from "./composition/process-replies";
+import { appManifest } from "./manifest";
+import { createWatchPlane } from "./composition/watch-plane";
+import { composedHolderOf, monitorPortsSlot } from "./composition/composed";
+import { readHooksJson } from "./bundles/hooks-json";
 
 export const ProcessSessionRequest = z
   .object({
@@ -52,6 +56,8 @@ export const ProcessSessionRequest = z
     entityIdleMs: z.number().int().positive(),
     model: Model.Ref,
     apiKey: z.string().min(1),
+    hooksPath: z.string().min(1).optional(),
+    bundlesOff: z.array(z.string().min(1)).optional(),
     transport: z
       .object({
         baseUrl: z.string().optional(),
@@ -270,11 +276,27 @@ export async function runProcessEntry(io: {
     const line = await replies.first;
     if (line === undefined) io.exit(PROCESS_SESSION_NO_REQUEST_EXIT);
     const request = ProcessSessionRequest.parse(JSON.parse(line));
+    // The child rebuilds the SAME composition root the parent booted from
+    // (config -> manifest -> compose -> runtime): the request carries the
+    // manifest inputs, never a tool list. A bad hooks file or a compose
+    // refusal is the typed child-boot failure, before any work.
+    const alarmsSlot = monitorPortsSlot();
+    const watchPlane = createWatchPlane();
+    const hooks = request.hooksPath === undefined ? undefined : readHooksJson(request.hooksPath);
+    const manifest = appManifest({
+      alarm: watchPlane.contract,
+      wake: watchPlane.wake,
+      alarms: alarmsSlot.current,
+      ...(hooks === undefined ? {} : { hooks }),
+      ...(request.bundlesOff === undefined ? {} : { off: request.bundlesOff }),
+    });
+    const composed = composedHolderOf({ manifest, generation: Bundle.composeSync(manifest) }, alarmsSlot);
     runtime = (io.gatewayRuntime ?? gatewayRuntime)({
       catalogPath: request.catalogPath,
       sessionsDir: request.sessionsDir,
       // Never the shared catalog: the parent's SingleRunner owns its cluster_* tables.
       clusterStoragePath: ":memory:",
+      composed,
     });
     try {
       await acquireAppResource(runtime, serveProcessSession(

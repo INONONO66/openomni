@@ -188,7 +188,15 @@ test("process entry logs committed sessions and disposes its runtime", async () 
   const { catalogPath, sessionsDir, runtime } = plane;
   const dispose = spyOn(runtime, "dispose");
   const createRuntime = mock((options: Parameters<typeof gatewayRuntime>[0]) => {
-    expect(options).toEqual({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+    expect(options).toMatchObject({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
+    // #1308: the child rebuilds the composition root; its generation lists the shipped bundles.
+    expect(options.composed?.current().generation.bundles).toEqual([
+      "monitor",
+      "cron",
+      "hooks-json",
+      "send-message",
+      "delegation-policy",
+    ]);
     return runtime;
   });
   const answerRequested = Promise.withResolvers<SessionTransition.Answer>();
