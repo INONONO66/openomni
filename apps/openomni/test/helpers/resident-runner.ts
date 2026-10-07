@@ -1,6 +1,6 @@
 import { testToolPorts } from "./tool-ports";
 import { Context, Effect, Layer, Scope } from "effect";
-import { Core, Model } from "@openomni/agent";
+import { Bundle, Core, Model } from "@openomni/agent";
 const Llm = Model.Llm;
 const LlmLive = Model.LlmLive;
 import { observationService } from "../../../../packages/agent/test/helpers/service-layers";
@@ -43,6 +43,9 @@ export function residentRunner(
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
     retryAlarm: nullRetryAlarm,
     authorizeConfigure: allowConfigure,
+    // #1307: the app composition injects the composed compaction seam; the
+    // fixture mirrors that default so compaction-dependent paths stay real.
+    compaction: Bundle.compactionCapability().verbs,
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,
     ...options.sessionRuntime,
