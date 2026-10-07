@@ -16,13 +16,15 @@ export { fixtureCompactionSeam } from "./fixture-compaction";
 export const fixtureStopEvidence: ChatAgentConfig["stopEvidence"] = () =>
   Effect.succeed({ progress: false, blocked: false, openIntent: [], alarmIds: [] });
 
-export interface ChatFixture extends Omit<ObservedChatAgentConfig, "stopEvidence"> {
+/**
+ * `stopEvidence` is overridable ONLY on the fixture: `ChatAgentConfig`
+ * requires the port; test helpers inject `fixtureStopEvidence` when a case
+ * omits it.
+ */
+export interface ChatFixture
+  extends Omit<ObservedChatAgentConfig, "stopEvidence">,
+    Partial<Pick<ObservedChatAgentConfig, "stopEvidence">> {
   readonly llm?: Partial<Context.Service.Shape<typeof Llm>>;
-  /**
-   * Optional ONLY on the fixture (#1310): `ChatAgentConfig` requires the
-   * port; test helpers inject `fixtureStopEvidence` when a case omits it.
-   */
-  readonly stopEvidence?: ObservedChatAgentConfig["stopEvidence"];
 }
 
 export function chatServices(fixture: ChatFixture) {
