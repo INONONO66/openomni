@@ -1,6 +1,7 @@
 import { Bundle, Core } from "@openomni/agent";
 import { Alarm, type PolicyRow } from "@openomni/protocol";
 import { z } from "zod";
+import { ToolCapabilitySeam } from "../seams";
 import { armCron, armWatch, type MonitorPorts, WatchState } from "../../tools/core/watch";
 
 const defineTool = Core.defineTool;
@@ -160,7 +161,10 @@ export function monitorBundle(
 ): Bundle.BundleContract<"monitor", object, Bundle.AlarmPurposeHandler> {
   return Bundle.define({
     name: "monitor",
-    requires: [Bundle.AlarmSeam],
+    // #1316: the wake-budget row below targets `tool.pre`, so the bundle
+    // requires the tool capability's seam — `off: ["tool"]` cascades monitor
+    // off instead of rejecting the row as `unknown_point`.
+    requires: [Bundle.AlarmSeam, ToolCapabilitySeam],
     // The declaration face; execution ports stay composition-wired until
     // compose (#1255 S2) derives the generation tool table from the manifest.
     tools: [Core.eraseTool(createMonitorTool(undefined))],

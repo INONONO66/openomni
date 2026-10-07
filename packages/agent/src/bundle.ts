@@ -8,6 +8,9 @@ export * from "./core/compose";
 export * from "./plugins/action";
 export * from "./plugins/alarm";
 export * from "./plugins/hook";
+// #1316: dispatcher construction lives in plugins/tool; the Bundle barrel is
+// the one legal meeting point that hands it to the app and the core loop.
+export * from "./plugins/tool";
 
 // #1255 S1: the three declaration contracts, surfaced for the app manifest.
 // `Bundle.define` is the barrel's `define`.

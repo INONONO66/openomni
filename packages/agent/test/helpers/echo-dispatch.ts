@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import type { createDispatcher } from "../../src/core/tool";
+import type { createDispatcher } from "../../src/plugins/tool";
 
 export function dispatchEcho(dispatcher: Effect.Success<ReturnType<typeof createDispatcher>>, text: string) {
   return dispatcher.execute(

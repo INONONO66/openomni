@@ -1,5 +1,36 @@
 # Implementation Status
 
+## #1316 tool plugin owns tool dispatch, monitor requires the tool seam (epic #1303)
+
+On `stab/2-tool-dispatcher-plugin` (2026-10-06, base `c73bc03b3`). The tool
+plugin directory holds the dispatcher source instead of a README scaffold:
+`packages/agent/src/plugins/tool/dispatch.ts` carries `createDispatcher`
+(catalog-wide dispatcher over an explicit or ambient executor; wave, single
+and cell doors; result finishing, truncation, output validation) and
+`createTurnDispatcher` (per-turn durable executor + dispatcher composition,
+captured-catalog pinning, guarded-wave recovery paging), moved verbatim from
+`core/tool.ts` and reaching the core only through `core/api.ts`, which grew
+re-exports for the gate seams (`activeInvocation`, `createExecutor`,
+`immutableInput`, `requireExecutor`, executor/ledger types), the ports
+(`GenerationOwnership`, `SessionLayer`, `ToolCatalog`, `ProcessServices`) and
+the tool-body seams (`executeToolBody`, `projectTools`, `ToolBodyOutcome`,
+`ToolRefused`, the `Dispatcher` types). The agent `Bundle` barrel re-exports
+the plugin; `core/index.ts` exports no dispatcher
+(`rg -c 'createTurnDispatcher' -g '*.ts' packages/agent/src/core` → nothing)
+and `apps/openomni/src/resident.ts` composes `Bundle.createTurnDispatcher`
+(`rg -c 'Core.createTurnDispatcher' -g '*.ts' apps packages` → nothing).
+Capability declaration: the `monitor` bundle (wake-budget row on `tool.pre`)
+and the `delegation-policy` bundle (three consulted cap rows on `tool.pre`)
+declare `requires: ToolCapabilitySeam`, so `off: ["tool"]` composes with a
+typed cascade — `session.configure{disabled: [{name: "monitor"|"send-message"|
+"delegation-policy", because: "tool"}]}` and zero surviving `tool.pre`/
+`tool.post` rows — instead of rejecting the rows `unknown_point`
+(`apps/openomni/test/manifest.test.ts`). A row on `tool.pre` from a bundle
+that does not require the tool seam still rejects `unknown_point`. New
+`packages/agent/test/plugins/tool-plugin.test.ts` pins the plugin door, the
+two invalid-output edges and the guarded-page recovery cursor walk. Durable
+bytes, the kind schemas, the point set and the 12-tool catalog are untouched.
+
 ## #1317 channel-facing persistence moved to the channels store (epic #1303)
 
 On `stab/6-store-channel-split` (2026-10-07, base `c73bc03b3`). The channels

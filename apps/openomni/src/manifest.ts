@@ -7,11 +7,11 @@ import { ToolCapabilitySeam } from "./bundles/seams";
 import { sendMessageBundle } from "./bundles/send-message";
 
 /**
- * The thin tool-capability contract (#1255 P3): the dispatcher stays the
- * composition-wired core loop, but the capability that OWNS the `tool.pre` /
- * `tool.post` points (and the kernel budget-clamp obligation bundle rows may
- * consult) must be declared for `compose` to accept rows on them — the
- * monitor bundle's wake-budget row targets `tool.pre`.
+ * The tool-capability contract (#1255 P3, #1316): the dispatcher lives in
+ * `plugins/tool` (surfaced through the `Bundle` barrel), and this declaration
+ * OWNS the `tool.pre` / `tool.post` points plus the kernel budget-clamp
+ * handler bundle rows may consult. `monitor` (wake-budget row on `tool.pre`)
+ * and `send-message` require its seam, so `off: ["tool"]` cascades both off.
  */
 export const toolCapability = Bundle.Capability.define({
   name: "tool",
