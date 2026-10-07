@@ -1,5 +1,5 @@
 import { Bundle, Core } from "@openomni/agent";
-import { Alarm, type PolicyRow } from "@openomni/protocol";
+import { Alarm } from "@openomni/protocol";
 import { z } from "zod";
 import { ToolCapabilitySeam } from "../seams";
 import { armCron, armWatch, type MonitorPorts, WatchState } from "../../tools/core/watch";
@@ -114,29 +114,10 @@ export function createMonitorTool(ports: MonitorPorts | undefined) {
 }
 
 /**
- * The monitor wake budget, moved here from `policy-seed.ts` (#1255 P2): the
- * bundle owns its policy rows. This is the legacy row shape the live policy
- * plane seeds today; `MONITOR_WAKE_BUDGET_ROW` below is the same obligation
- * in the frozen #1251 `GateRow` shape the bundle contract carries for
- * `compose` (#1255 S2).
+ * The monitor wake budget (#1255 P2, #1308): the bundle's one gate row in the
+ * frozen #1251 `GateRow` shape `compose` (#1255 S2) carries; the live policy
+ * plane seeds it through `gateRowPolicySeeds` over the composed generation.
  */
-const MONITOR_WAKE_BUDGET: Omit<PolicyRow.Row, "generation"> = {
-  name: "monitor-wake-budget",
-  kind: "tool",
-  phase: "pre",
-  priority: 900,
-  match: { encodingVersion: 1, value: { op: "monitor" } },
-  verdict: {
-    encodingVersion: 1,
-    value: { type: "obligation", ref: "kernel/budget-clamp", metric: "notifications", limit: 8 },
-  },
-};
-
-/** Seed rows the boot passes to the kernel policy seed until compose owns row tables. */
-export const monitorSeedRows: readonly Omit<PolicyRow.Row, "generation">[] = [
-  MONITOR_WAKE_BUDGET,
-];
-
 const MONITOR_WAKE_BUDGET_ROW: Bundle.BundleGateRow = {
   id: "monitor/tool.pre#1",
   on: "tool.pre",

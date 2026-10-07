@@ -9,7 +9,7 @@ import {
 } from "../../../../packages/agent/test/helpers/cluster-runtime";
 import { createAlarmMonitorPorts, createLiveArmRegistry } from "../../src/composition/alarm-plane";
 import { cronPurposes } from "../../src/bundles/cron";
-import { monitorPurposes, monitorSeedRows } from "../../src/bundles/monitor";
+import { monitorBundle, monitorPurposes } from "../../src/bundles/monitor";
 import {
   createAppLedger,
   type AppLedgerPlane,
@@ -17,7 +17,7 @@ import {
 } from "../../src/composition/cluster-runtime";
 import type { MonitorPorts } from "../../src/tools/core/watch";
 import type { ArmedWatch, WatchSources } from "../../src/composition/watch-sources";
-import { seedKernelPolicyRows } from "../../src/policy-seed";
+import { gateRowPolicySeeds, seedKernelPolicyRows } from "../../src/policy-seed";
 import { runEffect } from "./effect";
 import { adoptTestFence } from "./ledger";
 import { testClock } from "./test-entropy";
@@ -58,7 +58,10 @@ export async function watchFixture(sessionId: string, owner: string): Promise<Wa
     },
     closeAll: () => Promise.resolve(),
   };
-  seedKernelPolicyRows(plane.catalog.policies, monitorSeedRows);
+  seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds({
+    rows: monitorBundle({ close: () => undefined }).rows,
+    handlers: new Map(),
+  }));
   const kernel = plane.openKernel(sessionId);
   await runEffect(
     kernel.materialize({

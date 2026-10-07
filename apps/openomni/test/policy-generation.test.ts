@@ -4,23 +4,30 @@ const createPolicyCompiler = Core.createPolicyCompiler;
 const KERNEL_POLICY_REGISTRY = Core.KERNEL_POLICY_REGISTRY;
 const SEEDED_POLICY_ROWS = Core.SEEDED_POLICY_ROWS;
 import type { PolicyRow } from "@openomni/protocol";
-import { monitorSeedRows } from "../src/bundles/monitor";
-import { seedKernelPolicyRows } from "../src/policy-seed";
+import { monitorBundle } from "../src/bundles/monitor";
+import { gateRowPolicySeeds, seedKernelPolicyRows } from "../src/policy-seed";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";
 import { PROVISION_POLICY_ROWS } from "../src/tools/provision";
 import { testPlane } from "./helpers/ledger";
 
+// #1308: the wake-budget seed is the composed bundle row, projected the same
+// way the boot seeds it (gateRowPolicySeeds over the composed generation).
+const monitorRows = gateRowPolicySeeds({
+  rows: monitorBundle({ close: () => undefined }).rows,
+  handlers: new Map(),
+});
+
 test("the ledger writer seeds generation one with mandatory rows and identical reseeding is a no-op", () => {
   const source = testPlane().catalog.policies;
   // #1255 P2: the wake budget is the monitor bundle's row, passed by the boot.
-  expect(seedKernelPolicyRows(source, monitorSeedRows)).toBe(1);
+  expect(seedKernelPolicyRows(source, monitorRows)).toBe(1);
   const first = source.rows();
   for (const row of [...SEEDED_POLICY_ROWS, ...MESSAGE_POLICY_ROWS, ...PROVISION_POLICY_ROWS]) {
     expect(first).toContainEqual({ ...row, generation: 1 });
   }
-  expect(first.find((row: PolicyRow.Row) => row.name === "monitor-wake-budget"))
+  expect(first.find((row: PolicyRow.Row) => row.name === "monitor/tool.pre#1"))
     .toMatchObject({ generation: 1, verdict: { value: { ref: "kernel/budget-clamp" } } });
-  expect(seedKernelPolicyRows(source, monitorSeedRows)).toBe(1);
+  expect(seedKernelPolicyRows(source, monitorRows)).toBe(1);
   expect(source.rows()).toEqual(first);
   expect(source.rows(2)).toEqual([]);
 });

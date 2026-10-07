@@ -7,21 +7,28 @@ import { Core } from "@openomni/agent";
 const SEEDED_POLICY_ROWS = Core.SEEDED_POLICY_ROWS;
 const openCatalogStore = Core.openCatalogStore;
 import type { PolicyRow } from "@openomni/protocol";
-import { seedKernelPolicyRows } from "../src/policy-seed";
-import { monitorSeedRows } from "../src/bundles/monitor";
+import { gateRowPolicySeeds, seedKernelPolicyRows } from "../src/policy-seed";
+import { monitorBundle } from "../src/bundles/monitor";
 import { MESSAGE_POLICY_ROWS } from "../src/message-policy";
 import { PROVISION_POLICY_ROWS } from "../src/tools/provision";
 import { testClock } from "./helpers/test-entropy";
 
+// #1308: the wake-budget seed is the composed bundle row, projected the same
+// way the boot seeds it (gateRowPolicySeeds over the composed generation).
+const monitorRows = gateRowPolicySeeds({
+  rows: monitorBundle({ close: () => undefined }).rows,
+  handlers: new Map(),
+});
+
 const identity = (row: Omit<PolicyRow.Row, "generation">) =>
   JSON.stringify([row.name, row.kind, row.phase]);
-const budgetId = JSON.stringify(["monitor-wake-budget", "tool", "pre"]);
+const budgetId = JSON.stringify(["monitor/tool.pre#1", "tool", "pre"]);
 // #1255 P2: the wake budget is the monitor bundle's row, passed by the boot.
 const expectedIds = [
   ...SEEDED_POLICY_ROWS.map(identity),
   ...MESSAGE_POLICY_ROWS.map(identity),
   ...PROVISION_POLICY_ROWS.map(identity),
-  ...monitorSeedRows.map(identity),
+  ...monitorRows.map(identity),
   identity(Core.POINT_GENERATION_ROW),
 ].sort();
 
@@ -57,7 +64,7 @@ test("interrupted policy promotion rolls back every row and reopens with the com
       fault.run(`CREATE TRIGGER fail_partial_policy BEFORE INSERT ON policy
         WHEN NEW.generation = 2 AND (SELECT COUNT(*) FROM policy WHERE generation = 2) = 1
         BEGIN SELECT RAISE(ABORT, 'policy-upgrade-fault'); END`);
-      expect(() => seedKernelPolicyRows(adapter, monitorSeedRows)).toThrow("policy-upgrade-fault");
+      expect(() => seedKernelPolicyRows(adapter, monitorRows)).toThrow("policy-upgrade-fault");
       expect(adapter.rows(2)).toEqual([]);
       expect(adapter.rows()).toEqual(original);
       fault.run("DROP TRIGGER fail_partial_policy");
@@ -66,11 +73,11 @@ test("interrupted policy promotion rolls back every row and reopens with the com
     }
     first.close();
     const reopened = open().policies;
-    expect(seedKernelPolicyRows(reopened, monitorSeedRows)).toBe(2);
+    expect(seedKernelPolicyRows(reopened, monitorRows)).toBe(2);
     expect(reopened.rows(2).map(identity).sort()).toEqual(expectedIds);
     expect(reopened.rows(1)).toEqual(original);
     const complete = reopened.rows();
-    expect(seedKernelPolicyRows(reopened, monitorSeedRows)).toBe(2);
+    expect(seedKernelPolicyRows(reopened, monitorRows)).toBe(2);
     expect(reopened.rows()).toEqual(complete);
   });
 });
@@ -78,7 +85,7 @@ test("interrupted policy promotion rolls back every row and reopens with the com
 test("budget presence alone does not complete a generation; preserve existing policy content", () => {
   withDatabase((open) => {
     const policies = open().policies;
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(1);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(1);
     expect(policies.rows(1).map(identity).sort()).toEqual(expectedIds);
     const budget = policies
       .rows(1)
@@ -87,14 +94,14 @@ test("budget presence alone does not complete a generation; preserve existing po
     const custom = { ...budget, name: "site-policy", priority: 42, generation: 2 };
     expect(policies.append({ ...budget, generation: 2 })).toBe(true);
     expect(policies.append(custom)).toBe(true);
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(3);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(3);
     expect(policies.rows(3).map(identity).sort()).toEqual(
       [...expectedIds, identity(custom)].sort(),
     );
     expect(policies.rows(3)).toContainEqual({ ...custom, generation: 3 });
     expect(policies.rows(3)).toContainEqual({ ...budget, generation: 3 });
     const complete = policies.rows();
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(3);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(3);
     expect(policies.rows()).toEqual(complete);
   });
 });
@@ -102,7 +109,7 @@ test("budget presence alone does not complete a generation; preserve existing po
 test("a complete latest generation plus an unmappable row still rejects the boot (#1251 r1)", () => {
   withDatabase((open) => {
     const policies = open().policies;
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(1);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(1);
     // Generation 2 carries every current row (so the identity early return
     // would hold) plus one unmappable custom row: validation must run first.
     for (const row of policies.rows(1)) expect(policies.append({ ...row, generation: 2 })).toBe(true);
@@ -113,7 +120,7 @@ test("a complete latest generation plus an unmappable row still rejects the boot
     ).toBe(true);
     const before = policies.rows();
     try {
-      seedKernelPolicyRows(policies, monitorSeedRows);
+      seedKernelPolicyRows(policies, monitorRows);
       throw new Error("expected unknown_point");
     } catch (error) {
       if (!Core.GateComposeError.isInstance(error)) throw error;
@@ -126,7 +133,7 @@ test("a complete latest generation plus an unmappable row still rejects the boot
 test("a base-era compaction deny converts at boot and keeps refusing summarization (#1251 r1)", () => {
   withDatabase((open) => {
     const policies = open().policies;
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(1);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(1);
     // Generation 2: the complete current rows plus a base-era deny written
     // against the old turn envelope (`turn/post` matching `op: compaction`).
     for (const row of policies.rows(1)) expect(policies.append({ ...row, generation: 2 })).toBe(true);
@@ -143,7 +150,7 @@ test("a base-era compaction deny converts at boot and keeps refusing summarizati
     ).toBe(true);
     const historical = JSON.stringify(policies.rows(2));
 
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(3);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(3);
     // Historical bytes untouched; the latest generation carries the converted row.
     expect(JSON.stringify(policies.rows(2))).toBe(historical);
     expect(policies.rows(3).find((row) => row.name === "no-summaries")).toMatchObject({
@@ -160,14 +167,14 @@ test("a base-era compaction deny converts at boot and keeps refusing summarizati
     expect(refused.verdict).toBe("deny");
 
     // Reseeding converges: the converted generation is already in point shape.
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(3);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(3);
   });
 });
 
 test("a latest generation with an unmappable row rejects the boot conversion and keeps the catalog intact", () => {
   withDatabase((open) => {
     const policies = open().policies;
-    expect(seedKernelPolicyRows(policies, monitorSeedRows)).toBe(1);
+    expect(seedKernelPolicyRows(policies, monitorRows)).toBe(1);
     const budget = policies.rows(1).find((row) => identity(row) === budgetId);
     if (budget === undefined) throw new Error("missing seeded budget");
     expect(
@@ -175,7 +182,7 @@ test("a latest generation with an unmappable row rejects the boot conversion and
     ).toBe(true);
     const before = policies.rows();
     try {
-      seedKernelPolicyRows(policies, monitorSeedRows);
+      seedKernelPolicyRows(policies, monitorRows);
       throw new Error("expected unknown_point");
     } catch (error) {
       if (!Core.GateComposeError.isInstance(error)) throw error;

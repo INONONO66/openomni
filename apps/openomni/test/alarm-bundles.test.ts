@@ -3,7 +3,7 @@ import { Bundle, Core } from "@openomni/agent";
 import type { PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
 import { CRON_TICK, cronBundle, cronPurposes } from "../src/bundles/cron";
-import { monitorBundle, monitorPurposes, monitorSeedRows } from "../src/bundles/monitor";
+import { monitorBundle, monitorPurposes } from "../src/bundles/monitor";
 import { ToolCapabilitySeam } from "../src/bundles/seams";
 import { runEffect } from "./helpers/effect";
 
@@ -213,8 +213,6 @@ test("monitorBundle declares the sealed tool face, the wake budget row and the w
     },
   ]);
   expect(Object.keys(monitor.purposes).sort()).toEqual([Bundle.MONITOR_HIT, Bundle.MONITOR_TIMEOUT].sort());
-  // The legacy-shaped seed row rides the bundle module too (boot passes it to the seed).
-  expect(monitorSeedRows.map((row) => row.name)).toEqual(["monitor-wake-budget"]);
 });
 
 test("cronBundle declares the one cron.tick purpose and nothing else", () => {
