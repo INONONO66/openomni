@@ -26,6 +26,28 @@ unchanged. Tests: `packages/agent/test/compaction/capability.test.ts`,
 compaction-off cases in `packages/agent/test/compose-off-cascade.test.ts`
 and `apps/openomni/test/manifest.test.ts`.
 
+## #1304 action plugin owns its implementation source (epic #1303)
+
+On `stab/3-action-plugin-source` (2026-10-06, base `c73bc03b3`). The fifth
+capability plugin directory holds source instead of a README scaffold:
+`packages/agent/src/plugins/action/index.ts` exports `actionCapability()` —
+the `action` journal kind (schema and version read from the protocol's
+`Journal.CAPABILITY_DECLARATIONS`, identity reducer), the `action` deliver
+input and the `action.pre` gate point — plus `ActionSeam`
+(`@openomni/action/Action`), both public through the agent `Bundle` namespace
+(`packages/agent/src/bundle.ts` re-exports the plugin beside `plugins/hook`).
+`apps/openomni/src/manifest.ts` now composes `Bundle.actionCapability()`
+instead of calling `Bundle.Capability.define` locally; the app-owned
+`ActionCapabilitySeam` is deleted from `apps/openomni/src/bundles/seams.ts`
+(`rg -c 'ActionCapabilitySeam' -g '*.ts' packages apps` returns nothing) and
+`bundles/delegation-policy` requires `Bundle.ActionSeam`. The cascade is
+unchanged because compose resolves `requires` by name: `off: ["action"]`
+still disables `action`, `hook`, `hooks-json` and `delegation-policy` with
+`because: "action"` (`apps/openomni/test/hooks-json.test.ts`), and the new
+`packages/agent/test/action-plugin.test.ts` proves the plugin-owned cascade
+over a minimal `actionCapability()` + `hookCapability()` manifest. Durable
+bytes, the kind schema, the point set and the 12-tool catalog are untouched.
+
 ## #1258 one send_message tool for every contact, delegation-policy caps (epic #1260)
 
 On `epic1260/1258-send-message-contacts` (2026-10-05, base `ab62ca98`). The

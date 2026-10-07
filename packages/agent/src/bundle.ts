@@ -5,6 +5,7 @@
  * neither side imports the other directly.
  */
 export * from "./core/compose";
+export * from "./plugins/action";
 export * from "./plugins/alarm";
 export * from "./plugins/hook";
 
