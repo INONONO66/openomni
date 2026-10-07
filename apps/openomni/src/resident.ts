@@ -80,6 +80,11 @@ export function createResident(options: ResidentOptions) {
   const composedFaces = (role: LedgerSession.Role) => {
     const composed = options.composed?.current();
     if (composed === undefined) return projectTools(definitions[role]).session;
+    // #1306: the tool capability owns the model's tool door. Composed off,
+    // no face reaches any role — the catalog definitions still exist, but a
+    // session under this generation journals zero tools and the model runs
+    // with `toolChoice: "none"`.
+    if (composed.generation.disabled.some((entry) => entry.name === "tool")) return [];
     const bundleOwned = new Set(
       composed.manifest.bundles.flatMap((bundle) => bundle.tools.map((tool) => tool.name)),
     );
@@ -173,7 +178,13 @@ export function createResident(options: ResidentOptions) {
         bundles: composed?.generation.bundles ?? [],
         preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : WORKER_PRESET),
         at: ports.clock(),
-        ...(composed === undefined ? {} : { manifestHash: composed.generation.hash }),
+        // #1306: an off cascade leaves genesis unstamped so the first turn's
+        // adoption appends the `session.configure{operation: "compose"}` row
+        // carrying the typed `disabled` entries; an empty cascade keeps the
+        // stamp and the session journals no adoption row.
+        ...(composed === undefined || composed.generation.disabled.length > 0
+          ? {}
+          : { manifestHash: composed.generation.hash }),
         ...(options.forkCopyByteCap === undefined
           ? {}
           : {
