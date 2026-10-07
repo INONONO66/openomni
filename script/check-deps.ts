@@ -531,7 +531,8 @@ const CHANNELS_BANDED_DEP = "@openomni/agent";
  * The agent-gate surfaces the channels judgment band may name from
  * @openomni/agent (#1246 — the former policy engine and the scoped
  * ledger ports live in the agent package now): permission evaluation plus the
- * two handle-scoped perimeter ports (decision facts, surface↔session map).
+ * handle-scoped decision-fact perimeter port (#1317 moved the surface-key
+ * store into channels).
  * Brain surfaces (session stores, catalog, model plane, …) are NOT reachable
  * from the router — the gateway selects sessions but never reads or writes
  * session content (S1), and domain isolation inside the one DB is by store
@@ -545,20 +546,18 @@ const CHANNELS_JUDGMENT_AGENT_SURFACES = new Set([
   "PolicyEvaluationInput",
   // packages/channels/src/router/stores.ts
   "createDecisionFactPort",
-  "createSurfaceKeyStore",
 ]);
 
 /**
  * The persistence seams the channels store band (`src/store/`, the perimeter
  * stores absorbed from the old ledger in #1246) may name from
- * @openomni/agent: the sub-adapter guard, the timestamp wrapper, and the two
- * stored-identity schemas. Never a session, catalog, gate, or model surface.
+ * @openomni/agent: the sub-adapter guard and the timestamp wrapper (#1317
+ * moved the stored-identity schemas and the surface-key store into channels).
+ * Never a session, catalog, gate, or model surface.
  */
 const CHANNELS_STORE_AGENT_SURFACES = new Set([
   "requireSubAdapter",
   "withStoreTimestamps",
-  "StoredIdentity",
-  "StoredEndpoint",
 ]);
 
 function isChannelsJudgmentPath(filePath: string): boolean {
@@ -1004,7 +1003,7 @@ export async function validateAppsAgentBarrel(root = "."): Promise<string[]> {
 
 /**
  * #1247 S8 perimeter pin: `packages/agent/src/index.ts` exports exactly
- * the five namespaces plus at most these nine named exports consumed by
+ * the five namespaces plus at most these six named exports consumed by
  * `packages/channels` (legal channels -> agent band edges). Shrink-only:
  * removals are fine, any new name or any other export form fails. No epic
  * child owns retiring the named list; retirement is a separate decision.
@@ -1024,9 +1023,6 @@ const AGENT_INDEX_PINNED_NAMED_EXPORTS: ReadonlySet<string> = new Set([
   "requireSubAdapter",
   "withStoreTimestamps",
   "createDecisionFactPort",
-  "createSurfaceKeyStore",
-  "StoredEndpoint",
-  "StoredIdentity",
 ]);
 
 const AGENT_INDEX_PATH = "packages/agent/src/index.ts";
@@ -1379,7 +1375,7 @@ function selfTest(): number {
       "S8: the router may name the scoped decision-fact port (#930)",
       channelsAgentSurfaceViolations(
         "packages/channels/src/router/stores.ts",
-        'import { createDecisionFactPort, createSurfaceKeyStore } from "@openomni/agent";',
+        'import { createDecisionFactPort } from "@openomni/agent";',
       ).length === 0,
     ],
     [

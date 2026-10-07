@@ -30,3 +30,8 @@ export {
   type PersonStore,
   type SecretStore,
 } from "./store/provisioning/index.js";
+// #1317: the channels package owns the channel-facing SQLite adapters and
+// their DDL; the app attaches this store to the catalog's database handle.
+export { openChannelStore, type ChannelStore } from "./store/sqlite/index.js";
+export { createSurfaceKeyStore } from "./store/surface-key/index.js";
+export { StoredEndpoint, StoredIdentity } from "./store/sqlite/actor-schema.js";

@@ -6,6 +6,8 @@ test("channels barrel exposes only its runtime public surface", () => {
     "ChannelProviders",
     "ChannelsFailure",
     "SendAdmissionConflict",
+    "StoredEndpoint",
+    "StoredIdentity",
     "Vault",
     "WebSocketHandler",
     "createActorRegistry",
@@ -18,7 +20,9 @@ test("channels barrel exposes only its runtime public surface", () => {
     "createPersonStore",
     "createReplyGrantStore",
     "createSecretStore",
+    "createSurfaceKeyStore",
     "decodeChannelFailure",
+    "openChannelStore",
     "resolveChannelGrant",
     "unconfiguredChannelStores",
   ]);

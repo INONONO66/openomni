@@ -1,7 +1,6 @@
 import { Database } from "bun:sqlite";
 import { L0Observation, type ObservationSink, type Storage } from "@openomni/protocol";
 import { bootstrapStoreDatabase } from "../../../src/core/store/session-file";
-import { CATALOG_SCHEMA } from "../../../src/core/store/catalog";
 import { SESSION_FILE_SCHEMA } from "../../../src/core/store/session-file";
 import { createActions } from "../../../src/core/store/session-file";
 import type { ObservationPublishFailure } from "../../../src/core/store/storage/sqlite-l0-observation";
@@ -12,13 +11,6 @@ import type { SessionWriteAdapter } from "../../../src/core/store/services";
 export function openLedgerDatabase(): Database {
   const db = new Database(":memory:");
   bootstrapStoreDatabase(db, SESSION_FILE_SCHEMA);
-  return db;
-}
-
-/** In-memory database on the fresh catalog schema. */
-export function openCatalogDatabase(): Database {
-  const db = new Database(":memory:");
-  bootstrapStoreDatabase(db, CATALOG_SCHEMA);
   return db;
 }
 

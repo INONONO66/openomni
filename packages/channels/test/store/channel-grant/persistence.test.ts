@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createChannelGrantStore } from "../../../src/index.js";
-import { testNow, useSqliteStores } from "../../../../agent/test/store/helpers/storage";
+import { testNow, useSqliteChannelStore } from "../helpers/sqlite";
 import { Actor } from "@openomni/protocol";
 
 describe("ChannelGrantStore SQLite persistence", () => {
-  const stores = useSqliteStores("channel-grant");
-  const grants = () => createChannelGrantStore(stores.catalog);
+  const stores = useSqliteChannelStore("channel-grant");
+  const grants = () => createChannelGrantStore(stores.store);
 
   test("persists grant fields without resolution-derived normalization", () => {
     const stored = grants().put({
@@ -22,7 +22,7 @@ describe("ChannelGrantStore SQLite persistence", () => {
       updatedAt: 200,
     });
 
-    using reader = new Database(stores.catalogPath, { readonly: true });
+    using reader = new Database(stores.path, { readonly: true });
     const row = reader
       .query<{ data: string }, [string]>("SELECT data FROM channel_grant WHERE id = ?")
       .get("grant-byte-fixture");

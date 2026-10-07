@@ -5,6 +5,7 @@ type LedgerError = Core.LedgerError;
 import { Effect } from "effect";
 import type { Inbox, LedgerAction, Storage as ProtocolStorage } from "@openomni/protocol";
 import { createChannelStores, type ChannelStores } from "../../src/router/stores";
+import { openChannelStore, type ChannelStore } from "../../src/store/sqlite/index.js";
 import { runEffect } from "./effect";
 
 /**
@@ -16,6 +17,8 @@ import { runEffect } from "./effect";
  */
 export interface TestLedger {
   readonly catalog: ReturnType<typeof openCatalogStore>;
+  /** Channels-owned adapters (#1317) attached to the catalog's database handle. */
+  readonly channel: ChannelStore;
   readonly sessions: ReturnType<typeof openSessionStore>;
   readonly kernel: Core.SessionHandleStore.SessionKernel;
   readonly stores: ChannelStores;
@@ -32,18 +35,19 @@ export interface TestLedgerPaths {
 
 function createTestLedger(paths?: TestLedgerPaths): TestLedger {
   const catalog = openCatalogStore(paths?.catalog ?? ":memory:", { now: () => 1 });
+  const channel = openChannelStore(catalog.database, () => 1);
   const sessions = openSessionStore(paths?.sessions ?? ":memory:", { now: () => 1 });
   const kernel = Core.SessionHandleStore.createSessionKernel(sessions, catalog);
   const seam: { facts: ProtocolStorage.DecisionFactSubAdapter | undefined } = {
     facts: sessions.decisionFacts,
   };
   const stores = createChannelStores({
-    actorRegistry: catalog.actorRegistry,
-    blacklist: catalog.blacklist,
-    channelGrant: catalog.channelGrant,
-    replyGrant: catalog.replyGrant,
-    egressBudget: catalog.egressBudget,
-    surfaceKey: catalog.surfaceKey,
+    actorRegistry: channel.actorRegistry,
+    blacklist: channel.blacklist,
+    channelGrant: channel.channelGrant,
+    replyGrant: channel.replyGrant,
+    egressBudget: channel.egressBudget,
+    surfaceKey: channel.surfaceKey,
     get decisionFacts() {
       return seam.facts;
     },
@@ -52,6 +56,7 @@ function createTestLedger(paths?: TestLedgerPaths): TestLedger {
   });
   return {
     catalog,
+    channel,
     sessions,
     kernel,
     stores,
