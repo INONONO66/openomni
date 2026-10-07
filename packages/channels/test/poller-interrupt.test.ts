@@ -44,3 +44,34 @@ test("stop() interrupts the poll loop mid-backoff; a retired sleeper never polls
     await clock.dispose();
   }
 });
+
+/**
+ * #1312: `listenForAbort` owns the abort subscription, so a signal that is
+ * already aborted when the cycle starts aborts the cycle's controller before
+ * the request is built — zero getUpdates calls, not one full long poll.
+ */
+test("a pre-aborted signal performs zero getUpdates calls", async () => {
+  const clock = testClockRuntime();
+  let requests = 0;
+  const client = {
+    async getUpdates(): Promise<TelegramUpdate[]> {
+      requests += 1;
+      return [];
+    },
+  };
+  const poller = new TelegramPoller(
+    client,
+    { onMessage: () => undefined },
+    () => undefined,
+    { now: () => FIXED_NOW, id: sequentialIds(), run: clock.run },
+  );
+  try {
+    const aborted = new AbortController();
+    aborted.abort();
+    await poller.pollOnce("trace-pre-aborted", aborted.signal);
+    expect(requests).toBe(0);
+  } finally {
+    poller.stop();
+    await clock.dispose();
+  }
+});
