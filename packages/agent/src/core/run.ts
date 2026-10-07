@@ -64,7 +64,7 @@ export interface SessionRunnerInput {
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly trackWave?: (wave: Promise<void>) => void;
   readonly bindApprovals?: (approvals: ExecutionApprovals) => void;
-  readonly stopEvidence?: ChatAgentConfig["stopEvidence"];
+  readonly stopEvidence: ChatAgentConfig["stopEvidence"];
   readonly resultId: string;
   readonly parentActionId: string | null;
   readonly boundaryActionId: string | null;
@@ -778,7 +778,7 @@ export function sessionStopEvidence(
   turnId: string,
   approvals: () => ExecutionApprovals | undefined,
   openIntent?: SessionRuntime["openIntent"],
-): NonNullable<ChatAgentConfig["stopEvidence"]> {
+): ChatAgentConfig["stopEvidence"] {
   let ordinal = kernel.row(sessionId).revision;
   const start = kernel.actionById(turnId)?.ordinal ?? ordinal;
   return () => Effect.gen(function* () {
@@ -1184,7 +1184,11 @@ function resultOf(exit: Exit.Exit<ExecutionResult, ExecutionError>, value: Sessi
 
 // ─── from session-chat-runner.ts (#1247) ───
 interface SessionChatRun {
-  readonly config: ChatAgentConfig & { readonly executor: Executor };
+  /**
+   * The prepared loop config. `stopEvidence` is NOT prepared here (#1310):
+   * the durable runner owns it and always injects `input.stopEvidence`.
+   */
+  readonly config: Omit<ChatAgentConfig, "stopEvidence"> & { readonly executor: Executor };
   readonly traceContext: TraceContext.Type;
   readonly around?: (operation: Effect.Effect<AgentResult, ExecutionError, RunnerServices>) => Effect.Effect<AgentResult, ExecutionError, RunnerServices>;
 }

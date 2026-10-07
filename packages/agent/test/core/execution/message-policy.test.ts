@@ -1,6 +1,6 @@
 import { messageSource } from "../../helpers/message-source";
 import { testExecutor } from "../../helpers/executor";
-import { type ChatFixture, chatServices } from "../../helpers/chat-services";
+import { chatServices, fixtureStopEvidence } from "../../helpers/chat-services";
 import { KERNEL_POLICY_REGISTRY } from "../../../src/core/gate/compile";
 import type { RunInput, Sink } from "../../../src/model";
 import { Effect } from "effect";
@@ -68,11 +68,12 @@ test("the canonical assistant text is never rewritten after the turn", async () 
     identity: { sessionId: "session", role: "resident", parentActionId: "turn" },
   });
   const result = await isolated(
-    Effect.gen(function* () { const fixture: ChatFixture = {
+    Effect.gen(function* () { const fixture = {
       events: { publish: () => undefined },
       executor,
       execution: executor,
       model: { provider: "test", id: "test" },
+      stopEvidence: fixtureStopEvidence,
       llm: {
         resolveModel: () => Effect.succeed({ providerID: "test", id: "test", name: "test" }),
         run: (_input: RunInput, sink: Sink) =>

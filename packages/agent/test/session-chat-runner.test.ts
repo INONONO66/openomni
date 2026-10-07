@@ -3,7 +3,7 @@ import { runAgentSync } from "./helpers/executor";
 import { sessionTree } from "./helpers/session-tree";
 import { pinnedModelSelection, restoreModelSelection } from "./helpers/composition-fixtures";
 import { testTurnDispatcher } from "./helpers/service-layers";
-import { prepareChatFixture } from "./helpers/chat-services";
+import { fixtureStopEvidence, prepareChatFixture } from "./helpers/chat-services";
 import { allowConfigure, isolatedRuntime, type SessionFixture as SessionRuntime, type SessionFixture, withSessionServices, } from "./helpers/session-services";
 import { KERNEL_POLICY_REGISTRY } from "../src/core/gate/compile";
 import { Cause, Effect, Exit } from "effect";
@@ -85,6 +85,7 @@ function input(
     role: "resident",
     turnId: "turn-1",
     actionId: "action-1",
+    stopEvidence: fixtureStopEvidence,
     ledger: {
       commit: () =>
         Effect.sync(() => {

@@ -5,6 +5,7 @@ import type { Message, Tool } from "@openomni/protocol";
 import { messageSource } from "../../helpers/message-source";
 import { isolated } from "../../helpers/isolated";
 import { runInput } from "../../helpers/run-input";
+import { fixtureStopEvidence } from "../../helpers/chat-services";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { createRunState } from "../../../src/core/turn";
 import { buildTurn } from "../../../src/core/turn";
@@ -59,6 +60,7 @@ it("records the exact injected-clock duration and bills the wave union once", ()
       const config: ObservedChatAgentConfig = {
         events: { publish: () => undefined },
         model: { provider: "test", id: "test" },
+        stopEvidence: fixtureStopEvidence,
         toolWave: (calls: readonly Tool.Call[]) =>
           Effect.gen(function* () {
             waveEntered.resolve();
