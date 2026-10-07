@@ -8,6 +8,8 @@ import { gatewayRuntime } from "../../src/gateway";
 import { readHooksJson } from "../../src/bundles/hooks-json";
 import { appManifest } from "../../src/manifest";
 import { startOpenOmni } from "../../src";
+import { sessionTree } from "../../../../packages/agent/test/store/helpers/session-tree";
+import { planeOf } from "./ledger";
 import { testEntropy } from "./test-entropy";
 import { Bus } from "./bus";
 
@@ -76,4 +78,23 @@ export async function appFixture(options: AppFixtureOptions) {
       ),
     });
   return startOpenOmni({ ...app, runtime, sessionRuntime: session });
+}
+
+/**
+ * The `session.configure{operation: "compose"}` action of the first adopted
+ * generation (#1306): the per-session append-only row composition writes when
+ * a session adopts a composed generation, carrying the typed off cascade in
+ * `disabled`. One resident session must have run a turn before this reads.
+ */
+export async function composeRowOf(app: Awaited<ReturnType<typeof startOpenOmni>>) {
+  const plane = await planeOf(app.runtime);
+  const sessionId = plane.listSessions().find((row) => row.id !== "gateway-ingress")?.id;
+  if (sessionId === undefined) throw new Error("no resident session has adopted a generation");
+  const action = sessionTree(sessionId, plane.sessionStore(sessionId).actions).find(
+    (row) =>
+      row.kind === "session.configure" &&
+      (row.intent.value as { operation?: string }).operation === "compose",
+  );
+  if (action === undefined) throw new Error(`no compose configure row in session ${sessionId}`);
+  return action;
 }
