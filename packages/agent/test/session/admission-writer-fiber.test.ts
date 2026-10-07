@@ -14,8 +14,9 @@
  */
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
-import { Deferred, Effect, Exit, Fiber, Queue, Semaphore } from "effect";
+import { type Cause, Deferred, Effect, Exit, Fiber, Queue, Semaphore } from "effect";
 import { EntityAddress, EntityId, EntityType, Envelope, ShardId, Snowflake, type Entity } from "effect/cluster";
+import type { Rpc } from "effect/rpc";
 import { Headers } from "effect/http";
 import { openCatalogStore } from "../../src/core/store/catalog";
 import { openSessionStore } from "../../src/core/store/session-file";
@@ -96,9 +97,15 @@ const staleAlarmEnvelope = (sessionId: string, n: number): SessionRequest =>
     }),
   );
 
-/** Exactly what the replier's `complete` carries; `succeed` wraps into it. */
-type ReplyExit = Parameters<SessionReplier["complete"]>[1];
-type ReplyError = Parameters<SessionReplier["fail"]>[1] | Parameters<SessionReplier["failCause"]>[1];
+/** Exactly what the replier carries: the union over the four session RPCs. */
+type ReplySuccess = Entity.Replier.Success<SessionRpcs>;
+type ReplyError = Rpc.Error<SessionRpcs> | Cause.Cause<Rpc.Error<SessionRpcs>>;
+type ReplyExit = Exit.Exit<ReplySuccess, Rpc.Error<SessionRpcs>>;
+
+/** Instantiates the replier's per-RPC generic at its constraint: the four-RPC union. */
+const widen = <R extends SessionRpcs>(
+  exit: Exit.Exit<Entity.Replier.Success<R>, Rpc.Error<R>>,
+): ReplyExit => exit as Exit.Exit<Entity.Replier.Success<SessionRpcs>, Rpc.Error<SessionRpcs>>;
 
 interface Reply {
   readonly tag: string;
@@ -183,11 +190,13 @@ function makeWriterWorld(
     const failures = yield* Queue.make<{ readonly tag: string; readonly error: ReplyError }>();
     const replier: SessionReplier = {
       succeed: (request, value) =>
-        Queue.offer(replies, { tag: request.tag, exit: Exit.succeed(value) }).pipe(Effect.asVoid),
-      complete: (request, exit) => Queue.offer(replies, { tag: request.tag, exit }).pipe(Effect.asVoid),
-      fail: (request, error) => Queue.offer(failures, { tag: request.tag, error }).pipe(Effect.asVoid),
+        Queue.offer(replies, { tag: request.tag, exit: widen(Exit.succeed(value)) }).pipe(Effect.asVoid),
+      complete: (request, exit) =>
+        Queue.offer(replies, { tag: request.tag, exit: widen(exit) }).pipe(Effect.asVoid),
+      fail: (request, error) =>
+        Queue.offer(failures, { tag: request.tag, error: error as Rpc.Error<SessionRpcs> }).pipe(Effect.asVoid),
       failCause: (request, cause) =>
-        Queue.offer(failures, { tag: request.tag, error: cause }).pipe(Effect.asVoid),
+        Queue.offer(failures, { tag: request.tag, error: cause as Cause.Cause<Rpc.Error<SessionRpcs>> }).pipe(Effect.asVoid),
     };
     return { handle, queue, replier, replies, failures, kernel: baseKernel };
   });

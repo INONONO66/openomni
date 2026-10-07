@@ -1105,7 +1105,7 @@ test("H-1 e2e: a steering prompt denied mid-turn is refused at the RUN boundary 
   const config = suite.config("hooks-json-boundary-state-", { hooksPath });
   let calls = 0;
   let residentSessionId: string | undefined;
-  let steer: (sessionId: string) => Promise<void> = () =>
+  let steer: (sessionId: string) => Promise<{ readonly seq: number; readonly existed: boolean }> = () =>
     Promise.reject(new Error("steer door wired after boot"));
   const app = await suite.boot({
     config,

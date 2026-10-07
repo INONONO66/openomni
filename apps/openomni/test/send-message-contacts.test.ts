@@ -129,7 +129,7 @@ test("the tool routes contact targets through connectors and everything else thr
       ingested.push({ sender, to: (message as Gateway.SendMessage).to });
       return {
         status: "executed",
-        handle: { messageId: "m-1", target: "child-1", seq: 1 },
+        handle: { messageId: "m-1", target: "child-1" },
         delivery: { kind: "session" },
       } satisfies Gateway.IngestResult;
     },
@@ -160,7 +160,7 @@ test("a new child with a deadline arms delegation.deadline for the created child
     ingest: async () =>
       ({
         status: "executed",
-        handle: { messageId: "m-9", target: "child-9", seq: 1 },
+        handle: { messageId: "m-9", target: "child-9" },
         delivery: { kind: "session" },
       }) satisfies Gateway.IngestResult,
   };
