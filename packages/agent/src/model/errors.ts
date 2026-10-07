@@ -48,6 +48,10 @@ export class ModelResolutionError extends Data.TaggedError("ModelResolutionError
 export class AuthInvalidFileError extends Data.TaggedError("AuthInvalidFileError")<MessageFields & { readonly path: string }> {}
 export class AuthResolutionError extends Data.TaggedError("AuthResolutionError")<MessageFields & { readonly provider: string; readonly reason: "missing_auth" | "invalid_auth" }> {}
 export class ProxyModelsError extends Data.TaggedError("ProxyModelsError")<MessageFields & { readonly url: string; readonly status?: number }> {}
+/** A model-catalog source failed (#1312): cache read/parse, remote fetch/parse, or cache write. */
+export class ModelCatalogError extends Data.TaggedError("ModelCatalogError")<
+  MessageFields & { readonly source: "cache" | "remote" | "cache_write"; readonly path: string }
+> {}
 type BoundaryFields = Diagnostic & {
   readonly message: string;
   readonly aborted?: boolean;
@@ -59,4 +63,4 @@ export class TransportFailure extends Data.TaggedError("TransportFailure")<Bound
 export class InvalidProviderData extends Data.TaggedError("InvalidProviderData")<BoundaryFields> {}
 
 export type LlmError = AgentFailure | APIError | LlmRunFailure | ModelResolutionError |
-  AuthInvalidFileError | AuthResolutionError | ProxyModelsError | TransportFailure | InvalidProviderData;
+  AuthInvalidFileError | AuthResolutionError | ModelCatalogError | ProxyModelsError | TransportFailure | InvalidProviderData;

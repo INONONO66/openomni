@@ -9,25 +9,17 @@ export const CatalogModel = z.object({
 });
 
 const PrototypeKey = new Set(["__proto__", "constructor", "prototype"]);
-const RemoteModel = CatalogModel.omit({ provider: true }).optional().catch(undefined);
+const RemoteModel = CatalogModel.omit({ provider: true });
+const SupportedSdk = new Set<string>(["@ai-sdk/anthropic", "@ai-sdk/openai"]);
 const RemoteProvider = z.object({
   id: z.string().optional(),
   name: z.string(),
-  env: z
-    .array(z.string().optional().catch(undefined))
-    .transform((entries) => entries.filter((entry) => entry !== undefined)),
+  env: z.array(z.string()),
   npm: z.enum(["@ai-sdk/anthropic", "@ai-sdk/openai"]),
-  models: z
-    .record(z.string(), RemoteModel)
-    .catch({})
-    .transform((models) =>
-      Object.fromEntries(
-        Object.entries(models).filter(
-          ([id, model]) => !PrototypeKey.has(id) && model !== undefined,
-        ),
-      ),
-    ),
+  models: z.record(z.string(), RemoteModel),
 });
+/** The SDK gate: an entry without a bundled SDK is an explicit policy skip, never a parse failure. */
+const SdkCandidate = z.looseObject({ npm: z.string().optional() });
 
 export const CatalogProvider = z.object({
   api: z.string().optional(),
@@ -40,14 +32,28 @@ export const CatalogProvider = z.object({
 export const Catalog = z.record(z.string(), CatalogProvider);
 export type Catalog = z.infer<typeof Catalog>;
 
+/**
+ * Typed catalog decode (#1312): a malformed entry under a supported SDK is a
+ * parse failure the caller sees, never a silently dropped record. Providers
+ * without a bundled SDK and prototype-polluting keys are the two explicit
+ * filters that remain.
+ */
 export const RemoteCatalog = z
-  .record(z.string(), RemoteProvider.optional().catch(undefined))
-  .catch({})
-  .transform((providers): Catalog => {
+  .record(z.string(), SdkCandidate)
+  .transform((providers, ctx): Catalog => {
     const result: Catalog = {};
-    for (const [id, provider] of Object.entries(providers)) {
-      if (PrototypeKey.has(id) || provider === undefined) continue;
-      result[id] = CatalogProvider.parse({ ...provider, id: provider.id ?? id });
+    for (const [id, candidate] of Object.entries(providers)) {
+      if (PrototypeKey.has(id)) continue;
+      if (candidate.npm === undefined || !SupportedSdk.has(candidate.npm)) continue;
+      const provider = RemoteProvider.safeParse(candidate);
+      if (!provider.success) {
+        ctx.addIssue({ code: "custom", message: `provider ${id}: ${z.prettifyError(provider.error)}`, path: [id] });
+        return z.NEVER;
+      }
+      const models = Object.fromEntries(
+        Object.entries(provider.data.models).filter(([key]) => !PrototypeKey.has(key)),
+      );
+      result[id] = CatalogProvider.parse({ ...provider.data, models, id: provider.data.id ?? id });
     }
     return result;
   });

@@ -5,7 +5,9 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PlainObject } from "@openomni/protocol";
+import { Effect } from "effect";
 import { ModelsDev } from "../../../src/model/model";
+import { ModelCatalogError } from "../../../src/model/errors";
 import { Catalog } from "../../../src/model/model/schema";
 import { resetCatalog } from "../helpers/model-loader";
 
@@ -101,6 +103,19 @@ describe("ModelsDev catalog loading", () => {
     }
   });
 
+  async function withFetch(
+    answer: () => Promise<Response>,
+    body: () => Promise<void>,
+  ): Promise<void> {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(mock(answer), { preconnect: originalFetch.preconnect });
+    try {
+      await body();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
   async function writeCacheCatalog(content: string | PlainObject): Promise<void> {
     testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-cache-"));
     process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
@@ -162,7 +177,7 @@ describe("ModelsDev catalog loading", () => {
       });
     });
 
-    it("should fall back to the bundled snapshot when the cache sanitizes to nothing", async () => {
+    it("refuses a cache file whose trusted provider is malformed with a typed cache error", async () => {
       await writeCacheCatalog({
         openai: null,
         anthropic: {
@@ -174,11 +189,12 @@ describe("ModelsDev catalog loading", () => {
         },
       });
 
-      const snapshot = (await import("../../../src/model/model/models-snapshot.json")).default;
-      await expect(runEffect(ModelsDev.get())).resolves.toEqual(Catalog.parse(snapshot));
+      const error = await runEffect(Effect.flip(ModelsDev.get()));
+      expect(error).toBeInstanceOf(ModelCatalogError);
+      expect(error).toMatchObject({ source: "cache", path: process.env.OPENOMNI_MODELS_PATH });
     });
 
-    it("should drop malformed model records from trusted providers", async () => {
+    it("refuses a cache file with a malformed model record instead of dropping it", async () => {
       await writeCacheCatalog({
         openai: {
           id: "openai",
@@ -192,8 +208,83 @@ describe("ModelsDev catalog loading", () => {
         },
       });
 
-      const data = await runEffect(ModelsDev.get());
-      expect(data.openai?.models).toEqual({ valid: { id: "valid", name: "Valid Model" } });
+      const error = await runEffect(Effect.flip(ModelsDev.get()));
+      expect(error).toBeInstanceOf(ModelCatalogError);
+      expect(error).toMatchObject({ source: "cache" });
+      expect(String(error)).toContain("models.malformed");
+    });
+
+    it("refuses a cache file that is not JSON with a typed cache error", async () => {
+      await writeCacheCatalog("not json {");
+
+      const error = await runEffect(Effect.flip(ModelsDev.get()));
+      expect(error).toBeInstanceOf(ModelCatalogError);
+      expect(error).toMatchObject({ source: "cache", path: process.env.OPENOMNI_MODELS_PATH });
+    });
+
+    it("uses the bundled snapshot when the cache is empty and fetching is disabled", async () => {
+      await writeCacheCatalog({});
+
+      const snapshot = (await import("../../../src/model/model/models-snapshot.json")).default;
+      await expect(runEffect(ModelsDev.get())).resolves.toEqual(Catalog.parse(snapshot));
+    });
+
+    it("continues to the bundled snapshot when the remote fetch fails (typed remote refusal)", async () => {
+      testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-offline-"));
+      process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
+      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+      await withFetch(() => Promise.reject(new Error("network down")), async () => {
+        const snapshot = (await import("../../../src/model/model/models-snapshot.json")).default;
+        await expect(runEffect(ModelsDev.get())).resolves.toEqual(Catalog.parse(snapshot));
+      });
+    });
+
+    it("continues to the bundled snapshot when the remote answers non-OK or malformed", async () => {
+      for (const body of [new Response("oops", { status: 500 }), new Response("not json {", { status: 200 })]) {
+        resetCatalog();
+        testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-badremote-"));
+        process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
+        delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+        await withFetch(() => Promise.resolve(body), async () => {
+          const snapshot = (await import("../../../src/model/model/models-snapshot.json")).default;
+          await expect(runEffect(ModelsDev.get())).resolves.toEqual(Catalog.parse(snapshot));
+        });
+        await rm(testCacheDir, { force: true, recursive: true });
+        testCacheDir = undefined;
+      }
+    });
+
+    it("continues to the bundled snapshot when a remote provider entry is malformed", async () => {
+      testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-badentry-"));
+      process.env.OPENOMNI_MODELS_PATH = join(testCacheDir, "models.json");
+      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+      const malformed = { openai: { id: "openai", npm: "@ai-sdk/openai", models: {} } };
+      await withFetch(
+        () => Promise.resolve(new Response(JSON.stringify(malformed), { status: 200 })),
+        async () => {
+          const snapshot = (await import("../../../src/model/model/models-snapshot.json")).default;
+          await expect(runEffect(ModelsDev.get())).resolves.toEqual(Catalog.parse(snapshot));
+        },
+      );
+    });
+
+    it("reports a failed cache write as a typed cache_write error", async () => {
+      testCacheDir = mkdtempSync(join(tmpdir(), "openomni-models-readonly-"));
+      const blocker = join(testCacheDir, "blocker");
+      await Bun.write(blocker, "a file, not a directory");
+      process.env.OPENOMNI_MODELS_PATH = join(blocker, "nested", "models.json");
+      delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
+      const catalog = {
+        openai: { id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"], npm: "@ai-sdk/openai", models: {} },
+      };
+      await withFetch(
+        () => Promise.resolve(new Response(JSON.stringify(catalog), { status: 200 })),
+        async () => {
+          const error = await runEffect(Effect.flip(ModelsDev.get()));
+          expect(error).toBeInstanceOf(ModelCatalogError);
+          expect(error).toMatchObject({ source: "cache_write", path: process.env.OPENOMNI_MODELS_PATH });
+        },
+      );
     });
 
     it("should not let prototype keys mutate sanitized catalog objects", async () => {
