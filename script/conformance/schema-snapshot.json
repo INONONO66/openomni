@@ -669,7 +669,10 @@
     "offeredCapabilities",
     "platform"
   ],
+  "Machine.PeekAnswer#0": ["output", "running"],
+  "Machine.PeekAnswer#1": ["reason", "status"],
   "Machine.PeekCode": ["cellId"],
+  "Machine.PeekRefused": ["reason", "status"],
   "Machine.PeekResult": ["output", "running"],
   "Machine.PtyCloseRequest": ["name"],
   "Machine.PtyCloseResult#ok": ["status"],

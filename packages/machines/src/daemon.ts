@@ -65,7 +65,7 @@ type MachineDaemonOptions = DaemonConnection & {
 };
 type WireParse = <T>(schema: z.ZodType<T>) => T;
 type WireResult =
-  | Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekResult | Machine.CellResult | Machine.ScreenReadResult | Machine.InputWriteResult
+  | Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekAnswer | Machine.CellResult | Machine.ScreenReadResult | Machine.InputWriteResult
   | Machine.PtyOpenResult | Machine.PtyWriteResult | Machine.PtyReadResult | Machine.PtyResizeResult | Machine.PtyCloseResult | Machine.PtyListResult;
 export interface MachineDaemon {
   /** The CURRENT attachment: reattach and refusal outcomes replace it. */
@@ -219,7 +219,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       cell?.abort();
       return { cancelled: cell !== undefined };
     }
-    function peekCode(request: z.infer<typeof Machine.PeekCode>): Machine.PeekResult {
+    function peekCode(request: z.infer<typeof Machine.PeekCode>): Machine.PeekAnswer {
       // #1312: no runner means no kernel to peek — a typed refusal, not
       // fabricated empty output the caller could mistake for a real answer.
       if (options.runner === undefined) return { status: "refused", reason: "kernel_not_available" };

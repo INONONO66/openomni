@@ -170,7 +170,7 @@ describe("code-mode kernel substrate", () => {
     ).resolves.toMatchObject({ status: "completed" });
     const closed = await kernel.close().then(
       () => undefined,
-      (error: unknown) => error,
+      (error: Error) => error,
     );
     expect(closed).toMatchObject({ _tag: "CodemodeError", reason: "browser_cleanup_failed" });
     expect(String(closed)).toContain("kill_chromium");

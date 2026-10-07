@@ -115,7 +115,7 @@ describe("machine attach handshake", () => {
             // port surfaces host_tool_missing, never a fabricated failed result.
             const refusal = await call({ cellId: request.cellId, name: "missing", arguments: {} }).then(
               () => undefined,
-              (error: unknown) => error,
+              (error: Error) => error,
             );
             expect(String(refusal)).toContain("host_tool_missing");
             entered.resolve();

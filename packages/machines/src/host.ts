@@ -61,7 +61,7 @@ export interface MachineHandle {
   /** Persistent terminals (#1273): named tmux sessions behind one routed call seam. */
   readonly pty: PtyHandle;
   runCode(cell: Machine.CellRequest, signal?: AbortSignal): Effect.Effect<Machine.CellResult, MachineError>;
-  peekCode(cellId: string): Effect.Effect<Machine.PeekResult, MachineError>;
+  peekCode(cellId: string): Effect.Effect<Machine.PeekAnswer, MachineError>;
 }
 export interface MachineInfo extends Machine.Enrollment {
   readonly tags: string[];
@@ -312,7 +312,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
           if (inFlight.get(peer.key)?.has(request.cellId) !== true) return { running: false, output: { stdout: "", stderr: "" } };
           peer.server.useConnection(peer.rawId);
           const raw = yield* typedCall(peer.server, Machine.WireMethod.PeekCode, request).pipe(Effect.mapError(transportFailure("cell.peek")));
-          return yield* Effect.try({ try: () => Machine.PeekResult.parse(raw), catch: decodeMachineFailure("cell.peek.response") });
+          return yield* Effect.try({ try: () => Machine.PeekAnswer.parse(raw), catch: decodeMachineFailure("cell.peek.response") });
         }),
       };
       handles.set(id, handle);
