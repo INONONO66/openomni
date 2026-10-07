@@ -1,5 +1,6 @@
 
 import * as SessionHandleStore from "./store/fence";
+import { computeActionHash, storedActionRow } from "./store/action-hash";
 import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "./store/errors";
 import { canonicalJson, Inbox as InboxSchema, PlainObjectSchema, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction } from "@openomni/protocol";
 import { z } from "zod";
@@ -132,38 +133,88 @@ function retryRevision<A, E>(attempt: () => Effect.Effect<A, E>): Effect.Effect<
   );
 }
 
-/** Idempotent receive (F4): a redelivered envelope resolves to its existing chain action. */
+/** One received-message envelope on its way to the journal (#1313). */
+interface ReceivedEnvelope {
+  readonly messageId: string;
+  readonly content: string;
+  readonly origin: string;
+}
+
+/**
+ * The exact journal action `appendReceived` would commit for one envelope at
+ * `at` (#1256 H-3: a deferred input's `after` cursor rides the row INTENT —
+ * the protocol `action` declaration — so it merges into the origin object).
+ */
+function receivedActionFor(
+  sessionId: string,
+  kind: Inbox.Kind,
+  message: ReceivedEnvelope,
+  at: number,
+  delivery?: "steer" | "followUp",
+  after?: number,
+): LedgerAction.Append {
+  const source = PlainValueSchema.parse(JSON.parse(message.origin));
+  const origin =
+    after === undefined || source === null || typeof source !== "object" || Array.isArray(source)
+      ? source
+      : { ...source, after };
+  return receivedMessageAction({
+    id: message.messageId,
+    sessionId,
+    kind,
+    content: message.content,
+    origin: { encodingVersion: 1, value: origin },
+    parentActionId: null,
+    at,
+    ...(delivery === undefined ? {} : { delivery }),
+  });
+}
+
+/**
+ * The one replayed-key check (#1313). A key already on the journal replays as
+ * the existing receipt only when the envelope would commit the same row bytes
+ * — the candidate is hashed at the stored row's chain position (its
+ * `prevHash`/`ts`/`ordinal` belong to the original commit, not the payload)
+ * with the writer's own digest. A differing payload is the typed
+ * `idempotency_conflict`; neither outcome appends anything.
+ */
+function replayedReceived(
+  handle: ActivationHandle,
+  kind: Inbox.Kind,
+  message: ReceivedEnvelope,
+  delivery?: "steer" | "followUp",
+  after?: number,
+): Effect.Effect<{ readonly ordinal: number; readonly actionHash: string } | undefined, DeliverRefused> {
+  return Effect.suspend(() => {
+    const existing = handle.kernel.actionById(message.messageId);
+    if (existing === undefined) return Effect.succeed(undefined);
+    const candidate = receivedActionFor(
+      handle.authority.sessionId, kind, message, existing.ts, delivery, after,
+    );
+    const replayHash = computeActionHash(
+      storedActionRow(candidate, existing.prevHash, existing.ordinal),
+    );
+    return replayHash === existing.actionHash
+      ? Effect.succeed({ ordinal: existing.ordinal, actionHash: existing.actionHash })
+      : Effect.fail(new DeliverRefused({ code: "idempotency_conflict" }));
+  });
+}
+
+/** Idempotent receive (F4): a redelivered envelope resolves to its existing chain action; a conflicting one is the typed `idempotency_conflict` (#1313). */
 function appendReceived(
   handle: ActivationHandle,
   kind: Inbox.Kind,
-  message: { readonly messageId: string; readonly content: string; readonly origin: string },
+  message: ReceivedEnvelope,
   delivery?: "steer" | "followUp",
   after?: number,
-): Effect.Effect<{ readonly ordinal: number; readonly actionHash: string; readonly deduped: boolean }, LedgerError | AdmissionFailure> {
+): Effect.Effect<{ readonly ordinal: number; readonly actionHash: string; readonly deduped: boolean }, LedgerError | AdmissionFailure | DeliverRefused> {
   return retryRevision(() => Effect.gen(function* () {
     const { kernel, authority, env } = handle;
-    const existing = kernel.actionById(message.messageId);
-    if (existing !== undefined)
-      return { ordinal: existing.ordinal, actionHash: existing.actionHash, deduped: true };
+    const replayed = yield* replayedReceived(handle, kind, message, delivery, after);
+    if (replayed !== undefined) return { ...replayed, deduped: true };
     const row = kernel.row(authority.sessionId);
     const now = env.clock();
-    // #1256 H-3: a deferred input's `after` cursor rides the row INTENT (the
-    // protocol `action` declaration); it merges into the origin object here.
-    const source = PlainValueSchema.parse(JSON.parse(message.origin));
-    const origin =
-      after === undefined || source === null || typeof source !== "object" || Array.isArray(source)
-        ? source
-        : { ...source, after };
-    const action = receivedMessageAction({
-      id: message.messageId,
-      sessionId: authority.sessionId,
-      kind,
-      content: message.content,
-      origin: { encodingVersion: 1, value: origin },
-      parentActionId: null,
-      at: now,
-      ...(delivery === undefined ? {} : { delivery }),
-    });
+    const action = receivedActionFor(authority.sessionId, kind, message, now, delivery, after);
     const committed = yield* commitIn(handle, {
       sessionId: authority.sessionId,
       owner: authority.owner,
@@ -413,9 +464,6 @@ function drain(handle: ActivationHandle): Effect.Effect<SessionDrainOutcome, Led
   }));
 }
 
-/** The core input registration table (#1253): `action` arrives with its capability. */
-const CORE_INPUT_REGISTRATIONS: readonly string[] = Object.freeze(["prompt", "signal"]);
-
 const decodeDeliverBody = Schema.decodeUnknownSync(DeliverBody);
 const decodeDeadlineBody = Schema.decodeUnknownSync(DeadlineAlarmBody);
 
@@ -444,12 +492,14 @@ function deliverCandidate(
 }
 
 /**
- * `deliver` (#1253): the one input door. The kind is checked against the
- * activation's input registration table, a replayed `idempotencyKey` resolves
- * to the existing seq as success with zero new facts, and a refused admission
- * is a typed rejection (`unknown_kind | missing_key | closed | denied`), never
- * a success ack. An admitted input is appended as its own journal row and the
- * loop wakes.
+ * `deliver` (#1253, #1313): the one input door. The kind is checked against
+ * the composed `inputRegistrations` port (unbound is the typed `seam_missing`,
+ * never a core fallback), a replayed `idempotencyKey` resolves to the existing
+ * seq as success with zero new facts only when its payload matches the stored
+ * row (a differing payload is the typed `idempotency_conflict`), and a refused
+ * admission is a typed rejection (`unknown_kind | missing_key | closed |
+ * denied | idempotency_conflict | seam_missing`), never a success ack. An
+ * admitted input is appended as its own journal row and the loop wakes.
  */
 function deliver(
   handle: ActivationHandle,
@@ -464,7 +514,8 @@ function deliver(
   return Effect.gen(function* () {
     if (payload.idempotencyKey.trim().length === 0)
       return yield* new DeliverRefused({ code: "missing_key" });
-    const registered = env.ports.inputRegistrations ?? CORE_INPUT_REGISTRATIONS;
+    const registered = env.ports.inputRegistrations;
+    if (registered === undefined) return yield* new DeliverRefused({ code: "seam_missing" });
     if (!registered.includes(payload.kind))
       return yield* new DeliverRefused({ code: "unknown_kind" });
     // Unguarded by construction: every activation already read this row
@@ -481,8 +532,14 @@ function deliver(
           ? "action"
           : (body.control ??
             (yield* Effect.die(new Error("signal delivery without a control op"))));
-    const existing = kernel.actionById(payload.idempotencyKey);
-    if (existing !== undefined) return { seq: existing.ordinal, existed: true };
+    const replayed = yield* replayedReceived(
+      handle,
+      inboxKind,
+      { messageId: payload.idempotencyKey, content: body.content, origin: payload.source },
+      body.delivery,
+      body.after,
+    );
+    if (replayed !== undefined) return { seq: replayed.ordinal, existed: true };
     const candidate = deliverCandidate(handle, payload, body, inboxKind);
     const snapshot = admissionSnapshot(handle);
     const decision = decideSessionAdmission({
@@ -505,7 +562,8 @@ function deliver(
       body.delivery,
       body.after,
     ).pipe(Effect.catchIf(
-      (error): error is LedgerError => !(error instanceof AdmissionFailure),
+      (error): error is LedgerError =>
+        !(error instanceof AdmissionFailure) && !(error instanceof DeliverRefused),
       (error) => Effect.die(error),
     ));
     yield* drain(handle).pipe(Effect.orDie);

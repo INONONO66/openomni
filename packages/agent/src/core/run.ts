@@ -357,9 +357,10 @@ export interface SessionEntityPorts {
    */
   readonly onKeepAlive?: (enabled: boolean) => void;
   /**
-   * The input registration table `deliver` admits against (#1253): the core
-   * registers `prompt` and `signal`; the action capability registers `action`.
-   * Absent means exactly the core registrations.
+   * The input registration table `deliver` admits against (#1253): the
+   * composition root states every registered kind (`prompt` and `signal` plus
+   * whatever the composed generation registers). Absent is the typed
+   * `seam_missing` refusal at `deliver` (#1313) — never a core fallback.
    */
   readonly inputRegistrations?: readonly string[];
   /**
