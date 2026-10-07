@@ -106,9 +106,11 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
   const sessionId = "cluster-app-session";
   const decisions: SessionEntityTurnInput["decision"]["kind"][] = [];
   const ports: SessionEntityPorts = {
-    // Admission refuses a snapshot with no declared capability kinds; this
-    // fixture states the composed kinds like the booted app's port binding.
+    // Admission refuses a snapshot with no declared capability kinds and
+    // deliver refuses an unbound inputRegistrations port (#1313); this
+    // fixture states the composed tables like the booted app's port binding.
     capabilityKinds: ["tool", "compaction"],
+    inputRegistrations: ["prompt", "signal"],
     runTurn: (input) =>
       Effect.suspend(() => {
         decisions.push(input.decision.kind);

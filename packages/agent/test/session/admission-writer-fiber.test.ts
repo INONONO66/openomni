@@ -170,6 +170,8 @@ function makeWriterWorld(
           runTurn: options?.runTurn ?? makeTurnPort(resolvedRunner("ok"), false, () => 1_000),
           // #1310: admission refuses a snapshot with no declared kinds.
           capabilityKinds: ["tool", "compaction"],
+          // #1313: deliver refuses an unbound inputRegistrations port.
+          inputRegistrations: ["prompt", "signal"],
           ...(options?.alarmCapability === undefined ? {} : { alarmCapability: options.alarmCapability }),
         },
       },
