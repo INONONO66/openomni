@@ -34,6 +34,7 @@ import { canonicalJson, SessionGeneration, SessionTransition, type LedgerAction,
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
+  createChannelStores,
   decodeChannelFailure,
   ChannelsFailure,
   WebSocketHandler,
@@ -102,6 +103,7 @@ import { appManifest } from "./manifest";
 import {
   acquireAppResource,
   channelRequests,
+  channelStoreSource,
   createMonitorPorts,
   createMountedChannelGrantRegistrar,
   createResidentGateway,
@@ -864,6 +866,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           },
           prepare: prepareMessage(plane, resident.materialize),
           requests: requestsWithDeadlines,
+          stores: createChannelStores(channelStoreSource(plane, services.now)),
           authenticateAnswer: (_sender, credential, requestId) =>
             Effect.try({
               try: () => authenticateOwner(credential, requestId),

@@ -22,6 +22,7 @@ import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
 import { messageFixture } from "./helpers/message-fixture";
 import { rmSync } from "node:fs";
 import { testIds } from "./helpers/test-entropy";
+import { residentGatewayPorts } from "./helpers/gateway-ports";
 
 type ResidentRun = NonNullable<NonNullable<Parameters<typeof residentRunner>[0]["llm"]>["run"]>;
 function testResident(run: ResidentRun) {
@@ -34,11 +35,14 @@ function testResident(run: ResidentRun) {
       run,
     },
   });
-  const gateway = runSyncEffect(createResidentGateway({
-    now: Date.now,
-    id: testIds("gateway-contract"),
-    inbox: { commit: (input) => localInbox(resident.plane, "gateway-contract", Date.now)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
-    prepare: prepareMessage(resident.plane, resident.materialize),
+  const gateway = runSyncEffect(Effect.gen(function* () {
+    return yield* createResidentGateway({
+      now: Date.now,
+      id: testIds("gateway-contract"),
+      inbox: { commit: (input) => localInbox(resident.plane, "gateway-contract", Date.now)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
+      prepare: prepareMessage(resident.plane, resident.materialize),
+      ...(yield* residentGatewayPorts(resident.plane, Date.now)),
+    }, undefined);
   }).pipe(Effect.provide(resident.services)));
   createSurfaceKeyStore(resident.plane.channel).claim("ws:ws:dm:evidence", "session:evidence");
   return {
