@@ -1,5 +1,31 @@
 # Implementation Status
 
+## #1307 compaction behind a core seam, declared in the manifest (epic #1303, rung 1)
+
+On `stab/1-compaction-plugin-ownership` (2026-10-07, base `c73bc03b3`). The
+kernel reaches compaction only through the composed `CompactionSeam`
+(`packages/agent/src/core/compaction-ports.ts`, exported via `core/api.ts`):
+`core/{compaction,turn,commit,mailbox,types,index}.ts` have zero
+`plugins/compaction` lines, and `plugins/compaction/successor.ts` reads
+history through injected `CompactionHistoryPorts` instead of
+`inspect/history` (both greps print nothing; `script/check-deps.ts` pins the
+former core→compaction edges at 0 so a reintroduced import fails closed).
+`plugins/compaction/index.ts` exports `compactionCapability()` — a
+`Capability.define` contract named `compaction` whose verbs are one frozen
+`CompactionSeamService` (`geometry`/`measure`/`estimate`/`shouldCompact`/
+`execute`/`createSession`/`pinAction`/`prepareRestore`/`protectRecent`) —
+and `packages/agent/src/bundle.ts` wires the history ports for the app.
+`appManifest` (`apps/openomni/src/manifest.ts`) lists the capability, so
+`off: ["compaction"]` flows through `cascadeOff` and records the typed
+`{ name: "compaction", because: "compaction" }` disabled entry; with the
+seam absent the kernel skips compaction (`applyCompaction` → `"none"`, no
+event) and a compaction append dies typed
+(`compaction append without a composed compaction seam`) — never a silent
+built-in fallback. No new journal kind, tool, or gate point; durable bytes
+unchanged. Tests: `packages/agent/test/compaction/capability.test.ts`,
+compaction-off cases in `packages/agent/test/compose-off-cascade.test.ts`
+and `apps/openomni/test/manifest.test.ts`.
+
 ## #1258 one send_message tool for every contact, delegation-policy caps (epic #1260)
 
 On `epic1260/1258-send-message-contacts` (2026-10-05, base `ab62ca98`). The
