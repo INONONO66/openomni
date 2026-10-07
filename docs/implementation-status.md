@@ -31,6 +31,40 @@ that does not require the tool seam still rejects `unknown_point`. New
 two invalid-output edges and the guarded-page recovery cursor walk. Durable
 bytes, the kind schemas, the point set and the 12-tool catalog are untouched.
 
+## #1317 channel-facing persistence moved to the channels store (epic #1303)
+
+On `stab/6-store-channel-split` (2026-10-07, base `c73bc03b3`). The channels
+package owns the channel-facing SQLite plane:
+`packages/channels/src/store/sqlite/schema.ts` carries the `CREATE TABLE IF
+NOT EXISTS` statements moved verbatim from the agent catalog
+(`actor_identity`, `actor_endpoint`, `channel_grant`, `reply_grant`,
+`egress_debit`, `blacklist`, `surface_key`, plus `person`, `secret` and
+`channel_instance` — the provisioning adapter that owns those three joins the
+same module per the issue's plan), and `openChannelStore(db, now)`
+(`store/sqlite/index.ts`) applies the schema and binds the seven adapters
+(`git mv` from `packages/agent/src/core/store/storage/`) plus the handle-bound
+write `transaction` to one database handle. The agent catalog
+(`packages/agent/src/core/store/catalog.ts`) declares no channel-facing table
+and constructs no channel-facing adapter; it exposes its raw `database`
+handle, and the app composition
+(`apps/openomni/src/composition/cluster-runtime.ts`) attaches
+`openChannelStore(catalog.database, now)` once per boot as
+`AppLedgerPlane.channel`. `apps/openomni/src/gateway.ts` builds
+`ChannelStoreSource` from `plane.channel.*` plus the ingress session's
+`decisionFacts`/`transaction`. Channels tests run on their own fixture
+(`packages/channels/test/store/helpers/sqlite.ts`);
+`packages/channels/test/store/sqlite/schema-roundtrip.test.ts` is the
+round-trip guard proving `sqlite_master` DDL text and one row per table
+byte-identical between a catalog opened by the agent opener and
+`openChannelStore` on the same file (a pre-#1317 catalog file opens as an
+`IF NOT EXISTS` no-op over its existing tables). `StoredIdentity` /
+`StoredEndpoint` export from the channels barrel and left the agent barrel;
+the check-deps channels→agent named-import pin shrank by
+`createSurfaceKeyStore` (now channels-internal). Verification greps all at 0:
+`createSqlite*Adapter` under `packages/agent`+`apps` (22 → 0), `plane.catalog.*`
+channel fields under `apps` (6 → 0), agent test fixtures in channels tests
+(4 → 0), channel-facing `CREATE TABLE` under `packages/agent` (7 → 0).
+
 ## #1304 action plugin owns its implementation source (epic #1303)
 
 On `stab/3-action-plugin-source` (2026-10-06, base `c73bc03b3`). The fifth

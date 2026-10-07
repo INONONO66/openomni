@@ -4,9 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEgressBudgetStore } from "../../../src/index.js";
-import { Core } from "@openomni/agent";
-const openCatalogStore = Core.openCatalogStore;
-import { testNow, useMemoryStores } from "../../../../agent/test/store/helpers/storage";
+import { openTestChannelStore, useMemoryChannelStore } from "../helpers/sqlite";
 import type { Gateway } from "@openomni/protocol";
 
 /** #219 active-egress debit ledger: atomic, idempotent counted-window claims. */
@@ -26,8 +24,8 @@ describe("EgressBudgetStore", () => {
     ...overrides,
   });
 
-  const stores = useMemoryStores();
-  const budget = () => createEgressBudgetStore(stores.catalog);
+  const stores = useMemoryChannelStore();
+  const budget = () => createEgressBudgetStore(stores.store);
 
   test("an empty ledger presents a zero state to the first claim", () => {
     let observed: Gateway.EgressDebitState | undefined;
@@ -104,7 +102,7 @@ describe("EgressBudgetStore", () => {
   });
 
   test("two contenders for the last SQLite window slot produce exactly one claim", () => {
-    const adapter = stores.catalog.egressBudget;
+    const adapter = stores.store.egressBudget;
 
     const results = [row("race-a"), row("race-b")].map((candidate) =>
       adapter.claim(candidate, NOW - WINDOW, (state) => state.countInWindow < 1),
@@ -114,7 +112,7 @@ describe("EgressBudgetStore", () => {
   });
 
   test("retrying a recorded claim is idempotent and never charges the window twice", () => {
-    const adapter = stores.catalog.egressBudget;
+    const adapter = stores.store.egressBudget;
 
     const first = row("retry-a");
     expect(adapter.claim(first, NOW - WINDOW, (state) => state.countInWindow < 1)).toBe("claimed");
@@ -126,7 +124,7 @@ describe("EgressBudgetStore", () => {
   });
 
   test("retrying an id with different fields is refused as a conflicting claim", () => {
-    const adapter = stores.catalog.egressBudget;
+    const adapter = stores.store.egressBudget;
 
     expect(adapter.claim(row("conflict-a"), NOW - WINDOW, () => true)).toBe("claimed");
     const conflicting = { ...row("conflict-a"), targetActorId: "act_someone_else" };
@@ -143,9 +141,9 @@ describe("EgressBudgetStore", () => {
     // would leave the probe insert free to succeed and fail this test.
     const dir = mkdtempSync(join(tmpdir(), "egress-claim-"));
     const dbPath = join(dir, "claim.sqlite");
-    const catalog = openCatalogStore(dbPath, { now: testNow });
+    const opened = openTestChannelStore(dbPath);
     try {
-      const adapter = catalog.egressBudget;
+      const adapter = opened.store.egressBudget;
       const probe = new Database(dbPath);
       probe.exec("PRAGMA busy_timeout = 0");
       const insertProbeRow = () => {
@@ -168,7 +166,7 @@ describe("EgressBudgetStore", () => {
       insertProbeRow();
       probe.close();
     } finally {
-      catalog.close();
+      opened.close();
       rmSync(dir, { recursive: true, force: true });
     }
   });

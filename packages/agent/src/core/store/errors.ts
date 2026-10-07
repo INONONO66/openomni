@@ -101,16 +101,6 @@ export class CatalogVersionRefused extends Data.TaggedError("CatalogVersionRefus
   }
 }
 
-/** An incoherent reply-grant projection row observed by the SQLite adapter. */
-export class ReplyGrantProjectionError extends Error {
-  readonly code = "incoherent_reply_grant";
-
-  constructor(readonly grantId: string) {
-    super(`Incoherent reply-grant projection: ${grantId}`);
-    this.name = "ReplyGrantProjectionError";
-  }
-}
-
 export type LedgerError =
   | SessionNotFound
   | MaterializeRefused

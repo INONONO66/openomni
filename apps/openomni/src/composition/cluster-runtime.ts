@@ -12,7 +12,7 @@ const openSessionStore = Core.openSessionStore;
 type LedgerHandles = Core.LedgerHandles;
 type ObservationFailurePort = Core.ObservationFailurePort;
 type ObservationPublishFailure = Core.ObservationPublishFailure;
-import { createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore } from "@openomni/channels";
+import { type ChannelStore, createActorRegistry, createChannelGrantStore, createChannelInstanceStore, createPersonStore, createSecretStore, openChannelStore } from "@openomni/channels";
 import type { LedgerSession, ObservationSink } from "@openomni/protocol";
 import { Context, Deferred, Duration, Effect, Exit, Layer } from "effect";
 import { SingleRunner } from "effect/cluster";
@@ -112,6 +112,8 @@ interface AppCatalogStores {
  */
 export interface AppLedgerPlane {
   readonly catalog: CatalogHandle;
+  /** Channels-owned store plane (#1317) attached to the catalog's database handle. */
+  readonly channel: ChannelStore;
   /** `LedgerWrites` shape: the shared catalog plus the entity's session opener. */
   readonly handles: LedgerHandles;
   /** Memoized handle-scoped kernel for one session (plane-owned lifetime). */
@@ -131,6 +133,9 @@ export function createAppLedger(options: AppLedgerOptions): AppLedgerPlane {
     now: options.now,
     ...(options.observationSink === undefined ? {} : { observationSink: options.observationSink }),
   });
+  // #1317: the channel-facing tables ride the same catalog file, but their
+  // schema and adapters are channels-owned — attached here, once per boot.
+  const channel = openChannelStore(catalog.database, options.now);
   const onObservationFailure = options.onObservationFailure ?? reportObservationPublishFailure;
   const memo = new Map<string, { store: SessionStoreHandle; kernel: SessionKernel }>();
   function opened(sessionId: string) {
@@ -160,6 +165,7 @@ export function createAppLedger(options: AppLedgerOptions): AppLedgerPlane {
   }
   return {
     catalog,
+    channel,
     handles: {
       catalog,
       // File mode: the entity owns fresh handles it may close on passivation.
@@ -187,11 +193,11 @@ export function createAppLedger(options: AppLedgerOptions): AppLedgerPlane {
         }
       }),
     stores: {
-      actors: createActorRegistry(catalog),
-      persons: createPersonStore(catalog),
-      instances: createChannelInstanceStore(catalog),
-      secrets: createSecretStore(catalog),
-      channelGrants: createChannelGrantStore(catalog),
+      actors: createActorRegistry(channel),
+      persons: createPersonStore(channel),
+      instances: createChannelInstanceStore(channel),
+      secrets: createSecretStore(channel),
+      channelGrants: createChannelGrantStore(channel),
     },
     close: () => {
       for (const entry of memo.values()) entry.store.close();

@@ -44,9 +44,8 @@ export { forkSession, ForkRefused, isForkBoundary, DEFAULT_FORK_COPY_BYTE_CAP, t
 export {
   openCatalogStore, CATALOG_SCHEMA, bootstrapStoreDatabase, openSessionStore,
   readSessionFileSchemaVersion, SESSION_FILE_SCHEMA_VERSION,
-  createDecisionFactPort, SessionHandleStore, createSurfaceKeyStore,
+  createDecisionFactPort, SessionHandleStore,
   CommitRefused, CorruptRecord, requireSubAdapter, withStoreTimestamps,
-  StoredEndpoint, StoredIdentity,
 } from "./store";
 export type {
   ObservationFailurePort, ObservationPublishFailure, LedgerError,

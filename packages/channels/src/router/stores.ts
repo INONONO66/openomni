@@ -1,4 +1,5 @@
-import { createDecisionFactPort, createSurfaceKeyStore } from "@openomni/agent";
+import { createDecisionFactPort } from "@openomni/agent";
+import { createSurfaceKeyStore } from "../store/surface-key/index.js";
 import { createActorRegistry } from "../store/actor/index.js";
 import { createBlacklistStore } from "../store/blacklist/index.js";
 import { createChannelGrantStore } from "../store/channel-grant/index.js";

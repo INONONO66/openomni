@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { Gateway, type Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
-import { ReplyGrantProjectionError } from "../errors";
+import { ReplyGrantProjectionError } from "./errors";
 
 export function createSqliteReplyGrantAdapter(db: Database): ProtocolStorage.ReplyGrantSubAdapter {
   return {

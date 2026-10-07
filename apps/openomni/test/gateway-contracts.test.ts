@@ -3,10 +3,9 @@ import { Effect } from "effect";
 import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
 import { Bus } from "./helpers/bus";
 import { describe, expect, test } from "bun:test";
-import { createChannelStores, decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
-import { Core, type Model } from "@openomni/agent";
+import { createChannelStores, createSurfaceKeyStore, decodeChannelFailure, resolveChannelGrant } from "@openomni/channels";
+import type { Model } from "@openomni/agent";
 type RunInput = Model.RunInput;
-const createSurfaceKeyStore = Core.createSurfaceKeyStore;
 import { Gateway, MessagingEvents, type Tool } from "@openomni/protocol";
 import {
   channelStoreSource,
@@ -41,7 +40,7 @@ function testResident(run: ResidentRun) {
     inbox: { commit: (input) => localInbox(resident.plane, "gateway-contract", Date.now)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage(resident.plane, resident.materialize),
   }).pipe(Effect.provide(resident.services)));
-  createSurfaceKeyStore(resident.plane.catalog).claim("ws:ws:dm:evidence", "session:evidence");
+  createSurfaceKeyStore(resident.plane.channel).claim("ws:ws:dm:evidence", "session:evidence");
   return {
     gateway,
     plane: resident.plane,

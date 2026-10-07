@@ -1,17 +1,16 @@
 import { once } from "node:events";
 import { z } from "zod";
-import { Core } from "@openomni/agent";
-const openCatalogStore = Core.openCatalogStore;
+import { openTestChannelStore } from "../helpers/sqlite";
 
 const [path, id] = z.tuple([z.string(), z.string()]).parse(process.argv.slice(2));
 if (!process.send) throw new Error("reply-grant contender requires IPC");
-const adapter = openCatalogStore(path, { now: () => 1_700_000_000_000 });
+const adapter = openTestChannelStore(path);
 let result: "claimed" | "existing" | "capacity";
 try {
   const start = once(process, "message", { signal: AbortSignal.timeout(10_000) });
   process.send("ready");
   z.tuple([z.literal("claim"), z.undefined().optional()]).parse(await start);
-  result = adapter.replyGrant.claim(
+  result = adapter.store.replyGrant.claim(
     {
       id,
       ruleId: "rule-1",

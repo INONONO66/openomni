@@ -664,7 +664,7 @@ test("#1247 S8 pin: unaliased star export and default export are rejected forms"
   expect(defaulted.some((line) => line.includes("export form outside the #1276 surface"))).toBe(true);
 });
 
-test("#1247 S8 pin: a tenth named export trips the count diagnostic itself", () => {
+test("#1247 S8 pin: a seventh named export trips the count diagnostic itself", () => {
   const names = [
     "decisionFromEvaluation",
     "evaluatePermission",
@@ -672,17 +672,14 @@ test("#1247 S8 pin: a tenth named export trips the count diagnostic itself", () 
     "requireSubAdapter",
     "withStoreTimestamps",
     "createDecisionFactPort",
-    "createSurfaceKeyStore",
-    "StoredEndpoint",
-    "StoredIdentity",
-    // Tenth entry re-exports a pinned name under a second pinned alias, so every
-    // NAME stays pinned and only the count rule can catch the growth.
+    // Seventh entry re-exports a pinned name under a second pinned alias, so
+    // every NAME stays pinned and only the count rule can catch the growth.
     "evaluatePermission as decisionFromEvaluation",
   ];
   const source = names.map((name) => `export { ${name} } from "./kernel/gate/match";`).join("\n");
   const violations = agentIndexPerimeterViolations(source);
   expect(violations).toContain(
-    "VIOLATION: packages/agent/src/index.ts has 10 named exports over the pinned 9 — shrink only, never grow",
+    "VIOLATION: packages/agent/src/index.ts has 7 named exports over the pinned 6 — shrink only, never grow",
   );
 });
 
