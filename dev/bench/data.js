@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791374712619,
+  "lastUpdate": 1791382110782,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80037,6 +80037,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 147996,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c68c9de5a53b8db9c4c23e9402282e8c7cdb1142",
+          "message": "test(openomni): capability-off boot matrix and off cascade journal (#1306) (#1324)\n\n* feat(openomni): accept capability names in the off list and rename config.bundlesOff to off (#1306)\n\n* refactor(openomni): reach the watch verb through the Bundle barrel in alarm-plane tests (#1306)\n\n* feat(openomni): journal the off cascade at first adoption and close the tool door when the tool capability is off (#1306)\n\n* test(openomni): boot the full app with every capability off and pin the typed cascade (#1306)\n\n* docs: record the #1306 capability-off boot matrix (implementation-status, AGENTS stamp, SLOP §M row)\n\n* test(openomni): compaction-off app test uses the renamed config.off after the rebase onto main (#1306)\n\n* test(openomni): type the journaled disabled cascade through OffRow instead of unknown (#1306)",
+          "timestamp": "2026-10-07T14:06:05Z",
+          "tree_id": "9c94b3b4890ed9579abaef83b1b362230c981d90",
+          "url": "https://github.com/INONONO66/openomni/commit/c68c9de5a53b8db9c4c23e9402282e8c7cdb1142"
+        },
+        "date": 1791382109787,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 571,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 973,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 769,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 893198,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 260588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4292835,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 76,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 404,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 78681,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 443671,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 231676,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 1932,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 6420371,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 758630,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 10641,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 97681,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 499502,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 106326,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 8858397,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 54,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 82726,
             "unit": "ns/op"
           }
         ]
