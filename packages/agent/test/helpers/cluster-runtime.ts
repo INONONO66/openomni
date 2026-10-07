@@ -86,8 +86,12 @@ export interface TestClusterOptions {
   readonly onArmed?: SessionEntityPorts["onArmed"];
   /** Injected entity clock (byte-equality fixtures); default wall clock. */
   readonly clock?: () => number;
-  /** #1255: the composed generation's deliver registrations (default: core prompt/signal). */
-  readonly inputRegistrations?: readonly string[];
+  /**
+   * #1255: the composed generation's deliver registrations; `"unbound"` omits
+   * the port so a case can exercise the #1313 `seam_missing` refusal.
+   * Default: core prompt/signal, stated explicitly (no production fallback).
+   */
+  readonly inputRegistrations?: readonly string[] | "unbound";
   /**
    * #1255: the composed generation's capability kinds for input admission;
    * `"undeclared"` omits the port so a case can exercise the #1310
@@ -345,7 +349,11 @@ function entityPorts(
     ...(options.alarmCapability === undefined
       ? {}
       : { alarmCapability: options.alarmCapability }),
-    ...(options.inputRegistrations === undefined ? {} : { inputRegistrations: options.inputRegistrations }),
+    // #1313: deliver refuses an unbound inputRegistrations port, so the test
+    // cluster states the core table explicitly unless a case unbinds it.
+    ...(options.inputRegistrations === "unbound"
+      ? {}
+      : { inputRegistrations: options.inputRegistrations ?? ["prompt", "signal"] }),
     // #1310: admission refuses a snapshot with no declared kinds, so the
     // test cluster states the built-ins unless a case overrides them.
     ...(options.capabilityKinds === "undeclared"
