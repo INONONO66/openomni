@@ -113,7 +113,7 @@ export type SessionRunnerResult =
   | {
       readonly kind: "error";
       readonly text: string;
-      readonly cause?: Error | SessionPolicyRefusal | RunnerOutputMissing;
+      readonly cause?: Error | SessionPolicyRefusal | RunnerOutputMissing | InboundAuthorityViolation;
       readonly reported?: true;
     };
 
@@ -901,7 +901,7 @@ const TrustedOrigin = z.union([SessionOrigin, Inbox.MessageOrigin, Inbox.ReplyOr
 export const InboundAuthorityViolated = BusEvent.define(
   "session.inbound_authority.violation",
   z.object({
-    reason: z.enum(["unknown_origin", "undeclared_treatment"]),
+    reason: z.enum(["unknown_origin", "undeclared_treatment", "missing_origin"]),
     messageId: z.string().optional(),
   }),
   { visibility: "user_audit" },
@@ -913,20 +913,36 @@ export interface InboundAuthorityDecision {
 }
 
 /**
- * Turn authority from the prompt's inbox origin. A missing origin (fixture
- * prompt) or a kernel-minted origin acts; an external origin acts only when
- * the perimeter recorded `full_access` verbatim, and is evidence when it
- * recorded `evidence_only`. Everything else is mail of unknown provenance:
- * evidence authority plus a recorded violation fact — never `act`.
+ * Turn authority from the prompt's inbox origin. A kernel-minted origin acts;
+ * an external origin acts only when the perimeter recorded `full_access`
+ * verbatim, and is evidence when it recorded `evidence_only`. Everything else
+ * is mail of unknown provenance: evidence authority plus a recorded violation
+ * fact — never `act`. A missing origin never reaches this function (#1310):
+ * `promptInboundAuthority` refuses it typed before any grant.
  */
-export function inboundAuthority(origin: PlainValue | undefined): InboundAuthorityDecision {
-  if (origin === undefined || TrustedOrigin.safeParse(origin).success) return { authority: "act" };
+export function inboundAuthority(origin: PlainValue): InboundAuthorityDecision {
+  if (TrustedOrigin.safeParse(origin).success) return { authority: "act" };
   if (ExternalOrigin.safeParse(origin).success) {
     if (FullAccessOrigin.safeParse(origin).success) return { authority: "act" };
     if (EvidenceOnlyOrigin.safeParse(origin).success) return { authority: "evidence_only" };
     return { authority: "evidence_only", violation: new InboundAuthorityViolation("undeclared_treatment") };
   }
   return { authority: "evidence_only", violation: new InboundAuthorityViolation("unknown_origin") };
+}
+
+/**
+ * Turn authority for the hydrated prompt (#1310). No prompt means a
+ * kernel-driven turn: `act` with nothing to authenticate. A prompt whose
+ * action row (or its recorded intent) cannot be found is `missing_origin`:
+ * a typed violation the turn FAILS on — never a silent `act` grant.
+ */
+export function promptInboundAuthority(
+  promptId: string | undefined,
+  origin: PlainValue | undefined,
+): InboundAuthorityDecision {
+  if (promptId === undefined) return { authority: "act" };
+  if (origin !== undefined) return inboundAuthority(origin);
+  return { authority: "evidence_only", violation: new InboundAuthorityViolation("missing_origin") };
 }
 
 /** The turn's result when the runner never produced one: a typed missing-output failure, not a policy refusal. */
@@ -1008,13 +1024,19 @@ export function createSessionTurn(
         // #1257: the prompt's origin is its action row's intent — a point
         // read, not the retired whole-chain received-message fold.
         const origin = promptId === undefined ? undefined : kernel.actionById(promptId)?.intent;
-        const inbound = inboundAuthority(origin?.value);
+        const inbound = promptInboundAuthority(promptId, origin?.value);
         if (inbound.violation !== undefined) {
           const observations = yield* ObservationService;
           scopeObservation(observations, { sessionId, turnId: input.turnId }, { now: clock, id: entropy }).publish(
             InboundAuthorityViolated,
             { reason: inbound.violation.reason, ...(promptId === undefined ? {} : { messageId: promptId }) },
           );
+        }
+        // #1310: a prompt with no recorded origin fails the turn typed — the
+        // runner never runs, so no authority (not even evidence) is granted.
+        if (inbound.violation?.reason === "missing_origin") {
+          runnerResult = { kind: "error", text: inbound.violation.message, cause: inbound.violation };
+          return sessionRunnerResultValue(runnerResult);
         }
         runnerResult = yield* runner({
           authority: inbound.authority,

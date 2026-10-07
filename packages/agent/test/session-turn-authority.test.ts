@@ -28,8 +28,7 @@ test("unknown provenance never acts: evidence authority plus a typed violation f
 });
 
 test("known trusted origins keep acting with no violation", () => {
-  const origins: readonly (PlainValue | undefined)[] = [
-    undefined,
+  const origins: readonly PlainValue[] = [
     { kind: "session", id: "parent" },
     { kind: "message", messageId: "m1", senderSessionId: "parent", sourceActionId: "a1" },
     { kind: "external", messageId: "m", surface: "ws", externalId: "e", actorId: "", inboundTreatment: "full_access" },
