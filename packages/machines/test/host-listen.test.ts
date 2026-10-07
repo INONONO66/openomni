@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import type { Machine } from "@openomni/protocol";
 import { attachMachineDaemon as nativeDaemon } from "../src/daemon";
 import { createMachineHost as nativeHost } from "../src/host";
-import { createMachineHost } from "./helpers/native";
+import { createMachineHost, refusingToolPort } from "./helpers/native";
 import { acquire } from "./ipc/helpers/effects";
 import { connectIpcTcpClient } from "./ipc/helpers/native";
 import { exit as runExit } from "./helpers/effect";
@@ -255,7 +255,8 @@ describe("host listener set (#1270)", () => {
             listen: { unix, tcp: { host: "127.0.0.1", port: blocker.port } },
             tls: hostIdentity,
             id: sequentialIds("half-bound"),
-          dispatcherBound: 8,
+            dispatcherBound: 8,
+            callTool: refusingToolPort,
             enrollment: () => undefined,
             events: silent,
             now: () => 3,
@@ -281,7 +282,8 @@ describe("host listener set (#1270)", () => {
   test("an empty listener set and tcp without a TLS identity are typed startup failures", async () => {
     const common = {
       id: sequentialIds("invalid"),
-          dispatcherBound: 8,
+      dispatcherBound: 8,
+      callTool: refusingToolPort,
       enrollment: () => undefined,
       events: silent,
       now: () => 3,

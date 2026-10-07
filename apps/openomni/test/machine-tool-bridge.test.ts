@@ -14,6 +14,7 @@ import { bridgeDaemon, bridgeHost, bridgeOffer, bridgeProbe } from "./helpers/ma
 import { dispatchModelTool } from "./helpers/tool-dispatch";
 import { testMachinePorts } from "./helpers/native-tool-ports";
 import { testIds } from "./helpers/test-entropy";
+import { refusingToolPort } from "./helpers/tool-port";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -625,6 +626,7 @@ describe("bash session door", () => {
     const path = socketPath();
     const host = await acquireEffect(createMachineHost({
       dispatcherBound: 8,
+      callTool: refusingToolPort,
       listen: { unix: path },
       id: testIds("pty-bridge-host"),
       enrollment: () => ({

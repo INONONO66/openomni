@@ -13,6 +13,10 @@ function sequentialIds(prefix: string): () => string {
 export function foreign<A>(body: () => Promise<A>): Effect.Effect<A, Native.MachineError> {
   return Effect.tryPromise({ try: body, catch: decodeMachineFailure("test.machine") });
 }
+/** #1312: the explicit tool port for hosts wired without one in tests. */
+export function refusingToolPort(): Effect.Effect<never, Native.MachineError> {
+  return Effect.fail(new Native.MachineRefusalError({ reason: "host_tool_missing", message: "host_tool_missing: this host was wired without a tool port" }));
+}
 export interface CodeRunner {
   readonly native?: Native.CodeRunner;
   runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>, signal: AbortSignal): Promise<Machine.CellResult>;
@@ -52,7 +56,7 @@ function machineHandle(native: Native.MachineHandle) {
 export type MachineHandle = ReturnType<typeof machineHandle>;
 export async function createMachineHost(options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool" | "id" | "dispatcherBound"> & { id?: () => string; dispatcherBound?: number; callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> }) {
   const callTool = options.callTool;
-  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), dispatcherBound: options.dispatcherBound ?? 64, callTool: callTool ? (call) => foreign(() => callTool(call)) : undefined }));
+  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), dispatcherBound: options.dispatcherBound ?? 64, callTool: callTool ? (call) => foreign(() => callTool(call)) : refusingToolPort }));
   const handles = new Map<string, MachineHandle>();
   return { native, list: native.list, endpoints: native.endpoints,
     get(id: string) { let handle = handles.get(id); if (!handle) { handle = machineHandle(native.get(id)); handles.set(id, handle); } return handle; },

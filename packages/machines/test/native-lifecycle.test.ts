@@ -11,6 +11,7 @@ import { attachMachineDaemon } from "../src/daemon";
 import { execute } from "../src/exec";
 import { createMachineHost } from "../src/host";
 import { enrollment, offer } from "./helpers";
+import { refusingToolPort } from "./helpers/native";
 
 function lifecycleIds(prefix: string): () => string {
   let n = 0;
@@ -72,7 +73,7 @@ test("closing the attached daemon scope terminates a host-dispatched process gro
   const path = socketPath("machine-life");
   const detached = deferred();
   const host = await acquire(createMachineHost({
-    listen: { unix: path }, enrollment, now: () => 3, id: lifecycleIds("life-host"), dispatcherBound: 8,
+    listen: { unix: path }, enrollment, now: () => 3, id: lifecycleIds("life-host"), dispatcherBound: 8, callTool: refusingToolPort,
     events: { publish: (event) => { if (event.name === Machine.Events.Detached.name) detached.resolve(); } },
   }));
   const daemon = await acquire(attachMachineDaemon({ socketPath: path, id: lifecycleIds("life-daemon"), dispatcherBound: 8, offer: offer("/tmp"), fsExports: new Map([["docs", "/tmp"]]) }));

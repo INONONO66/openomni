@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Machine } from "@openomni/protocol";
 import type { createMachineHost } from "@openomni/machines";
 import { daemonFingerprint, hostIdentity } from "../../../../packages/machines/test/ipc/helpers/tls-fixtures";
+import { refusingToolPort } from "./tool-port";
 
 /** The committed PEM fixture files the CLI config points at (paths, not contents). */
 export const tlsFixturesDir = join(import.meta.dir, "../../../../packages/machines/test/ipc/fixtures");
@@ -33,6 +34,7 @@ export function pinnedTcpHostOptions(
     tls: hostIdentity,
     id,
     dispatcherBound: 8,
+    callTool: refusingToolPort,
     enrollment: (machineId) => ({
       machineId,
       name: machineId,

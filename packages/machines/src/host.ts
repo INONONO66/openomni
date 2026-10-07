@@ -28,7 +28,12 @@ interface MachineHostOptions {
   readonly enrollment: (id: Machine.MachineId) => Machine.Enrollment | undefined;
   readonly events: BusEvent.Sink;
   readonly now: () => number;
-  readonly callTool?: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
+  /**
+   * Required tool port (#1312): a host wired without one must say so with an
+   * explicit implementation failing `host_tool_missing`, never a fabricated
+   * `{ status: "failed" }` tool result.
+   */
+  readonly callTool: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
   /**
    * Machine ids whose live attachment is never superseded (#1271): while such
    * an id is attached, a second offer for it from another connection is
@@ -124,7 +129,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
     function callTool(call: Machine.ToolCall, key: string): Effect.Effect<Machine.ToolCallResult, MachineError> {
       return Effect.suspend(() => {
         if (!attachments.has(key) || !inFlight.get(key)?.has(call.cellId)) return new MachineCellError({ code: "unknown_cell_id", cellId: call.cellId, message: `no cell in flight: ${call.cellId}` });
-        return options.callTool ? options.callTool(call) : Effect.succeed({ status: "failed", error: "this host exposes no tools" } as const);
+        return options.callTool(call);
       });
     }
     function attach(offer: Machine.Offer, respond: (result: Machine.AttachResult) => void, source: RequestSource): Effect.Effect<void, MachineError> {
