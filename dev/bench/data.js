@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791242622170,
+  "lastUpdate": 1791355113951,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -79635,6 +79635,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 148656,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "350612bfff4376643d525a891bc1b3f5ebaf8d94",
+          "message": "refactor(channels): move channel-facing persistence out of the agent catalog into the channels store (#1317) (#1322)\n\n* refactor(channels): move channel-facing persistence out of the agent catalog into the channels store (#1317)\n\n* docs: #1317 channels-owned store plane receipt (implementation-status, SLOP §M, AGENTS stamp)",
+          "timestamp": "2026-10-07T15:36:00+09:00",
+          "tree_id": "c57c59350c6d30afe02c925bb5ed39f448c64f18",
+          "url": "https://github.com/INONONO66/openomni/commit/350612bfff4376643d525a891bc1b3f5ebaf8d94"
+        },
+        "date": 1791355113240,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 708,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1191,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 966,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 999475,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 297381,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5236730,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 87,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 656,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 463,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 106922,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 549878,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 290294,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2280,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9207491,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 834317,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 13650,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 124991,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 599499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 131563,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 11951531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 62,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 100168,
             "unit": "ns/op"
           }
         ]
