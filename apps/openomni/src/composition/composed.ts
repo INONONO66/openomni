@@ -1,4 +1,4 @@
-import { Bundle } from "@openomni/agent";
+import type { Bundle } from "@openomni/agent";
 import { Context } from "effect";
 import type { MonitorPorts } from "../tools/core/watch";
 
