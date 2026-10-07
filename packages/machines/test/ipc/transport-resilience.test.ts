@@ -132,7 +132,7 @@ describe("IPC transport resilience (#QB1)", () => {
 
     const logged = deferred<string>();
     const collector = collectingLogger("matched no message schema", logged.resolve);
-    const { value: client, close } = await acquire(connectNative(socketPath, { idSource: resilienceIds("warn-client") }).pipe(Effect.provide(Logger.layer([collector]))));
+    const { value: client, close } = await acquire(connectNative(socketPath, { idSource: resilienceIds("warn-client"), dispatcherBound: 8 }).pipe(Effect.provide(Logger.layer([collector]))));
     try {
       // The captured log entry carries the Warn level, not a console spy.
       expect(await within(logged.promise, "schema mismatch warning")).toBe("Warn");
@@ -150,7 +150,7 @@ describe("IPC transport resilience (#QB1)", () => {
     const collector = collectingLogger("request handler defect", logged.resolve);
     const disconnected = deferred<string>();
     const { close } = await acquire(listenNative(socketPath, () => Effect.die(new Error("deliberate handler defect")), {
-      idSource: resilienceIds("defect-server"),
+      idSource: resilienceIds("defect-server"), dispatcherBound: 8,
       onDisconnect: (id) => Effect.sync(() => disconnected.resolve(id)),
     }).pipe(Effect.provide(Logger.layer([collector]))));
     try {

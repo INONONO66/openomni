@@ -72,10 +72,10 @@ test("closing the attached daemon scope terminates a host-dispatched process gro
   const path = socketPath("machine-life");
   const detached = deferred();
   const host = await acquire(createMachineHost({
-    listen: { unix: path }, enrollment, now: () => 3, id: lifecycleIds("life-host"),
+    listen: { unix: path }, enrollment, now: () => 3, id: lifecycleIds("life-host"), dispatcherBound: 8,
     events: { publish: (event) => { if (event.name === Machine.Events.Detached.name) detached.resolve(); } },
   }));
-  const daemon = await acquire(attachMachineDaemon({ socketPath: path, id: lifecycleIds("life-daemon"), offer: offer("/tmp"), fsExports: new Map([["docs", "/tmp"]]) }));
+  const daemon = await acquire(attachMachineDaemon({ socketPath: path, id: lifecycleIds("life-daemon"), dispatcherBound: 8, offer: offer("/tmp"), fsExports: new Map([["docs", "/tmp"]]) }));
   const observed = observeProcess();
   try {
     expect(host.value.list()).toHaveLength(1);
@@ -103,11 +103,12 @@ test("failed attach rolls back the acquired daemon, runner and socket", async ()
   const server = await acquire(createIpcServer(path, (method, _params, respond) => Effect.sync(() => {
     expect(method).toBe(Machine.WireMethod.Attach);
     respond({ status: "invalid" });
-  }), { idSource: lifecycleIds("attach-fail-server"), onDisconnect: () => Effect.sync(() => disconnected.resolve()) }));
+  }), { idSource: lifecycleIds("attach-fail-server"), dispatcherBound: 8, onDisconnect: () => Effect.sync(() => disconnected.resolve()) }));
   try {
     const error = await captureError(acquire(attachMachineDaemon({
       socketPath: path,
       id: lifecycleIds("attach-fail-daemon"),
+      dispatcherBound: 8,
       offer: offer("/tmp"),
       fsExports: new Map([["docs", "/tmp"]]),
       runner: {

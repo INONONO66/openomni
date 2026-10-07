@@ -204,6 +204,9 @@ async function composeMachinePlane(
           : machines.enrolled.find((e) => e.machineId === machineId),
       events: deps.events,
       id: deps.id,
+      // #1312: injected IPC callback bound — queue depth and worker fan-out
+      // per listener; chosen here, the machines package carries no default.
+      dispatcherBound: 256,
       now: deps.now,
       callTool: deps.callTool,
       // r1 M3: the live self attachment is never superseded by a reattach.

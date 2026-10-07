@@ -32,6 +32,7 @@ export function pinnedTcpHostOptions(
     listen: { tcp: { host: "127.0.0.1", port: 0 } },
     tls: hostIdentity,
     id,
+    dispatcherBound: 8,
     enrollment: (machineId) => ({
       machineId,
       name: machineId,

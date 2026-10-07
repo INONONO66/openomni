@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { Deferred, Effect } from "effect";
 import { Ipc } from "@openomni/protocol";
+import { makeDispatcher } from "../../src/ipc/callbacks";
+import { IpcQueueFullError } from "../../src/ipc/errors";
+import { run } from "./helpers/effects";
 import { connectIpcClient, createIpcServer } from "./helpers/native";
 import { deferred, within } from "./helpers/signal";
 import { socketPath } from "./helpers/socket-path";
@@ -65,5 +69,25 @@ describe("published callback contract", () => {
       clientResult: 3,
       notifications: [5, 2],
     });
+  });
+});
+
+describe("bounded callback dispatcher (#1312)", () => {
+  test("a full queue answers the offerer with a typed IpcQueueFullError instead of dropping the task", async () => {
+    await run(Effect.scoped(Effect.gen(function* () {
+      const dispatch = yield* makeDispatcher({ bound: 1 });
+      const running = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      // Occupy the single worker; `running` resolves once the worker took it.
+      expect(dispatch(Deferred.succeed(running, undefined).pipe(Effect.andThen(Deferred.await(release))))).toBeUndefined();
+      yield* Deferred.await(running);
+      // Fill the single queue slot behind the blocked worker.
+      expect(dispatch(Effect.void)).toBeUndefined();
+      // The bound is reached: the offerer gets the typed refusal, not a drop.
+      const full = dispatch(Effect.void);
+      expect(full).toBeInstanceOf(IpcQueueFullError);
+      expect(full?.bound).toBe(1);
+      yield* Deferred.succeed(release, undefined);
+    })));
   });
 });

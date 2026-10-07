@@ -85,6 +85,7 @@ async function fixture(
   const machineId = explicit ? "c" : "self";
   const socket = socketPath();
   const host = await acquireEffect(createMachineHost({
+    dispatcherBound: 8,
     listen: { unix: socket },
     id: testIds("locus-host"),
     enrollment: () => ({
@@ -99,6 +100,7 @@ async function fixture(
     now: () => 1,
   }));
   const daemon = await acquireEffect(attachMachineDaemon({
+    dispatcherBound: 8,
     socketPath: socket,
     id: testIds("locus-daemon"),
     offer: {

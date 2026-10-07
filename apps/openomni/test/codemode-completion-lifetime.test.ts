@@ -47,6 +47,7 @@ for (const stop of [false, true]) {
     const path = socketPath();
     let cells: Effect.Success<ReturnType<typeof composeCodemode>>;
     const host = await acquireEffect(createMachineHost({
+      dispatcherBound: 8,
       listen: { unix: path },
       id: testIds("lifetime-host"),
       enrollment: (machineId: string) => ({

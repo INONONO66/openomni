@@ -5,7 +5,7 @@ import { type IdSource, Ipc, type PlainValue } from "@openomni/protocol";
 import { Effect, type Scope } from "effect";
 import { IpcConnectionError, type IpcError } from "./errors";
 import { decodeIpcFailure } from "../failure";
-import { makeDispatcher } from "./callbacks";
+import { makeDispatcher, type Dispatch } from "./callbacks";
 import { LineDecoder, encode } from "./framing";
 import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";
 import { certificateKeyFingerprint, type IpcTlsIdentity } from "./tls";
@@ -18,6 +18,8 @@ function unlinkIfExists(socketPath: string): void {
 interface IpcServerOptions {
   /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
   readonly idSource: IdSource;
+  /** Callback dispatcher bound (#1312): required, the composition chooses it. */
+  readonly dispatcherBound: number;
   /**
    * Fires once per connection after it is torn down (close or error). The
    * connection's in-flight requests have already been failed when this runs.
@@ -122,8 +124,6 @@ type ConnectionState = {
   /** The socket is gone; drop writes instead of queueing them forever. */
   closed: boolean;
 };
-
-type Dispatch = (task: Effect.Effect<void, IpcError>) => void;
 
 /**
  * The transport-independent half of an IPC server: framing, correlation,
@@ -237,17 +237,25 @@ function makeServerCore(handler: RequestHandler, options: IpcServerOptions, disp
     if (state) peer.disconnect(state, new IpcConnectionError({ message: reason }));
     // `state` guards double delivery: close always follows error, and the
     // second call finds the connection already deleted.
-    if (state && options.onDisconnect) dispatch(options.onDisconnect(id));
+    if (state && options.onDisconnect) {
+      const full = dispatch(options.onDisconnect(id));
+      // The disconnect callback must not vanish: a full dispatcher at
+      // teardown is a composition fault — fail loudly (#1312).
+      if (full !== undefined) throw full;
+    }
   }
 
   function dispatchFrame(msg: PlainValue, state: ConnectionState): Effect.Effect<void, IpcError> {
     const message = classifyIpcMessage(msg);
     if (message === undefined) return Effect.sync(() => sendFrame(state, Ipc.createErrorResponse(extractFrameId(msg), 4000, unknownMessageError(msg))));
     if (message.kind === "response") return peer.dispatchMessage(message, state);
-    return Effect.sync(() => dispatch(peer.dispatchMessage(message, state).pipe(Effect.catchCause((cause) => Effect.logError("IPC request handler defect", cause).pipe(Effect.andThen(Effect.sync(() => {
-      removeConnection(state.id, "request handler defect");
-      state.socket.end();
-    })))))));
+    return Effect.suspend(() => {
+      const full = dispatch(peer.dispatchMessage(message, state).pipe(Effect.catchCause((cause) => Effect.logError("IPC request handler defect", cause).pipe(Effect.andThen(Effect.sync(() => {
+        removeConnection(state.id, "request handler defect");
+        state.socket.end();
+      }))))));
+      return full === undefined ? Effect.void : Effect.fail(full);
+    });
   }
 
   function stateOf(socket: BunSocket): ConnectionState | undefined {
@@ -278,7 +286,7 @@ function makeServerCore(handler: RequestHandler, options: IpcServerOptions, disp
         // loop (and the reclaim timer with it) for nothing.
         if (state.endAfterFlush) return;
 
-        dispatch(Effect.gen(function* () {
+        const full = dispatch(Effect.gen(function* () {
           if (state.endAfterFlush || state.closed) return;
           const { frames: messages, malformed } = yield* Effect.try({ try: () => state.decoder.push(raw), catch: decodeIpcFailure("frame.decode") });
           for (const msg of messages) yield* dispatchFrame(msg, state);
@@ -287,6 +295,9 @@ function makeServerCore(handler: RequestHandler, options: IpcServerOptions, disp
           sendFrame(state, Ipc.createErrorResponse("unknown", 4001, error.message || String(error)));
           closeAfterFlush(state);
         }))));
+        // Typed backpressure (#1312): the offerer gets an error frame and the
+        // overloaded connection is condemned — never a silent drop.
+        if (full !== undefined) { sendFrame(state, Ipc.createErrorResponse("unknown", 4001, full.message)); closeAfterFlush(state); }
       },
       drain(socket) {
         const state = stateOf(socket);
@@ -358,7 +369,7 @@ export function createIpcServer(
   options: IpcServerOptions,
 ): Effect.Effect<IpcServer, IpcError, Scope.Scope> {
   return Effect.gen(function* () {
-    const dispatch = yield* makeDispatcher;
+    const dispatch = yield* makeDispatcher({ bound: options.dispatcherBound });
     // A leftover socket file blocks Bun.listen with EADDRINUSE — but blindly
     // unlinking would steal a LIVE server's socket (new connections silently
     // divert to the newcomer while the old server keeps running blind). Probe
@@ -399,7 +410,7 @@ export function createIpcTcpServer(
   options: IpcServerOptions,
 ): Effect.Effect<IpcTcpServer, IpcError, Scope.Scope> {
   return Effect.gen(function* () {
-    const dispatch = yield* makeDispatcher;
+    const dispatch = yield* makeDispatcher({ bound: options.dispatcherBound });
     const core = makeServerCore(handler, options, dispatch);
     const door = yield* bindDoor(core, () => Bun.listen({
       hostname: spec.host,

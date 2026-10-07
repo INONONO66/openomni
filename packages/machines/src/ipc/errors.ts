@@ -39,4 +39,13 @@ export class IpcRemoteError extends Data.TaggedError("IpcRemoteError")<{
   readonly code: number;
 }> {}
 
-export type IpcError = MachinesFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError | IpcPeerKeyMismatchError;
+/**
+ * The bounded callback dispatcher refused a task because its queue is at the
+ * injected bound (#1312): typed backpressure, never a silent drop.
+ */
+export class IpcQueueFullError extends Data.TaggedError("IpcQueueFullError")<{
+  readonly message: string;
+  readonly bound: number;
+}> {}
+
+export type IpcError = MachinesFailure | IpcConnectionError | IpcTimeoutError | IpcProtocolError | IpcRemoteError | IpcPeerKeyMismatchError | IpcQueueFullError;

@@ -23,6 +23,8 @@ interface MachineHostOptions {
   readonly tls?: IpcTlsIdentity;
   /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
   readonly id: () => string;
+  /** Callback dispatcher bound per listener (#1312): required, the composition chooses it. */
+  readonly dispatcherBound: number;
   readonly enrollment: (id: Machine.MachineId) => Machine.Enrollment | undefined;
   readonly events: BusEvent.Sink;
   readonly now: () => number;
@@ -186,13 +188,13 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
     const unixPath = options.listen.unix;
     if (unixPath !== undefined) {
       const listener = makeListener("unix");
-      servers.push(listener.bind(yield* createIpcServer(unixPath, listener.handler, { idSource: options.id, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure))));
+      servers.push(listener.bind(yield* createIpcServer(unixPath, listener.handler, { idSource: options.id, dispatcherBound: options.dispatcherBound, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure))));
       yield* Effect.try({ try: () => chmodSync(unixPath, 0o600), catch: decodeMachineFailure("host.chmod") });
     }
     let tcpBound: { readonly host: string; readonly port: number } | undefined;
     if (tcpSpec !== undefined) {
       const listener = makeListener("tcp");
-      const server = listener.bind(yield* createIpcTcpServer(tcpSpec, listener.handler, { idSource: options.id, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure)));
+      const server = listener.bind(yield* createIpcTcpServer(tcpSpec, listener.handler, { idSource: options.id, dispatcherBound: options.dispatcherBound, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure)));
       servers.push(server);
       tcpBound = { host: server.host, port: server.port };
     }

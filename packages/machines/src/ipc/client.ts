@@ -5,7 +5,7 @@ import type { IdSource, Ipc, PlainValue } from "@openomni/protocol";
 import { Effect, type Scope } from "effect";
 import { IpcConnectionError, IpcPeerKeyMismatchError, IpcProtocolError, type IpcError } from "./errors";
 import { decodeIpcFailure } from "../failure";
-import { makeDispatcher } from "./callbacks";
+import { makeDispatcher, type Dispatch } from "./callbacks";
 import { LineDecoder, encode } from "./framing";
 import { classifyIpcMessage, PeerRequestTable } from "./peer-request-table";
 import { certificateKeyFingerprint, type IpcTlsIdentity } from "./tls";
@@ -18,6 +18,8 @@ export interface IpcClient {
 export type ConnectIpcClientOptions = {
   /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
   readonly idSource: IdSource;
+  /** Callback dispatcher bound (#1312): required, the composition chooses it. */
+  readonly dispatcherBound: number;
   connectTimeoutMs?: number;
   onDisconnect?: () => Effect.Effect<void, IpcError>;
   onRequest?: (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) => Effect.Effect<void, IpcError>;
@@ -145,8 +147,6 @@ function hostVerificationFailure(error: Error, expected: string): IpcError | und
   });
 }
 
-type Dispatch = (task: Effect.Effect<void, IpcError>) => void;
-
 type ClientFrameSink = {
   readonly decoder: LineDecoder;
   readonly peer: PeerRequestTable<undefined>;
@@ -161,20 +161,27 @@ function dispatchClientFrame(raw: PlainValue, sink: ClientFrameSink): Effect.Eff
     return Effect.logWarning(`IPC frame matched no message schema: ${String(JSON.stringify(raw)).slice(0, 200)}`);
   }
   if (message.kind === "response") return sink.peer.dispatchMessage(message, undefined);
-  return Effect.sync(() => sink.dispatch(sink.peer.dispatchMessage(message, undefined)));
+  return Effect.suspend(() => {
+    const full = sink.dispatch(sink.peer.dispatchMessage(message, undefined));
+    return full === undefined ? Effect.void : Effect.fail(full);
+  });
 }
 
 function makeClientDataHandler(sink: ClientFrameSink): (chunk: Buffer) => void {
-  return (chunk) => sink.dispatch(Effect.gen(function* () {
-    const { frames, malformed } = yield* Effect.try({ try: () => sink.decoder.push(chunk), catch: decodeIpcFailure("frame.decode") });
-    for (const raw of frames) yield* dispatchClientFrame(raw, sink);
-    if (malformed.length > 0) return yield* new IpcProtocolError({ message: `received invalid IPC frame: ${malformed[0]}` });
-  }).pipe(Effect.catch((error) => Effect.sync(() => sink.fail(error)))));
+  return (chunk) => {
+    const full = sink.dispatch(Effect.gen(function* () {
+      const { frames, malformed } = yield* Effect.try({ try: () => sink.decoder.push(chunk), catch: decodeIpcFailure("frame.decode") });
+      for (const raw of frames) yield* dispatchClientFrame(raw, sink);
+      if (malformed.length > 0) return yield* new IpcProtocolError({ message: `received invalid IPC frame: ${malformed[0]}` });
+    }).pipe(Effect.catch((error) => Effect.sync(() => sink.fail(error)))));
+    // A full dispatcher is typed backpressure: fail the stream, never drop bytes.
+    if (full !== undefined) sink.fail(full);
+  };
 }
 
 function connectOverTransport(transport: ClientTransport, opts: ConnectIpcClientOptions): Effect.Effect<IpcClient, IpcError, Scope.Scope> {
   return Effect.gen(function* () {
-    const dispatch = yield* makeDispatcher;
+    const dispatch = yield* makeDispatcher({ bound: opts.dispatcherBound });
     const decoder = new LineDecoder();
     let socket: net.Socket | undefined;
     let connected = false;
@@ -221,7 +228,12 @@ function connectOverTransport(transport: ClientTransport, opts: ConnectIpcClient
       stream.on("close", () => {
         connected = false;
         peer.disconnectAll(new IpcConnectionError({ message: "socket closed" }));
-        if (opts.onDisconnect) dispatch(opts.onDisconnect());
+        if (opts.onDisconnect) {
+          const full = dispatch(opts.onDisconnect());
+          // The disconnect callback must not vanish: a full dispatcher at
+          // teardown is a composition fault — fail loudly (#1312).
+          if (full !== undefined) throw full;
+        }
       });
       stream.on("end", () => {
         connected = false;

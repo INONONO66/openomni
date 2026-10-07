@@ -22,6 +22,7 @@ test("machine attach CLI composes real runners; eval pipelines two machine handl
   const capabilities = ["fs.read", "fs.write", "shell.exec", "kernel.py"];
   let cells: ComposedCodemode;
   const host = await acquireEffect(createMachineHost({
+    dispatcherBound: 8,
     listen: { unix: path },
     id: testIds("cli-host"),
     enrollment: (id) => ({

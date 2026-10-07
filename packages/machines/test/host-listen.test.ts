@@ -69,6 +69,7 @@ describe("host listener set (#1270)", () => {
         nativeDaemon({
           socketPath: unix,
           id: sequentialIds("unix-daemon"),
+          dispatcherBound: 8,
           offer: offer("via-unix", root),
           fsExports: new Map([["docs", root]]),
         }),
@@ -80,6 +81,7 @@ describe("host listener set (#1270)", () => {
           tlsCertificate: daemonIdentity.certificate,
           tlsPrivateKey: daemonIdentity.privateKey,
           id: sequentialIds("tcp-daemon"),
+          dispatcherBound: 8,
           offer: offer("via-tcp", root),
           fsExports: new Map([["docs", root]]),
         }),
@@ -123,6 +125,7 @@ describe("host listener set (#1270)", () => {
           tlsCertificate: daemonIdentity.certificate,
           tlsPrivateKey: daemonIdentity.privateKey,
           id: sequentialIds("tcp-pty-daemon"),
+          dispatcherBound: 8,
           offer: { ...offer("via-tcp", "/"), offeredCapabilities: ["pty.session"] },
           fsExports: new Map([["docs", "/"]]),
           pty: { socketName: tmuxSocket },
@@ -174,6 +177,7 @@ describe("host listener set (#1270)", () => {
           tlsCertificate: wrongIdentity.certificate,
           tlsPrivateKey: wrongIdentity.privateKey,
           id: sequentialIds("intruder"),
+          dispatcherBound: 8,
           offer: { ...offer("pinned", "/tmp"), exports: undefined },
         }),
       );
@@ -207,6 +211,7 @@ describe("host listener set (#1270)", () => {
           tlsCertificate: daemonIdentity.certificate,
           tlsPrivateKey: daemonIdentity.privateKey,
           id: sequentialIds("legit"),
+          dispatcherBound: 8,
           offer: offer("pinned", root),
           fsExports: new Map([["docs", root]]),
         }),
@@ -250,6 +255,7 @@ describe("host listener set (#1270)", () => {
             listen: { unix, tcp: { host: "127.0.0.1", port: blocker.port } },
             tls: hostIdentity,
             id: sequentialIds("half-bound"),
+          dispatcherBound: 8,
             enrollment: () => undefined,
             events: silent,
             now: () => 3,
@@ -275,6 +281,7 @@ describe("host listener set (#1270)", () => {
   test("an empty listener set and tcp without a TLS identity are typed startup failures", async () => {
     const common = {
       id: sequentialIds("invalid"),
+          dispatcherBound: 8,
       enrollment: () => undefined,
       events: silent,
       now: () => 3,

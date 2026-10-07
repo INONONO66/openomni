@@ -137,6 +137,7 @@ test("app root runs machine read write shell and code through one eval cell", as
   });
   const plane = await planeOf(app.runtime);
   const daemon = await attachMachineDaemon({
+    dispatcherBound: 8,
     socketPath,
     fsExports: new Map([["data", root]]),
     offer: {
@@ -221,6 +222,7 @@ test("a cell drives a named persistent terminal through m.pty (#1273)", async ()
   });
   const plane = await planeOf(app.runtime);
   const daemon = await attachMachineDaemon({
+    dispatcherBound: 8,
     socketPath,
     fsExports: new Map([["shell", "/"]]),
     pty: { socketName: tmuxSocket },
@@ -471,6 +473,7 @@ test("the catalog remains available while machine execution refuses without atta
 async function e2eHost(callTool: Parameters<typeof createMachineHost>[0]["callTool"]) {
   const socketPath = testSocketPath();
   const host = await createMachineHost({
+    dispatcherBound: 8,
     listen: { unix: socketPath },
     enrollment: (machineId) => (machineId === MACHINE_ID ? enrollment : undefined),
     events: Bus,
@@ -505,6 +508,7 @@ test("a cell cannot present another cell's id when calling back", async () => {
     return { status: "completed" as const, value: call.cellId };
   }));
   await attachMachineDaemon({
+    dispatcherBound: 8,
     socketPath,
     offer: {
       machineId: MACHINE_ID,
@@ -904,6 +908,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
   const socketPath = testSocketPath();
 
   const host = await createMachineHost({
+    dispatcherBound: 8,
     listen: { unix: socketPath },
     enrollment: () => ({ ...enrollment, allowedCapabilities: ["fs.read"] }),
     events: Bus,
@@ -911,6 +916,7 @@ test("a machine offering more than it is enrolled for keeps only the intersectio
     callTool: () => Effect.succeed({ status: "failed" as const, error: "no tools" }),
   });
   await attachMachineDaemon({
+    dispatcherBound: 8,
     socketPath,
     offer: {
       machineId: MACHINE_ID,
