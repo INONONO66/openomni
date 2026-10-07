@@ -137,6 +137,10 @@ export function serveProcessSession(
   const entropy = yield* Entropy;
   const observations = yield* ObservationSink;
   const owner = `process:${process.pid}`;
+  // Fail closed before any entity wake: a session absent from the durable
+  // plane is the typed child refusal here — the activation would otherwise
+  // die building its handlers and the wake would never ack.
+  plane.openKernel(request.sessionId).row(request.sessionId);
   seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds(composed.current().generation), yield* AppPointTable);
   const runtime: SessionRuntime = {
     openKernel: plane.openKernel,
