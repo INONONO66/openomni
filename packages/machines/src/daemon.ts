@@ -1,5 +1,6 @@
 import { realpathSync } from "node:fs";
 import { posix } from "node:path";
+import { isContained, normalizeExportRoot } from "./contained";
 import { type IpcClient, connectIpcClient, connectIpcTcpClient } from "./ipc";
 import { makeDispatcher } from "./ipc/callbacks";
 import { typedCall } from "./typed-call";
@@ -151,8 +152,8 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
         const offered = offer.exports?.find((entry) => entry.name === name);
         const configured = options.fsExports?.get(name);
         if (offered === undefined || configured !== offered.path) continue;
-        const root = posix.normalize(offered.path).replace(/\/+$/, "") || "/";
-        if (absolute !== root && !absolute.startsWith(`${root}/`)) continue;
+        const root = normalizeExportRoot(offered.path);
+        if (!isContained(root, absolute)) continue;
         if (escapesCanonicalRoot(absolute, root)) return { status: "refused", reason: "path_escapes_export" };
         return { cwd: absolute };
       }

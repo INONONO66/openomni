@@ -1,5 +1,6 @@
 import { chmodSync } from "node:fs";
 import { posix } from "node:path";
+import { isContained, normalizeExportRoot } from "./contained";
 import { createIpcServer, createIpcTcpServer, type IpcServer, type IpcTlsIdentity } from "./ipc";
 import { typedCall } from "./typed-call";
 import { type BusEvent, type Ipc, Machine } from "@openomni/protocol";
@@ -209,8 +210,8 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
       const peer = connection(id);
       const absolute = posix.normalize(Machine.AbsolutePath.parse(path));
       const candidates = (peer.offer.exports ?? [])
-        .map((entry) => ({ ...entry, path: posix.normalize(entry.path).replace(/\/+$/, "") || "/" }))
-        .filter((entry) => absolute === entry.path || absolute.startsWith(entry.path === "/" ? "/" : `${entry.path}/`))
+        .map((entry) => ({ ...entry, path: normalizeExportRoot(entry.path) }))
+        .filter((entry) => isContained(entry.path, absolute))
         .sort((a, b) => b.path.length - a.path.length);
       const root = candidates[0];
       if (root === undefined) throw new MachineRefusalError({ reason: "export_not_available", message: "path is outside offered exports" });
