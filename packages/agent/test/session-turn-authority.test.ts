@@ -99,7 +99,7 @@ test("a turn over unknown-provenance mail runs as evidence and records the viola
 // Integration seam (#1310): a prompt whose action row cannot be found fails
 // the turn typed — the runner never runs, no authority (not even evidence).
 test("a prompt with no recorded origin fails the turn typed and never runs the runner", () => {
-  const published: { name: string; data: Record<string, unknown> }[] = [];
+  const published: { name: string; data: PlainObject }[] = [];
   let runnerCalls = 0;
   const runner: SessionRunner = () =>
     Effect.sync(() => {
@@ -110,7 +110,11 @@ test("a prompt with no recorded origin fails the turn typed and never runs the r
     authorizeConfigure: allowConfigure,
     observations: {
       publish: <T>(event: BusEvent.Descriptor<T>, data: T) => {
-        published.push({ name: event.name, data: data as Record<string, unknown> });
+        const value = PlainValueSchema.parse(data);
+        published.push({
+          name: event.name,
+          data: value !== null && typeof value === "object" && !Array.isArray(value) ? value : {},
+        });
       },
     },
     clock: () => 2_000,
