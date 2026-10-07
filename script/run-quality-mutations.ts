@@ -2288,7 +2288,9 @@ function emitShardReceipt(context: {
 		counts.uncompleted === 0 &&
 		restored &&
 		cleanupVerified;
-	const exitCode = errors.length ? 2 : 0;
+	// Errors win over incompleteness; an incomplete shard with no errors is
+	// still a failed shard, never a green one.
+	const exitCode = errors.length ? 2 : complete ? 0 : 1;
 	console.error(`[mutation] shard ${shardOptions.index}/${shardOptions.count} finished: ${JSON.stringify({ recorded: rows.length, sliceSize: slice.length, executed: shardExecution.executed.length, budgetExhausted: shardExecution.budgetExhausted, complete, errors })}`);
 	console.log(
 		JSON.stringify({
