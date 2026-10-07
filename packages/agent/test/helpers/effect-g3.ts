@@ -1,4 +1,4 @@
-import { type ChatFixture as ChatAgentConfig, type ChatFixture, chatServices, fixtureCompactionSeam, fixtureStopEvidence } from "./chat-services";
+import { type ChatFixture as ChatAgentConfig, chatServices, fixtureCompactionSeam, fixtureStopEvidence } from "./chat-services";
 import { KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
 import { Effect, Cause, Exit } from "effect";
 
