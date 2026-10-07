@@ -11,6 +11,8 @@ import {
 } from "../src/core/capability";
 import { runTestPromise } from "./helpers/isolated";
 import { compose } from "../src/core/compose";
+import { CompactionSeam } from "../src/core/api";
+import { compactionCapability } from "../src/bundle";
 
 class SeamA extends Context.Service<SeamA, object>()("@openomni/agent/test/off/A") {}
 class SeamB extends Context.Service<SeamB, object>()("@openomni/agent/test/off/B") {}
@@ -108,4 +110,19 @@ test("session.configure journals the cascade as disabled {name, because}", async
     effect: action.effect,
   });
   expect(malformed.success).toBe(false);
+});
+
+test("the real compaction capability off cascades its typed record to seam dependents (#1307)", async () => {
+  const definition = Manifest.define({
+    capabilities: [compactionCapability()],
+    bundles: [defineBundle({ name: "needs-compaction", requires: [CompactionSeam] })],
+    off: ["compaction"],
+  });
+  const generation = await runTestPromise(compose(definition));
+  expect(generation.disabled).toEqual([
+    { name: "compaction", because: "compaction" },
+    { name: "needs-compaction", because: "compaction" },
+  ]);
+  expect(generation.capabilities).toEqual([]);
+  expect(generation.bundles).toEqual([]);
 });
