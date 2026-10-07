@@ -128,6 +128,13 @@ function createWindow(
  */
 function bootstrap(host: { readonly env: Parameters<typeof resolveDesktopConfig>[0] }): void {
   const config = resolveDesktopConfig(host.env);
+  if ("kind" in config) {
+    // A typed refusal, not a fallback (#1312): a present-but-invalid
+    // OPENOMNI_WS_PORT names itself and no window opens on a guessed port.
+    console.error(`[desktop] ${config.message}`);
+    app.quit();
+    return;
+  }
   const development = config.rendererDevUrl !== undefined;
   const applicationWindows = new Map<number, BrowserWindow>();
   let lastFocusedWindowId: number | null = null;

@@ -32,17 +32,50 @@ function read(value: string | undefined): string | undefined {
   return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 }
 
-function port(raw: string | undefined): number {
+/**
+ * A configuration the main process refuses to boot on (#1312). A plain tagged
+ * object — the desktop imports no Effect — carried to `bootstrap`, which
+ * prints `message` and quits instead of opening a window on a guessed port.
+ */
+export interface DesktopConfigError {
+  readonly kind: "desktop_config_error";
+  readonly variable: "OPENOMNI_WS_PORT";
+  readonly value: string;
+  readonly message: string;
+}
+
+/**
+ * An unset (or blank) port still means the daemon default; a PRESENT invalid
+ * value is a typed error, never a silent 3000 (#1312) — a typo in
+ * `OPENOMNI_WS_PORT` must fail at the variable, not connect somewhere else.
+ */
+function port(raw: string | undefined): number | DesktopConfigError {
   const value = read(raw);
   if (value === undefined) return DEFAULT_WS_PORT;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) return DEFAULT_WS_PORT;
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
+    return {
+      kind: "desktop_config_error",
+      variable: "OPENOMNI_WS_PORT",
+      value,
+      message: `OPENOMNI_WS_PORT is not a port: "${value}" (expected an integer in 0..65535; unset means ${DEFAULT_WS_PORT})`,
+    };
+  }
   return parsed;
 }
 
-export function resolveGatewayEndpoint(env: DesktopEnv): GatewayEndpoint {
-  const url =
-    read(env.OPENOMNI_WS_URL) ?? `ws://127.0.0.1:${port(env.OPENOMNI_WS_PORT)}${GATEWAY_PATH}`;
+export function resolveGatewayEndpoint(env: DesktopEnv): GatewayEndpoint | DesktopConfigError {
+  const explicit = read(env.OPENOMNI_WS_URL);
+  let url: string;
+  if (explicit === undefined) {
+    const resolved = port(env.OPENOMNI_WS_PORT);
+    if (typeof resolved !== "number") return resolved;
+    url = `ws://127.0.0.1:${resolved}${GATEWAY_PATH}`;
+  } else {
+    // An explicit URL wins outright: the port variable is never read, so an
+    // invalid value next to a good URL is not an error.
+    url = explicit;
+  }
   const token = read(env.OPENOMNI_WS_TOKEN);
   return token === undefined ? { url } : { url, token };
 }
@@ -53,10 +86,12 @@ export interface DesktopConfig {
   readonly rendererDevUrl?: string;
 }
 
-export function resolveDesktopConfig(env: DesktopEnv): DesktopConfig {
+export function resolveDesktopConfig(env: DesktopEnv): DesktopConfig | DesktopConfigError {
+  const gateway = resolveGatewayEndpoint(env);
+  if ("kind" in gateway) return gateway;
   const rendererDevUrl = read(env.ELECTRON_RENDERER_URL);
   return {
-    gateway: resolveGatewayEndpoint(env),
+    gateway,
     ...(rendererDevUrl === undefined ? {} : { rendererDevUrl }),
   };
 }
