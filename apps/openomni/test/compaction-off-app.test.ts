@@ -33,7 +33,7 @@ test("compaction off at boot composes out through index.ts: the overflow turn sk
     config: suite.config("compaction-off-app-", {
       wsToken: TOKEN,
       compactionSummarizer: false,
-      bundlesOff: ["compaction"],
+      off: ["compaction"],
     }),
     llm: {
       // The same tight context window that compacts in the ON mirror test.
