@@ -277,7 +277,7 @@ export function createController(
         yield* commitFoldBatch(kernel, {
           sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
           actions: pending, state: "interrupted",
-        }).pipe(Effect.catchIf(
+        }, runtime.compaction).pipe(Effect.catchIf(
           (error) => rescans > 0 && error._tag === "CommitRefused" && error.reason === "revision",
           () => sealUnknown(rescans - 1),
         ));

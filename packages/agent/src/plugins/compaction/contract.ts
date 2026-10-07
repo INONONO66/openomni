@@ -1,80 +1,23 @@
-import type { Effect } from "effect";
-import type { ExecutionError } from "../../core/api";
 import type { Message } from "@openomni/protocol";
 import type { CompactionYield } from "./geometry";
-import type { ToolOutputElision } from "./reduce";
 import type { CompactionRecord } from "./durable";
 
-export interface SummarizationBudget {
-  readonly maxInputTokens: number;
-  readonly maxOutputTokens: number;
-  readonly contextWindowTokens: number;
-}
+// #1307: the option/budget shapes are seam types the kernel reads from
+// `core/compaction-ports`; this module keeps its old names as re-exports so
+// the mechanism files stay put.
+export type {
+  CompactionOptions,
+  ResolvedCompactionOptions,
+  SummarizationBudget,
+} from "../../core/api";
+import type { CompactionExecutionOutcome } from "../../core/api";
 
-export interface CompactionOptions {
-  /**
-   * Optional narrowing of the model's window. The loop records the resolved
-   * model's real limit and the policy reads it from the dispatch context, so
-   * strategy config only sets this to compact as if the window were smaller.
-   */
-  contextWindowTokens?: number;
-  /** Minimum headroom reserved beyond the adaptive threshold. */
-  reserveTokens?: number;
-  protectRecentMessages?: number;
-  /**
-   * Anchored iterative summarization (compaction-design L2). The summarizer
-   * receives the newly cut span WITH user messages and prior anchor renders
-   * already excluded, plus the previous anchor body when one exists — it
-   * merges, it never regenerates. The mechanism owns the exclusions and the
-   * threading; what the summarizer does with them is strategy.
-   */
-  onSummarize?: (
-    messages: Message.WithParts[],
-    previousAnchor: string | undefined,
-    budget: SummarizationBudget,
-    signal?: AbortSignal,
-  ) => Effect.Effect<string, ExecutionError>;
-  /**
-   * Budget (chars) of most-recent user messages carried verbatim through a
-   * cut. The newest user message is always preserved even when it alone
-   * exceeds the budget — user tokens are the irreplaceable part.
-   */
-  preserveUserMessageChars?: number;
-  /**
-   * Opt-in deterministic reduction: when the trigger fires, old completed
-   * tool outputs are elided first; the lossy cut joins the same round
-   * whenever the estimated net reclaim cannot cover the measured overage.
-   * The knobs are strategy, so they arrive as config.
-   */
-  elideToolOutputs?: ToolOutputElision;
-  /**
-   * Speculative prepare/promote (L4). Meaningful only with `onSummarize`:
-   * once the measured window passes the prepare ratio the summarize call
-   * runs in the background at turn settlement, and the seam promotes the
-   * result with zero model calls while its span is still live. `false`
-   * disables speculation; the seam then always merges synchronously.
-   */
-  speculate?: false;
-  /** Maximum duration of each summarizer call before deterministic fallback. */
-  summarizerDeadlineMs?: number;
-}
-
-/** Options with the window already resolved — the mechanism never guesses it. */
-export type ResolvedCompactionOptions = CompactionOptions & { contextWindowTokens: number };
-
-export interface CompactionResult {
+/** The plugin's full result: the seam outcome plus mechanism-local fields. */
+export interface CompactionResult extends CompactionExecutionOutcome {
   readonly record?: CompactionRecord;
-  messages: Message.WithParts[];
-  compacted: boolean;
   removedCount: number;
   /** L4: what happened to the speculative candidate, when one was offered. */
   candidate?: "promoted" | "discarded";
-  /** The synchronous merge failed and used the deterministic snap-cut fallback. */
-  summarizerFailed?: boolean;
-  /** Estimated structural yield of the replacement, used by the next geometry decision. */
-  yield?: CompactionYield;
-  /** A compacted replacement that saved too little to justify another early round. */
-  ineffective?: boolean;
   /** Set when the trigger fired but no provider-valid cut exists: no summary
    * anchor and no user boundary at or before the cutoff. The caller records
    * it; killing the run over housekeeping would be worse than a full window. */

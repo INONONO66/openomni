@@ -3,7 +3,10 @@ import { type Context, Effect, Layer } from "effect";
 import type { ChatAgentConfig, ObservedChatAgentConfig } from "../../src/core/types";
 import type { createSessionChatRunner } from "../../src/core/run";
 import { ObservationSink } from "../../src/core/ports";
+import { fixtureCompactionSeam } from "./fixture-compaction";
 import { observationService } from "./service-layers";
+
+export { fixtureCompactionSeam } from "./fixture-compaction";
 
 export interface ChatFixture extends ObservedChatAgentConfig {
   readonly llm?: Partial<Context.Service.Shape<typeof Llm>>;
@@ -45,7 +48,8 @@ export function prepareChatFixture(
     readonly config: ChatFixture & Pick<Prepared["config"], "executor">;
   },
 ): Prepared {
-  const { events: _events, llm: _llm, ...config } = prepared.config;
+  const { events: _events, llm: _llm, ...rest } = prepared.config;
+  const config = "compactionSeam" in rest ? rest : { ...rest, compactionSeam: fixtureCompactionSeam };
   return {
     ...prepared,
     config: config satisfies ChatAgentConfig & Pick<Prepared["config"], "executor">,

@@ -10,7 +10,24 @@ import {
   type PlainObject,
 } from "@openomni/protocol";
 import { z } from "zod";
-import { foldSessionHistory, hydrateSessionHistory } from "../../inspect/history";
+
+/**
+ * The fold/hydrate ports the pin needs (#1307). The plugin band may not
+ * import the inspect band's history module; composition (`bundle.ts`) wires
+ * the real functions in when it builds the capability.
+ */
+export interface CompactionHistoryPorts {
+  readonly fold: (
+    sessionId: string,
+    actions: readonly LedgerAction.Node[],
+    seed?: FoldCheckpoint.State,
+  ) => Message.WithParts[];
+  readonly hydrate: (
+    kernel: SessionKernel,
+    sessionId: string,
+    throughRevision?: number,
+  ) => { readonly revision: number; readonly state: FoldCheckpoint.State };
+}
 
 export const CompactionPredecessorError = NamedError.create(
   "CompactionPredecessorError",
@@ -41,8 +58,8 @@ function refuse(action: LedgerAction.Append): never {
   });
 }
 
-function identity(sessionId: string, state: FoldCheckpoint.State, sourceRevision: number): Source {
-  const projection = foldSessionHistory(sessionId, [], state);
+function identity(history: CompactionHistoryPorts, sessionId: string, state: FoldCheckpoint.State, sourceRevision: number): Source {
+  const projection = history.fold(sessionId, [], state);
   return {
     sourceRevision,
     foldVersion: 1,
@@ -69,26 +86,27 @@ function pinIntent(
   return { ...action, intent: { encodingVersion: 1, value: { ...intent, context: current } } };
 }
 
-function capturedSource(kernel: SessionKernel, action: LedgerAction.Append): Source {
+function capturedSource(history: CompactionHistoryPorts, kernel: SessionKernel, action: LedgerAction.Append): Source {
   const parent = action.parentId === null ? undefined : kernel.actionById(action.parentId);
   if (parent?.sessionId !== action.sessionId) return refuse(action);
   const intent = PlainObjectSchema.parse(parent.intent.value);
   if (intent.context === undefined) {
-    const prior = hydrateSessionHistory(kernel, action.sessionId, parent.ordinal - 1);
-    return identity(action.sessionId, prior.state, prior.revision);
+    const prior = history.hydrate(kernel, action.sessionId, parent.ordinal - 1);
+    return identity(history, action.sessionId, prior.state, prior.revision);
   }
   const captured = Source.safeParse(intent.context);
   return captured.success ? captured.data : refuse(action);
 }
 
 function pinResult(
+  history: CompactionHistoryPorts,
   kernel: SessionKernel,
   action: LedgerAction.Append,
   effect: PlainObject,
   value: PlainObject,
   current: Source,
 ): LedgerAction.Append {
-  const captured = capturedSource(kernel, action);
+  const captured = capturedSource(history, kernel, action);
   if (
     captured.predecessorProjectionHash !== current.predecessorProjectionHash ||
     captured.predecessorActionId !== current.predecessorActionId ||
@@ -117,20 +135,24 @@ function pinResult(
 }
 
 /** The admission watermark and successor proof share the caller's fenced commit. */
-export function pinCompactionAction(
+export function createCompactionPin(
+  history: CompactionHistoryPorts,
+): (
   kernel: SessionKernel,
   action: LedgerAction.Append,
   state: FoldCheckpoint.State,
   sourceRevision: number,
-): LedgerAction.Append {
-  if (action.kind !== "compaction") return action;
-  const intent = PlainObjectSchema.parse(action.intent.value);
-  const effect = PlainObjectSchema.parse(action.effect.value);
-  const current = identity(action.sessionId, state, sourceRevision);
-  if (intent.phase === "intent") return pinIntent(action, intent, current);
-  if (effect.phase !== "boundary" && (effect.phase !== "result" || effect.terminal !== "executed"))
-    return action;
-  const value = PlainObjectSchema.safeParse(effect.result);
-  if (!value.success || !Array.isArray(value.data.projection)) return action;
-  return pinResult(kernel, action, effect, value.data, current);
+) => LedgerAction.Append {
+  return function pinCompactionAction(kernel, action, state, sourceRevision) {
+    if (action.kind !== "compaction") return action;
+    const intent = PlainObjectSchema.parse(action.intent.value);
+    const effect = PlainObjectSchema.parse(action.effect.value);
+    const current = identity(history, action.sessionId, state, sourceRevision);
+    if (intent.phase === "intent") return pinIntent(action, intent, current);
+    if (effect.phase !== "boundary" && (effect.phase !== "result" || effect.terminal !== "executed"))
+      return action;
+    const value = PlainObjectSchema.safeParse(effect.result);
+    if (!value.success || !Array.isArray(value.data.projection)) return action;
+    return pinResult(history, kernel, action, effect, value.data, current);
+  };
 }

@@ -407,8 +407,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
         if (request.mode === "approval") approvals.notify?.(request);
       }
     };
+    const compactionVerbs = Bundle.compactionCapability().verbs;
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
+      // #1307 (review M1): the kernel's commit pinning and restore paths get
+      // the compaction verbs only while the CURRENT composed generation keeps
+      // the capability on — off, the seam stays absent so a compaction append
+      // dies typed and a restore refuses `compaction_seam_missing` instead of
+      // running a disabled capability.
+      get compaction() {
+        return services.composed.current().generation.capabilities.includes("compaction")
+          ? compactionVerbs
+          : undefined;
+      },
       openKernel: plane.openKernel,
       listSessions: plane.listSessions,
       dispatchOutbound: dispatchOutboundMessage(

@@ -4,6 +4,7 @@ import type { PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
 import { CRON_TICK, cronBundle, cronPurposes } from "../src/bundles/cron";
 import { monitorBundle, monitorPurposes, monitorSeedRows } from "../src/bundles/monitor";
+import { ToolCapabilitySeam } from "../src/bundles/seams";
 import { runEffect } from "./helpers/effect";
 
 /** A recording `AlarmWakeContext.prompt` — the core's verb, stubbed for assertion. */
@@ -195,7 +196,10 @@ test("monitorBundle declares the sealed tool face, the wake budget row and the w
   const monitor = monitorBundle({ close: () => undefined });
   expect(monitor.contract).toBe("bundle");
   expect(monitor.name).toBe("monitor");
-  expect(monitor.requires.map((seam) => seam.key)).toEqual([Bundle.AlarmSeam.key]);
+  expect(monitor.requires.map((seam) => seam.key)).toEqual([
+    Bundle.AlarmSeam.key,
+    ToolCapabilitySeam.key,
+  ]);
   // The 12-tool catalog stays sealed: the bundle declares the same `monitor` face.
   expect(monitor.tools.map((tool) => tool.name)).toEqual(["monitor"]);
   expect(monitor.rows).toEqual([

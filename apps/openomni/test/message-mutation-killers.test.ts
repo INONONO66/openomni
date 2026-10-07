@@ -5,8 +5,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { Bus } from "./helpers/bus";
 import { join } from "node:path";
-import { Core } from "@openomni/agent";
-const createSurfaceKeyStore = Core.createSurfaceKeyStore;
+import { createSurfaceKeyStore } from "@openomni/channels";
 import { canonicalDigest, Gateway } from "@openomni/protocol";
 import { messageFixture } from "./helpers/message-fixture";
 import { sessionFilePath, type AppLedgerPlane } from "../src/composition/cluster-runtime";
@@ -143,7 +142,7 @@ test("external ingress retry after inbox fault commits once despite a recorded r
 test("conversation correlation cannot select the physical default session", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
-  createSurfaceKeyStore(fixture.plane.catalog).claim("ws:unrelated-conversation", fixture.sessionId);
+  createSurfaceKeyStore(fixture.plane.channel).claim("ws:unrelated-conversation", fixture.sessionId);
   const result = await runEffect(
     fixture.gateway.ingest(
       { kind: "external", surface: "ws", externalId: "owner" },

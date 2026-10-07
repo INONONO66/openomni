@@ -10,6 +10,7 @@ import { makeSessionGenerations, type GenerationBundle } from "../../src/core/ru
 import type { SessionRuntime } from "../../src/core/run";
 import { Entropy, GenerationLayers, ObservationSink, type SessionEntryServices } from "../../src/core/ports";
 import { isolatedLedger } from "./isolated";
+import { fixtureCompactionSeam } from "./fixture-compaction";
 import { observationService } from "./service-layers";
 import { entropySource, fixedClock } from "./time";
 import { parentReply } from "./composition-fixtures";
@@ -29,9 +30,10 @@ export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSess
 }
 
 /** A runtime kernel plane over one explicit kernel handle (crash children own their stores). */
-export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply"> {
+export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply" | "compaction"> {
   // #1276: parent replies are composition-injected; fixtures keep the shipped behavior.
-  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply };
+  // #1307: so is the compaction seam.
+  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply, compaction: fixtureCompactionSeam };
 }
 
 const fixtures = new WeakMap<Scope.Scope, WeakMap<SessionFixture, Context.Context<SessionEntryServices>>>();

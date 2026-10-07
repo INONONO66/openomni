@@ -15,7 +15,7 @@ import type { Bench } from "tinybench";
 import { closeSessions } from "../src/core/run";
 import { session } from "../src/testing/registry";
 import { createSessionChatRunner } from "../src/core/run";
-import { createDispatcher, createTurnDispatcher } from "../src/core/tool";
+import { createDispatcher, createTurnDispatcher } from "../src/plugins/tool";
 import { nullRetryAlarm, recordingLedger } from "../test/helpers/effect-g2";
 import { createExecutor } from "../src/core/gate/decide";
 import { runAgent } from "../src/core/turn";

@@ -1,7 +1,35 @@
 import { Effect } from "effect";
-import { PlainValueSchema, type Message, type LedgerAction, type PlainValue } from "@openomni/protocol";
-import { type ExecutionRequest, ContextRestoreError } from "../../core/api";
+import { canonicalDigest, PlainValueSchema, type Message, type LedgerAction, type PlainValue } from "@openomni/protocol";
+import {
+  AgentFailure,
+  ContextRestoreError,
+  type CompactionRestoreInput,
+  type CompactionRestorePlan,
+  type ExecutionRequest,
+} from "../../core/api";
 import { CompactionRecord, restoreCompactionProjection } from "./durable";
+
+/**
+ * The seam's restore verb (#1307): validates the compaction intent and its
+ * executed record, then returns the typed `restore_context_projection`
+ * request plus the restored value the kernel's executor records.
+ */
+export function prepareCompactionRestore(
+  input: CompactionRestoreInput,
+): Effect.Effect<CompactionRestorePlan, ContextRestoreError | AgentFailure> {
+  return Effect.gen(function* () {
+    const source = yield* requireCompactionIntent(input.action);
+    if (source.sessionId !== input.sessionId)
+      return yield* new AgentFailure({ operation: "session.restore", cause: "foreign_compaction" });
+    const record = yield* recordedCompaction(input.compactionId, input.result);
+    const restored = restoredContextProjection(input.history, input.compactionId, record);
+    const projectionHash = canonicalDigest({
+      foldVersion: 1,
+      projection: PlainValueSchema.parse(input.history),
+    });
+    return { request: restoreContextRequest(input.compactionId, projectionHash), restored };
+  });
+}
 
 /** The typed compensation of one compaction; a distinct recorded action, never a mutation of the original. */
 export function restoreContextRequest(
@@ -18,7 +46,7 @@ export function restoreContextRequest(
 }
 
 /** Validate the caller's target before querying any result children or acquiring a lease. */
-export function requireCompactionIntent(
+function requireCompactionIntent(
   action: LedgerAction.Node | undefined,
 ): Effect.Effect<LedgerAction.Node, ContextRestoreError> {
   if (action === undefined || action.kind !== "compaction")

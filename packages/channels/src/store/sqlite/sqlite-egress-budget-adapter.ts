@@ -1,9 +1,31 @@
 import { Gateway, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { LedgerInvariant } from "../errors";
+import { ChannelStoreInvariant } from "./errors";
 import type { Database } from "bun:sqlite";
-import { claimWithinCountedWindow } from "../fence.js";
 import { z } from "zod";
-import { SqliteCount } from "../json";
+import { SqliteCount } from "./json";
+
+/**
+ * Atomically claims one item against a counted window (moved beside its only
+ * consumer in #1317). The caller owns the persisted row and window projection;
+ * this primitive owns the indivisible read/decision/append sequence.
+ * `alreadyClaimed` makes retrying a deterministic claim idempotent without
+ * charging the window twice.
+ */
+function claimWithinCountedWindow<State>(operations: {
+  transaction<T>(operation: () => T): T;
+  alreadyClaimed(): boolean;
+  readWindowState(): State;
+  canClaim(state: State): boolean;
+  append(): void;
+}): "claimed" | "refused" {
+  return operations.transaction(() => {
+    if (operations.alreadyClaimed()) return "claimed";
+    const state = operations.readWindowState();
+    if (!operations.canClaim(state)) return "refused";
+    operations.append();
+    return "claimed";
+  });
+}
 
 const WindowRow = z.object({
   count_in_window: SqliteCount,
@@ -73,7 +95,7 @@ export function createSqliteEgressBudgetAdapter(
             existing.class !== parsed.class ||
             existing.at !== parsed.at
           ) {
-            throw new LedgerInvariant({
+            throw new ChannelStoreInvariant({
               operation: "egress.debit",
               message: `egress debit id ${parsed.id} already identifies a different claim`,
             });

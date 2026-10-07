@@ -17,19 +17,56 @@ import {
   type PlainValue,
 } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
-import { pinCompactionAction } from "../plugins/compaction/successor";
+import type { CompactionSeamService } from "./compaction-ports";
 import type * as SessionHandleStore from "./store/fence";
 import { z } from "zod";
 import { RunReasonCode } from "./reason-codes";
-import { GenerationUnavailable } from "./failure";
+import { AgentInvariantViolation, GenerationUnavailable } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { SessionRunnerResult, SessionTool } from "./run";
 
 // ─── from session-fold-commit.ts (#1247) ───
+/** Fails closed: a compaction append without the composed seam cannot be pinned. */
+function requireNoCompactionPin(action: LedgerAction.Append): LedgerAction.Append {
+  if (action.kind === "compaction")
+    throw new AgentInvariantViolation("compaction append without a composed compaction seam");
+  return action;
+}
+
+/** Pins through the composed seam, or fails closed on an unpinnable compaction append. */
+function pinThroughSeam(
+  seam: Pick<CompactionSeamService, "pinAction"> | undefined,
+  kernel: SessionKernel,
+  action: LedgerAction.Append,
+  state: FoldCheckpoint.State,
+  sourceRevision: number,
+): LedgerAction.Append {
+  return seam !== undefined
+    ? seam.pinAction(kernel, action, state, sourceRevision)
+    : requireNoCompactionPin(action);
+}
+
+/** An executed compaction result forces an immediate checkpoint after it. */
+function executedCompactionResult(action: LedgerAction.Append): boolean {
+  const effect = action.effect.value;
+  return (
+    action.kind === "compaction" &&
+    effect !== null &&
+    typeof effect === "object" &&
+    !Array.isArray(effect) &&
+    effect.phase === "result" &&
+    effect.terminal === "executed"
+  );
+}
+
 /** Synchronous decoration preserves durable admission's existing suspension schedule. */
 export function commitFoldBatch(
   kernel: SessionKernel,
   input: LedgerSession.Commit,
+  // #1307: the composed compaction seam decorates compaction appends with
+  // their successor proof. Absent seam + compaction append = typed defect —
+  // the kernel never pins without the capability, and never commits unpinned.
+  seam?: Pick<CompactionSeamService, "pinAction">,
 ): Effect.Effect<CommitReceipt, LedgerError> {
   return Effect.gen(function* () {
     const checkpoint = readHistoryCheckpoint(kernel, input.sessionId, input.expectedRevision);
@@ -42,12 +79,8 @@ export function commitFoldBatch(
     const actions: LedgerAction.Append[] = [];
     for (const draft of input.actions) {
       const sourceRevision = input.expectedRevision + actions.length;
-      const action = pinCompactionAction(
-        kernel,
-        pinContext(draft, state, sourceRevision),
-        state,
-        sourceRevision,
-      );
+      const contextPinned = pinContext(draft, state, sourceRevision);
+      const action = pinThroughSeam(seam, kernel, contextPinned, state, sourceRevision);
       actions.push(action);
       const ordinal = input.expectedRevision + actions.length;
       state = foldHistoryState(
@@ -56,14 +89,7 @@ export function commitFoldBatch(
         state,
       );
       if (action.kind !== "fold.checkpoint") count += 1;
-      const effect = action.effect.value;
-      const compaction =
-        action.kind === "compaction" &&
-        effect !== null &&
-        typeof effect === "object" &&
-        !Array.isArray(effect) &&
-        effect.phase === "result" &&
-        effect.terminal === "executed";
+      const compaction = executedCompactionResult(action);
       if (count < 256 && !compaction) continue;
       actions.push(
         foldCheckpointAction({

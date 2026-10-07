@@ -6,7 +6,7 @@ import { Entropy, ObservationSink, SessionLayer, ToolCatalog } from "../../src/c
 import { scopeObservation } from "../../src/core/bus";
 import { testBusService } from "./isolated";
 import { entropySource, fixedClock } from "./time";
-import { createTurnDispatcher } from "../../src/core/tool";
+import { createTurnDispatcher } from "../../src/plugins/tool";
 
 /** The dispatcher-backed tool surface of a chat fixture config. */
 export function dispatcherToolPorts(

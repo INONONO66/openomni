@@ -1,8 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Core, Testing } from "@openomni/agent";
-const createDispatcher = Core.createDispatcher;
+import { Bundle, Core, Testing } from "@openomni/agent";
+const createDispatcher = Bundle.createDispatcher;
 const createExecutor = Core.createExecutor;
 const createSessionRequests = Core.createSessionRequests;
 const eraseTool = Core.eraseTool;

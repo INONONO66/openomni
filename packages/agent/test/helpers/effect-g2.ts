@@ -10,7 +10,7 @@ import { catalogLayer, dispatcherToolPorts } from "./service-layers";
 import { type ChatFixture as ChatAgentConfig, fixtureConfigHead, fixtureTraceContext, prepareChatFixture, } from "./chat-services";
 import type { SessionFixture as SessionRuntime } from "./session-services";
 import { createSessionChatRunner } from "../../src/core/run";
-import { createTurnDispatcher } from "../../src/core/tool";
+import { createTurnDispatcher } from "../../src/plugins/tool";
 import type { AnyToolDefinition } from "@openomni/protocol";
 import type { Run, RunInput } from "../../src/model";
 import type {} from "../../src/core/run";

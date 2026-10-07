@@ -16,6 +16,7 @@ import type { decideSessionAdmission } from "./mailbox";
 import type { Generation } from "./compose";
 import { projectTools } from "./tool";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
+import type { CompactionSeamService } from "./compaction-ports";
 import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { LedgerError } from "./store/errors";
 import { z } from "zod";
@@ -119,6 +120,12 @@ export type SessionRunnerResult =
 export type SessionRunner = (input: SessionRunnerInput) => Effect.Effect<SessionRunnerResult, ExecutionError, RunnerServices>;
 
 export interface SessionRuntime {
+  /**
+   * The composed compaction capability's verbs (#1307): commit-path pinning
+   * and context-projection restore. Absent = the capability is off — a
+   * compaction append is a defect and a restore refuses typed.
+   */
+  readonly compaction?: CompactionSeamService;
   /** Dispatches only an already committed source obligation through gateway admission. */
   readonly dispatchOutbound?: (input: {
     readonly message: SessionTransition.OutboundMessage;
@@ -490,7 +497,7 @@ export function createSessionConfiguration(
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [configured], state: current.state,
         generation: { toolsGeneration: snapshot.generation, systemHash: snapshot.systemHash, policyGeneration: snapshot.policyGeneration },
-      }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      }, runtime.compaction).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       const committed = yield* runtime.generations.configure({ sessionId, generation }, snapshot, commit);
       yield* ports.hibernate(committed.row);
       return { generation: snapshot.generation, revertTo: snapshot.revertTo };
@@ -1098,7 +1105,7 @@ export function createSessionTurn(
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [checkpoint, ...deliveries],
         state: current.state === "interrupted" ? "interrupted" : "running",
-      }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      }, runtime.compaction).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       observeDrained(delivered, input.turnId, boundary, clock(), observations, entropy);
       return {
         messages: delivered.filter((item) => item.kind === "prompt").map((item) => ({ id: item.id, role: "user" as const, text: item.content })),
@@ -1128,7 +1135,7 @@ export function createSessionTurn(
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],
         state: result.kind === "interrupted" ? "interrupted" : "idle",
-      }).pipe(Effect.mapError((error) => new CommitFailed({ error })));
+      }, runtime.compaction).pipe(Effect.mapError((error) => new CommitFailed({ error })));
       observeDrained(interrupts, open.turnId, "before_llm", clock(), runtime.observations, runtime.entropy);
       if (reply !== undefined) yield* dispatchSessionOutbound(kernel, sessionId, runtime, owner, state.fence, clock);
     });

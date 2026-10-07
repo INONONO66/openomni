@@ -6,7 +6,7 @@ export { failureFacts } from "./retry";
 export * from "./failure";
 export * from "./ports";
 export * from "./alarm-ports";
-export type { CompactionOptions } from "../plugins/compaction";
+export type { CompactionOptions, CompactionSeamService } from "./compaction-ports";
 export {
   createExecutor, ExecutionApprovalError, ExecutorContext, executorContext, ExecutorContextError,
   currentInvocation, forkInvocation,
@@ -20,7 +20,7 @@ export {
 } from "./points";
 export { assertPointGenerationRows, POINT_GENERATION_ROW, translateLegacyPolicyRow } from "./gate/migrate";
 export {
-  createDispatcher, createTurnDispatcher, currentExecutor, defineTool, eraseTool, projectTools,
+  currentExecutor, defineTool, eraseTool, projectTools,
   ToolRefused, toolInputSchema, type ToolProjections, type ProjectableTool,
 } from "./tool";
 
@@ -44,9 +44,8 @@ export { forkSession, ForkRefused, isForkBoundary, DEFAULT_FORK_COPY_BYTE_CAP, t
 export {
   openCatalogStore, CATALOG_SCHEMA, bootstrapStoreDatabase, openSessionStore,
   readSessionFileSchemaVersion, SESSION_FILE_SCHEMA_VERSION,
-  createDecisionFactPort, SessionHandleStore, createSurfaceKeyStore,
+  createDecisionFactPort, SessionHandleStore,
   CommitRefused, CorruptRecord, requireSubAdapter, withStoreTimestamps,
-  StoredEndpoint, StoredIdentity,
 } from "./store";
 export type {
   ObservationFailurePort, ObservationPublishFailure, LedgerError,

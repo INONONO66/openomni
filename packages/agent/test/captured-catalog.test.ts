@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import { z } from "zod";
 import { Effect } from "effect";
 import { recordingLedger } from "./helpers/effect-g3-recording";
-import { createTurnDispatcher } from "../src/core/tool";
+import { createTurnDispatcher } from "../src/plugins/tool";
 import { defineTool, projectTools } from "../src/core/tool";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { isolated } from "./helpers/isolated";

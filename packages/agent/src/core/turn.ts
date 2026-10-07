@@ -10,16 +10,12 @@ import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState, effe
 import { AgentStopError, AgentInvariantViolation, AgentFailure, type ExecutionError, Interrupted, ContextAdmissionError } from "./failure";
 import type { AgentResult, AgentStep, ChatAgentInput, TokenUsage, ChatAgentConfig, ObservedChatAgentConfig } from "./types";
 import { createUserMessage, createAssistantMessage, withMessageId, type MessageSource } from "./message-factory";
-import { type CompactionYield, resolveCompactionGeometry } from "../plugins/compaction/geometry";
+import type { CompactionSessionPort, CompactionYield } from "./compaction-ports";
 import * as Retry from "./retry";
 import { type RetryReason, type TerminalReason, failureFacts } from "./retry";
-import { measuredContextTokens } from "../plugins/compaction/measure";
 import { buildSystemPrompt, prepareTurnTools, settleModelTools, assertToolExecutor, assertUnambiguousToolMetadata } from "./tool";
 import { Entropy, ObservationSink } from "./ports";
-import { CompactionSession } from "../plugins/compaction";
 import { applyCompaction, prepareCompactionAfterContinue } from "./compaction";
-import { DEFAULT_PROTECT_RECENT } from "../plugins/compaction/contract";
-import { estimateMessagesTokens } from "../plugins/compaction/estimate";
 import { ExecutorContext, type Executor } from "./gate/decide";
 
 
@@ -450,6 +446,7 @@ function createTrackingSink(
   sink: Sink | undefined,
   turnUsage: TokenUsage,
   turnAssistant: TurnArtifacts["turnAssistant"],
+  measure: ((message: Message.WithParts) => number | undefined) | undefined,
 ): Sink {
   let prevInputTokens = 0;
   let prevOutputTokens = 0;
@@ -485,7 +482,7 @@ function createTrackingSink(
         ) {
           accumulateUsage(turnUsage, delta);
           recordAssistantTokenDelta(state, delta);
-          const measured = measuredContextTokens(message);
+          const measured = measure?.(message);
           if (measured !== undefined) recordCallContext(state, measured);
         }
       }
@@ -542,11 +539,16 @@ export function buildTurn(
     toolCallPool === -1
       ? Number.MAX_SAFE_INTEGER
       : Math.max(1, toolCallPool - state.budgetState.toolCalls);
+  // No compaction seam = the capability is off: the window-yield arm and the
+  // measured-context recording are compaction concerns and skip with it (#1307).
+  const compactionSeam = config.compactionSeam;
   const yieldAtInputTokens =
-    state.contextWindowTokens === undefined || state.windowYieldDisarmed === true
+    state.contextWindowTokens === undefined ||
+    state.windowYieldDisarmed === true ||
+    compactionSeam === undefined
       ? undefined
       : Math.floor(
-          resolveCompactionGeometry({
+          compactionSeam.geometry({
             contextWindowTokens: state.contextWindowTokens,
             ...(state.lastCompactionYield === undefined
               ? {}
@@ -554,7 +556,7 @@ export function buildTurn(
           }).thresholdTokens,
         );
   const turnAssistant: TurnArtifacts["turnAssistant"] = {};
-  const trackingSink = createTrackingSink(state, sink, turnUsage, turnAssistant);
+  const trackingSink = createTrackingSink(state, sink, turnUsage, turnAssistant, compactionSeam?.measure);
   // Steering (#751): the host check is wrapped so the turn records WHY the
   // loop stopped — without the flag, a steering yield below the step cap is
   // indistinguishable from a cap end and would terminate as "max-steps".
@@ -648,7 +650,7 @@ function handleStop(
   execution: NonNullable<ObservedChatAgentConfig["execution"]>,
   agentBase: AgentRunBase,
   turn: TurnArtifacts,
-  compaction: CompactionSession | undefined,
+  compaction: CompactionSessionPort | undefined,
 ): Effect.Effect<StopOutcome, ExecutionError, Scope.Scope | Entropy> {
   return Effect.gen(function* () {
   const now = yield* Clock.clockWith(Effect.succeed).pipe(
@@ -836,7 +838,7 @@ function runModelStep(
   sink: Sink | undefined,
   trace: RunTrace,
   base: AgentRunBase,
-  compaction: CompactionSession | undefined,
+  compaction: CompactionSessionPort | undefined,
   durableExecutor: Executor,
   llm: Context.Service.Shape<typeof Llm>,
   source: MessageSource,
@@ -857,9 +859,11 @@ function runModelStep(
     state.modelKey = modelKey;
     provider = model.providerID;
     recordRunWindow(state, model.limit?.context ?? 0);
+    const estimate = config.compactionSeam?.estimate;
     if (
+      estimate !== undefined &&
       state.contextWindowTokens !== undefined &&
-      estimateMessagesTokens(state.messages) > state.contextWindowTokens
+      estimate(state.messages) > state.contextWindowTokens
     ) {
       yield* applyCompaction(state, config, base, compaction, "yield");
     }
@@ -891,8 +895,9 @@ function runModelStep(
         )
           return Effect.fail(new AgentStopError({ reason: "budget" }));
         if (
+          estimate !== undefined &&
           state.contextWindowTokens !== undefined &&
-          estimateMessagesTokens(state.messages) > state.contextWindowTokens
+          estimate(state.messages) > state.contextWindowTokens
         ) {
           return Effect.fail(new ContextAdmissionError());
         }
@@ -985,11 +990,13 @@ function successfulOutcome(value: PlainValue): "stop" | "continue" {
   throw new AgentInvariantViolation("invalid llm execution result");
 }
 
-function createCompactionSession(config: ChatAgentConfig): CompactionSession | undefined {
+function createCompactionSession(config: ChatAgentConfig): CompactionSessionPort | undefined {
   const options = config.compaction;
-  if (options?.onSummarize === undefined || options.speculate === false) return undefined;
-  return new CompactionSession({
-    protectRecentMessages: options.protectRecentMessages ?? DEFAULT_PROTECT_RECENT,
+  const seam = config.compactionSeam;
+  if (seam === undefined || options?.onSummarize === undefined || options.speculate === false)
+    return undefined;
+  return seam.createSession({
+    protectRecentMessages: options.protectRecentMessages ?? seam.protectRecent,
     summarize: options.onSummarize,
     summarizerDeadlineMs: options.summarizerDeadlineMs,
   });

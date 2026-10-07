@@ -149,8 +149,9 @@ test("a finished child frees a spawn_children slot; a liveness read failure coun
 test("the bundle contract carries the three tool.pre rows, their guards, and the deadline purpose", () => {
   const bundle = delegationPolicyBundle();
   expect(bundle.requires.map((seam) => seam.key)).toEqual([
-    "@openomni/openomni/ActionCapabilitySeam",
+    "@openomni/action/Action",
     "@openomni/agent/capability/alarm",
+    "@openomni/openomni/ToolCapabilitySeam",
   ]);
   expect(delegationRows().map((row) => [row.on, row.how.ref])).toEqual([
     ["tool.pre", "delegation-policy/spawn-depth"],
