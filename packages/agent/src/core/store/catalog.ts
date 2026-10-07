@@ -214,7 +214,7 @@ export class CatalogStore extends StoreHandle {
   }
 }
 
-export interface OpenCatalogStoreOptions {
+interface OpenCatalogStoreOptions {
   /** Injected wall clock (#1245): catalog adapters never read ambient time. */
   readonly now: () => number;
   readonly observationSink?: ObservationSink;

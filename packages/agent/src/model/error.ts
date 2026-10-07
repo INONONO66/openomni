@@ -7,7 +7,7 @@ const ErrorFacts = z.object({
   aborted: z.boolean().optional().catch(undefined),
   contextOverflow: z.boolean().optional().catch(undefined),
 });
-export type ErrorFacts = z.infer<typeof ErrorFacts>;
+type ErrorFacts = z.infer<typeof ErrorFacts>;
 export function errorFacts<E>(error: E): ErrorFacts {
   return ErrorFacts.catch({}).parse(error);
 }

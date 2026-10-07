@@ -12,7 +12,7 @@ import type { Token } from "@openomni/protocol";
 import { Entropy, ObservationSink } from "../src/core/ports";
 import { allowAllPolicy } from "../test/helpers/compiled-policy";
 import type { Bench } from "tinybench";
-import { closeSessions } from "../src/core/run";
+import { closeSessions, type SessionRunnerResult } from "../src/core/run";
 import { session } from "../src/testing/registry";
 import { createSessionChatRunner } from "../src/core/run";
 import { createDispatcher, createTurnDispatcher } from "../src/plugins/tool";
@@ -130,7 +130,12 @@ export function toolDispatch() {
   };
 }
 
-export async function roundTrip() {
+export async function roundTrip(): Promise<{
+  handle: Effect.Success<ReturnType<typeof session>>;
+  kernel: SessionHandleStore.SessionKernel;
+  run: () => Promise<SessionRunnerResult | undefined>;
+  close: () => Promise<void>;
+}> {
   // Handle-scoped kernel over fresh in-memory stores (W5.2): the benchmark owns
   // its stores' lifetime and keeps the no-op observation port as the commit sink.
   let tick = 0;

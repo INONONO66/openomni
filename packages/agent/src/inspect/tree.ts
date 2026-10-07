@@ -4,14 +4,13 @@
  * tree and the history-only aside text. Nothing in this module feeds model
  * context — `foldSessionHistory` never reads `session.configure` intents into
  * messages, and compaction folds over that same history — so the aside is
- * invisible to the model unless the opt-in `forkAsideTransformer` is
- * registered in a composition's handler table and an explicit `prompt.pre`
- * policy row (`verdict {type: "transform", ref: "inspect/fork-aside"}`)
+ * invisible to the model unless an opt-in `prompt.pre` transformer named
+ * `FORK_ASIDE_REF` is registered in a composition's handler table and an
+ * explicit `prompt.pre` policy row (`verdict {type: "transform", ref: "inspect/fork-aside"}`)
  * promotes it through the compiled gate.
  */
 import { SessionGeneration } from "@openomni/protocol";
 import type { SessionKernel } from "../core/entity";
-import type { NamedTransformer } from "../core/gate/registry";
 
 /** Reads the fork pin off a session's genesis configure; null for a root. */
 export function forkAncestryOf(
@@ -83,29 +82,11 @@ export function inspectTree(
 }
 
 /**
- * Opt-in promotion (#1257): the registration-ready `prompt.pre` transformer
- * that prepends the fork aside to a string prompt value. Registered nowhere
- * by default — only a composition that puts it in the handler table AND
- * commits a policy row `{type: "transform", ref: "inspect/fork-aside"}` on
- * `prompt.pre` moves the aside into model context; anything else (a root
- * session, a non-string value) passes through unchanged.
+ * Opt-in promotion (#1257): the `prompt.pre` transformer name a composition
+ * registers to prepend the fork aside to a string prompt value. Registered
+ * nowhere by default — only a composition that puts a transformer with this
+ * name in the handler table AND commits a policy row
+ * `{type: "transform", ref: "inspect/fork-aside"}` on `prompt.pre` moves the
+ * aside into model context.
  */
 export const FORK_ASIDE_REF = "inspect/fork-aside";
-
-export function forkAsideTransformer(
-  ancestryOf: (sessionId: string) => SessionGeneration.ForkAncestry | null,
-  sessionId: string,
-): NamedTransformer {
-  return {
-    name: FORK_ASIDE_REF,
-    apply: (args) => {
-      const ancestry = ancestryOf(sessionId);
-      if (ancestry === null || args === null || typeof args !== "object" || Array.isArray(args))
-        return args;
-      // The prompt.pre point's one rewritable text field is `body`.
-      const body = args.body;
-      if (typeof body !== "string") return args;
-      return { ...args, body: `${forkAside(ancestry)}\n\n${body}` };
-    },
-  };
-}

@@ -59,7 +59,11 @@ export function useMemoryStores(sink?: ObservationSink): LedgerStores {
 }
 
 /** Own one real on-disk session+catalog pair per test; `reopen` survives restarts. */
-export function useSqliteStores(label: string) {
+export function useSqliteStores(label: string): LedgerStores & {
+  readonly sessionPath: string;
+  readonly catalogPath: string;
+  reopen(): void;
+} {
   let directory = "";
   let stores: LedgerStores | undefined;
   const paths = { session: "", catalog: "" };
