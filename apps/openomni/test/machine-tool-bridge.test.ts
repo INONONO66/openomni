@@ -594,7 +594,7 @@ describe("code-mode tool bridge", () => {
       }));
 
       expect(result).toMatchObject({ status: "raised" });
-      expect(result.status === "raised" && result.error).toContain("this host exposes no tools");
+      expect(result.status === "raised" && result.error).toContain("host_tool_missing");
     } finally {
       await runEffect(daemon.close());
       await runEffect(host.close());

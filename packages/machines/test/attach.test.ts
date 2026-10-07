@@ -103,7 +103,7 @@ describe("machine attach handshake", () => {
     );
   });
 
-  test("returns no-tools failure for a real in-flight cell and refuses duplicate ids", async () => {
+  test("a host wired without a tool port refuses host_tool_missing and refuses duplicate ids", async () => {
     const entered = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
     await withHost(
@@ -111,8 +111,13 @@ describe("machine attach handshake", () => {
       async ({ host, path }) => {
         const daemon = await attachKernel(path, {
           runCode: async (request, call) => {
-            const answer = await call({ cellId: request.cellId, name: "missing", arguments: {} });
-            expect(answer).toMatchObject({ status: "failed" });
+            // #1312: the tool port is required; a host wired with the refusing
+            // port surfaces host_tool_missing, never a fabricated failed result.
+            const refusal = await call({ cellId: request.cellId, name: "missing", arguments: {} }).then(
+              () => undefined,
+              (error: unknown) => error,
+            );
+            expect(String(refusal)).toContain("host_tool_missing");
             entered.resolve();
             await finish.promise;
             return {
