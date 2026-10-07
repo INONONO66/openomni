@@ -908,7 +908,8 @@ const AGENT_BAND_RATCHET: ReadonlyMap<string, number> = new Map([
   ["packages/agent/src/core/commit.ts", 1],
   ["packages/agent/src/core/failure.ts", 1],
   ["packages/agent/src/core/gate/decide.ts", 2],
-  ["packages/agent/src/core/mailbox.ts", 1],
+  // #1310 split mailbox.ts; its grandfathered inspect/history edge moved to recovery.ts.
+  ["packages/agent/src/core/recovery.ts", 1],
   ["packages/agent/src/core/ports.ts", 1],
   // pre-existing value import (instanceof LlmRunFailure); undercounted by the
   // slash-only classifier before #1276 (r2 addendum measurement correction).
