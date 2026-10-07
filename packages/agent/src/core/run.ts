@@ -12,7 +12,7 @@ import type { SessionKernel } from "./entity";
 import type { InspectRequest, InspectionPage } from "../inspect";
 import { Inbox, isReservedAlarmPurpose, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type ConfigureDisabled, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, AgentResult } from "./types";
-import type { decideSessionAdmission } from "./mailbox";
+import type { decideSessionAdmission } from "./admission";
 import type { Generation } from "./compose";
 import { projectTools } from "./tool";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";

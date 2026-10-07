@@ -13,7 +13,8 @@ import {
   receivedMessageAction,
   turnTerminalAction,
 } from "../../src/core/commit";
-import { createSessionAdmission } from "../../src/core/mailbox";
+import { createSessionAdmission } from "../../src/core/admission";
+import { createSessionRecovery } from "../../src/core/recovery";
 import type { ResolvedSessionRuntime, SessionControllerState } from "../../src/core/run";
 import { openCrashStores } from "../helpers/crash-stores";
 import { runAgent } from "../helpers/isolated";

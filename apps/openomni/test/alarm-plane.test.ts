@@ -89,7 +89,7 @@ test("r3 H1: a recovered turn never lets an old activation's continuation borrow
         calls.push(occurrenceId);
         return { alarmId: input.alarmId ?? "minted", occurrenceId, armSeq: 1 };
       });
-  // Recovery retains the open turn id (core/mailbox resumeTurn): BOTH the old
+  // Recovery retains the open turn id (core/recovery resumeTurn): BOTH the old
   // activation and its successor own the SAME durable turn token.
   const ownsPersisted = (turnId: string) => turnId === "persisted-turn";
   registry.onLive(SESSION, { arm: verbOf("occ-old"), ownsTurn: ownsPersisted });

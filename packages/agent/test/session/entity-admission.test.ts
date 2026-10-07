@@ -8,7 +8,7 @@ import { rmSync } from "node:fs";
 import type { Inbox, LedgerSession, SessionTransition } from "@openomni/protocol";
 import { Deferred, Effect } from "effect";
 import { decideRequestTransition } from "../../src/core/request";
-import { decideSessionAdmission } from "../../src/core/mailbox";
+import { decideSessionAdmission } from "../../src/core/admission";
 import {
   fixtureOpenTurn,
   fixtureTerminal,

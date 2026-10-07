@@ -903,3 +903,49 @@ export function commitSessionRequest(
     return decision;
   });
 }
+
+/**
+ * Out-of-turn request authority over a possibly-live activation (W5.2 F5):
+ * adopting a fresh fence while an entity turn is running would steal that
+ * activation's authority and kill its wave. This kernel view instead BORROWS
+ * the running activation's owner+fence: `adoptFence` on a running session
+ * records the live pair (and the borrowing caller) without touching the row,
+ * `row()` reports the borrowing caller as `fenceOwner` so the pure request
+ * decision (`ownsRequestRevision`) runs under the true live authority, and the
+ * commit lands under the live owner+fence (same process: it lands between the
+ * turn's awaits). Fence and revision are never masked — a rotated fence or a
+ * moved revision still refuses — and only the caller that adopted through this
+ * view gains the borrow; any other owner keeps being rejected. An idle session
+ * falls back to a real adoption, the documented out-of-turn takeover.
+ */
+export function requestAuthorityKernel(base: SessionKernel, sessionId: string): SessionKernel {
+  const holder: {
+    borrowed: { readonly owner: string; readonly fence: number } | undefined;
+    caller: string | undefined;
+  } = { borrowed: undefined, caller: undefined };
+  return {
+    ...base,
+    row: (id: string) => {
+      const row = base.row(id);
+      return holder.borrowed !== undefined && holder.caller !== undefined && id === sessionId
+        ? { ...row, fenceOwner: holder.caller }
+        : row;
+    },
+    adoptFence: (input) =>
+      Effect.suspend(() => {
+        const row = base.row(sessionId);
+        if (input.sessionId === sessionId && row.state === "running" && row.fenceOwner !== null) {
+          holder.borrowed = { owner: row.fenceOwner, fence: row.fence };
+          holder.caller = input.owner;
+          return Effect.succeed({ ok: true as const, fence: row.fence });
+        }
+        return base.adoptFence(input);
+      }),
+    commit: (input) =>
+      base.commit(
+        holder.borrowed === undefined
+          ? input
+          : { ...input, owner: holder.borrowed.owner, fence: holder.borrowed.fence },
+      ),
+  };
+}

@@ -4,20 +4,18 @@ import * as SessionHandleStore from "./store/fence";
 import type { CommitReceipt } from "./store/services";
 import { ObservationSink, type RunnerServices } from "./ports";
 import { canonicalDigest, Journal, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
-import { createExecutor, type ExecutionResult } from "./gate/decide";
+import { createExecutor } from "./gate/decide";
 import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { ResolvedSessionRuntime, SessionRunnerResult } from "./run";
 import type { ExecutionLedger } from "./gate/decide";
 import type { SessionKernel } from "./entity";
-import { turnIntentAction, turnResumeAction, deliveryActions, inputRowKind, policyRefusalResult, generationForOpen, boundaryConsumption, consumptionSettings, } from "./commit";
+import { turnIntentAction, deliveryActions, inputRowKind, policyRefusalResult, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { SessionControllerState } from "./run";
 import { observeDrained } from "./bus";
 import { commitSessionRequest } from "./request";
-export { commitSessionRequest } from "./request";
 
 import { commitFoldBatch } from "./commit";
-import { hydrateSessionHistory } from "../inspect/history";
 
 type AdmissionError = SessionError;
 
@@ -355,80 +353,6 @@ export function createSessionAdmission(
     };
   }
 
-  function restoreContextProjection(compactionId: string): Effect.Effect<ExecutionResult, AdmissionError> {
-    return Effect.gen(function* () {
-      yield* awaitRetainedRunner();
-      const current = kernel.row(sessionId);
-      return yield* Effect.scoped(Effect.gen(function* () {
-        // #1307: restore is a compaction-owned projection — without the
-        // composed seam the restore refuses typed instead of improvising.
-        const seam = runtime.compaction;
-        if (seam === undefined) return yield* new AgentFailure({ operation: "session.restore", cause: "compaction_seam_missing" });
-        const plan = yield* seam.prepareRestore({
-          sessionId,
-          compactionId,
-          action: kernel.actionById(compactionId),
-          result: kernel.resultFor(sessionId, compactionId),
-          history: hydrateSessionHistory(kernel, sessionId).history,
-        });
-        const captured = yield* runtime.generations.capture({ sessionId, generation: kernel.latestGenerationFor(sessionId).generation });
-        const executor = yield* captured.provide(createExecutor({
-          ledger: createExecutionLedger(),
-          identity: { sessionId, role: current.role, parentActionId: compactionId },
-        })).pipe(Effect.provide(runtime.services));
-        return yield* captured.provide(executor.run(plan.request, () => Effect.succeed(plan.restored)));
-      }));
-    });
-  }
-
-  function resumeTurn(open: SessionHandleStore.OpenTurn): Effect.Effect<SessionRunnerResult, AdmissionError> {
-    return Effect.gen(function* () {
-      yield* awaitRetainedRunner();
-      if (kernel.pendingMessages(sessionId).some((item) => item.kind === "interrupt" || item.kind === "cancel")) {
-        const interrupted = { kind: "interrupted" as const };
-        yield* seal(open, interrupted);
-        return interrupted;
-      }
-      if (open.resumeCount >= SessionHandleStore.RESUME_BUDGET) {
-        const exhausted = { kind: "error" as const, text: "session resume budget exhausted" };
-        yield* seal(open, exhausted);
-        return exhausted;
-      }
-      const generation = yield* generationForOpen(kernel, open);
-      const resumeCount = open.resumeCount + 1;
-      const resumeId = entropy();
-      const resultId = open.resultId;
-      const resume = turnResumeAction({ id: resumeId, parentId: open.boundaryActionId ?? open.action.id, sessionId, turnId: open.turnId, resultId, generation, resumeCount, boundaryActionId: open.boundaryActionId, at: clock() });
-      yield* commitSession({ expectedRevision: kernel.row(sessionId).revision, actions: [resume], state: "running" });
-      return yield* runTurn({ turnId: open.turnId, resultId, parentActionId: resumeId, boundaryActionId: open.boundaryActionId, resumeCount, generation, resume: true });
-    });
-  }
-
-  function resumeInterrupted(item: Inbox.Row): Effect.Effect<SessionRunnerResult | undefined, AdmissionError> {
-    return Effect.gen(function* () {
-      yield* awaitRetainedRunner();
-      const terminal = kernel.latestTurnTerminal(sessionId);
-      if (terminal?.effect.kind !== "interrupted") {
-        yield* consumeNoopInbox([item]);
-        return undefined;
-      }
-      const current = kernel.row(sessionId);
-      const generation = kernel.latestGenerationFor(sessionId);
-      const resultId = entropy();
-      const turnId = entropy();
-      const resumeCount = terminal.effect.resumeCount + 1;
-      const delivery = deliveryActions(
-        [item],
-        { kind: "turn", turnId },
-        "before_llm",
-        terminal.action.id,
-      );
-      const resume = turnIntentAction({ id: turnId, parentId: delivery.at(-1)?.id ?? terminal.action.id, sessionId, resultId, inboxIds: [item.id], generation, resumeCount, boundaryActionId: terminal.effect.boundaryActionId, at: clock() });
-      yield* commitSession({ expectedRevision: current.revision, actions: [...delivery, resume], state: "running" });
-      return yield* runTurn({ turnId, resultId, parentActionId: resume.id, boundaryActionId: terminal.effect.boundaryActionId, resumeCount, generation, resume: true });
-    });
-  }
-
   function consumeNoopInbox(items: readonly Inbox.Row[]): Effect.Effect<void, AdmissionError> {
     return Effect.gen(function* () {
       const current = kernel.row(sessionId);
@@ -442,51 +366,5 @@ export function createSessionAdmission(
     });
   }
 
-  return { startTurn, evaluatePromptPolicies, consumePolicyBlockedInbox, commitSession, createExecutionLedger, resumeTurn, resumeInterrupted, consumeNoopInbox, restoreContextProjection };
-}
-
-/**
- * Out-of-turn request authority over a possibly-live activation (W5.2 F5):
- * adopting a fresh fence while an entity turn is running would steal that
- * activation's authority and kill its wave. This kernel view instead BORROWS
- * the running activation's owner+fence: `adoptFence` on a running session
- * records the live pair (and the borrowing caller) without touching the row,
- * `row()` reports the borrowing caller as `fenceOwner` so the pure request
- * decision (`ownsRequestRevision`) runs under the true live authority, and the
- * commit lands under the live owner+fence (same process: it lands between the
- * turn's awaits). Fence and revision are never masked — a rotated fence or a
- * moved revision still refuses — and only the caller that adopted through this
- * view gains the borrow; any other owner keeps being rejected. An idle session
- * falls back to a real adoption, the documented out-of-turn takeover.
- */
-export function requestAuthorityKernel(base: SessionKernel, sessionId: string): SessionKernel {
-  const holder: {
-    borrowed: { readonly owner: string; readonly fence: number } | undefined;
-    caller: string | undefined;
-  } = { borrowed: undefined, caller: undefined };
-  return {
-    ...base,
-    row: (id: string) => {
-      const row = base.row(id);
-      return holder.borrowed !== undefined && holder.caller !== undefined && id === sessionId
-        ? { ...row, fenceOwner: holder.caller }
-        : row;
-    },
-    adoptFence: (input) =>
-      Effect.suspend(() => {
-        const row = base.row(sessionId);
-        if (input.sessionId === sessionId && row.state === "running" && row.fenceOwner !== null) {
-          holder.borrowed = { owner: row.fenceOwner, fence: row.fence };
-          holder.caller = input.owner;
-          return Effect.succeed({ ok: true as const, fence: row.fence });
-        }
-        return base.adoptFence(input);
-      }),
-    commit: (input) =>
-      base.commit(
-        holder.borrowed === undefined
-          ? input
-          : { ...input, owner: holder.borrowed.owner, fence: holder.borrowed.fence },
-      ),
-  };
+  return { startTurn, evaluatePromptPolicies, consumePolicyBlockedInbox, commitSession, createExecutionLedger, consumeNoopInbox };
 }

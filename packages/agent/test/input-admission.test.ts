@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Inbox, Journal, type LedgerSession } from "@openomni/protocol";
 import { deliveryActions, inputRowKind, receivedMessageAction } from "../src/core/commit";
-import { decideSessionAdmission } from "../src/core/mailbox";
+import { decideSessionAdmission } from "../src/core/admission";
 
 /**
  * #1252 input admission: delivered inputs are journal rows of the closed set —

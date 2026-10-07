@@ -3,7 +3,7 @@ import { Deferred, Effect, Fiber } from "effect";
 import * as SessionHandleStore from "../src/core/store/fence";
 import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type LedgerSession, type SessionTransition, } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
-import { decideSessionAdmission } from "../src/core/mailbox";
+import { decideSessionAdmission } from "../src/core/admission";
 import { decideRequestTransition } from "../src/core/request";
 import { session } from "../src/testing/registry";
 import { resolveSessionRuntime } from "../src/core/run";
