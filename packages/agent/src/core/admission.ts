@@ -19,24 +19,22 @@ import { commitFoldBatch } from "./commit";
 
 type AdmissionError = SessionError;
 
-/**
- * The capability journal kinds the kernel composes built-in (#1252): `tool`
- * and `compaction` ship with the core loop; `action` arrives with its plugin.
- */
-const BUILTIN_CAPABILITY_KINDS: readonly string[] = Object.freeze(["tool", "compaction"]);
-
 interface AdmissionSnapshot {
   readonly row: LedgerSession.Row;
   readonly pending: readonly Inbox.Row[];
   readonly open?: SessionHandleStore.OpenTurn;
   readonly terminal?: ReturnType<SessionKernel["latestTurnTerminal"]>;
-  /** Capability kinds the composed generation registers; defaults to the built-ins. */
+  /**
+   * Capability kinds the composed generation registers (#1310): a snapshot
+   * that carries none is a typed `missing_capability_kinds` refusal, never a
+   * silent built-in list.
+   */
   readonly capabilityKinds?: readonly string[];
 }
 
 type AdmissionDecision =
   | { readonly kind: "stop" | "start" }
-  | { readonly kind: "refused"; readonly reason?: "unknown_kind" }
+  | { readonly kind: "refused"; readonly reason?: "unknown_kind" | "missing_capability_kinds" }
   | { readonly kind: "recover"; readonly open: SessionHandleStore.OpenTurn }
   | { readonly kind: "resume"; readonly item: Inbox.Row }
   | { readonly kind: "consume"; readonly items: readonly Inbox.Row[] };
@@ -46,7 +44,10 @@ export function decideSessionAdmission(snapshot: AdmissionSnapshot): AdmissionDe
   const { row, pending, open, terminal } = snapshot;
   // #1252 input admission: an input whose journal row kind belongs to a
   // capability absent from the composed generation is rejected, not consumed.
-  const registered = snapshot.capabilityKinds ?? BUILTIN_CAPABILITY_KINDS;
+  // #1310: a snapshot with no registered kinds is refused typed — admission
+  // never substitutes a built-in list for a composition that declared nothing.
+  const registered = snapshot.capabilityKinds;
+  if (registered === undefined) return { kind: "refused", reason: "missing_capability_kinds" };
   if (pending.some((item) => Journal.admitInputKind(registered, inputRowKind(item.kind)) !== "ok"))
     return { kind: "refused", reason: "unknown_kind" };
   if (pending.some((item) => item.sessionId !== row.id || item.status !== "pending")) return { kind: "refused" };

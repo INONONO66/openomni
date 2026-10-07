@@ -89,7 +89,7 @@ test("an input of a capability kind whose capability is off is rejected with unk
   };
   const pending = [row("action", "in-action")];
   // The composed generation registers only the built-ins: the action input is refused.
-  const refused = decideSessionAdmission({ row: sessionRow, pending });
+  const refused = decideSessionAdmission({ row: sessionRow, pending, capabilityKinds: ["tool", "compaction"] });
   expect(refused).toEqual({ kind: "refused", reason: "unknown_kind" });
   // The same input with the action capability composed is admitted and heads
   // a turn like a prompt (#1256 r5 H-3): boundary consumption — not an idle

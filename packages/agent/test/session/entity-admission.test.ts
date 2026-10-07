@@ -209,6 +209,7 @@ function decide(c: AdmissionCase): AdmissionDecision {
   return decideSessionAdmission({
     row: sessionRow(c.state),
     pending: c.items,
+    capabilityKinds: ["tool", "compaction"],
     ...(c.open === undefined ? {} : { open: c.open }),
     ...(c.terminal === undefined ? {} : { terminal: c.terminal }),
   });
@@ -249,10 +250,10 @@ describe("Table A: admission decisions over the chain-derived pending set", () =
     const row = sessionRow("idle");
     for (const prefix of prefixes) {
       const prefixItems = prefix.map((kind) => item(kind));
-      const base = normalize(decideSessionAdmission({ row, pending: prefixItems }));
+      const base = normalize(decideSessionAdmission({ row, pending: prefixItems, capabilityKinds: ["tool", "compaction"] }));
       for (const suffix of suffixes) {
         const extended = [...prefixItems, ...suffix.map((kind) => item(kind))];
-        expect(normalize(decideSessionAdmission({ row, pending: extended }))).toEqual(base);
+        expect(normalize(decideSessionAdmission({ row, pending: extended, capabilityKinds: ["tool", "compaction"] }))).toEqual(base);
       }
     }
   });
@@ -263,6 +264,7 @@ describe("Table A: admission decisions over the chain-derived pending set", () =
     const decision = decideSessionAdmission({
       row,
       pending: items,
+      capabilityKinds: ["tool", "compaction"],
       terminal: terminal("interrupted"),
     });
     expect(decision.kind).toBe("resume");

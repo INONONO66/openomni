@@ -88,8 +88,12 @@ export interface TestClusterOptions {
   readonly clock?: () => number;
   /** #1255: the composed generation's deliver registrations (default: core prompt/signal). */
   readonly inputRegistrations?: readonly string[];
-  /** #1255: the composed generation's capability kinds for input admission. */
-  readonly capabilityKinds?: readonly string[];
+  /**
+   * #1255: the composed generation's capability kinds for input admission;
+   * `"undeclared"` omits the port so a case can exercise the #1310
+   * missing-kinds refusal. Default: the built-ins.
+   */
+  readonly capabilityKinds?: readonly string[] | "undeclared";
   /**
    * #1254 r5 M1: post-commit observation sink injected into every session
    * store this cluster opens — the store publishes `ledger.action.committed`
@@ -342,7 +346,11 @@ function entityPorts(
       ? {}
       : { alarmCapability: options.alarmCapability }),
     ...(options.inputRegistrations === undefined ? {} : { inputRegistrations: options.inputRegistrations }),
-    ...(options.capabilityKinds === undefined ? {} : { capabilityKinds: options.capabilityKinds }),
+    // #1310: admission refuses a snapshot with no declared kinds, so the
+    // test cluster states the built-ins unless a case overrides them.
+    ...(options.capabilityKinds === "undeclared"
+      ? {}
+      : { capabilityKinds: options.capabilityKinds ?? ["tool", "compaction"] }),
     ...(options.onKeepAlive === undefined ? {} : { onKeepAlive: options.onKeepAlive }),
     ...(options.ready === undefined ? {} : { ready: options.ready }),
     ...(options.onRequestReady === undefined ? {} : { onRequestReady: options.onRequestReady }),

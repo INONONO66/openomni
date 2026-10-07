@@ -365,7 +365,8 @@ export interface SessionEntityPorts {
   /**
    * The capability journal kinds the composed generation registers (#1255):
    * session admission refuses a pending input of an absent capability's kind
-   * with `unknown_kind`. Absent means exactly the built-ins.
+   * with `unknown_kind`. Absent refuses every admission with a typed
+   * `missing_capability_kinds` decision (#1310) — never a built-in default.
    */
   readonly capabilityKinds?: readonly string[];
   /** Optional domain-revision capture for request bindings, as on `SessionRuntime`. */

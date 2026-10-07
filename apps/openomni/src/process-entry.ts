@@ -224,6 +224,9 @@ export function serveProcessSession(
         pending: kernel.pendingMessages(request.sessionId),
         ...(open === undefined ? {} : { open }),
         ...(terminal === undefined ? {} : { terminal }),
+        // #1310: admission refuses a snapshot with no declared kinds; the
+        // child states the composed generation's kinds explicitly.
+        capabilityKinds: Object.keys(composed.current().generation.kinds),
       };
       const decision = decideSessionAdmission(snapshot);
       switch (decision.kind) {
