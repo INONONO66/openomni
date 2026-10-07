@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791362870345,
+  "lastUpdate": 1791374712619,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -79903,6 +79903,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 135768,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c23d1f0fdd26051960f059589928f0979f10d7a7",
+          "message": "refactor(agent): move compaction behind a core seam and declare it in the manifest (#1307) (#1323)\n\n* refactor(agent): move compaction orchestration behind a core seam (#1307)\n\nCore owns compaction-ports.ts (seam tag + every shared type) and reaches the\nplugin only through CompactionSeamService: ChatAgentConfig.compactionSeam for\nthe run loop, SessionRuntime.compaction for commit pinning and restore. The\nplugin's successor pin takes injected fold/hydrate history ports; bundle.ts\nwires them and publishes compactionCapability(). The app manifest declares\nthe capability; the resident skips options+seam while the composed generation\nhas it disabled. Band ratchet pins drop 24 -> 12.\n\n* test(agent): default the composed compaction seam into fixtures (#1307)\n\nHarness runtimes (testing/registry, kernelRuntime), chat fixtures, and the\nrequest-ledger commit paths get the real seam service by default — a test\nthat wants the capability off sets the key explicitly.\n\n* test(agent,openomni): pin the compaction capability contract and off-cascade (#1307)\n\n* docs: record the #1307 compaction seam wiring (#1307)\n\n* refactor(agent): consume the seam types in the plugin and settle lint/dead-export gates (#1307)\n\n* test(openomni): default the composed compaction seam into the resident fixture (#1307)\n\n* fix(openomni): bind compaction verbs only when the capability is composed (#1307 review M1)",
+          "timestamp": "2026-10-07T21:02:39+09:00",
+          "tree_id": "9cf3141c3925be666d26daba41a037bf0d3035b2",
+          "url": "https://github.com/INONONO66/openomni/commit/c23d1f0fdd26051960f059589928f0979f10d7a7"
+        },
+        "date": 1791374711918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 839,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1509,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1154,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1107229,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 323269,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5366977,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 863,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 575,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 129414,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 644013,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 373243,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9046670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1141304,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14761,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 133424,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 672382,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 181945,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 12075545,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 73,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 147996,
             "unit": "ns/op"
           }
         ]
