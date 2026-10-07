@@ -1,6 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
-import { Machine } from "@openomni/protocol";
+import { parseJson, Machine } from "@openomni/protocol";
 import { onAbort, type MachineError } from "@openomni/machines";
 import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
 import { CodemodeError, DriverFailure, type CodeError } from "./errors";
@@ -944,10 +944,9 @@ export class PythonKernel {
         // The cleanup ack is close()'s signal, never a cell frame: consume it
         // here so a pending cell's frame loop never sees an unknown kind.
         if (line.startsWith('{"kind": "lifecycle"')) {
-          const json = Effect.runSyncExit(Effect.try(() => JSON.parse(line)));
-          const parsed = Exit.isSuccess(json) ? CleanupCompleteFrame.safeParse(json.value) : undefined;
-          if (parsed?.success === true) {
-            Deferred.doneUnsafe(cleanup, Exit.succeed(parsed.data.failed));
+          const parsed = parseJson(CleanupCompleteFrame, line);
+          if (parsed !== undefined) {
+            Deferred.doneUnsafe(cleanup, Exit.succeed(parsed.failed));
             return;
           }
         }

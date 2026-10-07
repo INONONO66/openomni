@@ -463,7 +463,7 @@ describe("pty.control command-timeout FIFO cleanup (#1312)", () => {
       { mode: 0o755 },
     );
     try {
-      await Effect.runPromise(
+      await run(
         Effect.gen(function* () {
           const sawLateMarker = yield* Deferred.make<void>();
           const control = yield* startPtyControl({
