@@ -13,14 +13,17 @@ export interface WrittenTypeFinding {
 /** The PR gate counts syntax, not inferred types or words in comments and strings. */
 export function writtenTypes(root: string = ROOT): WrittenTypeFinding[] {
   const findings: WrittenTypeFinding[] = [];
+  // #1318: test sources are gated too — the literal-zero definition of done
+  // makes no test exemption. `script/*.ts` already matches `script/*.test.ts`.
   const patterns = [
     "packages/*/src/**/*.{ts,tsx}",
     "apps/*/src/**/*.{ts,tsx}",
+    "packages/*/test/**/*.{ts,tsx}",
+    "apps/*/test/**/*.{ts,tsx}",
     "script/*.ts",
   ];
   for (const pattern of patterns) {
     for (const path of new Bun.Glob(pattern).scanSync({ cwd: root, onlyFiles: true })) {
-      if (/\.test\.tsx?$/.test(path)) continue;
       const source = ts.createSourceFile(
         path,
         readFileSync(join(root, path), "utf8"),

@@ -1,4 +1,7 @@
 /**
+ * Invariant (#1318): no unused export beyond the (empty) baseline. Distinct
+ * from inventory wiring, allowed edges and import cycles.
+ *
  * Dead-export ratchet over knip.
  *
  * Runs `bunx knip --reporter json` (config: knip.json), normalizes every

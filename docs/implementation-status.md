@@ -1,5 +1,42 @@
 # Implementation Status
 
+## #1318 gate-escape closure and timing-test removal (epic #1303, rung 4)
+
+On `stab/4-gate-escape-closure` (2026-10-07, base `c73bc03b3`). Three gates that
+could report green without checking now fail closed, with the planted escapes
+kept as regression tests, and no test in `packages`, `apps` or `script` passes
+by timing luck.
+
+- Patch coverage: `GATED` in `script/check-patch-coverage.ts` gates nested
+  script paths (`script/quality-metrics/`, `script/quality-mutation/`) and
+  excludes `script/fixtures/`; a planted uncovered nested-script line exits 1
+  (`script/check-patch-coverage.test.ts`).
+- Written types: `script/check-written-types.ts` scans `packages/*/test/**`,
+  `apps/*/test/**` and `script/*.test.ts`; every test-source written
+  `unknown`/`any` was rewritten (gate reports 0 on the real tree); a planted
+  test-file `unknown` exits 1 (`script/check-written-types.test.ts`).
+- Mutation campaign: an incomplete join exits 1
+  (`script/quality-mutation-join.ts`), an incomplete shard with no errors
+  exits 1 and errors still win with exit 2
+  (`script/run-quality-mutations.ts`), and all three
+  `.github/workflows/quality-mutation.yml` artifact uploads use
+  `if-no-files-found: error` (regressions in
+  `script/quality-mutation-shard.test.ts` and
+  `script/quality-mutation-workflow.test.ts`).
+- Timing tests: `entity-crash.test.ts` asserts not-before delivery from the
+  recorded stale alarm fact's commit clock time (`fired_at >= armed_at +
+  1500`, no upper bound; the child subscribes via `observationSink` and never
+  reads `Date.now()`); the four `hook-plugin.test.ts` polling loops are
+  `startImmediately` forks settled by one `TestClock.adjust` + `Fiber.join`;
+  the `new Promise((resolve) => setTimeout(resolve` sleeps in test helpers are
+  gone (`waitUntil`/`awaitGone` are interval observations of third-party
+  state with timeout-as-failure-guard; `fixedClock.sleep` rides `Bun.sleep`);
+  the duplicate `preserves the provided name` bus test is deleted.
+- The four script gates (`check-topology`, `check-deps`,
+  `check-import-cycles`, `check-dead-exports`) are unchanged in what they
+  check; each names its invariant in a header comment.
+  `knip-baseline.json` still reads `"grandfathered": []`.
+
 ## #1307 compaction behind a core seam, declared in the manifest (epic #1303, rung 1)
 
 On `stab/1-compaction-plugin-ownership` (2026-10-07, base `c73bc03b3`). The

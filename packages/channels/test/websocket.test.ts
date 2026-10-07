@@ -249,11 +249,11 @@ describe("WebSocketHandler ingress and receipts", () => {
 
   it("push without a live connection throws a typed delivery failure", () => {
     const handler = createHandler();
-    let caught: unknown;
+    let caught: Error | undefined;
     try {
       handler.push("ghost", "body", "message-x");
     } catch (error) {
-      caught = error;
+      caught = error instanceof Error ? error : new Error(String(error));
     }
     expect(caught).toMatchObject({ _tag: "DeliveryNotSent", operation: "websocket.push" });
   });

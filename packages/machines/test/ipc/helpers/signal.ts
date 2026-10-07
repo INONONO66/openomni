@@ -46,14 +46,15 @@ const reaped = (pid: number): boolean => {
  */
 export async function awaitGone(pids: readonly number[], timeoutMs = 5_000): Promise<void> {
   let present = [...pids];
-  let guarded = true;
-  const observed = (async () => {
-    while (guarded) {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const observed = new Promise<void>((resolve) => {
+    const observe = () => {
       present = present.filter((pid) => !reaped(pid));
-      if (present.length === 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-  })();
+      if (present.length === 0) resolve();
+    };
+    observe();
+    timer = setInterval(observe, 25);
+  });
   try {
     await within(observed, "every descendant to leave the process table", timeoutMs);
   } catch {
@@ -61,6 +62,6 @@ export async function awaitGone(pids: readonly number[], timeoutMs = 5_000): Pro
     const state = spawnSync("ps", ["-o", "stat=", "-p", String(pid)]).stdout?.toString().trim();
     throw new ProcessStillPresentError(pid, state || "not in ps output");
   } finally {
-    guarded = false;
+    clearInterval(timer);
   }
 }

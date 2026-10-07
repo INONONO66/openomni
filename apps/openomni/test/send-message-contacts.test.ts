@@ -123,14 +123,15 @@ test("the scripted CLI connector forwards captured stdout to the sender as its p
 });
 
 test("the tool routes contact targets through connectors and everything else through the gateway door", async () => {
-  const ingested: { sender: Gateway.IngestSender; to: unknown }[] = [];
+  const ingested: { sender: Gateway.IngestSender; to: Gateway.SendMessage["to"] }[] = [];
   const port: MessagePort = {
     ingest: async (sender, message) => {
       ingested.push({ sender, to: (message as Gateway.SendMessage).to });
       return {
         status: "executed",
-        handle: { messageId: "m-1", target: "child-1", seq: 1 },
-      } as unknown as Gateway.IngestResult;
+        handle: { messageId: "m-1", target: "child-1" },
+        delivery: { kind: "session" },
+      } satisfies Gateway.IngestResult;
     },
   };
   const notified: object[] = [];
@@ -159,8 +160,9 @@ test("a new child with a deadline arms delegation.deadline for the created child
     ingest: async () =>
       ({
         status: "executed",
-        handle: { messageId: "m-9", target: "child-9", seq: 1 },
-      }) as unknown as Gateway.IngestResult,
+        handle: { messageId: "m-9", target: "child-9" },
+        delivery: { kind: "session" },
+      }) satisfies Gateway.IngestResult,
   };
   const tool = createSendMessageTool(port, () => 2_000, {
     run: runEffect,

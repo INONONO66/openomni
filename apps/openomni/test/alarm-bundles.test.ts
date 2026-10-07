@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Bundle, Core } from "@openomni/agent";
+import type { PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
 import { CRON_TICK, cronBundle, cronPurposes } from "../src/bundles/cron";
 import { monitorBundle, monitorPurposes, monitorSeedRows } from "../src/bundles/monitor";
@@ -8,7 +9,7 @@ import { runEffect } from "./helpers/effect";
 
 /** A recording `AlarmWakeContext.prompt` — the core's verb, stubbed for assertion. */
 function recordingPrompt() {
-  const prompts: { content: string; payload?: unknown }[] = [];
+  const prompts: Parameters<Bundle.AlarmPromptVerb>[0][] = [];
   const prompt: Bundle.AlarmPromptVerb = (input) => {
     prompts.push(input);
     return Effect.succeed({ seq: prompts.length });
@@ -37,7 +38,7 @@ test("alarmCapability composes the monitor and cron purposes under their owning 
   ]);
 });
 
-const cronFired = (payload: unknown, fireAt: number): Bundle.AlarmFired => ({
+const cronFired = (payload: PlainObject, fireAt: number): Bundle.AlarmFired => ({
   occurrenceId: "grid:tick:1",
   purpose: CRON_TICK,
   alarmId: "grid",

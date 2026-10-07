@@ -76,13 +76,12 @@ test("SIGKILL mid-turn: chain action durable, envelope unprocessed, redelivery d
   expect(kinds.filter((kind) => kind === "turn").length).toBeGreaterThanOrEqual(1);
   expect(out).toMatch(/CHAIN_OK [1-9]\d*/);
 
-  // DeliverAt is a durable not-before clock: the Deadline reply resolved only
-  // after the 1500ms residual elapsed (and within poll slack).
-  const residualMatch = out.match(/DELIVER_AT residual_ms=(\d+)/);
-  if (residualMatch === null) throw new Error(`missing DELIVER_AT marker:\n${out}`);
-  const residual = Number(residualMatch[1]);
-  expect(residual).toBeGreaterThanOrEqual(1500);
-  expect(residual).toBeLessThan(3500);
+  // DeliverAt is a durable not-before clock: the recorded stale alarm fact
+  // committed at or after the armed instant plus the 1500ms residual. The
+  // contract is not-before delivery, so there is no upper bound to assert.
+  const deliverAt = out.match(/DELIVER_AT fired_at=(\d+) armed_at=(\d+)/);
+  if (deliverAt === null) throw new Error(`missing DELIVER_AT marker:\n${out}`);
+  expect(Number(deliverAt[1])).toBeGreaterThanOrEqual(Number(deliverAt[2]) + 1500);
 
   // Every Session envelope is processed after recovery.
   const afterRestart = clusterMessages(catalogFile, "Session");

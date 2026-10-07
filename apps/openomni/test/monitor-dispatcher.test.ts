@@ -178,7 +178,7 @@ test("capability wakes spend the chain budget: prompt, re-arm, then exhaustion r
   // The prompt append is the entity's (`AlarmWakeContext.prompt`); here it is
   // recorded so the chain budget, re-arm and retire are what the test proves.
   // Every arm the handler commits goes through the REAL entity verb.
-  const prompts: { content: string; payload?: unknown }[] = [];
+  const prompts: Parameters<Bundle.AlarmPromptVerb>[0][] = [];
   const prompt: Bundle.AlarmPromptVerb = (input) => {
     prompts.push(input);
     return Effect.succeed({ seq: prompts.length });
@@ -242,7 +242,9 @@ test("capability wakes spend the chain budget: prompt, re-arm, then exhaustion r
 });
 
 /** A compiled tool/pre snapshot the invocation frame carries into `evaluateGate`. */
-function monitorPolicy(extraRows: readonly Record<string, unknown>[] = []) {
+type PolicyRow = Parameters<typeof Core.compilePolicySnapshot>[0]["rows"][number];
+
+function monitorPolicy(extraRows: readonly PolicyRow[] = []) {
   return Core.compilePolicySnapshot({
     registry: Core.KERNEL_POLICY_REGISTRY,
     generation: 1,
@@ -250,7 +252,7 @@ function monitorPolicy(extraRows: readonly Record<string, unknown>[] = []) {
     rows: [
       ...Core.SEEDED_POLICY_ROWS.map((row) => ({ ...row, generation: 1 })),
       ...extraRows,
-    ] as Parameters<typeof Core.compilePolicySnapshot>[0]["rows"],
+    ] as PolicyRow[],
   });
 }
 

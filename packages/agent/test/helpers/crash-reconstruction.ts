@@ -287,7 +287,7 @@ function restartGenerations(captures: number[], missing: boolean) {
   );
 }
 
-function refusalFromCause(cause: Cause.Cause<unknown>) {
+function refusalFromCause<E>(cause: Cause.Cause<E>) {
   const error = Cause.squash(cause);
   if (FoldCheckpointIntegrityError.isInstance(error))
     return "FoldCheckpointIntegrityError" as const;

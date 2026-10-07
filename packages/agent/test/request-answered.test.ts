@@ -1,6 +1,6 @@
 import { expect, it } from "bun:test";
 import { Effect } from "effect";
-import { Journal, type LedgerAction } from "@openomni/protocol";
+import { Journal, type LedgerAction, type PlainObject, type PlainValue } from "@openomni/protocol";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { sessionTree } from "./helpers/session-tree";
 import { planeAnswer, requestPlane } from "./helpers/session-request-plane";
@@ -16,7 +16,7 @@ function requestRowsOf(sessionId: string): readonly LedgerAction.Node[] {
   );
 }
 
-function phaseOf(action: LedgerAction.Node): unknown {
+function phaseOf(action: LedgerAction.Node): PlainValue | undefined {
   const effect = action.effect.value;
   if (effect === null || typeof effect !== "object" || Array.isArray(effect)) return undefined;
   return effect.phase;
@@ -45,7 +45,7 @@ it("an answer lands as request{phase: answered, answer} and resolution as resolv
         }
         const answered = rows.find((row) => phaseOf(row) === "answered");
         if (answered === undefined) throw new Error("missing answered row");
-        const effect = answered.effect.value as Record<string, unknown>;
+        const effect = answered.effect.value as PlainObject;
         expect(effect.answer).toMatchObject({ content: "child", decision: "answer" });
 
         // SQL correlation reads the answered phase through the one request kind

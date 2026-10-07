@@ -123,7 +123,10 @@ export function joinMain(argv = Bun.argv.slice(2)): number {
   const identity = fingerprint(root, values.contract);
   const joined = joinShardDocuments(shardDocuments(resolve(values.shards ?? "")), identity);
   console.error(`[mutation] ${joined.summary}`);
-  if (!joined.complete) return 0;
+  if (!joined.complete) {
+    console.error("[mutation] incomplete campaign is a failure, not a skipped receipt");
+    return 1;
+  }
   mkdirSync(directory);
   writeFileSync(
     resolve(directory, "native.json"),

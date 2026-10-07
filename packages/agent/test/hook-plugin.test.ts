@@ -76,11 +76,13 @@ const scoped = <A, E>(body: (scope: Scope.Scope) => Effect.Effect<A, E>) =>
     return result;
   });
 
-/** Cooperative wait for a synchronously-observable condition; no clock involved. */
-const settledWhen = (condition: () => boolean) =>
-  Effect.gen(function* () {
-    while (!condition()) yield* Effect.yieldNow;
-  });
+/**
+ * Fork a call so it runs synchronously to its first suspension: the pending
+ * entry is registered and any TestClock timer armed when the fork returns —
+ * the exact-state guarantee the deleted polling loops approximated.
+ */
+const forkStarted = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.forkChild(effect, { startImmediately: true });
 
 test("the capability declares exactly one handler and no kind, point, input or tool", () => {
   const capability = hookCapability();
@@ -184,8 +186,8 @@ test("a nonresponsive script times out when the TestClock passes timeoutMs", () 
         const hook = yield* acquireHookProcess({ command: COMMAND }).pipe(
           Scope.provide(scope),
         );
-        const call = yield* Effect.forkChild(hook.call(request("silent", "silent", 5_000)));
-        yield* settledWhen(() => hook.inFlight() === 1);
+        const call = yield* forkStarted(hook.call(request("silent", "silent", 5_000)));
+        expect(hook.inFlight()).toBe(1);
         yield* TestClock.adjust(5_001);
         expect(yield* Fiber.join(call)).toEqual({
           kind: "failure",
@@ -207,8 +209,8 @@ test("rotation: one PID per generation and the old PID dies only after its last 
       // A full round-trip proves the child is up with its signal handler bound.
       expect(yield* oldHook.call(request("allow"))).toEqual({ kind: "gate", verdict: "allow" });
       // One turn is mid-call against the generation it captured.
-      const inFlightCall = yield* Effect.forkChild(oldHook.call(request("hold")));
-      yield* settledWhen(() => oldHook.inFlight() === 1);
+      const inFlightCall = yield* forkStarted(oldHook.call(request("hold")));
+      expect(oldHook.inFlight()).toBe(1);
       // M-1 (r3): `inFlight` only proves the parent wrote the request. The
       // child reads stdin in order, so a completed ack round-trip PROVES it
       // consumed the "hold" line before any SIGUSR2 can arrive.
@@ -349,8 +351,8 @@ test("M-1: one JSON line split at a chosen byte across two reader chunks decodes
         const hook = yield* acquireHookProcess({ command: ["./hook.sh"] }, () => child).pipe(
           Scope.provide(scope),
         );
-        const splitCall = yield* Effect.forkChild(hook.call(request("split", "split")));
-        yield* settledWhen(() => hook.inFlight() === 1);
+        const splitCall = yield* forkStarted(hook.call(request("split", "split")));
+        expect(hook.inFlight()).toBe(1);
         expect(yield* hook.call(request("flush", "flush"))).toEqual({
           kind: "gate",
           verdict: "allow",
@@ -373,8 +375,8 @@ test("H-3: a result settling after its timeout surfaces through the typed onLate
           command: COMMAND,
           onLate: (late) => resolveLate(late),
         }).pipe(Scope.provide(scope));
-        const call = yield* Effect.forkChild(hook.call(request("hold", "late-1", 5_000)));
-        yield* settledWhen(() => hook.inFlight() === 1);
+        const call = yield* forkStarted(hook.call(request("hold", "late-1", 5_000)));
+        expect(hook.inFlight()).toBe(1);
         yield* TestClock.adjust(5_001);
         // The call itself settled as the one timeout failure the gate folds to deny.
         expect(yield* Fiber.join(call)).toEqual({
@@ -414,19 +416,12 @@ test("H-3: the consultant routes a late result to seed.late with its CALL-time a
           late: (payload) => resolveLate(payload),
           cursor: () => ordinal,
         }).pipe(Scope.provide(scope));
-        const timedOutFiber = yield* Effect.forkChild(
+        // The fork runs to the call's suspension, arming its TestClock timer;
+        // one adjust fires it and the joined fiber IS the settlement.
+        const timedOutFiber = yield* forkStarted(
           consult({ rowId, point: "tool.pre", params, value: { op: "bash" } }),
         );
-        // Drive the TestClock until the forked call's timer registers and
-        // fires; the loop is bounded by the fiber settling, never wall time.
-        let settled = false;
-        yield* Effect.forkChild(
-          Fiber.join(timedOutFiber).pipe(Effect.ensuring(Effect.sync(() => { settled = true; }))),
-        );
-        while (!settled) {
-          yield* Effect.yieldNow;
-          yield* TestClock.adjust(251);
-        }
+        yield* TestClock.adjust(251);
         const timedOut = yield* Fiber.join(timedOutFiber);
         expect(timedOut).toEqual({
           verdict: "deny",
@@ -497,17 +492,11 @@ test("G-5: late rewrite and observe results route through seed.late as typed pay
         }).pipe(Scope.provide(scope));
         const timeOut = (event: string) =>
           Effect.gen(function* () {
-            const fiber = yield* Effect.forkChild(
+            // Fork to the timer's suspension, fire it, await the settlement.
+            const fiber = yield* forkStarted(
               consult({ rowId, point: "tool.pre", params: { ...params, event }, value: { op: "bash" } }),
             );
-            let settled = false;
-            yield* Effect.forkChild(
-              Fiber.join(fiber).pipe(Effect.ensuring(Effect.sync(() => { settled = true; }))),
-            );
-            while (!settled) {
-              yield* Effect.yieldNow;
-              yield* TestClock.adjust(251);
-            }
+            yield* TestClock.adjust(251);
             return yield* Fiber.join(fiber);
           });
         expect(yield* timeOut("hold-rewrite")).toMatchObject({ verdict: "deny" });
@@ -546,17 +535,11 @@ test("G-5: the late window evicts the oldest timed-out call; an evicted late rep
         }).pipe(Scope.provide(scope));
         const timeOut = () =>
           Effect.gen(function* () {
-            const fiber = yield* Effect.forkChild(
+            // Fork to the timer's suspension, fire it, await the settlement.
+            const fiber = yield* forkStarted(
               consult({ rowId, point: "tool.pre", params, value: { op: "bash" } }),
             );
-            let settled = false;
-            yield* Effect.forkChild(
-              Fiber.join(fiber).pipe(Effect.ensuring(Effect.sync(() => { settled = true; }))),
-            );
-            while (!settled) {
-              yield* Effect.yieldNow;
-              yield* TestClock.adjust(251);
-            }
+            yield* TestClock.adjust(251);
             return yield* Fiber.join(fiber);
           });
         expect(yield* timeOut()).toMatchObject({ verdict: "deny" });
@@ -636,8 +619,8 @@ test("H-2 (r3): an interrupted in-flight call cleans up; generation disposal com
         { command: ["./hook.sh"] },
         () => child,
       ).pipe(Scope.provide(scope));
-      const call = yield* Effect.forkChild(hook.call(request("silent")));
-      yield* settledWhen(() => hook.inFlight() === 1);
+      const call = yield* forkStarted(hook.call(request("silent")));
+      expect(hook.inFlight()).toBe(1);
       yield* Fiber.interrupt(call);
       // The interrupted call left NO pending entry behind.
       expect(hook.inFlight()).toBe(0);
