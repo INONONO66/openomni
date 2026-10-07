@@ -9,7 +9,6 @@ import {
 } from "@openomni/protocol";
 import { Effect } from "effect";
 import { z } from "zod";
-import { ActionCapabilitySeam } from "../seams";
 
 /**
  * The `delegation-policy` bundle (#1258): the caps on child-session creation
@@ -299,7 +298,7 @@ export function delegationPolicyBundle(): Bundle.BundleContract<
 > {
   return Bundle.define({
     name: "delegation-policy",
-    requires: [ActionCapabilitySeam, Bundle.AlarmSeam],
+    requires: [Bundle.ActionSeam, Bundle.AlarmSeam],
     rows: delegationRows(),
     handlers: {
       "delegation-policy/spawn-depth": spawnDepthGuard(UNBOUND_READS),
