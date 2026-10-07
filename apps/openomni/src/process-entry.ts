@@ -7,10 +7,11 @@ const closeSessions = Core.closeSessions;
 const createSessionRequests = Core.createSessionRequests;
 const createSessionEntityRunTurn = Core.createSessionEntityRunTurn;
 const currentExecutor = Core.currentExecutor;
-const decideSessionAdmission = Core.decideSessionAdmission;
 const AgentFailure = Core.AgentFailure;
 type AgentFailure = Core.AgentFailure;
 const adoptSessionAuthority = Core.adoptSessionAuthority;
+const SessionEntity = Core.SessionEntity;
+type SessionError = Core.SessionError;
 const receivedMessageAction = Core.receivedMessageAction;
 type SessionEntryServices = Core.SessionEntryServices;
 type SessionRuntime = Core.SessionRuntime;
@@ -26,7 +27,7 @@ import {
   toolPorts,
 } from "./gateway";
 import { AppInvariantError } from "./invariant";
-import { AppScope, type AppRuntime } from "./runtime";
+import { AppScope, SessionEntityBinding, type AppRuntime } from "./runtime";
 import { type Inbox, Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
@@ -200,8 +201,12 @@ export function serveProcessSession(
     requests: { ...channelRequests(requests), ...(answer === undefined ? {} : { answer: (input: SessionTransition.Answer) => Effect.tryPromise({ try: () => answer(input), catch: decodeChannelFailure("process.answer") }) }) },
     committed: (row) => committed([row.sessionId]),
   });
-  // The child's one-shot drain (the entity's backlog loop, minus the mailbox):
-  // adopt the fence once, then run admitted decisions until the chain says stop.
+  // The child's drain IS the entity's (#1308): bind the activation ports to
+  // the Resident's runner with an inline detach — the child owns the whole
+  // turn's lifetime, so the wake only acks after the backlog ran dry — then
+  // wake the session entity once with the entity-internal `rescan`
+  // occurrence. The entity owns fence rotation, consume folds and
+  // passivation arming; this function declares nothing twice.
   const resolved: Parameters<typeof createSessionEntityRunTurn>[1] = {
     ...runtime,
     clock: now,
@@ -210,51 +215,53 @@ export function serveProcessSession(
     generations,
     services: yield* Effect.context<SessionEntryServices>(),
   };
-  const kernel = plane.openKernel(request.sessionId);
-  const runTurn = createSessionEntityRunTurn(
-    resident.runnerFor(kernel.row(request.sessionId)),
-    resolved,
-    scope,
-  );
-  const drain = Effect.gen(function* () {
-    const fence = yield* adoptSessionAuthority(kernel, request.sessionId, owner).pipe(
-      Effect.mapError((error) => new AgentFailure({ operation: "process.adopt", cause: error._tag })),
-    );
-    const authority = { sessionId: request.sessionId, owner, fence };
-    for (;;) {
-      const row = kernel.row(request.sessionId);
-      const open = kernel.latestOpenTurn(request.sessionId);
-      const terminal = kernel.latestTurnTerminal(request.sessionId);
-      const snapshot = {
-        row,
-        pending: kernel.pendingMessages(request.sessionId),
-        ...(open === undefined ? {} : { open }),
-        ...(terminal === undefined ? {} : { terminal }),
-        // #1310: admission refuses a snapshot with no declared kinds; the
-        // child states the composed generation's kinds explicitly.
-        capabilityKinds: Object.keys(composed.current().generation.kinds),
-      };
-      const decision = decideSessionAdmission(snapshot);
-      switch (decision.kind) {
-        case "stop":
-        case "refused":
-          return;
-        case "consume":
-          // The consume fold (`<id>:delivery` records) is entity-owned; a child
-          // hitting it hands the backlog back to the parent's next activation.
-          console.error(`process drain deferred consume: ${request.sessionId}`);
-          return;
-        case "start":
-          // Inline detach: this drain owns the whole turn's lifetime itself.
-          yield* runTurn({ authority, kernel, decision: { kind: "start" }, snapshot, detach: (body) => body });
-          continue;
-        default:
-          yield* runTurn({ authority, kernel, decision, snapshot, detach: (body) => body });
-          continue;
-      }
-    }
+  // A turn refusal must end the child typed (non-zero exit), not vanish into
+  // an activation log: the first failure is recorded and surfaced after the
+  // wake. A failure that left the journal unmoved is a wiring defect and dies
+  // — the drain would otherwise re-admit the same decision forever.
+  let refused: SessionError | undefined;
+  const binding = yield* SessionEntityBinding;
+  binding.bind({
+    runTurn: (input) =>
+      Effect.suspend(() => {
+        const before = input.kernel.row(input.authority.sessionId).revision;
+        return createSessionEntityRunTurn(
+          resident.runnerFor(input.kernel.row(input.authority.sessionId)),
+          resolved,
+          scope,
+        )({ ...input, detach: (body) => body }).pipe(
+          Effect.catch((error) =>
+            input.kernel.row(input.authority.sessionId).revision === before
+              ? Effect.die(error)
+              : Effect.sync(() => {
+                  refused ??= error;
+                }),
+          ),
+        );
+      }),
+    get inputRegistrations(): readonly string[] {
+      return ["prompt", "signal", ...composed.current().generation.inputs];
+    },
+    get capabilityKinds(): readonly string[] {
+      return Object.keys(composed.current().generation.kinds);
+    },
   });
-  yield* drain.pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie)));
+  const entityClient = yield* SessionEntity.client;
+  const wake = entityClient(request.sessionId)
+    .Alarm({
+      occurrenceId: `${request.sessionId}:rescan:${entropy.id()}`,
+      purpose: "rescan",
+      alarmId: `${request.sessionId}:rescan`,
+      armSeq: 0,
+      sourceKey: "rescan",
+      payload: "{}",
+      fireAt: now(),
+    })
+    .pipe(
+      Effect.mapError((error) => new AgentFailure({ operation: "process.wake", cause: String(error) })),
+      Effect.andThen(Effect.suspend(() => (refused === undefined ? Effect.void : Effect.fail(refused)))),
+    );
+  yield* wake.pipe(Effect.ensuring(closeSessions(runtime).pipe(Effect.orDie)));
   });
 }
 

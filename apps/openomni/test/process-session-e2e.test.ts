@@ -262,11 +262,10 @@ test("process session drain stops without invoking a model when the session is i
   }
 });
 
-test("process session drain defers entity-owned resume consumption", async () => {
+test("process session drain consumes resume backlog through the entity fold", async () => {
   const fixture = messageFixture("resident");
   const plane = processPlane(fixture);
   const { runtime } = plane;
-  const deferred = spyOn(console, "error").mockImplementation(() => undefined);
   try {
     const kernel = fixture.plane.openKernel(fixture.sessionId);
     const initial = kernel.row(fixture.sessionId);
@@ -309,21 +308,18 @@ test("process session drain defers entity-owned resume consumption", async () =>
       serveProcessSession(
         processRequest(fixture.sessionId, plane),
         () => {
-          throw new Error("deferred consume must not commit a message");
+          throw new Error("an entity consume fold must not ring the inbox doorbell");
         },
         undefined,
         runtime,
       ),
     );
 
-    expect(deferred).toHaveBeenCalledWith(
-      `process drain deferred consume: ${fixture.sessionId}`,
-    );
-    expect(kernel.pendingMessages(fixture.sessionId).map((message) => message.id)).toEqual([
-      "resume-pending",
-    ]);
+    // #1308: the child routes through the session entity, whose backlog drain
+    // owns the consume fold — the resume is folded durably, not deferred.
+    expect(kernel.pendingMessages(fixture.sessionId)).toEqual([]);
+    expect(kernel.actionById("resume-pending:delivery")).toBeDefined();
   } finally {
-    deferred.mockRestore();
     await releaseProcess(fixture, runtime);
   }
 });
