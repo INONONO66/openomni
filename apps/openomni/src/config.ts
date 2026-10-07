@@ -123,11 +123,13 @@ export interface OpenOmniConfig {
   /** Owner-declared allowances for cold proactive sends; absent denies all. */
   readonly socialBudgets?: readonly Gateway.SocialBudget[];
   /**
-   * Bundle names the Owner turns off (#1255): the manifest's `off` list.
-   * Compose owns the cascade semantics; absent means every declared bundle
-   * is on.
+   * Names the Owner turns off (#1255, #1306): the manifest's `off` list.
+   * One key, one meaning — it accepts bundle names (`monitor`, `cron`) and
+   * capability names (`alarm`, `action`, `hook`, `compaction`, `tool`)
+   * alike; compose owns the cascade semantics and ignores names the
+   * manifest never declared. Absent means everything declared is on.
    */
-  readonly bundlesOff?: readonly string[];
+  readonly off?: readonly string[];
   /**
    * Path of the Owner's hooks JSON file (#1256, `OPENOMNI_HOOKS_PATH`).
    * Absent composes the hooks-json bundle with zero rows. The file is read
@@ -558,18 +560,19 @@ export function assertDeclaredChannelConfig(
 }
 
 /**
- * `OPENOMNI_BUNDLES_OFF` — JSON array of bundle names the Owner turns off:
+ * `OPENOMNI_BUNDLES_OFF` — JSON array of bundle or capability names the
+ * Owner turns off (#1306):
  *
- *     OPENOMNI_BUNDLES_OFF='["monitor"]'
+ *     OPENOMNI_BUNDLES_OFF='["monitor","hook"]'
  *
  * Unset or empty means everything the manifest declares is on. Validation is
  * fail-closed: a non-array or an empty name rejects the boot rather than
- * silently keeping a bundle the Owner meant to turn off.
+ * silently keeping something the Owner meant to turn off.
  */
-const BundlesOff = z.array(z.string().min(1));
+const OffNames = z.array(z.string().min(1));
 
-function bundlesOffFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["bundlesOff"] {
-  return parseEnvJson("OPENOMNI_BUNDLES_OFF", BundlesOff, env);
+function offFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["off"] {
+  return parseEnvJson("OPENOMNI_BUNDLES_OFF", OffNames, env);
 }
 
 function socialBudgetsFromEnv(env: Record<string, string | undefined>): OpenOmniConfig["socialBudgets"] {
@@ -684,7 +687,7 @@ export function loadConfig(
   const alarmSweep = alarmSweepFromEnv(env);
   const forkCopyByteCap = forkCopyByteCapFromEnv(env);
   const channelAllowedSenders = channelAllowedSendersFromEnv(env);
-  const bundlesOff = bundlesOffFromEnv(env);
+  const off = offFromEnv(env);
   const hooksPath = env.OPENOMNI_HOOKS_PATH?.trim() || undefined;
   return {
     ...resolveClusterStorage(
@@ -707,7 +710,7 @@ export function loadConfig(
     ...(actors === undefined ? {} : { actors }),
     ...(socialBudgets === undefined ? {} : { socialBudgets }),
     ...(channelAllowedSenders === undefined ? {} : { channelAllowedSenders }),
-    ...(bundlesOff === undefined ? {} : { bundlesOff }),
+    ...(off === undefined ? {} : { off }),
     ...(hooksPath === undefined ? {} : { hooksPath }),
   };
 }

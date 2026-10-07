@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Core } from "@openomni/agent";
+import { Bundle, Core } from "@openomni/agent";
 import { Effect, Result } from "effect";
 import {
   alarmChainReads,
@@ -16,7 +16,6 @@ import {
   watchFixture,
   withEntityAlarmPorts,
 } from "./helpers/watch-fixture";
-import { createWatchVerb } from "../../../packages/agent/src/plugins/alarm/watch";
 
 const OWNER = "alarm-plane-owner";
 const SESSION = "alarm-plane-session";
@@ -123,7 +122,7 @@ test("r4 H1: a watch continuation built under the old activation never commits t
   // Recovery retains the open turn id: BOTH activations own `persisted-turn`.
   const ownsPersisted = (turnId: string) => turnId === "persisted-turn";
   registry.onLive(SESSION, { arm: verbOf("occ-old"), ownsTurn: ownsPersisted });
-  const watch = createWatchVerb(registry.arm, {
+  const watch = Bundle.createWatchVerb(registry.arm, {
     install: ({ watchId }) =>
       Effect.sync(() => {
         installs.push(watchId);

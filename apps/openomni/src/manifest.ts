@@ -32,8 +32,10 @@ export const toolCapability = Bundle.Capability.define({
  * the manifest only composes it, so `off: ["action"]` still cascades `hook`,
  * `hooks-json` and `delegation-policy` off with `action` as the root.
  *
- * `off` comes from the Owner's `OPENOMNI_BUNDLES_OFF` tuple (`config.bundlesOff`);
- * compose owns the transitive off-cascade semantics.
+ * `off` comes from the Owner's `OPENOMNI_BUNDLES_OFF` tuple (`config.off`,
+ * #1306): capability names (`alarm`, `action`, `hook`, `compaction`, `tool`)
+ * and bundle names ride the same list; compose owns the transitive
+ * off-cascade semantics and ignores names the manifest never declared.
  */
 export interface AppManifestInput {
   /** The composed alarm capability's frozen `Capability.define` contract. */
@@ -42,7 +44,7 @@ export interface AppManifestInput {
   readonly wake: Bundle.WatchWakeDeps;
   /** The parsed hooks JSON config (#1256); absent composes zero hook rows. */
   readonly hooks?: HooksJsonInput;
-  /** Owner-configured off names; absent means everything declared is on. */
+  /** Owner-configured off names (capabilities and bundles); absent means everything declared is on. */
   readonly off?: readonly string[];
 }
 

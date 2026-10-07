@@ -288,7 +288,7 @@ test("a bundle off at boot composes out: no tool face, no bundle adoption, unkno
     config: suite.config("monitor-bundle-off-", {
       wsToken: TOKEN,
       compactionSummarizer: false,
-      bundlesOff: ["monitor"],
+      off: ["monitor"],
     }),
     llm: {
       resolveModel: fakeProviderModel,

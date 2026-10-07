@@ -322,7 +322,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       alarm: watchPlane.contract,
       wake: watchPlane.wake,
       ...(hooks === undefined ? {} : { hooks }),
-      ...(config.bundlesOff === undefined ? {} : { off: config.bundlesOff }),
+      ...(config.off === undefined ? {} : { off: config.off }),
     });
     const generation = Bundle.composeSync(manifest);
     const holder = composedHolderOf({ manifest, generation });
