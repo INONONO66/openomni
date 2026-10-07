@@ -15,6 +15,7 @@ import { z } from "zod";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { residentSuite } from "./helpers/resident-suite";
 import { auditBundle, composedHolder, ProviderRequest, providerResponse } from "./helpers/bundle-fixture";
+import { testToolsBundle } from "./helpers/app-fixture";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { eventSignal } from "./helpers/event-signal";
 import { Bus, newTraceId } from "./helpers/bus";
@@ -37,11 +38,12 @@ for (const enabled of [false, true]) test(`one AppLive bundle argument controls 
   suite.defer(() => provider.stop(true));
   const config = suite.config("app-observer-db-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
+  const echoTool = echo("echo", async (text) => text);
   const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir,
-    composed: composedHolder({ bundles: enabled ? [audit.contract] : [] }),
+    composed: composedHolder({ bundles: [...(enabled ? [audit.contract] : []), testToolsBundle([echoTool])] }),
     llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
-  const app = await suite.boot({ config, runtime, toolDefinitions: [echo("echo", async (text) => text)] });
+  const app = await suite.boot({ config, runtime });
   const plane = await planeOf(app.runtime);
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
   const reply = nextResidentTurn(plane);
@@ -93,10 +95,10 @@ test("a held WS generation keeps its catalog and transformer while public tools.
   suite.defer(() => provider.stop(true));
   const config = suite.config("app-bundle-swap-", { wsToken: "fixture", compactionSummarizer: false,
     model: { provider: "anthropic", id: "fixture", apiKey: "fixture", baseUrl: `http://127.0.0.1:${provider.port}/v1` } });
-  const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, composed: composedHolder({ bundles: [audit.contract, definition] }),
+  const runtime = gatewayRuntime({ observations: Bus, catalogPath: config.catalogPath, sessionsDir: config.sessionsDir, composed: composedHolder({ bundles: [audit.contract, definition, testToolsBundle([base])] }),
     llm: Layer.succeed(Llm, { run: (input, sink, dependencies) => run({ ...input, authFilePath: "/nonexistent/openomni-test/auth.json" }, sink, dependencies), resolveModel: () => Effect.succeed({ providerID: "anthropic", id: "fixture", name: "fixture", api: { npm: "@ai-sdk/anthropic" } }) }),
   });
-  const app = await suite.boot({ config, runtime, toolDefinitions: [base] });
+  const app = await suite.boot({ config, runtime });
   const plane = await planeOf(app.runtime);
   const ws = await suite.openSocket(`ws://127.0.0.1:${app.port}/ws?actor=owner`, ["auth", "fixture"]);
   const first = nextResidentTurn(plane);

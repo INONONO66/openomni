@@ -21,6 +21,7 @@ import { runEffect } from "./helpers/effect";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { waveTool } from "./helpers/session-wave";
+import { testToolsBundle } from "./helpers/app-fixture";
 import { nextFrame } from "./helpers/ws";
 import { approvalPolicy } from "./helpers/approval-policy";
 
@@ -92,7 +93,7 @@ test("live approval readiness notifies the facade and arms its deadline", async 
   let calls = 0;
   const running = await suite.boot({
     config: suite.config("index-live-approval-", { wsToken: "index-token" }),
-    toolDefinitions: [waveTool("B", async () => "approved")],
+    bundles: [testToolsBundle([waveTool("B", async () => "approved")])],
     sessionRuntime: { approvalTimeoutMs: 60_000 },
     llm: {
       resolveModel: fakeProviderModel,

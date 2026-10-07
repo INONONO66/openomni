@@ -11,7 +11,7 @@ const ToolRefused = Core.ToolRefused;
 type ChatAgentConfig = Core.ChatAgentConfig;
 type SessionRunner = Core.SessionRunner;
 type SessionRuntime = Core.SessionRuntime;
-import { traceIdFromUuid, type AnyToolDefinition, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
+import { traceIdFromUuid, type LedgerSession, type Model, type Tool } from "@openomni/protocol";
 import { chatProviderConfig } from "./composition/chat-provider";
 import type { ComposedContext } from "./composition/composed";
 import { pinnedModelSelection, restoreModelSelection } from "./composition/model-selection";
@@ -46,7 +46,6 @@ export interface ResidentOptions {
   readonly composed?: { readonly current: () => ComposedContext };
   readonly compaction?: Effect.Effect<NonNullable<ChatAgentConfig["compaction"]>,  never, import("@openomni/agent").Model.Llm | ObservationSink>;
   readonly tools: ToolPorts;
-  readonly toolDefinitions?: readonly AnyToolDefinition[];
   readonly sessionRuntime: SessionRuntime;
   /** The catalog's current policy generation; new sessions pin it at creation. */
   readonly policyGeneration: () => number;
@@ -62,14 +61,12 @@ export interface ResidentOptions {
 export function createResident(options: ResidentOptions) {
   const ports = options.tools;
   const catalog = catalogDefinitions(ports);
-  const definitionsFor = (role: LedgerSession.Role) => [
-    ...catalog.filter((tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role)),
-    ...(options.toolDefinitions ?? []),
-  ];
+  const definitionsFor = (role: LedgerSession.Role) =>
+    catalog.filter((tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role));
   const definitions: GenerationDefinitions = {
     resident: definitionsFor("resident"),
     worker: definitionsFor("worker"),
-    catalogLayer: (select) => toolCatalogLayer(ports, (tools) => select([...tools, ...(options.toolDefinitions ?? [])])),
+    catalogLayer: (select) => toolCatalogLayer(ports, select),
   };
   /**
    * The journaled tool faces of one role under the current composition

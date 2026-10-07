@@ -21,6 +21,8 @@ import { installShutdownHandlers } from "../src";
 const GenerationLayers = Core.GenerationLayers;
 import { AppLifecycleFailure } from "../src/runtime";
 import { allowConfigure } from "./helpers/generation-services";
+import { composedHolder } from "./helpers/bundle-fixture";
+import { testToolsBundle } from "./helpers/app-fixture";
 import { Bus } from "./helpers/bus";
 
 test("shutdown stops ingress before session cleanup and awaits cleanup before storage and exit", async () => {
@@ -104,10 +106,6 @@ test("a cleanup failure is an observed shutdown incident and cannot produce a su
 
 for (const settleAfterTurn of [false, true]) {
 test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfterTurn})`, async () => {
-  const runtime = gatewayRuntime({ observations: Bus, now: () => 1000 });
-  await runAppBoot(runtime, Effect.void);
-  const plane = await planeOf(runtime);
-  seedKernelPolicyRows(plane.catalog.policies);
   const entered = eventSignal<void>("raw tool entered");
   const interrupted = eventSignal<void>("raw tool interrupted");
   const raw = Promise.withResolvers<string>();
@@ -123,6 +121,10 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     },
     render: (_args, output) => output,
   }));
+  const runtime = gatewayRuntime({ observations: Bus, now: () => 1000, composed: composedHolder({ bundles: [testToolsBundle([tool])] }) });
+  await runAppBoot(runtime, Effect.void);
+  const plane = await planeOf(runtime);
+  seedKernelPolicyRows(plane.catalog.policies);
   const sessionRuntime: SessionRuntime = {
     authorizeConfigure: allowConfigure,
     openKernel: plane.openKernel,
@@ -134,7 +136,6 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
     model: { provider: "test", id: "test" },
     apiKey: "test",
     tools: { ...testToolPorts },
-    toolDefinitions: [tool],
     sessionRuntime,
     policyGeneration: () => plane.openKernel("shutdown-raw").currentPolicyGeneration(),
   });

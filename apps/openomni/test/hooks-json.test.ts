@@ -24,6 +24,7 @@ import { planeOf } from "./helpers/ledger";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { Bus } from "./helpers/bus";
+import { testToolsBundle } from "./helpers/app-fixture";
 import { nextFrame } from "./helpers/ws";
 import { z } from "zod";
 import { executionReads } from "../../../packages/agent/test/helpers/execution-reads";
@@ -1330,7 +1331,7 @@ test("H-2 e2e: an external PreToolUse rewrite reaches the REAL dispatched execut
   let residentSessionId: string | undefined;
   const app = await suite.boot({
     config,
-    toolDefinitions: [bashTool],
+    bundles: [testToolsBundle([bashTool])],
     llm: {
       resolveModel: fakeProviderModel,
       run: (input: RunInput, sink: Sink) =>
@@ -1496,7 +1497,7 @@ test("H-3(b) e2e: a real generation rotation mid-turn — the old turn keeps its
   });
   const app = await suite.boot({
     config,
-    toolDefinitions: [probeTool],
+    bundles: [testToolsBundle([probeTool])],
     llm: {
       resolveModel: fakeProviderModel,
       run: (input: RunInput, sink: Sink) =>

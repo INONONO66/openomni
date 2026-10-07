@@ -133,7 +133,6 @@ interface StartOptions {
     "closeGraceMs" | "approvalTimeoutMs" | "retryAlarm" | "openIntent" | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
-  readonly toolDefinitions?: readonly import("@openomni/protocol").AnyToolDefinition[];
 }
 
 /**
@@ -571,11 +570,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
         names: () => services.composed.current().manifest.bundles.map((bundle) => bundle.name),
         off: () => services.composed.current().manifest.off,
         set: async (off) => {
-          const manifest = appManifest({
-            alarm: watchPlane.contract,
-            wake: watchPlane.wake,
-            alarms: services.composed.alarms.current,
-            ...(hooks === undefined ? {} : { hooks }),
+          // #1308: recompose edits ONLY the off-list of the manifest the boot
+          // composed — the one root; a rebuilt declaration would silently drop
+          // bundles an injected holder (tests) declared beyond the product set.
+          const current = services.composed.current().manifest;
+          const manifest = Bundle.Manifest.define({
+            capabilities: [...current.capabilities],
+            bundles: [...current.bundles],
             off,
           });
           const generation = await runAppEffect(runtime, Bundle.compose(manifest));
@@ -679,7 +680,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
     // declaration executes against — injected holders (tests) bind here too.
     services.composed.alarms.bind(await createMonitorPorts(runtime, alarmPlane));
     const resident = createResident({
-      toolDefinitions: options.toolDefinitions,
       // #1257: the app's resolved cap is the input the composition writes
       // into every new session's genesis generation settings.
       forkCopyByteCap: resolveSessionFork(config).copyByteCap,
