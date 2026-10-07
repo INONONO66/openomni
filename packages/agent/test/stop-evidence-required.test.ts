@@ -8,7 +8,6 @@ import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { isolated } from "./helpers/isolated";
 import { createTestAgent } from "./helpers/effect-g3";
-import { runAgent } from "../src/core/turn";
 import type { ChatAgentConfig } from "../src/core/types";
 import { Bus } from "./helpers/bus";
 import { completeModel, mockLlm } from "./helpers/mock-llm";
@@ -20,9 +19,8 @@ test("runAgent without stopEvidence does not compile; the port has no runtime de
   const config = { model } as const;
   // @ts-expect-error — stopEvidence is required on ChatAgentConfig (#1310)
   const missing: ChatAgentConfig = config;
-  expect(missing.stopEvidence).toBeUndefined();
   // The loop itself is never reached here; the assertion is the type error.
-  expect(typeof runAgent).toBe("function");
+  expect(missing.stopEvidence).toBeUndefined();
 });
 
 test("a wired stopEvidence port is consulted by the turn's stop judgment", async () => {
