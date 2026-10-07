@@ -18,7 +18,9 @@ describe("evaluatePermission", () => {
     expect(
       evaluatePermission(
         { action: "tool.call", inputRules: [{ toolPattern: "*", field: "value", pattern: "x", action: "allow", priority: 1 }] },
-        { ...request("tool"), input: { value: () => "not JSON" } },
+        // The typed wire schema now refuses functions at parse time; the runtime
+        // evaluator must still fail closed on a value smuggled past the types.
+        { ...request("tool"), input: { value: (() => "not JSON") as never } },
       ),
     ).toMatchObject({ action: "abort", decision: "deny", reason: "unsafe_input_rule" });
   });

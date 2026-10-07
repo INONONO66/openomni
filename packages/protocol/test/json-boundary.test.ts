@@ -6,7 +6,8 @@ import {
   PlainObjectSchema,
   PlainValueSchema,
 } from "../src/index.js";
-import { CanonicalJsonError } from "../src/json.js";
+import { CanonicalJsonError, JsonShapedValueSchema } from "../src/json.js";
+import { PolicyPermission } from "../src/policy/permission.js";
 
 describe("plain JSON owner", () => {
   test("the typed key profile retains its established bytes", () => {
@@ -63,5 +64,46 @@ describe("plain JSON owner", () => {
     expect(canonicalDigest({ z: false, a: [2, "y"] })).toBe(
       "sha256:e53828d05df6b85481c1747214a1f672d2873303857ac4f335de3affe9ed8b50",
     );
+  });
+});
+
+describe("JSON-shaped wire boundary", () => {
+  test("rejects a function, a non-finite number, a Date, and undefined inside an array", () => {
+    for (const value of [
+      () => undefined,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      new Date(0),
+      [undefined],
+      { nested: { deep: [1, Number.NaN] } },
+    ]) {
+      const parsed = JsonShapedValueSchema.safeParse(value);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.message).toBe("Expected a JSON-shaped value");
+    }
+  });
+
+  test("accepts a nested record and keeps explicit undefined record slots expressible", () => {
+    const nested = { a: { b: [1, "two", null, { c: false }] }, d: "edge" };
+    expect(JsonShapedValueSchema.parse(nested)).toEqual(nested);
+    expect(JsonShapedValueSchema.safeParse({ omitted: undefined, kept: 1 }).success).toBe(true);
+  });
+
+  test("the policy evaluation request carries only JSON-shaped record fields", () => {
+    const base = { action: "tool.call", resource: "read" };
+    expect(
+      PolicyPermission.EvaluationRequest.safeParse({
+        ...base,
+        input: { path: "/tmp/x" },
+        actor: { id: "a-1" },
+        resourceMeta: { labels: ["secret"] },
+        metadata: { nested: { depth: 2 } },
+      }).success,
+    ).toBe(true);
+    for (const field of ["input", "actor", "resourceMeta", "metadata"]) {
+      expect(
+        PolicyPermission.EvaluationRequest.safeParse({ ...base, [field]: { bad: () => 1 } }).success,
+      ).toBe(false);
+    }
   });
 });

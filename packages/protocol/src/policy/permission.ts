@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { JsonShapedValueSchema } from "../json.js";
 
 export namespace PolicyPermission {
   const MAX_REGEX_PATTERN_LENGTH = 200;
@@ -46,10 +47,10 @@ export namespace PolicyPermission {
     action: z.string(),
     resource: z.string(),
     resourceLabels: z.array(z.string()).optional(),
-    input: z.record(z.string(), z.unknown()).optional(),
-    actor: z.record(z.string(), z.unknown()).optional(),
-    resourceMeta: z.record(z.string(), z.unknown()).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    input: z.record(z.string(), JsonShapedValueSchema).optional(),
+    actor: z.record(z.string(), JsonShapedValueSchema).optional(),
+    resourceMeta: z.record(z.string(), JsonShapedValueSchema).optional(),
+    metadata: z.record(z.string(), JsonShapedValueSchema).optional(),
   });
   export type EvaluationRequest = z.infer<typeof EvaluationRequest>;
 
