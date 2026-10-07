@@ -18,7 +18,7 @@ packages apps` prints nothing); tests seed the composed wake-budget row via
 `gateRowPolicySeeds` over the monitor bundle's rows.
 
 The process child is a transport into the same root: `ProcessSessionRequest`
-grew `hooksPath`/`bundlesOff`, the child rebuilds `config -> manifest ->
+grew `hooksPath`/`off` (the #1306 name), the child rebuilds `config -> manifest ->
 compose` and boots `gatewayRuntime` with the composed holder (its generation
 lists the five shipped bundles), and `process-entry.ts` holds no admission
 loop — it binds `SessionEntityBinding` (inline detach: the child owns the

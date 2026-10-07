@@ -58,7 +58,7 @@ export const ProcessSessionRequest = z
     model: Model.Ref,
     apiKey: z.string().min(1),
     hooksPath: z.string().min(1).optional(),
-    bundlesOff: z.array(z.string().min(1)).optional(),
+    off: z.array(z.string().min(1)).optional(),
     transport: z
       .object({
         baseUrl: z.string().optional(),
@@ -299,7 +299,7 @@ export async function runProcessEntry(io: {
       wake: watchPlane.wake,
       alarms: alarmsSlot.current,
       ...(hooks === undefined ? {} : { hooks }),
-      ...(request.bundlesOff === undefined ? {} : { off: request.bundlesOff }),
+      ...(request.off === undefined ? {} : { off: request.off }),
     });
     const composed = composedHolderOf({ manifest, generation: Bundle.composeSync(manifest) }, alarmsSlot);
     runtime = (io.gatewayRuntime ?? gatewayRuntime)({

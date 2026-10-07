@@ -791,7 +791,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
         apiKey: config.model.apiKey,
         ...(transport === undefined ? {} : { transport }),
         ...(config.hooksPath === undefined ? {} : { hooksPath: config.hooksPath }),
-        ...(config.bundlesOff === undefined ? {} : { bundlesOff: [...config.bundlesOff] }),
+        ...(config.off === undefined ? {} : { off: [...config.off] }),
       },
       committed: (ids) => {
         for (const id of ids) void wake(id);
