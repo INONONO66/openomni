@@ -16,7 +16,7 @@ export function foreign<A>(body: () => Promise<A>): Effect.Effect<A, Native.Mach
 export interface CodeRunner {
   readonly native?: Native.CodeRunner;
   runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>, signal: AbortSignal): Promise<Machine.CellResult>;
-  peekCode(cellId: string): Machine.CellOutput | undefined;
+  peekCode(cellId: string): Machine.CellOutput;
   close(): Promise<void>;
 }
 function nativeRunner(runner: CodeRunner): Native.CodeRunner {

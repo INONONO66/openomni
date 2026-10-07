@@ -66,7 +66,7 @@ function heldRunner() {
       if (request.cellId === "orphan") await release.promise;
       return { status: "completed", cellId: request.cellId, value: request.cellId, output: { stdout: "", stderr: "" } };
     },
-    peekCode: () => undefined,
+    peekCode: () => ({ stdout: "", stderr: "" }),
     close: async () => {
       closes += 1;
     },

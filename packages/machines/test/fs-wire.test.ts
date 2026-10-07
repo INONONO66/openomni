@@ -377,7 +377,7 @@ describe("daemon boundary cannot be bypassed by a rogue host", () => {
             cellId: request.cellId,
             output: { stdout: "", stderr: "" },
           }),
-          peekCode: () => undefined,
+          peekCode: () => ({ stdout: "", stderr: "" }),
           close: async () => {
             closed += 1;
           },

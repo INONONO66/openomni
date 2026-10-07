@@ -475,7 +475,14 @@ export const CancelCode = z.object({ cellId: z.string().min(1) }).strict();
 export const CancelResult = z.object({ cancelled: z.boolean() }).strict();
 /** Machine host → machine daemon: the output a live cell has produced so far. */
 export const PeekCode = z.object({ cellId: z.string().min(1) }).strict();
-export const PeekResult = z.object({ running: z.boolean(), output: CellOutput }).strict();
+/**
+ * `machine.peek_code` answer: the cell view, or a typed refusal when the
+ * daemon has no code runner at all (#1312) — never fabricated empty output.
+ */
+export const PeekResult = z.union([
+  z.object({ running: z.boolean(), output: CellOutput }).strict(),
+  z.object({ status: z.literal("refused"), reason: z.literal("kernel_not_available") }).strict(),
+]);
 
 /**
  * Computer use (#1274): bounded screen captures and guarded input actions.

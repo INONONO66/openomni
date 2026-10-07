@@ -19,7 +19,8 @@ import { createPtyAdapter } from "./pty";
 /** Injected native interpreter port; the acquiring app scope owns its execution. */
 export interface CodeRunner {
   runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>, signal: AbortSignal): Effect.Effect<Machine.CellResult, MachineError>;
-  peekCode(cellId: string): Machine.CellOutput | undefined;
+  /** Total: an unknown cell answers with the runner's own empty output. */
+  peekCode(cellId: string): Machine.CellOutput;
   close(): Effect.Effect<void, MachineError>;
 }
 /**
@@ -216,7 +217,10 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       return { cancelled: cell !== undefined };
     }
     function peekCode(request: z.infer<typeof Machine.PeekCode>): Machine.PeekResult {
-      return { running: cells.has(request.cellId), output: options.runner?.peekCode(request.cellId) ?? { stdout: "", stderr: "" } };
+      // #1312: no runner means no kernel to peek — a typed refusal, not
+      // fabricated empty output the caller could mistake for a real answer.
+      if (options.runner === undefined) return { status: "refused", reason: "kernel_not_available" };
+      return { running: cells.has(request.cellId), output: options.runner.peekCode(request.cellId) };
     }
     function callTool(call: Machine.ToolCall, timeoutMs: number): Effect.Effect<Machine.ToolCallResult, MachineError> {
       return Effect.suspend(() => {

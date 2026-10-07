@@ -112,7 +112,7 @@ test("failed attach rolls back the acquired daemon, runner and socket", async ()
       fsExports: new Map([["docs", "/tmp"]]),
       runner: {
         runCode: () => Effect.die("attach failure must not execute code"),
-        peekCode: () => undefined,
+        peekCode: () => ({ stdout: "", stderr: "" }),
         close: () => Effect.sync(() => { closeCount += 1; runnerClosed.resolve(); }),
       },
     })));
