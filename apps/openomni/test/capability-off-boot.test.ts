@@ -188,7 +188,7 @@ test.each([...ROWS])(
     const { app, plane } = await bootWithOff(`cap-off-${row.name}-`, row.off, toolsSeen);
     // 1. The compose configure row journals exactly the typed cascade.
     const composeAction = await composeRowOf(app);
-    const intent = composeAction.intent.value as { disabled?: unknown };
+    const intent = composeAction.intent.value as { disabled?: OffRow["disabled"] };
     expect(intent.disabled).toEqual(row.disabled);
     // 2. The removed surface is really gone from the adopted composition.
     const generation = await runAppEffect(
@@ -216,7 +216,7 @@ test.each([...ROWS])(
 test("a bundle and a capability ride one off list: each cascade keeps its own root", async () => {
   const toolsSeen: string[][] = [];
   const { app } = await bootWithOff("cap-off-mixed-", ["monitor", "hook"], toolsSeen);
-  const intent = (await composeRowOf(app)).intent.value as { disabled?: unknown };
+  const intent = (await composeRowOf(app)).intent.value as { disabled?: OffRow["disabled"] };
   expect(intent.disabled).toEqual([
     { name: "monitor", because: "monitor" },
     { name: "hook", because: "hook" },
