@@ -546,6 +546,8 @@ export interface ChainRow {
   readonly id: string;
   readonly kind: string;
   readonly ordinal: number;
+  /** Commit clock time of the action — the recorded fact's own timestamp. */
+  readonly ts: number;
   readonly prev_hash: string;
   readonly action_hash: string;
 }
@@ -563,7 +565,7 @@ export function readChain(file: string, sessionId: string): ChainRow[] {
   return withReadonly(file, (db) =>
     db
       .query<ChainRow, [string]>(
-        "SELECT id, kind, ordinal, prev_hash, action_hash FROM action WHERE session_id = ? ORDER BY ordinal ASC",
+        "SELECT id, kind, ordinal, ts, prev_hash, action_hash FROM action WHERE session_id = ? ORDER BY ordinal ASC",
       )
       .all(sessionId),
   );
@@ -642,19 +644,53 @@ export function sessionFence(catalogFile: string, sessionId: string): number | u
 }
 
 /**
- * Bounded DB/file observation poll — the one wait pattern W5.1 check2
- * sanctioned (review F8). Timeout is a failure guard, never a synchronizer.
+ * Bounded observation of state behind a third-party boundary (effect/cluster's
+ * message tables, SQLite WAL files) that exposes no event to subscribe to.
+ * The interval is an observation cadence, never a synchronizer: the test
+ * passes only when the exact predicate holds, and the timeout is a failure
+ * guard. For facts our own stores commit, subscribe with `completionSignal`
+ * and the `observationSink` option instead of calling this.
  */
-export async function waitUntil(
-  label: string,
-  check: () => boolean,
-  timeoutMs = 15_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting for: ${label}`);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
+export function waitUntil(label: string, check: () => boolean, timeoutMs = 15_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (check()) {
+      resolve();
+      return;
+    }
+    const expiresAt = Date.now() + timeoutMs;
+    const timer = setInterval(() => {
+      if (check()) {
+        clearInterval(timer);
+        resolve();
+      } else if (Date.now() > expiresAt) {
+        clearInterval(timer);
+        reject(new Error(`timed out waiting for: ${label}`));
+      }
+    }, 25);
+  });
+}
+
+/**
+ * #1254 r5 M1: completion signals replace polling. A signal is created BEFORE
+ * the seam that fires it is installed (a runner's entry callback / the store's
+ * post-commit observation sink) and resolved from that exact seam, so
+ * completion is subscribed, never polled.
+ */
+export function completionSignal(): { readonly done: Promise<void>; readonly fire: () => void } {
+  let resolveDone: () => void = () => undefined;
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve;
+  });
+  return { done, fire: () => resolveDone() };
+}
+
+/** Bounded await of one signal: the cap is a failure guard, never a synchronizer. */
+export function boundedAwait(label: string, done: Promise<void>, capMs = 15_000): Promise<void> {
+  let cap: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<never>((_, reject) => {
+    cap = setTimeout(() => reject(new Error(`timed out awaiting ${label}`)), capMs);
+  });
+  return Promise.race([done, guard]).finally(() => clearTimeout(cap));
 }
 
 /** True once the session file's WAL is gone: the activation finalizer closed it. */
