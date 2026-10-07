@@ -31,6 +31,7 @@ export {
   type ArmVerb,
 } from "../../core/api";
 export {
+  createWatchVerb,
   MONITOR_HIT,
   MONITOR_SOURCE,
   MONITOR_TIMEOUT,
