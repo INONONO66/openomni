@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createActorRegistry } from "../../../src/index.js";
-import { useMemoryStores } from "../../../../agent/test/store/helpers/storage";
+import { useMemoryChannelStore } from "../helpers/sqlite";
 
-const stores = useMemoryStores();
-const registry = () => createActorRegistry(stores.catalog);
+const stores = useMemoryChannelStore();
+const registry = () => createActorRegistry(stores.store);
 
 const T0 = 1_000;
 

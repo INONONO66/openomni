@@ -4,7 +4,7 @@
  */
 
 import { Channel, type Storage as ProtocolStorage } from "@openomni/protocol";
-import { requireSubAdapter } from "../storage/timestamped-store";
+import { requireSubAdapter } from "@openomni/agent";
 
 export function createSurfaceKeyStore(source: {
   readonly surfaceKey?: ProtocolStorage.SurfaceKeySubAdapter;

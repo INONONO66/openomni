@@ -5,12 +5,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { SessionIndexInsert, SessionIndexRow } from "../../../src/core/store/catalog";
 import { CATALOG_SCHEMA, openCatalogStore } from "../../../src/core/store/catalog";
+import { SessionNotFound, StorageUnavailable } from "../../../src/core/store/errors";
 import { testNow } from "../helpers/storage";
 import { expectBusyBeforeSchema, policyFixture } from "./store-fixtures";
 
 const PACKAGE_ROOT = resolve(import.meta.dir, "../../..");
 
-test("openCatalogStore bootstraps a fresh catalog: exactly the twelve catalog tables", () => {
+test("ledger error contracts are runtime values", () => {
+  expect(new SessionNotFound({ sessionId: "missing" })._tag).toBe("SessionNotFound");
+  expect(new StorageUnavailable({ capability: "sessions" })._tag).toBe("StorageUnavailable");
+});
+
+test("openCatalogStore bootstraps a fresh catalog: exactly the two agent-owned tables (#1317)", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
   const path = join(directory, "catalog.sqlite");
   const store = openCatalogStore(path, { now: testNow });
@@ -24,20 +30,7 @@ test("openCatalogStore bootstraps a fresh catalog: exactly the twelve catalog ta
              WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
           )
           .all(),
-      ).toEqual([
-        { name: "actor_endpoint" },
-        { name: "actor_identity" },
-        { name: "blacklist" },
-        { name: "channel_grant" },
-        { name: "channel_instance" },
-        { name: "egress_debit" },
-        { name: "person" },
-        { name: "policy" },
-        { name: "reply_grant" },
-        { name: "secret" },
-        { name: "session_index" },
-        { name: "surface_key" },
-      ]);
+      ).toEqual([{ name: "policy" }, { name: "session_index" }]);
     } finally {
       raw.close();
     }
@@ -154,9 +147,6 @@ test("catalog sub-adapters operate on the fresh catalog tables", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-store-"));
   const store = openCatalogStore(join(directory, "catalog.sqlite"), { now: testNow });
   try {
-    expect(store.surfaceKey.claim("surface:main", "s1")).toBe("s1");
-    expect(store.surfaceKey.lookup("surface:main")).toBe("s1");
-    expect(store.surfaceKey.listBySession("s1")).toEqual(["surface:main"]);
     expect(store.policies.append(policyFixture)).toBe(true);
     expect(store.policies.append(policyFixture)).toBe(false);
     expect(store.policies.rows()).toEqual([policyFixture]);

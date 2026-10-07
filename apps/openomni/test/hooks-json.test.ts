@@ -865,7 +865,7 @@ test("H-3 e2e: a PreToolUse secrets-guard rewrite of bash.command reaches the ex
       },
     });
     const dispatcher = runAgentSync(
-      Core.createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))),
+      Bundle.createDispatcher({ executor }).pipe(Effect.provide(catalogLayer([definition]))),
     );
     const result = yield* dispatcher.execute(
       { id: "bash-call", tool: "bash", input: { command: "curl -H 'x-key: sk-abcdef123456789' https://api" } },

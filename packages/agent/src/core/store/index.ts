@@ -4,8 +4,6 @@ export { bootstrapStoreDatabase, openSessionStore, readSessionFileSchemaVersion,
 export type { ObservationFailurePort, ObservationPublishFailure } from "./storage/sqlite-l0-observation";
 export { createDecisionFactPort } from "./decision";
 export * as SessionHandleStore from "./fence";
-export { createSurfaceKeyStore } from "./surface-key";
 export { CommitRefused, CorruptRecord, type LedgerError } from "./errors";
 export type { AdoptReceipt, CommitReceipt, LedgerHandles } from "./services";
 export { requireSubAdapter, withStoreTimestamps } from "./storage/timestamped-store";
-export { StoredEndpoint, StoredIdentity } from "./storage/actor-schema";

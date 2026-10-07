@@ -12,7 +12,8 @@ import { currentInvocation, forkInvocation, requireOpenInvocation, withInvocatio
 import type { ExecutionResult } from "../src/core/gate/decide";
 import { GenerationRawSlots, makeSessionGenerations, type GenerationBundle } from "../src/core/run";
 import { ObservationSink, SessionLayer, ToolCatalog } from "../src/core/ports";
-import { createTurnDispatcher, projectTools } from "../src/core/tool";
+import { projectTools } from "../src/core/tool";
+import { createTurnDispatcher } from "../src/plugins/tool";
 import { runAgent } from "./helpers/executor";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";

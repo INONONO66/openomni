@@ -1,10 +1,10 @@
 import { AppInvariantError } from "./invariant";
-import { Core } from "@openomni/agent";
+import { Bundle, Core } from "@openomni/agent";
 const ObservationSink = Core.ObservationSink;
 type ObservationSink = Core.ObservationSink;
 import { Effect } from "effect";
 const createSessionChatRunner = Core.createSessionChatRunner;
-const createTurnDispatcher = Core.createTurnDispatcher;
+const createTurnDispatcher = Bundle.createTurnDispatcher;
 const failureFacts = Core.failureFacts;
 const projectTools = Core.projectTools;
 const ToolRefused = Core.ToolRefused;

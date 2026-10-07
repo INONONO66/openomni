@@ -1,7 +1,7 @@
 // The single import target for capability plugins (#1276): re-exports exactly
 // the core ports and types the removable capability plugins consume. #1255
 // grows this into the core context handed to loaded capabilities.
-export type { ExecutionRequest } from "./gate/decide";
+export type { ExecutionRequest, Executor } from "./gate/decide";
 export {
   AgentFailure, AgentInvariantViolation, CompactionExecutionError, ContextRestoreError,
   type ExecutionError, pretty,
@@ -25,6 +25,22 @@ export { AlarmSeam } from "./alarm";
 export type { ConsultantSeed } from "./compose";
 export type { ConsultInput, NamedConsultant } from "./gate/registry";
 export type { GateHandlerResult } from "./gate/compose";
+// #1316 tool-dispatcher seam: exactly what `plugins/tool` needs to construct
+// dispatchers through the core gate — executor construction, the ambient
+// invocation store, the tool body boundary, the Dispatcher contract and the
+// catalog/session/generation ports the per-turn composition consumes.
+export {
+  activeInvocation, createExecutor, immutableInput, requireExecutor,
+  type DurableExecutor, type ExecutionApprovals, type ExecutionBatchResult,
+  type ExecutionLedger, type ExecutorOptions, type InvocationFrame, type RawToolSlots,
+} from "./gate/decide";
+export { GenerationOwnership, SessionLayer, ToolCatalog, type ProcessServices } from "./ports";
+export {
+  executeToolBody, projectTools, ToolBodyOutcome, ToolRefused,
+  type CellToolDispatchResult, type DispatchContext, type Dispatcher,
+  type DispatcherOptions, type ToolDispatchDefinition, type ToolDispatchResult,
+  type ToolErrorKind,
+} from "./tool";
 // #1307 compaction seam: the one contract the compaction plugin implements
 // and the kernel consumes; the plugin imports its core types from here.
 export {

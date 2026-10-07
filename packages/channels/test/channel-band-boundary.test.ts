@@ -10,6 +10,9 @@ const CHANNEL_ROOT = fileURLToPath(new URL("../src", import.meta.url));
 const DRIVER_ALLOWED_PACKAGES = new Set(["@openomni/protocol", "zod", "effect"]);
 const JUDGMENT_ALLOWED_PACKAGES = new Set(["@openomni/agent"]);
 const JUDGMENT_DIRS = ["src/router/", "src/authn/", "src/store/"] as const;
+// #1317: the channel-facing persistence band owns its SQLite adapters, so the
+// runtime's built-in driver is legal there — and only there.
+const SQLITE_BAND_DIR = "src/store/sqlite/";
 
 type ScannedSource = Readonly<{ path: string; text: string }>;
 
@@ -61,6 +64,7 @@ function isAllowed(specifier: string, path: string): boolean {
   if (specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("node:")) {
     return true;
   }
+  if (specifier === "bun:sqlite" && path.startsWith(SQLITE_BAND_DIR)) return true;
   const dependency = packageName(specifier);
   if (DRIVER_ALLOWED_PACKAGES.has(dependency)) return true;
   return (
@@ -97,6 +101,14 @@ describe("channels band import boundary", () => {
         { path: "src/websocket.ts", text: "const loaded = await import(moduleName);" },
       ]),
     ).toEqual(["src/websocket.ts: imports <non-literal dynamic import>"]);
+  });
+
+  test("rejects bun:sqlite outside the sqlite store band", () => {
+    expect(
+      detectBandViolations([
+        { path: "src/websocket.ts", text: 'import { Database } from "bun:sqlite";' },
+      ]),
+    ).toEqual(["src/websocket.ts: imports bun:sqlite"]);
   });
 
   test("rejects import-equals require from a driver", () => {

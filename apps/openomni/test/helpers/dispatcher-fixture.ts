@@ -1,5 +1,5 @@
-import { Core } from "@openomni/agent";
-const createDispatcher = Core.createDispatcher;
+import { Bundle, Core } from "@openomni/agent";
+const createDispatcher = Bundle.createDispatcher;
 const ToolCatalog = Core.ToolCatalog;
 import type { AnyToolDefinition } from "@openomni/protocol";
 import { Effect } from "effect";

@@ -6,12 +6,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createReplyGrantStore } from "../../../src/store/reply-grant/index.js";
-import { Core } from "@openomni/agent";
-const openCatalogStore = Core.openCatalogStore;
-import { createSqliteReplyGrantAdapter } from "../../../../agent/src/core/store/storage/sqlite-reply-grant-adapter";
-const bootstrapStoreDatabase = Core.bootstrapStoreDatabase;
-const CATALOG_SCHEMA = Core.CATALOG_SCHEMA;
-import { testNow } from "../../../../agent/test/store/helpers/storage";
+import { createSqliteReplyGrantAdapter } from "../../../src/store/sqlite/sqlite-reply-grant-adapter.js";
+import { applyChannelStoreSchema } from "../../../src/store/sqlite/schema.js";
+import { openTestChannelStore } from "../helpers/sqlite";
 import { z } from "zod";
 
 const ClosedMessage = z.tuple([
@@ -32,7 +29,7 @@ const grant = {
 function withClaimedGrant(check: (db: Database, store: ReturnType<typeof createSqliteReplyGrantAdapter>) => void): void {
   const db = new Database(":memory:");
   try {
-    bootstrapStoreDatabase(db, CATALOG_SCHEMA);
+    applyChannelStoreSchema(db);
     const store = createSqliteReplyGrantAdapter(db);
     store.claim(grant, { at: 1, maxLiveInstances: 1 });
     check(db, store);
@@ -45,7 +42,7 @@ describe("durable reply-grant current projection", () => {
   test("independent connections racing for one slot admit exactly one grant", async () => {
     const directory = mkdtempSync(join(tmpdir(), "reply-grant-race-"));
     const path = join(directory, "ledger.sqlite");
-    const adapter = openCatalogStore(path, { now: testNow });
+    const adapter = openTestChannelStore(path);
     const contenders: ChildProcess[] = [];
     const exits: Promise<[number | null, NodeJS.Signals | null]>[] = [];
     const signal = AbortSignal.timeout(10_000);
@@ -81,9 +78,9 @@ describe("durable reply-grant current projection", () => {
         ]),
       );
       expect(await Promise.all(exits)).toEqual(contenders.map(() => [0, null]));
-      const reopened = openCatalogStore(path, { now: testNow });
+      const reopened = openTestChannelStore(path);
       try {
-        expect(reopened.replyGrant.listLive(1)).toHaveLength(1);
+        expect(reopened.store.replyGrant.listLive(1)).toHaveLength(1);
       } finally {
         reopened.close();
       }
@@ -153,7 +150,7 @@ describe("durable reply-grant current projection", () => {
 
   test("malformed live rows fail closed at the persisted-data boundary", () => {
     using db = new Database(":memory:");
-    bootstrapStoreDatabase(db, CATALOG_SCHEMA);
+    applyChannelStoreSchema(db);
     const store = createSqliteReplyGrantAdapter(db);
     db.run(
       "INSERT INTO reply_grant VALUES ('bad', '{', 'rule-1', 'guest', 'telegram:chat-1', 100)",
@@ -182,7 +179,7 @@ describe("durable reply-grant current projection", () => {
   test("repeat contact preserves expiry while a later first contact reuses expired capacity", () => {
     const db = new Database(":memory:");
     try {
-      bootstrapStoreDatabase(db, CATALOG_SCHEMA);
+      applyChannelStoreSchema(db);
       const store = createSqliteReplyGrantAdapter(db);
       expect(store.claim(grant, { at: 1, maxLiveInstances: 1 })).toBe("claimed");
       expect(
@@ -214,14 +211,14 @@ describe("durable reply-grant current projection", () => {
 });
 
 describe("reply-grant store factory", () => {
-  test("delegates claim and listLive to the catalog sub-adapter", () => {
-    const catalog = openCatalogStore(":memory:", { now: testNow });
+  test("delegates claim and listLive to the channel-store sub-adapter", () => {
+    const opened = openTestChannelStore(":memory:");
     try {
-      const store = createReplyGrantStore(catalog);
+      const store = createReplyGrantStore(opened.store);
       expect(store.claim(grant, { at: 1, maxLiveInstances: 1 })).toBe("claimed");
       expect(store.listLive(50)).toEqual([grant]);
     } finally {
-      catalog.close();
+      opened.close();
     }
   });
 

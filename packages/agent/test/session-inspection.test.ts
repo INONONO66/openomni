@@ -15,7 +15,7 @@ import * as SessionHandleStore from "../src/core/store/fence";
 import { LlmRunFailure, type Run } from "../src/model";
 import { Alarm, L0Observation, type PolicyRow, type SessionHistory } from "@openomni/protocol";
 import { closeSessions, type SessionRunner } from "../src/core/run";
-import { createTurnDispatcher } from "../src/core/tool";
+import { createTurnDispatcher } from "../src/plugins/tool";
 import { resolveSessionRuntime } from "../src/core/run";
 import { createController } from "../src/testing/controller";
 import { commitReceivedMessage } from "./helpers/ingress";

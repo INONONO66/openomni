@@ -16,7 +16,7 @@ import { settleModelTools } from "../../../src/core/tool";
 import type { ObservedChatAgentConfig } from "../../../src/core/types";
 import { createRawSlots } from "../../../src/core/gate/decide";
 import { GenerationRawSlots } from "../../../src/core/run";
-import { createDispatcher } from "../../../src/core/tool";
+import { createDispatcher } from "../../../src/plugins/tool";
 import { executeToolBody } from "../../../src/core/tool";
 import { AgentFailure } from "../../../src/core/failure";
 

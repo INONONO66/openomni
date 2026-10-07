@@ -12,7 +12,8 @@ import { approveWriteRow, compiledPolicy } from "./helpers/compiled-policy";
 import { requestLedger } from "./helpers/effect-g1";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { z } from "zod";
-import { createDispatcher, defineTool } from "../src/core/tool";
+import { defineTool } from "../src/core/tool";
+import { createDispatcher } from "../src/plugins/tool";
 import { bounded } from "./helpers/bounded";
 
 const policy = compiledPolicy([approveWriteRow]);
