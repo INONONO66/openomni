@@ -95,6 +95,9 @@ describe("Machine.ScreenReadResult", () => {
       "invalid_region",
       "permission_denied",
       "capture_failed",
+      "spawn_failed",
+      "read_failed",
+      "probe_timeout",
     ] as const) {
       expect(Machine.ScreenReadResult.parse({ status: "refused", reason })).toEqual({
         status: "refused",
@@ -163,6 +166,8 @@ describe("Machine.InputWriteResult", () => {
       "permission_denied",
       "unsupported_action",
       "input_failed",
+      "spawn_failed",
+      "probe_timeout",
     ] as const) {
       expect(Machine.InputWriteResult.parse({ status: "refused", reason })).toEqual({
         status: "refused",
