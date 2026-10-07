@@ -4,7 +4,7 @@ const ObservationSink = Core.ObservationSink;
 import { Tool } from "@openomni/protocol";
 import { Effect, Layer } from "effect";
 import { z } from "zod";
-import { composedHolderOf, monitorPortsSlot, type ComposedHolder } from "../../src/composition/composed";
+import { composedHolderOf, alarmPortsSlot, type ComposedHolder } from "../../src/composition/composed";
 import { toolCapability } from "../../src/manifest";
 import { contentBlocks, messageEnd, messageStart, sseResponse } from "./anthropic-sse";
 
@@ -25,7 +25,7 @@ export function composedHolder(options: {
     off: options.off ?? [],
   });
   const generation = Bundle.composeSync(manifest);
-  return composedHolderOf({ manifest, generation }, monitorPortsSlot());
+  return composedHolderOf({ manifest, generation }, alarmPortsSlot());
 }
 
 export const ProviderRequest = z.object({

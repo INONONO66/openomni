@@ -13,7 +13,7 @@ import {
   SECRETS_GUARD_REF,
   secretsGuard,
 } from "../src/bundles/hooks-json";
-import { composedHolderOf, monitorPortsSlot } from "../src/composition/composed";
+import { composedHolderOf, alarmPortsSlot } from "../src/composition/composed";
 import { createWatchPlane } from "../src/composition/watch-plane";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { appManifest } from "../src/manifest";
@@ -434,7 +434,7 @@ async function offCascadeConfigureRows(prefix: string) {
   const holder = composedHolderOf({
     manifest: onManifest,
     generation: Bundle.composeSync(onManifest),
-  }, monitorPortsSlot());
+  }, alarmPortsSlot());
   let calls = 0;
   const runtime = gatewayRuntime({
     observations: Bus,

@@ -46,7 +46,7 @@ import { parentReply } from "./bundles/delegation-policy";
 import { createProcessReplyChannel } from "./composition/process-replies";
 import { appManifest } from "./manifest";
 import { createWatchPlane } from "./composition/watch-plane";
-import { composedHolderOf, monitorPortsSlot } from "./composition/composed";
+import { composedHolderOf, alarmPortsSlot } from "./composition/composed";
 import { readHooksJson } from "./bundles/hooks-json";
 
 export const ProcessSessionRequest = z
@@ -291,7 +291,7 @@ export async function runProcessEntry(io: {
     // (config -> manifest -> compose -> runtime): the request carries the
     // manifest inputs, never a tool list. A bad hooks file or a compose
     // refusal is the typed child-boot failure, before any work.
-    const alarmsSlot = monitorPortsSlot();
+    const alarmsSlot = alarmPortsSlot();
     const watchPlane = createWatchPlane();
     const hooks = request.hooksPath === undefined ? undefined : readHooksJson(request.hooksPath);
     const manifest = appManifest({

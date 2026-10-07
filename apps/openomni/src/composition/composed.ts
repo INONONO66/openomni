@@ -8,12 +8,12 @@ import type { MonitorPorts } from "../tools/core/watch";
  * time; boot calls `bind` once the runtime exists. Unbound calls are the
  * monitor tool's typed refusal, never a silent fallback.
  */
-export interface MonitorPortsSlot {
+export interface AlarmPortsSlot {
   readonly current: () => MonitorPorts | undefined;
   readonly bind: (ports: MonitorPorts) => void;
 }
 
-export function monitorPortsSlot(): MonitorPortsSlot {
+export function alarmPortsSlot(): AlarmPortsSlot {
   let ports: MonitorPorts | undefined;
   return {
     current: () => ports,
@@ -44,10 +44,10 @@ export interface ComposedHolder {
   readonly current: () => ComposedContext;
   readonly swap: (next: ComposedContext) => void;
   /** The monitor ports door (#1308): the slot the manifest's monitor bundle closed over. */
-  readonly alarms: MonitorPortsSlot;
+  readonly alarms: AlarmPortsSlot;
 }
 
-export function composedHolderOf(initial: ComposedContext, alarms: MonitorPortsSlot): ComposedHolder {
+export function composedHolderOf(initial: ComposedContext, alarms: AlarmPortsSlot): ComposedHolder {
   let current = initial;
   return {
     current: () => current,
