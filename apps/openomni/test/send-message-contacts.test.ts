@@ -184,7 +184,7 @@ test("composing the action capability off cascades delegation-policy off and dro
       watch: { install: () => Effect.void },
     }),
   );
-  const manifest = appManifest({ alarm: alarm.definition, wake: { close: () => undefined }, off: ["action"] });
+  const manifest = appManifest({ alarm: alarm.definition, wake: { close: () => undefined }, alarms: () => undefined, off: ["action"] });
   const generation = await runEffect(Bundle.compose(manifest));
   expect(generation.disabled).toContainEqual({ name: "delegation-policy", because: "action" });
   expect(generation.inputs).not.toContain("action");

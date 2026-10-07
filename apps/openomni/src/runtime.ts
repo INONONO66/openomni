@@ -22,7 +22,7 @@ import {
   type ClusterServices,
 } from "./composition/cluster-runtime";
 import { resolveAlarmDrain } from "./config";
-import { ComposedGeneration, composedHolderOf, emptyComposition } from "./composition/composed";
+import { ComposedGeneration, composedHolderOf, emptyComposition, monitorPortsSlot } from "./composition/composed";
 import { GenerationLayersLive, HookConsultClock } from "./composition/generation-layers";
 import { AppPointTable, composedPointTable } from "./composition/point-table";
 import { captureNow, platformEntropy, wallClockLayer } from "./composition/platform";
@@ -103,7 +103,7 @@ export interface AppRuntimeOptions {
 
 export function AppLive(options: AppRuntimeOptions) {
   const now = options.now === undefined ? captureNow : Effect.succeed(options.now);
-  const composed = options.composed ?? composedHolderOf(emptyComposition());
+  const composed = options.composed ?? composedHolderOf(emptyComposition(), monitorPortsSlot());
   return Layer.unwrap(Effect.map(now, (captured) => appLayer(options, Layer.succeed(ComposedGeneration, composed), captured)));
 }
 

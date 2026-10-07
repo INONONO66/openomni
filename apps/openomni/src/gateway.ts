@@ -127,7 +127,6 @@ export function toolPorts(
   const cells = ports.cells;
   const machines = ports.machines;
   return {
-    alarms: undefined,
     provisioning: undefined,
     clock: ports.now,
     id: ports.id,

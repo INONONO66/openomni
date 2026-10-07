@@ -59,7 +59,7 @@ export async function watchFixture(sessionId: string, owner: string): Promise<Wa
     closeAll: () => Promise.resolve(),
   };
   seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds({
-    rows: monitorBundle({ close: () => undefined }).rows,
+    rows: monitorBundle({ close: () => undefined }, () => undefined).rows,
     handlers: new Map(),
   }));
   const kernel = plane.openKernel(sessionId);

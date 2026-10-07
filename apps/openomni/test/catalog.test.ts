@@ -16,13 +16,17 @@ const toolSpec = (tool: AnyToolDefinition) => {
 };
 import type { AnyToolDefinition, PlainValue } from "@openomni/protocol";
 import { catalogDefinitions, type ToolPorts } from "../src/tools/core/catalog";
+import { createMonitorTool } from "../src/bundles/monitor";
 import type { LlmCall } from "../src/tools/completion";
 
 const ports: ToolPorts = {
-  alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
+  messages: undefined, machines: undefined, cells: undefined,
   llm: undefined, provisioning: undefined, clock: () => 0, id: () => "tool-id",
 };
-const definitions = catalogDefinitions(ports);
+const catalog = catalogDefinitions(ports);
+// #1308: `monitor` is the monitor bundle's ONE declaration; the sealed 12-tool
+// surface is the 11-factory catalog plus the bundle face, in catalog order.
+const definitions = [...catalog.slice(0, 8), Core.eraseTool(createMonitorTool(() => undefined)), ...catalog.slice(8)];
 
 /** KERNEL §3.4/§3.5: the sealed model door, in catalog order, then the one cell-only tool. */
 const MODEL_DOOR = [
@@ -115,6 +119,9 @@ describe("tool catalog", () => {
   });
   it("is sealed at eleven model-door tools plus the cell-only completion", () => {
     assertSealedNames(definitions);
+    // #1308: the catalog itself builds 11 factories; the bundle declares `monitor`.
+    expect(catalog.map((tool: AnyToolDefinition) => tool.name)).not.toContain("monitor");
+    expect(catalog).toHaveLength(11);
     expect(definitions.map(toolSpec).map((tool: ReturnType<typeof toolSpec>) => tool.name)).toEqual([...MODEL_DOOR, ...CELL_ONLY]);
     for (const tool of definitions) {
       expect(tool.visibility.model.length > 0).toBe(MODEL_DOOR.includes(tool.name));

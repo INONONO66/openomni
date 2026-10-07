@@ -31,6 +31,8 @@ import { join } from "node:path";
 import { runScriptMain } from "./main-runner";
 import { projectTools } from "../packages/agent/src/core/tool.js";
 import { catalogDefinitions, type ToolPorts } from "../apps/openomni/src/tools/core/catalog.js";
+import { createMonitorTool } from "../apps/openomni/src/bundles/monitor/index.js";
+import { eraseTool } from "../packages/agent/src/core/tool.js";
 import type { Tool, AnyToolDefinition, ToolCategory } from "../packages/protocol/src/tool/index.js";
 import type { PlainObject, PlainValue } from "../packages/protocol/src/json.js";
 import { z } from "zod";
@@ -39,10 +41,11 @@ import * as protocolExports from "../packages/protocol/src/index.js";
 
 // Schema inspection never executes ports; absent capabilities are explicit test doubles.
 const schemaPorts: ToolPorts = {
-  alarms: undefined, messages: undefined, machines: undefined, cells: undefined,
+  messages: undefined, machines: undefined, cells: undefined,
   llm: undefined, provisioning: undefined, clock: () => 0, id: () => "schema",
 };
-const definitions = catalogDefinitions(schemaPorts);
+// #1308: `monitor` is bundle-declared; the lint surface stays the full 12 tools.
+const definitions = [...catalogDefinitions(schemaPorts), eraseTool(createMonitorTool(() => undefined))];
 
 /**
  * The snapshot pins the FULL catalog surface, cell-only doors included:

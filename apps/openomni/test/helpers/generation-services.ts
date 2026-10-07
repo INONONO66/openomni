@@ -9,7 +9,7 @@ const LlmLive = Model.LlmLive;
 import type { AnyToolDefinition, LedgerSession } from "@openomni/protocol";
 import { Effect, Layer, Scope, type Context } from "effect";
 import { AppLedger, createAppLedger, type AppLedgerPlane } from "../../src/composition/cluster-runtime";
-import { ComposedGeneration, composedHolderOf, emptyComposition, type ComposedContext } from "../../src/composition/composed";
+import { ComposedGeneration, composedHolderOf, emptyComposition, monitorPortsSlot, type ComposedContext } from "../../src/composition/composed";
 import { GenerationLayersLive } from "../../src/composition/generation-layers";
 import { AppPointTable, composedPointTable } from "../../src/composition/point-table";
 import { wallClockLayer } from "../../src/composition/platform";
@@ -43,7 +43,7 @@ export function generationServices(options: {
       : options.plane;
     const process = Layer.mergeAll(
       AgentProcessLive(options.observations ?? Bus, testEntropy(options.entropy)),
-      Layer.succeed(ComposedGeneration, composedHolderOf(options.composed?.current() ?? composedEmpty)),
+      Layer.succeed(ComposedGeneration, composedHolderOf(options.composed?.current() ?? composedEmpty, monitorPortsSlot())),
       Layer.succeed(AppLedger, plane),
       Layer.succeed(AppPointTable, composedPointTable()),
       wallClockLayer(now),

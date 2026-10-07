@@ -98,7 +98,7 @@ import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
 import { createSessionForkExecutor } from "./composition/session-fork";
 import { alarmCapabilityView, createWatchPlane } from "./composition/watch-plane";
-import { ComposedGeneration, composedHolderOf } from "./composition/composed";
+import { ComposedGeneration, composedHolderOf, monitorPortsSlot } from "./composition/composed";
 import { appManifest } from "./manifest";
 import {
   acquireAppResource,
@@ -323,14 +323,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // here is the typed boot failure, thrown before any listener exists. An
   // injected runtime carries its own composed holder (tests).
   const composedRuntime = async (): Promise<AppRuntime> => {
+    // #1308: the monitor bundle's ONE live tool executes against this slot;
+    // boot binds it after the runtime exists, unbound calls refuse typed.
+    const alarmsSlot = monitorPortsSlot();
     const manifest = appManifest({
       alarm: watchPlane.contract,
       wake: watchPlane.wake,
+      alarms: alarmsSlot.current,
       ...(hooks === undefined ? {} : { hooks }),
       ...(config.off === undefined ? {} : { off: config.off }),
     });
     const generation = Bundle.composeSync(manifest);
-    const holder = composedHolderOf({ manifest, generation });
+    const holder = composedHolderOf({ manifest, generation }, alarmsSlot);
     return gatewayRuntime({
       // Cluster storage rides only on configs that resolved it (loadConfig
       // always does); injected literal test configs stay on the in-memory
@@ -570,6 +574,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           const manifest = appManifest({
             alarm: watchPlane.contract,
             wake: watchPlane.wake,
+            alarms: services.composed.alarms.current,
             ...(hooks === undefined ? {} : { hooks }),
             off,
           });
@@ -670,6 +675,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
     );
     watchPlane.bind(watchSources);
+    // #1308: bind the live alarm ports the monitor bundle's ONE tool
+    // declaration executes against — injected holders (tests) bind here too.
+    services.composed.alarms.bind(await createMonitorPorts(runtime, alarmPlane));
     const resident = createResident({
       toolDefinitions: options.toolDefinitions,
       // #1257: the app's resolved cap is the input the composition writes
@@ -680,7 +688,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       composed: { current: services.composed.current },
       tools: {
         ...tools,
-        alarms: await createMonitorPorts(runtime, alarmPlane),
         provisioning: provisioningPort,
         // #1258: a `to.new` send carrying `deadline_ms` arms the
         // delegation.deadline purpose through the live activation's arm verb.

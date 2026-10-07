@@ -1,5 +1,27 @@
 import { Bundle } from "@openomni/agent";
 import { Context } from "effect";
+import type { MonitorPorts } from "../tools/core/watch";
+
+/**
+ * The late-bound live alarm ports the monitor bundle's ONE tool declaration
+ * executes against (#1308): the manifest closes over `current` at compose
+ * time; boot calls `bind` once the runtime exists. Unbound calls are the
+ * monitor tool's typed refusal, never a silent fallback.
+ */
+export interface MonitorPortsSlot {
+  readonly current: () => MonitorPorts | undefined;
+  readonly bind: (ports: MonitorPorts) => void;
+}
+
+export function monitorPortsSlot(): MonitorPortsSlot {
+  let ports: MonitorPorts | undefined;
+  return {
+    current: () => ports,
+    bind: (next) => {
+      ports = next;
+    },
+  };
+}
 
 /**
  * The composed-generation seam (#1255 P3): boot runs `config → manifest →
@@ -21,15 +43,18 @@ export interface ComposedContext {
 export interface ComposedHolder {
   readonly current: () => ComposedContext;
   readonly swap: (next: ComposedContext) => void;
+  /** The monitor ports door (#1308): the slot the manifest's monitor bundle closed over. */
+  readonly alarms: MonitorPortsSlot;
 }
 
-export function composedHolderOf(initial: ComposedContext): ComposedHolder {
+export function composedHolderOf(initial: ComposedContext, alarms: MonitorPortsSlot): ComposedHolder {
   let current = initial;
   return {
     current: () => current,
     swap: (next) => {
       current = next;
     },
+    alarms,
   };
 }
 

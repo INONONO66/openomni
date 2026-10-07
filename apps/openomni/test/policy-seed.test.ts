@@ -16,7 +16,7 @@ import { testClock } from "./helpers/test-entropy";
 // #1308: the wake-budget seed is the composed bundle row, projected the same
 // way the boot seeds it (gateRowPolicySeeds over the composed generation).
 const monitorRows = gateRowPolicySeeds({
-  rows: monitorBundle({ close: () => undefined }).rows,
+  rows: monitorBundle({ close: () => undefined }, () => undefined).rows,
   handlers: new Map(),
 });
 

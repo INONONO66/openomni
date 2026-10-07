@@ -13,7 +13,7 @@ import {
   SECRETS_GUARD_REF,
   secretsGuard,
 } from "../src/bundles/hooks-json";
-import { composedHolderOf } from "../src/composition/composed";
+import { composedHolderOf, monitorPortsSlot } from "../src/composition/composed";
 import { createWatchPlane } from "../src/composition/watch-plane";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { appManifest } from "../src/manifest";
@@ -64,6 +64,7 @@ function composed(input?: {
       appManifest({
         alarm,
         wake: { close: () => undefined },
+        alarms: () => undefined,
         ...(input?.hooks === undefined ? {} : { hooks: input.hooks }),
         ...(input?.off === undefined ? {} : { off: input.off }),
       }),
@@ -427,12 +428,12 @@ async function offCascadeConfigureRows(prefix: string) {
   let counter = 0;
   const config = suite.config(prefix);
   const watch = createWatchPlane();
-  const onManifest = appManifest({ alarm: watch.contract, wake: watch.wake });
-  const offManifest = appManifest({ alarm: watch.contract, wake: watch.wake, off: ["hook"] });
+  const onManifest = appManifest({ alarm: watch.contract, wake: watch.wake, alarms: () => undefined });
+  const offManifest = appManifest({ alarm: watch.contract, wake: watch.wake, alarms: () => undefined, off: ["hook"] });
   const holder = composedHolderOf({
     manifest: onManifest,
     generation: Bundle.composeSync(onManifest),
-  });
+  }, monitorPortsSlot());
   let calls = 0;
   const runtime = gatewayRuntime({
     observations: Bus,

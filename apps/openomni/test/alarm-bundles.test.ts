@@ -193,7 +193,7 @@ test("cron.tick reports payload and expression faults as typed wake failures", a
 // ─── #1255 P2: the Bundle.define contracts the manifest composes ────────────
 
 test("monitorBundle declares the sealed tool face, the wake budget row and the watch purposes", () => {
-  const monitor = monitorBundle({ close: () => undefined });
+  const monitor = monitorBundle({ close: () => undefined }, () => undefined);
   expect(monitor.contract).toBe("bundle");
   expect(monitor.name).toBe("monitor");
   expect(monitor.requires.map((seam) => seam.key)).toEqual([
@@ -226,7 +226,7 @@ test("cronBundle declares the one cron.tick purpose and nothing else", () => {
 });
 
 test("the port-less monitor tool face refuses execution with a typed refusal", async () => {
-  const face = monitorBundle({ close: () => undefined }).tools[0];
+  const face = monitorBundle({ close: () => undefined }, () => undefined).tools[0];
   if (face === undefined) throw new Error("missing monitor tool face");
   const attempt = face.execute(
     { operation: { op: "cancel", id: "w-1" } },

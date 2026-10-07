@@ -2,7 +2,7 @@ import { Model, Bundle } from "@openomni/agent";
 const Llm = Model.Llm;
 const LlmLive = Model.LlmLive;
 import { type Clock, Context, Effect, Layer } from "effect";
-import { composedHolderOf, type ComposedHolder } from "../../src/composition/composed";
+import { composedHolderOf, monitorPortsSlot, type ComposedHolder } from "../../src/composition/composed";
 import { createWatchPlane } from "../../src/composition/watch-plane";
 import { gatewayRuntime } from "../../src/gateway";
 import { readHooksJson } from "../../src/bundles/hooks-json";
@@ -24,14 +24,17 @@ async function productComposedHolder(
   hooksPath?: string,
 ): Promise<ComposedHolder> {
   const plane = createWatchPlane();
+  // #1308: the boot binds the live monitor ports into this slot.
+  const alarms = monitorPortsSlot();
   const manifest = appManifest({
     alarm: plane.contract,
     wake: plane.wake,
+    alarms: alarms.current,
     ...(hooksPath === undefined ? {} : { hooks: readHooksJson(hooksPath) }),
     ...(off === undefined ? {} : { off }),
   });
   const generation = Bundle.composeSync(manifest);
-  return composedHolderOf({ manifest, generation });
+  return composedHolderOf({ manifest, generation }, alarms);
 }
 
 export type FixtureLlm = Context.Service.Shape<typeof Llm>;

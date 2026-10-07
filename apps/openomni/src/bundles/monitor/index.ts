@@ -79,7 +79,7 @@ const operation = z.discriminatedUnion("op", [
 // Like provision: an object root preserves the framework's model ABI.
 const input = z.object({ operation }).strict();
 
-export function createMonitorTool(ports: MonitorPorts | undefined) {
+export function createMonitorTool(alarms: () => MonitorPorts | undefined) {
   return defineTool({
     name: "monitor",
     category: "mutation",
@@ -91,6 +91,7 @@ export function createMonitorTool(ports: MonitorPorts | undefined) {
     sequential: true,
     async execute(request, context) {
       const args = request.operation;
+      const ports = alarms();
       if (ports === undefined) throw new ToolRefused("monitor", "alarm port unavailable");
       context.signal.throwIfAborted();
       if (args.op !== "create") {
@@ -139,6 +140,8 @@ export function monitorPurposes(deps: Bundle.WatchWakeDeps): Bundle.AlarmBundleP
 /** The `monitor` bundle contract (#1255 `Bundle.define`): tool face, wake budget row, purposes. */
 export function monitorBundle(
   deps: Bundle.WatchWakeDeps,
+  /** The live alarm ports, late-bound: boot binds them after the runtime exists (#1308). */
+  alarms: () => MonitorPorts | undefined,
 ): Bundle.BundleContract<"monitor", object, Bundle.AlarmPurposeHandler> {
   return Bundle.define({
     name: "monitor",
@@ -146,9 +149,9 @@ export function monitorBundle(
     // requires the tool capability's seam — `off: ["tool"]` cascades monitor
     // off instead of rejecting the row as `unknown_point`.
     requires: [Bundle.AlarmSeam, ToolCapabilitySeam],
-    // The declaration face; execution ports stay composition-wired until
-    // compose (#1255 S2) derives the generation tool table from the manifest.
-    tools: [Core.eraseTool(createMonitorTool(undefined))],
+    // #1308: the bundle is the ONE `monitor` declaration and it is live —
+    // the catalog no longer builds a competing copy.
+    tools: [Core.eraseTool(createMonitorTool(alarms))],
     rows: [MONITOR_WAKE_BUDGET_ROW],
     purposes: Object.fromEntries(
       Bundle.watchPurposes(deps).map((purpose) => [purpose.name, purpose.handler]),
