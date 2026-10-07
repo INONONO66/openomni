@@ -691,7 +691,6 @@ function handleStop(
   );
   if (yielded === "window" && (compacted === "none" || state.lastCompactionIneffective))
     disarmWindowYield(state);
-  // #1310: stop evidence is a required port — no empty-evidence fallback.
   const evidence = yield* config.stopEvidence();
   const judgment = yield* execution.judgeStop(state.stop, {
     ...evidence,

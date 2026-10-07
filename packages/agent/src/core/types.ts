@@ -34,9 +34,8 @@ type AgentToolSpec = Tool.Spec & {
 
 export interface ChatAgentConfig {
   /**
-   * The loop's stop-evidence port (#1310): REQUIRED. The turn consults it for
-   * progress/blocked/open-intent before judging a stop; there is no empty
-   * default — a caller that cannot answer must not compile.
+   * Required stop-evidence port: the turn consults it for progress, blocked,
+   * and open-intent state before judging a stop; it has no empty default.
    */
   stopEvidence: () => Effect.Effect<{
     readonly progress: boolean;

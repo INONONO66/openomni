@@ -1184,10 +1184,6 @@ function resultOf(exit: Exit.Exit<ExecutionResult, ExecutionError>, value: Sessi
 
 // ─── from session-chat-runner.ts (#1247) ───
 interface SessionChatRun {
-  /**
-   * The prepared loop config. `stopEvidence` is NOT prepared here (#1310):
-   * the durable runner owns it and always injects `input.stopEvidence`.
-   */
   readonly config: Omit<ChatAgentConfig, "stopEvidence"> & { readonly executor: Executor };
   readonly traceContext: TraceContext.Type;
   readonly around?: (operation: Effect.Effect<AgentResult, ExecutionError, RunnerServices>) => Effect.Effect<AgentResult, ExecutionError, RunnerServices>;
