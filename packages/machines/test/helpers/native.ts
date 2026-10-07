@@ -56,7 +56,7 @@ function machineHandle(native: Native.MachineHandle) {
 export type MachineHandle = ReturnType<typeof machineHandle>;
 export async function createMachineHost(options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool" | "id" | "dispatcherBound"> & { id?: () => string; dispatcherBound?: number; callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> }) {
   const callTool = options.callTool;
-  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), dispatcherBound: options.dispatcherBound ?? 64, callTool: callTool ? (call) => foreign(() => callTool(call)) : refusingToolPort }));
+  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), dispatcherBound: options.dispatcherBound ?? 256, callTool: callTool ? (call) => foreign(() => callTool(call)) : refusingToolPort }));
   const handles = new Map<string, MachineHandle>();
   return { native, list: native.list, endpoints: native.endpoints,
     get(id: string) { let handle = handles.get(id); if (!handle) { handle = machineHandle(native.get(id)); handles.set(id, handle); } return handle; },
@@ -69,7 +69,7 @@ type DaemonConnection =
   | Omit<Extract<NativeDaemonOptions, { socketPath: string }>, "runner" | "id" | "dispatcherBound">
   | Omit<Extract<NativeDaemonOptions, { tcp: { host: string; port: number } }>, "runner" | "id" | "dispatcherBound">;
 export async function attachMachineDaemon(options: DaemonConnection & { id?: () => string; dispatcherBound?: number; runner?: CodeRunner }) {
-  const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), dispatcherBound: options.dispatcherBound ?? 64, runner: options.runner ? nativeRunner(options.runner) : undefined }));
+  const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), dispatcherBound: options.dispatcherBound ?? 256, runner: options.runner ? nativeRunner(options.runner) : undefined }));
   return { native, get attachment() { return native.attachment; }, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
 }
 export function createFsDriver(...args: Parameters<typeof fsDriver>) {
