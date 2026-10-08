@@ -51,7 +51,7 @@ describe("journal kind census (#1252)", () => {
       "attempt",
       // Assembled like the alarm literals: the retired input-queue policy
       // token must stay greppable-to-zero (#1315).
-      ["in", "box"].join("") + ".deliver",
+      "inbox.deliver",
       "outbound",
       ...["paused", "arm", "fired"].map((suffix) => `alarm.${suffix}`),
       "notice",

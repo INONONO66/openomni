@@ -66,7 +66,7 @@ export function refineField(
 export function declare<Kind extends string>(
   kind: Kind,
   schema: z.ZodType,
-  version: number = 1,
+  version = 1,
 ): KindDeclaration<Kind> {
   return { kind, version, schema };
 }
