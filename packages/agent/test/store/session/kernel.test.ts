@@ -745,12 +745,14 @@ describe("session kernel commit query budget (#1314)", () => {
     ];
     const counts = { exists: 0, parent: 0 };
     const original = Database.prototype.query;
-    // Query spy (#1314 lead ruling): count the two exact validation
-    // statements; `validActionBatch` is their single call site per action.
+    // Query spy (#1314 lead ruling): count the two validation statements;
+    // `validActionBatch` is their single call site per action. Matched by
+    // pattern, not string equality (review r1 L1), so a rephrased second
+    // check cannot evade the count.
     const spy = function (this: Database, ...args: Parameters<typeof original>) {
       const sql = args[0];
-      if (sql === "SELECT 1 FROM action WHERE id = ?") counts.exists += 1;
-      else if (sql === "SELECT session_id FROM action WHERE id = ?") counts.parent += 1;
+      if (/SELECT 1 FROM action/.test(sql)) counts.exists += 1;
+      else if (/SELECT session_id FROM action/.test(sql)) counts.parent += 1;
       return original.apply(this, args);
     };
     Database.prototype.query = spy as typeof original;
