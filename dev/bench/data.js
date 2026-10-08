@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791466866810,
+  "lastUpdate": 1791482044251,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80707,6 +80707,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 94646,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d74fae5304b69356ba3cede6f7b2513cc4d791e9",
+          "message": "Project large tool output as identifiers with bounded previews under a budget (#1332)\n\n* feat(protocol): ToolOutputRef + toolOutputBudgetBytes setting (#1305)\n\n* feat(store): content-addressed tool_outputs table, kernel reads, fork copy under cap (#1305)\n\n* feat(core): bounded tool output projection replaces destructive truncation (#1305)\n\n* feat(read): Inspect.toolOutput, SessionRead outputRef, gateway projection surface (#1305)\n\n* feat(codemode): tool_output prelude helper rides a host op; app wires session-file read-back (#1305)\n\n* feat(bus): publish skips when no live subscriber holds interest; onPublish seam (#1305)\n\n* feat(config): OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES rides genesis settings (#1305)\n\n* docs: stamp #1305 bounded tool output projection; measured byte pairs (#1305)\n\n* fix(lint): drop stray duplicated projectValue; extract codemode host-op reader (#1305)\n\n* fix(test): typed test signatures satisfy the written-types gate (#1305)\n\n* fix(core): drop unused projectResultValue re-export from api.ts (#1305)\n\n* refactor(app): extract sessionOutputsSource for full patch coverage (#1305)\n\n* fix(protocol): keep the tool-output preview cap out of the barrel (#1305)\n\nscript/lint-tools.ts reads the protocol barrel as Record<string, object>, so a bare\nnumber export (TOOL_OUTPUT_PREVIEW_MAX_BYTES) failed check-types after the rebase. The\nsibling TOOL_RESULT_JSON_MAX_BYTES is already private to result.ts; the one consumer\n(tool.test.ts) imports the cap from result.js directly.\n\n* docs: drop the duplicated #1309 stamp left by the rebase; pin base 2dc31be78 (#1305)\n\n* fix(agent): track bus interest per event name so non-matching publishes drop (#1305 review M1)\n\n* test(codemode): drop the log-theater read-back print; assertions carry the evidence (#1305 review L2)\n\n* test(agent): validate outputRef with the shipped toolOutputRefSchema, not a hand-rolled mirror (#1305 review L4)\n\n* docs: call the measured pair the read-plane / row-event proxy, not the bus event (#1305 review L1)",
+          "timestamp": "2026-10-09T02:51:30+09:00",
+          "tree_id": "b90e392adc0cb3d63d2075b3d6ab4144b91cc093",
+          "url": "https://github.com/INONONO66/openomni/commit/d74fae5304b69356ba3cede6f7b2513cc4d791e9"
+        },
+        "date": 1791482043358,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 810,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1107,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1097670,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 326698,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5266517,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 122,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 865,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 559,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 126313,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 599531,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 365120,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2573,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9017782,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1084464,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 13809,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 127110,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 637973,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 178046,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 12429469,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 69,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 145939,
             "unit": "ns/op"
           }
         ]
