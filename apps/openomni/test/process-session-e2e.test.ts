@@ -451,9 +451,16 @@ test.each([
       (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
     );
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({
-      content: "PROCESS_SENTINEL",
-      origin: { value: { replyTo: "process-original", terminal: "completed" } },
+    // #1311: the settlement is the bounded DelegationResult envelope.
+    expect(received[0]?.origin.value).toMatchObject({
+      replyTo: "process-original",
+      terminal: "completed",
+      delivery: "followUp",
+    });
+    expect(Gateway.DelegationResult.parse(JSON.parse(received[0]?.content ?? ""))).toMatchObject({
+      status: "completed",
+      preview: "PROCESS_SENTINEL",
+      pointer: { session: child.id },
     });
     expect(
       sessionTree(child.id, fixture.plane.sessionStore(child.id).actions).filter(
@@ -644,10 +651,15 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     ),
   ).toBe(true);
   expect(replies).toHaveLength(1);
-  expect(replies[0]?.content).toBe("PROCESS_SENTINEL");
+  expect(Gateway.DelegationResult.parse(JSON.parse(replies[0]?.content ?? ""))).toMatchObject({
+    status: "completed",
+    preview: "PROCESS_SENTINEL",
+    pointer: { session: child.id },
+  });
   expect(replies[0]?.origin.value).toMatchObject({
     sourceSessionId: child.id,
     replyTo: "process-binding",
     terminal: "completed",
+    delivery: "followUp",
   });
 }, 60_000);
