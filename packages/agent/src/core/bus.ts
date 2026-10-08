@@ -65,6 +65,12 @@ export interface ObservationBusOptions {
   /** Composition-root time for scoped event stamps; never ambient. */
   readonly now: () => number;
   readonly onError?: FailureReporter;
+  /**
+   * #1305: the publication-decision seam. Called once per `publish` with
+   * whether the observation was enqueued; rung 16 (#1314) counts skipped
+   * publications without subscribing (which would create interest itself).
+   */
+  readonly onPublish?: (eventName: string, delivered: boolean) => void;
 }
 
 /** A callback subscriber threw: logged on the subscriber's own fiber, never the publisher's. */
@@ -90,7 +96,24 @@ export const makeObservationBus = (
       PubSub.shutdown,
     );
     const forkDrain = yield* FiberSet.makeRuntime<never, void, never>();
-    const observations = Effect.map(PubSub.subscribe(pubsub), Stream.fromSubscription);
+    // #1305: live-subscription interest. Every consumer — `observations`,
+    // `stream`, callback `subscribe` — acquires through this one gate, so the
+    // count is exact: incremented when a subscription is acquired, decremented
+    // by its finalizer in the consumer's own Scope.
+    let interest = 0;
+    const observations = Effect.map(
+      Effect.acquireRelease(
+        Effect.tap(PubSub.subscribe(pubsub), () =>
+          Effect.sync(() => {
+            interest += 1;
+          })),
+        () =>
+          Effect.sync(() => {
+            interest -= 1;
+          }),
+      ),
+      Stream.fromSubscription,
+    );
     const stream = <T>(
       event: BusEvent.Descriptor<T>,
       streamOptions?: { readonly match?: Partial<T> },
@@ -105,6 +128,13 @@ export const makeObservationBus = (
         ));
     const sink: SinkService = {
       publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
+        // #1305: no subscriber, no publication. A PubSub without
+        // subscriptions drops the value anyway, so skipping is semantically
+        // free — and a large payload is never copied onto a plane nobody
+        // drains. The lossy-synchronous contract is unchanged.
+        const delivered = interest > 0;
+        options.onPublish?.(event.name, delivered);
+        if (!delivered) return;
         PubSub.publishUnsafe(pubsub, {
           name: event.name,
           ...(event.visibility === undefined ? {} : { visibility: event.visibility }),
