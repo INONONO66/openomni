@@ -10,7 +10,7 @@ export type Dispatch = (task: Effect.Effect<void, IpcError>) => IpcQueueFullErro
 /** The acquiring app scope owns every callback task; socket callbacks never run a runtime. */
 /**
  * Bounded callback dispatcher (#1312): `bound` caps BOTH the queue depth and
- * the worker fan-out. Required, no default — the acquiring app composition
+ * the executor fan-out. Required, no default — the acquiring app composition
  * chooses the value (injection law).
  */
 export function makeDispatcher(options: { readonly bound: number }): Effect.Effect<Dispatch, never, Scope.Scope> {
