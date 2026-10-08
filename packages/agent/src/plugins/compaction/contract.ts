@@ -1,5 +1,4 @@
 import type { Message } from "@openomni/protocol";
-import type { CompactionYield } from "./geometry";
 import type { CompactionRecord } from "./durable";
 
 // #1307: the option/budget shapes are seam types the kernel reads from

@@ -232,9 +232,16 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(stdin.isPaused()).toBe(true);
     expect(stdin.listenerCount("data")).toBe(0);
-    expect(receivedMessages(fixture.plane, "sender").some(
-      (row) => row.content === "PROCESS_SENTINEL",
-    )).toBe(true);
+    // #1311: the settlement is the bounded DelegationResult envelope, not the raw reply.
+    const settled = receivedMessages(fixture.plane, "sender").filter(
+      (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
+    );
+    expect(settled).toHaveLength(1);
+    expect(Gateway.DelegationResult.parse(JSON.parse(settled[0]?.content ?? ""))).toMatchObject({
+      status: "completed",
+      preview: "PROCESS_SENTINEL",
+      pointer: { session: child.id },
+    });
   } finally {
     dispose.mockRestore();
     stdin.destroy();
@@ -451,9 +458,16 @@ test.each([
       (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
     );
     expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({
-      content: "PROCESS_SENTINEL",
-      origin: { value: { replyTo: "process-original", terminal: "completed" } },
+    // #1311: the settlement is the bounded DelegationResult envelope.
+    expect(received[0]?.origin.value).toMatchObject({
+      replyTo: "process-original",
+      terminal: "completed",
+      delivery: "followUp",
+    });
+    expect(Gateway.DelegationResult.parse(JSON.parse(received[0]?.content ?? ""))).toMatchObject({
+      status: "completed",
+      preview: "PROCESS_SENTINEL",
+      pointer: { session: child.id },
     });
     expect(
       sessionTree(child.id, fixture.plane.sessionStore(child.id).actions).filter(
@@ -564,13 +578,13 @@ test.each([
 });
 
 test("startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement", async () => {
-  const parentReply = Promise.withResolvers<void>();
+  const settlementDrained = Promise.withResolvers<void>();
   const timer = setTimeout(
-    () => parentReply.reject(new Error("process reply was not drained")),
+    () => settlementDrained.reject(new Error("process reply was not drained")),
     // Bounded, not timed: the child kernel boots ~10x slower under coverage instrumentation.
     60_000,
   );
-  const received = parentReply.promise.then(
+  const received = settlementDrained.promise.then(
     () => ({ ok: true }),
     (error: Error) => ({ ok: false, error }),
   );
@@ -578,7 +592,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
   suite.defer(
     Bus.subscribe(Gateway.MessageObserved, (event) => {
       if (event.kind === "message.drained" && event.messageId.endsWith(":reply"))
-        parentReply.resolve();
+        settlementDrained.resolve();
     }),
   );
   let requests = 0;
@@ -644,10 +658,15 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
     ),
   ).toBe(true);
   expect(replies).toHaveLength(1);
-  expect(replies[0]?.content).toBe("PROCESS_SENTINEL");
+  expect(Gateway.DelegationResult.parse(JSON.parse(replies[0]?.content ?? ""))).toMatchObject({
+    status: "completed",
+    preview: "PROCESS_SENTINEL",
+    pointer: { session: child.id },
+  });
   expect(replies[0]?.origin.value).toMatchObject({
     sourceSessionId: child.id,
     replyTo: "process-binding",
     terminal: "completed",
+    delivery: "followUp",
   });
 }, 60_000);

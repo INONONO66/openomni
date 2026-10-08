@@ -137,12 +137,16 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
       // redelivered commit resolves to the original seq. A typed refusal
       // (`unknown_kind | missing_key | closed | denied`) appends nothing.
       const control = input.kind === "interrupt" || input.kind === "resume" ? input.kind : undefined;
+      // #1311: the outbound message declares its consumption boundary (a child
+      // settlement rides `followUp`); the deliver body carries it explicitly.
+      const delivery = message?.delivery;
       const receipt = yield* entity
         .Deliver({
           kind: control === undefined ? input.kind : "signal",
           body: JSON.stringify({
             content: input.content,
             ...(control === undefined ? {} : { control }),
+            ...(delivery === undefined ? {} : { delivery }),
           }),
           source: JSON.stringify(input.origin.value),
           idempotencyKey: input.id,

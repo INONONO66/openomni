@@ -122,6 +122,8 @@ export namespace SessionTransition {
       replyTo: Id,
       terminal: z.enum(["completed", "error", "interrupted"]),
       content: z.string(),
+      /** Loop-consumption boundary the receiver folds the row at (#1311); absent folds to the `followUp` default. */
+      delivery: z.enum(["steer", "followUp"]).optional(),
       digest: Id,
     })
     .strict();

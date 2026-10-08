@@ -42,7 +42,7 @@ import { messageDecisionRules } from "./composition/message-decision";
 import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
-import { parentReply } from "./bundles/delegation-policy";
+import { settleChild } from "./bundles/delegation-policy";
 import { APPROVAL_POLICY } from "./bundles/approval-policy";
 import { createProcessReplyChannel } from "./composition/process-replies";
 import { appManifest } from "./manifest";
@@ -156,8 +156,8 @@ export function serveProcessSession(
       plane.openKernel,
     ),
     authorizeConfigure: configureAuthority(generations, plane.openKernel),
-    // #1276: product choice injected into the core seam (#1258 replaces it).
-    parentReply,
+    // #1311: the product settlement fold injected into the core seam.
+    settleChild,
   };
   const messages = {
     ingest: (...args: Parameters<ReturnType<typeof createGatewayRouter>["ingest"]>) =>

@@ -293,7 +293,7 @@ import {
   sessionFileFor,
 } from "../../../packages/agent/test/helpers/cluster-runtime";
 import { runAgent } from "../../../packages/agent/test/helpers/executor";
-import { parentReply } from "../src/bundles/delegation-policy";
+import { settleChild } from "../src/bundles/delegation-policy";
 
 const cluster = clusterTempDir("stale-entity-deliver-");
 afterAll(() => rmSync(cluster.dir, { recursive: true, force: true }));
@@ -439,7 +439,7 @@ test("H-3(a): a stale late-hook action through the REAL entity deliver door clos
         authorizeConfigure: allowConfigure,
         openKernel,
         listSessions: () => [],
-        parentReply,
+        settleChild,
       };
       const fixture = {
         ...runtime,

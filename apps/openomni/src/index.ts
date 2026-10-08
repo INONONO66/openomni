@@ -85,7 +85,7 @@ import { createMessageInboxCommit, prepareMessage } from "./composition/message-
 import { dispatchOutboundMessage } from "./composition/terminal-message";
 import {
   DELEGATION_DEADLINE,
-  parentReply,
+  settleChild,
   type DelegationDeadlineDeps,
 } from "./bundles/delegation-policy";
 import {
@@ -459,8 +459,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // #1255 S3: the product's composed manifest, adopted at each session's
       // next turn start. Late-bound: the resident below owns the tool faces.
       composed: { current: () => residentAdoption?.() },
-      // #1276: product choice injected into the core seam (#1258 replaces it).
-      parentReply,
+      // #1311: the product settlement fold injected into the core seam.
+      settleChild,
     };
     let residentAdoption: (() => Core.ComposedManifest | undefined) | undefined;
     // Request transitions never steal a live activation's fence: the borrowed

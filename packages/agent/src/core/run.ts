@@ -135,13 +135,12 @@ export interface SessionRuntime {
   /** Direct post-commit doorbells, independent of the lossy observation bus. */
   readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
   /**
-   * Composition-owned child-to-parent reply (#1276): the app injects
-   * `parentReply` (apps/openomni/src/bundles/delegation-policy). Called at turn
+   * Composition-owned child settlement (#1311): the app injects
+   * `settleChild` (apps/openomni/src/bundles/delegation-policy). Called at turn
    * seal; a returned message is committed as the child's outbound obligation.
-   * Absent = a sealing child never writes toward its parent. #1258 replaces
-   * this with the contact contract.
+   * Absent = a sealing child never writes toward its parent.
    */
-  readonly parentReply?: (
+  readonly settleChild?: (
     kernel: SessionKernel,
     row: LedgerSession.Row,
     terminal: LedgerAction.Append,
@@ -1166,7 +1165,16 @@ export function createSessionTurn(
         id: open.resultId, parentId: deliveries.at(-1)?.id ?? latest?.id ?? open.action.id,
         sessionId, turnId: open.turnId, result, resumeCount: open.resumeCount, boundaryActionId: open.boundaryActionId, at: clock(),
       });
-      const reply = runtime.parentReply?.(kernel, current, terminal, result);
+      // #1311: a child settles toward its parent exactly once — an existing
+      // settlement row (any prior seal's outbound obligation) skips the fold.
+      const settled =
+        current.parentId !== null &&
+        kernel
+          .outboundRows(sessionId)
+          .some((item) => item.message.destinationSessionId === current.parentId);
+      const reply = settled
+        ? undefined
+        : runtime.settleChild?.(kernel, current, terminal, result);
       yield* commitFoldBatch(kernel, {
         sessionId, owner, fence: state.fence, now: clock(), expectedRevision: current.revision,
         actions: [...deliveries, terminal, ...(reply === undefined ? [] : [outboundOpen(reply, terminal.ts)])],

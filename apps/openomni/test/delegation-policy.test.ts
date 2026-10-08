@@ -9,13 +9,17 @@
 import { expect, test } from "bun:test";
 import type { Bundle } from "@openomni/agent";
 import { Effect } from "effect";
+import type { Core } from "@openomni/agent";
+import { Gateway, Inbox, type LedgerAction, LedgerSession } from "@openomni/protocol";
 import {
   catalogDelegationReads,
   DEFAULT_DELEGATION_CAPS,
   DELEGATION_DEADLINE,
+  DelegationRefusal,
   delegationPolicyBundle,
   delegationPurposes,
   delegationRows,
+  settleChild,
   spawnChildrenGuard,
   spawnDepthGuard,
   spendCapGuard,
@@ -42,9 +46,15 @@ test("spawn_depth allows below the row limit and denies at it; a non-child send 
     verdict: "allow",
     payload: { cap: "spawn_depth", limit: 3, observed: 2 },
   });
+  const depthRefusal = { code: "delegation_refused", cap: "spawn_depth", limit: 3, observed: 3 };
   expect(spawnDepthGuard(reads({ depth: 3 })).decide({ value: NEW_SESSION, params: { limit: 3 }, when, service })).toEqual({
     verdict: "deny",
-    payload: { cap: "spawn_depth", limit: 3, observed: 3 },
+    payload: {
+      cap: "spawn_depth",
+      limit: 3,
+      observed: 3,
+      reason: JSON.stringify(depthRefusal),
+    },
   });
   expect(guard.decide({ value: { to: { kind: "session", id: "s" }, message: "hi" }, params: { limit: 3 }, when, service })).toEqual({
     verdict: "allow",
@@ -56,21 +66,40 @@ test("caps fail closed: an unknown session or a missing sessionId denies child c
   const unavailable = spawnDepthGuard(reads({}));
   expect(unavailable.decide({ value: NEW_SESSION, params: { limit: 3 }, when, service })).toEqual({
     verdict: "deny",
-    payload: { cap: "spawn_depth", limit: 3, reason: "catalog read unavailable" },
+    payload: {
+      cap: "spawn_depth",
+      limit: 3,
+      reason: JSON.stringify({ code: "delegation_refused", cap: "spawn_depth", limit: 3, reason: "catalog read unavailable" }),
+    },
   });
   expect(
     spawnChildrenGuard(reads({ children: 1 })).decide({ value: NEW_SESSION, params: null, when: { op: "send_message" }, service }),
   ).toEqual({
     verdict: "deny",
-    payload: { cap: "spawn_children", limit: DEFAULT_DELEGATION_CAPS.maxActiveChildren, reason: "catalog read unavailable" },
+    payload: {
+      cap: "spawn_children",
+      limit: DEFAULT_DELEGATION_CAPS.maxActiveChildren,
+      reason: JSON.stringify({
+        code: "delegation_refused",
+        cap: "spawn_children",
+        limit: DEFAULT_DELEGATION_CAPS.maxActiveChildren,
+        reason: "catalog read unavailable",
+      }),
+    },
   });
 });
 
 test("spawn_children denies the fifth concurrent child under the default cap", () => {
   const atCap = spawnChildrenGuard(reads({ children: 4 }));
+  const childrenRefusal = { code: "delegation_refused", cap: "spawn_children", limit: 4, observed: 4 };
   expect(atCap.decide({ value: NEW_SESSION, params: { limit: 4 }, when, service })).toEqual({
     verdict: "deny",
-    payload: { cap: "spawn_children", limit: 4, observed: 4 },
+    payload: {
+      cap: "spawn_children",
+      limit: 4,
+      observed: 4,
+      reason: JSON.stringify(childrenRefusal),
+    },
   });
   expect(spawnChildrenGuard(reads({ children: 3 })).decide({ value: NEW_SESSION, params: { limit: 4 }, when, service })).toEqual({
     verdict: "allow",
@@ -127,9 +156,15 @@ test("a finished child frees a spawn_children slot; a liveness read failure coun
   const decide = () =>
     guard.decide({ value: NEW_SESSION, params: null, when, service });
   // Four active children exhaust the cap.
+  const exhausted = { code: "delegation_refused", cap: "spawn_children", limit: 4, observed: 4 };
   expect(decide()).toEqual({
     verdict: "deny",
-    payload: { cap: "spawn_children", limit: 4, observed: 4 },
+    payload: {
+      cap: "spawn_children",
+      limit: 4,
+      observed: 4,
+      reason: JSON.stringify(exhausted),
+    },
   });
   // One child finishes -> the next request succeeds (issue edge case).
   finished.add("a");
@@ -243,4 +278,121 @@ test("a malformed payload or a refused cancel is the typed wake failure, never a
     ),
   ).rejects.toMatchObject({ reason: "entity door refused" });
   expect(prompts).toEqual([]);
+});
+
+// ─── #1311 typed refusal + settleChild ───
+
+test("a cap-denied creation carries the parseable delegation_refused payload for both caps", () => {
+  const denied = [
+    spawnDepthGuard(reads({ depth: 3 })).decide({ value: NEW_SESSION, params: { limit: 3 }, when, service }),
+    spawnChildrenGuard(reads({ children: 4 })).decide({ value: NEW_SESSION, params: { limit: 4 }, when, service }),
+  ];
+  const refusals = denied.map((decision) => {
+    expect(decision.verdict).toBe("deny");
+    const payload = decision.payload;
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload))
+      throw new Error("cap decision payload missing");
+    // The reason string IS the refusal: the consulted-guard seam carries it
+    // verbatim into the caller's ToolRefused, so the model reads it typed.
+    if (typeof payload.reason !== "string") throw new Error("cap refusal reason missing");
+    return DelegationRefusal.parse(JSON.parse(payload.reason));
+  });
+  expect(refusals).toEqual([
+    { code: "delegation_refused", cap: "spawn_depth", limit: 3, observed: 3 },
+    { code: "delegation_refused", cap: "spawn_children", limit: 4, observed: 4 },
+  ]);
+});
+
+function childRow(parentId: string | null): LedgerSession.Row {
+  return LedgerSession.Row.parse({
+    id: "child-1",
+    parentId,
+    role: "worker",
+    fenceOwner: "runtime",
+    fence: 1,
+    revision: 3,
+    state: "idle",
+  });
+}
+
+const TERMINAL: LedgerAction.Append = {
+  id: "terminal-1",
+  parentId: null,
+  sessionId: "child-1",
+  kind: "turn",
+  intent: { encodingVersion: 1, value: { phase: "intent" } },
+  effect: { encodingVersion: 1, value: { phase: "result" } },
+  ts: 500,
+  irreversible: true,
+};
+
+function settlementKernel(origin: Readonly<Record<string, string>>): Core.SessionKernel {
+  const row = Inbox.Row.parse({
+    id: "commission",
+    sessionId: "child-1",
+    kind: "prompt",
+    content: "work",
+    origin: { encodingVersion: 1, value: origin },
+    status: "pending",
+    consumedBy: null,
+    consumedAt: null,
+    createdAt: 100,
+    ordinal: 1,
+  });
+  const stub: Pick<Core.SessionKernel, "inputMessages"> = { inputMessages: () => [row] };
+  return stub as Core.SessionKernel;
+}
+
+const PARENT_ORIGIN = {
+  kind: "message",
+  messageId: "commission",
+  senderSessionId: "parent-1",
+  sourceActionId: "commission-action",
+};
+
+test("settleChild writes nothing for waiting and interrupted seals and for parentless sessions", () => {
+  const kernel = settlementKernel(PARENT_ORIGIN);
+  expect(
+    settleChild(kernel, childRow("parent-1"), TERMINAL, {
+      kind: "waiting",
+      reason: "live_wait",
+      alarmIds: [],
+      text: "",
+    }),
+  ).toBeUndefined();
+  expect(
+    settleChild(kernel, childRow("parent-1"), TERMINAL, { kind: "interrupted", text: "half" }),
+  ).toBeUndefined();
+  expect(
+    settleChild(kernel, childRow(null), TERMINAL, { kind: "result", text: "done" }),
+  ).toBeUndefined();
+});
+
+test("settleChild settles result and failed seals as a bounded DelegationResult with the child pointer", () => {
+  const kernel = settlementKernel(PARENT_ORIGIN);
+  const completed = settleChild(kernel, childRow("parent-1"), TERMINAL, {
+    kind: "result",
+    text: "x".repeat(5000),
+  });
+  if (completed === undefined) throw new Error("completed settlement missing");
+  expect(completed.delivery).toBe("followUp");
+  expect(completed.terminal).toBe("completed");
+  expect(completed.destinationSessionId).toBe("parent-1");
+  expect(completed.requestId).toBe("commission-action");
+  expect(completed.replyTo).toBe("commission");
+  const envelope = Gateway.DelegationResult.parse(JSON.parse(completed.content));
+  expect(envelope.status).toBe("completed");
+  expect(envelope.preview).toBe("x".repeat(4096));
+  expect(envelope.pointer).toEqual({ session: "child-1", action: "terminal-1" });
+  const failed = settleChild(kernel, childRow("parent-1"), TERMINAL, {
+    kind: "error",
+    text: "CHILD_FAILURE",
+  });
+  if (failed === undefined) throw new Error("failed settlement missing");
+  expect(failed.terminal).toBe("error");
+  expect(Gateway.DelegationResult.parse(JSON.parse(failed.content))).toEqual({
+    status: "failed",
+    preview: "CHILD_FAILURE",
+    pointer: { session: "child-1", action: "terminal-1" },
+  });
 });
