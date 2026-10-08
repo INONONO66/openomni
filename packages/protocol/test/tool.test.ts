@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { ZodError } from "zod";
-import { Tool, toolResultText, toolOutputRefSchema, TOOL_OUTPUT_PREVIEW_MAX_BYTES } from "../src/tool/index.js";
+import { Tool, toolResultText, toolOutputRefSchema } from "../src/tool/index.js";
+import { TOOL_OUTPUT_PREVIEW_MAX_BYTES } from "../src/tool/result.js";
 import type { PlainValue } from "../src/json.js";
 
 function expectInvalidState<State>(state: State): void {
