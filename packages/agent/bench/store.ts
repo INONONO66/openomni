@@ -1,11 +1,11 @@
 // Run with: bun run bench/index.ts
-import { Effect, Result } from "effect";
+import { Effect, Result, Stream } from "effect";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Bench } from "tinybench";
 import { L0Observation, type LedgerSession, type Message } from "@openomni/protocol";
-import { Bus } from "../test/store/helpers/observation";
 import { materializeSession } from "../test/store/helpers/session";
+import { makeObservationBus } from "../src/core/bus";
 import { openCatalogStore } from "../src/core/store/catalog";
 import { openSessionStore } from "../src/core/store/session-file";
 import * as SessionHandleStore from "../src/core/store/fence";
@@ -85,33 +85,53 @@ async function runSessionHydration(): Promise<void> {
   }
 }
 
+// #1314: the fanout benchmark measures the production observation bus — an
+// Effect PubSub built by `makeObservationBus` inside a Scope — not a test
+// substitute. Each subscription is acquired deterministically (`yield*`
+// registers interest before any publish), and each iteration awaits a
+// deferred settled by the N-th delivery: an exact signal, never a timer.
 async function runBusFanout(): Promise<void> {
   for (const count of [10, 50, 100]) {
-    const bench = new Bench(measurement);
-    let handled = 0;
-    try {
-      for (let index = 0; index < count; index += 1) {
-        Bus.subscribe(L0Observation.ActionCommittedEvent, () => {
-          handled += 1;
-        });
-      }
-      bench.add(`${count}-subscribers`, async () => {
-        const before = handled;
-        Bus.publish(L0Observation.ActionCommittedEvent, {
-          id: "fanout-configure",
-          sessionId: "fanout",
-          kind: "session.configure",
-          revision: 1,
-        });
-        // Bus dispatches the complete subscriber batch in its queued microtask.
-        await Promise.resolve();
-        if (handled - before !== count) throw new Error("incomplete benchmark fanout");
-      });
-      await bench.run();
-      recordResults("bus-fanout", bench);
-    } finally {
-      Bus.reset();
-    }
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let stamp = 0;
+          const bus = yield* makeObservationBus({
+            id: () => `bench-fanout-${++stamp}`,
+            now: () => 1_700_000_000_000,
+          });
+          let handled = 0;
+          let target = 0;
+          let settle: (() => void) | undefined;
+          for (let index = 0; index < count; index += 1) {
+            const deliveries = yield* bus.stream(L0Observation.ActionCommittedEvent);
+            yield* Effect.forkScoped(
+              Stream.runForEach(deliveries, () =>
+                Effect.sync(() => {
+                  handled += 1;
+                  if (handled === target) settle?.();
+                }),
+              ),
+            );
+          }
+          const bench = new Bench(measurement);
+          bench.add(`${count}-subscribers`, async () => {
+            const deferred = Promise.withResolvers<void>();
+            target = handled + count;
+            settle = deferred.resolve;
+            bus.sink.publish(L0Observation.ActionCommittedEvent, {
+              id: "fanout-configure",
+              sessionId: "fanout",
+              kind: "session.configure",
+              revision: 1,
+            });
+            await deferred.promise;
+          });
+          yield* Effect.promise(() => bench.run());
+          recordResults("bus-fanout", bench);
+        }),
+      ),
+    );
   }
 }
 
@@ -227,15 +247,11 @@ async function runSessionCommit(): Promise<void> {
   }
 }
 
-try {
-  await runSessionHydration();
-  await runBusFanout();
-  await runMessageSerialization();
-  await runStorageSessionList();
-  await runSessionTree();
-  await runSessionCommit();
-  mkdirSync("bench-results", { recursive: true });
-  await Bun.write(join("bench-results", "session.json"), `${JSON.stringify(results, null, 2)}\n`);
-} finally {
-  Bus.reset();
-}
+await runSessionHydration();
+await runBusFanout();
+await runMessageSerialization();
+await runStorageSessionList();
+await runSessionTree();
+await runSessionCommit();
+mkdirSync("bench-results", { recursive: true });
+await Bun.write(join("bench-results", "session.json"), `${JSON.stringify(results, null, 2)}\n`);
