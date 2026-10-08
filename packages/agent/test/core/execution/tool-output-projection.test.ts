@@ -8,16 +8,16 @@
 import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
 import { canonicalDigest, canonicalJson, type LedgerAction, type PlainValue } from "@openomni/protocol";
-import { useMemoryStores, testNow } from "./store/helpers/storage";
-import { materializeSession, adoptWriter } from "./store/helpers/session";
-import { testExecutor } from "./helpers/executor";
-import { allowAllPolicy } from "./helpers/compiled-policy";
-import { isolated } from "./helpers/isolated";
-import { toolOutput as inspectToolOutput } from "../src/inspect";
-import { configureAction } from "../src/core/store/fence";
-import { consumptionSettings } from "../src/core/commit";
-import { DEFAULT_TOOL_OUTPUT_BUDGET_BYTES } from "../src/core/tool-output";
-import type { ExecutionLedger } from "../src/core/gate/decide";
+import { useMemoryStores, testNow } from "../../store/helpers/storage";
+import { materializeSession, adoptWriter } from "../../store/helpers/session";
+import { testExecutor } from "../../helpers/executor";
+import { allowAllPolicy } from "../../helpers/compiled-policy";
+import { isolated } from "../../helpers/isolated";
+import { toolOutput as inspectToolOutput } from "../../../src/inspect";
+import { configureAction } from "../../../src/core/store/fence";
+import { consumptionSettings } from "../../../src/core/commit";
+import { DEFAULT_TOOL_OUTPUT_BUDGET_BYTES } from "../../../src/core/tool-output";
+import type { ExecutionLedger } from "../../../src/core/gate/decide";
 
 const SESSION = "projection-session";
 
@@ -25,14 +25,18 @@ const stores = useMemoryStores();
 
 let entropySeq = 0;
 
-function kernelLedger(authority: { sessionId: string; owner: string; fence: number }): ExecutionLedger {
-  return {
+function kernelLedger(
+  authority: { sessionId: string; owner: string; fence: number },
+  mode: "projecting" | "baseline" = "projecting",
+): ExecutionLedger {
+  const sessionId = authority.sessionId;
+  const base: ExecutionLedger = {
     commit: (action: LedgerAction.Append) =>
       Effect.suspend(() => {
-        const row = stores.kernel.row(SESSION);
+        const row = stores.kernel.row(sessionId);
         return stores.kernel
           .commit({
-            sessionId: SESSION,
+            sessionId,
             owner: authority.owner,
             fence: authority.fence,
             now: testNow(),
@@ -48,20 +52,27 @@ function kernelLedger(authority: { sessionId: string; owner: string; fence: numb
             }),
           );
       }),
-    resultFor: (id) => stores.kernel.resultFor(SESSION, id),
+    resultFor: (id) => stores.kernel.resultFor(sessionId, id),
+  };
+  if (mode === "baseline") return base;
+  return {
+    ...base,
     toolOutputBudgetBytes: () =>
-      consumptionSettings(stores.kernel, SESSION).toolOutputBudgetBytes ?? DEFAULT_TOOL_OUTPUT_BUDGET_BYTES,
+      consumptionSettings(stores.kernel, sessionId).toolOutputBudgetBytes ?? DEFAULT_TOOL_OUTPUT_BUDGET_BYTES,
     putToolOutput: (write) => stores.kernel.putToolOutput(write),
     toolOutput: (outputId) => stores.kernel.toolOutput(outputId),
   };
 }
 
-function toolExecutor(authority: { sessionId: string; owner: string; fence: number }) {
+function toolExecutor(
+  authority: { sessionId: string; owner: string; fence: number },
+  mode: "projecting" | "baseline" = "projecting",
+) {
   return testExecutor({
     policy: allowAllPolicy,
-    ledger: kernelLedger(authority),
+    ledger: kernelLedger(authority, mode),
     observations: { publish: () => undefined },
-    identity: { sessionId: SESSION, role: "resident", parentActionId: null },
+    identity: { sessionId: authority.sessionId, role: "resident", parentActionId: null },
     clock: testNow,
     entropy: () => `projection-${++entropySeq}`,
     random: () => 0,
@@ -74,11 +85,11 @@ function plainObject(value: PlainValue | undefined): Record<string, PlainValue> 
   return value;
 }
 
-function resultRows(): LedgerAction.Node[] {
+function resultRows(sessionId: string = SESSION): LedgerAction.Node[] {
   const rows: LedgerAction.Node[] = [];
   let afterRevision = 0;
   for (;;) {
-    const page = stores.kernel.historyPage(SESSION, { afterRevision, limit: 256 });
+    const page = stores.kernel.historyPage(sessionId, { afterRevision, limit: 256 });
     for (const action of page.actions) {
       if (action.kind !== "tool") continue;
       if (plainObject(action.effect.value).phase === "result") rows.push(action);
@@ -88,8 +99,12 @@ function resultRows(): LedgerAction.Node[] {
   }
 }
 
-function runTool(authority: { sessionId: string; owner: string; fence: number }, value: PlainValue) {
-  const executor = toolExecutor(authority);
+function runTool(
+  authority: { sessionId: string; owner: string; fence: number },
+  value: PlainValue,
+  mode: "projecting" | "baseline" = "projecting",
+) {
+  const executor = toolExecutor(authority, mode);
   return executor.run(
     { kind: "tool", op: "emit", intent: {}, effect: { category: "query" } },
     () => Effect.succeed(value),
@@ -102,8 +117,17 @@ describe("tool output projection through the durable gate (#1305)", () => {
       Effect.gen(function* () {
         materializeSession(stores.kernel, SESSION);
         const authority = adoptWriter(stores.kernel, SESSION);
+        // Baseline session: the same 1 MiB result through a ledger WITHOUT
+        // output ports — no projection — measured for the before/after pairs.
+        const BASELINE = "projection-baseline";
+        materializeSession(stores.kernel, BASELINE);
+        const baselineAuthority = adoptWriter(stores.kernel, BASELINE);
         const bigText = "m".repeat(1_048_576);
         const value: PlainValue = { status: "ok", output: bigText };
+        const baseline = yield* runTool(baselineAuthority, value, "baseline");
+        expect(baseline.terminal).toBe("executed");
+        const baselineRow = resultRows(BASELINE).at(-1);
+        if (baselineRow === undefined) throw new Error("missing baseline row");
         const outcome = yield* runTool(authority, value);
         expect(outcome.terminal).toBe("executed");
         if (outcome.terminal !== "executed") throw new Error("not executed");
@@ -114,11 +138,17 @@ describe("tool output projection through the durable gate (#1305)", () => {
         if (row === undefined) throw new Error("missing result row");
         const effect = plainObject(row.effect.value);
         // The committed row is bounded: well under the budget, never 1 MiB.
-        const beforeBytes = Buffer.byteLength(canonicalJson(value), "utf8");
+        const beforeBytes = Buffer.byteLength(canonicalJson(baselineRow.effect.value), "utf8");
         const afterBytes = Buffer.byteLength(canonicalJson(row.effect.value), "utf8");
-        // #1305 evidence: the measured row bytes before/after projection.
+        // The read-plane event (one serialized history-page action node) is
+        // what a page/stream consumer receives for this row.
+        const eventBefore = Buffer.byteLength(JSON.stringify(baselineRow), "utf8");
+        const eventAfter = Buffer.byteLength(JSON.stringify(row), "utf8");
+        // #1305 evidence: the measured byte pairs the PR quotes.
         console.log(`row bytes before projection: ${beforeBytes}; after: ${afterBytes}`);
+        console.log(`event bytes before projection: ${eventBefore}; after: ${eventAfter}`);
         expect(afterBytes).toBeLessThan(DEFAULT_TOOL_OUTPUT_BUDGET_BYTES);
+        expect(eventAfter).toBeLessThan(eventBefore);
         // Replay identity: resultHash stays the digest of the FULL value.
         expect(effect.resultHash).toBe(canonicalDigest(value));
         const ref = plainObject(plainObject(effect.result).outputRef);

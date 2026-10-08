@@ -1,5 +1,41 @@
 # Implementation Status
 
+## #1305 bounded tool output projection (epic #1303, rung 15)
+
+On `stab/15-bounded-tool-output-projection` (2026-10-08, base `0373ed38c`).
+
+- Protocol: `ToolOutputRef`/`toolOutputRefSchema()` + `TOOL_OUTPUT_PREVIEW_MAX_BYTES`
+  in `packages/protocol/src/tool/result.ts` (Effect-free: `rg -c 'from "effect"'
+  packages/protocol/src/tool/result.ts` -> no output); `Settings` gains optional
+  `toolOutputBudgetBytes`.
+- Store: `tool_outputs` table (output_id PK, bytes, media_type) in the session
+  file; `SessionStore.toolOutputs.put` is INSERT OR IGNORE (identical bytes
+  store once); fork copies only referenced outputs inside the same child
+  transaction and counts their bytes against `forkCopyByteCap`.
+- Core: `projectToolOutput`/`projectResultValue` in `core/tool-output.ts`
+  replace the deleted `truncate`/`MODEL_OUTPUT_MAX_CHARS`
+  (`rg -c 'MODEL_OUTPUT_MAX_CHARS|bytes dropped|function truncate' -g '*.ts'
+  packages apps` -> no output; base counts 4/6/1); the gate projects the
+  committed `result` to `{outputRef}` while `resultHash` stays the full-value
+  digest and `revert` survives beside the ref; the dispatcher renders
+  preview + `[output <id>: <n> bytes; read with tool_output("<id>")]`.
+- Readers: `Inspect.toolOutput` (typed `unknown_output`), optional `outputRef`
+  on `session_read` page action rows, and the codemode prelude
+  `tool_output(output_id)` over a host op (`CodemodeOptions.toolOutput`) - the
+  12-factory catalog stays sealed, no new journal kind.
+- Bus: `publish` skips `publishUnsafe` when no subscriber holds interest;
+  `onPublish(eventName, delivered)` seam for rung 16 measurement
+  (`packages/agent/test/core/bus.test.ts` zero-publication case).
+- Config: `OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES` -> `resolveToolOutput` ->
+  genesis `session.configure{settings.toolOutputBudgetBytes}`
+  (`apps/openomni/test/tool-output-budget.test.ts` through the shipped
+  composition).
+- Measured (1 MiB fixture, `packages/agent/test/core/execution/tool-output-projection.test.ts`):
+  row bytes before projection 1048770, after 16617; event bytes before
+  1049184, after 17030; the stored bytes read back whole through
+  `Inspect.toolOutput` and the codemode `tool_output` (1048576 bytes).
+- Kept reader: `rg -c 'toolResultText' -g '*.ts' packages apps` sums to 23.
+
 ## #1309 executable product policy moved into app bundles behind seams (epic #1303, rung 9)
 
 On `stab/9-core-policy-to-bundles` (2026-10-08, base `c11ae7148`).
