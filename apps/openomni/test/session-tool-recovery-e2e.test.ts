@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { Effect } from "effect";
 import { allowConfigure, generationServices } from "./helpers/generation-services";
@@ -130,6 +131,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     const plane = createAppLedger({ now: testClock(), catalogPath, sessionsDir, observationSink: observations });
     planeRef.current = plane;
     const runtime: SessionRuntime = {
+      approvalPolicy: APPROVAL_POLICY,
       authorizeConfigure: allowConfigure,
       openKernel: plane.openKernel,
       listSessions: plane.listSessions,
@@ -171,6 +173,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
           traceContext: { traceId: "recovery", sessionId, runId: input.resultId },
           config: {
             executor: dispatcher.executor,
+            defaultBudget: APPROVAL_POLICY.defaultBudget,
             tools: [...dispatcher.specs],
             toolWave: (calls, signal) =>
               dispatcher.executeWave(calls, { sessionId, turnId: input.turnId, signal }),
@@ -237,6 +240,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         // drain adopts a higher fence and settles the open turn from evidence.
         expect(crashPlane.openKernel(sessionId).row(sessionId).fenceOwner).not.toBeNull();
         const crashRuntime: SessionRuntime = {
+          approvalPolicy: APPROVAL_POLICY,
           authorizeConfigure: allowConfigure,
           openKernel: crashPlane.openKernel,
           listSessions: crashPlane.listSessions,

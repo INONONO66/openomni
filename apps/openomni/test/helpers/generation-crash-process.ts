@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../../src/bundles/approval-policy";
 import { Core, Testing } from "@openomni/agent";
 const GenerationLayers = Core.GenerationLayers;
 const session = Testing.session;
@@ -28,7 +29,7 @@ await acquireAppResource(runtime, Effect.gen(function* () {
   const held = yield* Deferred.make<void>();
   const handle = yield* session({ id: "crash-session", role: "resident", bundles: ["audit-log"],
     runner: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(held)), Effect.as({ kind: "result" as const, text: "unused" })),
-  }, { authorizeConfigure: allowConfigure, openKernel: plane.openKernel, listSessions: plane.listSessions });
+  }, { approvalPolicy: APPROVAL_POLICY, authorizeConfigure: allowConfigure, openKernel: plane.openKernel, listSessions: plane.listSessions });
   yield* Effect.forkIn(handle.prompt("hold g1"), yield* AppScope);
   yield* Deferred.await(entered);
   yield* handle.system.blocks.set([{ id: "next", source: "test", content: "generation-two" }]);

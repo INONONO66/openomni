@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../../src/bundles/approval-policy";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,6 +44,7 @@ export function messageFixture(
   seedKernelPolicyRows(plane.catalog.policies);
   const sessionId = "sender";
   const runtime: SessionRuntime = {
+    approvalPolicy: APPROVAL_POLICY,
     authorizeConfigure: allowConfigure,
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,
@@ -90,6 +92,7 @@ export function messageFixture(
           Gateway.SendMessage.parse(JSON.parse(input.messages.at(-1)?.text ?? "null")),
         );
         const executor = yield* createExecutor({
+          approvalPolicy: APPROVAL_POLICY,
           identity: {
             sessionId,
             role,

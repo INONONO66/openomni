@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { expect, test } from "bun:test";
 import { Core, Bundle, Testing } from "@openomni/agent";
 const AgentFailure = Core.AgentFailure;
@@ -84,7 +85,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
       yield* (yield* GenerationLayers).initialize({ resident: [], worker: [] });
       const plane = yield* AppLedger;
       seedKernelPolicyRows(plane.catalog.policies);
-      return yield* session({ id: "owners", role: "resident", bundles: ["probe"], runner: () => Effect.succeed({ kind: "result", text: "done" }) }, { authorizeConfigure: allowConfigure, openKernel: plane.openKernel, listSessions: plane.listSessions });
+      return yield* session({ id: "owners", role: "resident", bundles: ["probe"], runner: () => Effect.succeed({ kind: "result", text: "done" }) }, { approvalPolicy: APPROVAL_POLICY, authorizeConfigure: allowConfigure, openKernel: plane.openKernel, listSessions: plane.listSessions });
     }));
     const values = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;

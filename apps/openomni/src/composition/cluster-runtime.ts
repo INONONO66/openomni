@@ -250,6 +250,11 @@ export function createSessionEntityPortsSlot(): SessionEntityPortsSlot {
     },
     ports: {
       ready: Deferred.await(ready),
+      // #1309: the policy is composition-owned data; reads delegate to the
+      // bound ports (an activation awaits `ready` before any port call).
+      get approvalPolicy() {
+        return resolve().approvalPolicy;
+      },
       runTurn: (input) => Effect.suspend(() => resolve().runTurn(input)),
       onRequestReady: (sessionId) => bound?.onRequestReady?.(sessionId),
       requestDomainRevisions: (request) => resolve().requestDomainRevisions?.(request) ?? {},

@@ -43,6 +43,7 @@ import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
 import { parentReply } from "./bundles/delegation-policy";
+import { APPROVAL_POLICY } from "./bundles/approval-policy";
 import { createProcessReplyChannel } from "./composition/process-replies";
 import { appManifest } from "./manifest";
 import { createWatchPlane } from "./composition/watch-plane";
@@ -143,6 +144,8 @@ export function serveProcessSession(
   plane.openKernel(request.sessionId).row(request.sessionId);
   seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds(composed.current().generation), yield* AppPointTable);
   const runtime: SessionRuntime = {
+    // #1309: approval/budget policy values from the product bundle.
+    approvalPolicy: APPROVAL_POLICY,
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,
     processId: owner,

@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { testToolPorts } from "./helpers/tool-ports";
 import { executorLayer, catalogLayer } from "../../../packages/agent/test/helpers/service-layers";
 import { runnerTestLayer } from "../../../packages/agent/test/helpers/isolated";
@@ -90,7 +91,7 @@ for (const stop of [false, true]) {
     const runnerServices = acquireSyncEffect(Layer.build(runnerTestLayer));
     const dispatcher = acquireSyncEffect(createTurnDispatcher({
       sessionId: origin.sessionId, role: origin.role, actionId: "completion-turn", ledger,
-    }, {}).pipe(Effect.provide(catalogLayer(definitions)), Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `${origin.sessionId}-${++nextId}` })), Effect.provide(runnerServices)));
+    }, { approvalPolicy: APPROVAL_POLICY }).pipe(Effect.provide(catalogLayer(definitions)), Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `${origin.sessionId}-${++nextId}` })), Effect.provide(runnerServices)));
     let nextCall = 0;
     const execute = (operation: PlainObject) =>
       bounded(

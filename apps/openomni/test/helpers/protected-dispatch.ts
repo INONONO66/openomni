@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../../src/bundles/approval-policy";
 import { Effect } from "effect";
 import { Bundle, Core } from "@openomni/agent";
 const createDispatcher = Bundle.createDispatcher;
@@ -45,6 +46,7 @@ export function protectedDispatch(
   const controller = new AbortController();
   const executor = runSyncEffect(createExecutor({
     ...recording,
+    approvalPolicy: APPROVAL_POLICY,
     authorizeApproval: () => Effect.succeed({
       kind: "owner" as const,
       principalId: "owner",

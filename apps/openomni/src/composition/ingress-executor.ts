@@ -1,5 +1,6 @@
 import { Effect, Semaphore } from "effect";
 import { messageDecisionRules } from "./message-decision";
+import { APPROVAL_POLICY } from "../bundles/approval-policy";
 import { Core } from "@openomni/agent";
 const adoptSessionAuthority = Core.adoptSessionAuthority;
 const createExecutor = Core.createExecutor;
@@ -52,6 +53,7 @@ export function createIngressExecutor(plane: AppLedgerPlane): Effect.Effect<Nati
       }));
       const work = Effect.gen(function* () {
       const executor = yield* createExecutor({
+        approvalPolicy: APPROVAL_POLICY,
         identity: { sessionId: id, role: "resident", parentActionId: null },
         ledger: { commit: (action) => commit([action]).pipe(Effect.flatMap((result) => {
           const receipt = result.receipts[0];
