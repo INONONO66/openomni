@@ -1,5 +1,38 @@
 # Implementation Status
 
+## #1319 legacy gate rows cut over to a versioned writer (epic #1303, rung 12)
+
+On `stab/12-legacy-rows-cutover` (2026-10-08, base `0373ed38c`).
+
+- Writer: `packages/agent/src/core/gate/rows.ts` owns gate-row identity
+  minting — `GATE_ROW_WRITER_VERSION = 1` and `gateRowId(row, point, ordinal)`
+  returning `<row name>/<point>#<ordinal>` (the shape the product bundles
+  already use, e.g. `hooks-json/tool.pre#3`). `project.ts` mints every
+  projected row id through it; the ordinal is the row's index in the
+  priority-sorted projection order, so same-name rows on one point stay
+  distinct.
+- Snapshot version: protocol `SessionGeneration.Snapshot` gains the optional
+  `rowsVersion`; `fence.ts` `generationSnapshot` (the one snapshot
+  constructor) records `rowsVersion: 1` on every new materialization.
+  Pre-cutover snapshots parse with the field absent — never defaulted.
+  Measured: `rg -n 'rowsVersion' packages apps -g '*.ts' | rg -v
+  'fence.ts|rows.ts|protocol/src|test/'` → no output (one writer).
+- History: decision facts recorded under pre-cutover ids keep their bytes —
+  they decode (`SessionHistory.PolicyDecision`) and replay (`GateDecision`
+  by recorded `inputHash`) without rewriting `matchedRuleIds`/`rowIds`.
+  A pre-existing session file read after the cutover is byte-identical
+  (sha256-verified); a freshly materialized generation records
+  `rowsVersion: 1`.
+- Rename: `legacy-rows.ts` → `row-parse.ts` (`git mv`; the parser was never
+  legacy), imports rewritten in `compile.ts`, `evaluate.ts`, `project.ts`;
+  no re-export alias. Measured greps: `rg -c 'legacy/' -g '*.ts' packages
+  apps` 1 → no output; `rg -c 'legacy-rows' -g '*.ts' packages apps` 5 → no
+  output.
+- Tests: `packages/agent/test/core/gate-row-writer.test.ts` (3 pass:
+  identity shape + same-name ordinals, pre-cutover decode/replay, snapshot
+  version); `generation-policy.test.ts`, `permission-row-migration.test.ts`,
+  `apps/openomni/test/policy-seed-rows.test.ts` pass unchanged.
+
 ## #1311 delegation lifecycle contract — typed cap refusals + once-only child settlement (epic #1303, rung 14)
 
 On `stab/14-delegation-lifecycle-contract` (2026-10-08, base `2dc31be78`).
