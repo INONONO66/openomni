@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791483428383,
+  "lastUpdate": 1791484205544,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80975,6 +80975,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 212221,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4b36d0f73e0e22c8ddb43012d23378846a2e0dc6",
+          "message": "Cut legacy gate rows over to a versioned writer and delete the legacy emit path (#1331)\n\n* feat(agent,protocol): versioned gate-row writer and optional snapshot rowsVersion (#1319)\n\n* feat(agent): mint gate-row ids through the versioned writer; snapshots record rowsVersion (#1319)\n\n* test(agent): gate-row writer identities, legacy decision replay, snapshot rowsVersion (#1319)\n\n* refactor(agent): rename legacy-rows.ts to row-parse.ts; the parser was never legacy (#1319)\n\n* docs: stamp #1319 gate-row writer cutover (AGENTS.md, implementation-status, SLOP §M rung 12)\n\n* docs: drop the duplicated #1309 stamp left by the rebase; pin base 2dc31be78 (#1319)\n\n* fix(agent): mint GateRowId-valid gate-row ids for every production row name (#1319 review H1, L1/L2)\n\ngateRowId now projects the free-form row name onto the GateRowId grammar\n([a-z][a-z0-9-]*): runs outside [a-z0-9] collapse to '-', a non-letter start\ngains 'row-'. Bundle-seeded names (hooks-json/tool.pre#3) and dotted message\nnames no longer mint ids that GateDecision.parse refuses as stale_approval at\napproval re-admission. Test (a) validates with the real protocol GateRowId\nschema (L2); a new production-shaped test draws gateRowPolicySeeds-shaped\nfixtures (bundle id, dotted) and proves the decision parses and an approved\ncall re-admits (folds L1/L2 per lead ruling).\n\n* test(agent): cover context-matcher rows in the pre-cutover replay test (#1319 review M1)\n\nA pre-cutover record that applied a matcher row does not replay: the live\nentry's current id is absent from the recorded legacy rowIds, so the gate\ndecides fresh under current identities; in recoverAdmission that non-replay\nis the documented fail-closed stale_approval for approvals pending across\nthe cutover upgrade. A catalog-level policy-generation bump would not fence\nthis (sessions pin policyGeneration and recompile the same stored rows with\nthe new writer; seedKernelPolicyRows' no-op identity compares row ids, which\nare unchanged), so per the lead ruling the narrow window is accepted and\nrecorded as an explicit deviation.\n\n* docs: sync #1319 stamps with the schema-valid name token and the recorded matcher-replay deviation (review H1/M1)",
+          "timestamp": "2026-10-09T03:26:56+09:00",
+          "tree_id": "2d5b7d6f8a434a7a673c558698db23140b1b1569",
+          "url": "https://github.com/INONONO66/openomni/commit/4b36d0f73e0e22c8ddb43012d23378846a2e0dc6"
+        },
+        "date": 1791484204744,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 906,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1619,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1247,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1155886,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 338754,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5718384,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 130,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 891,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 588,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 132704,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 697413,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 381537,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2766,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9618677,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1131337,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15837,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 147500,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 710752,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 190274,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 13617760,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 70,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 152837,
             "unit": "ns/op"
           }
         ]
