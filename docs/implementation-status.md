@@ -2,7 +2,7 @@
 
 ## #1319 legacy gate rows cut over to a versioned writer (epic #1303, rung 12)
 
-On `stab/12-legacy-rows-cutover` (2026-10-08, base `0373ed38c`).
+On `stab/12-legacy-rows-cutover` (2026-10-08, base `2dc31be78`).
 
 - Writer: `packages/agent/src/core/gate/rows.ts` owns gate-row identity
   minting — `GATE_ROW_WRITER_VERSION = 1` and `gateRowId(row, point, ordinal)`
