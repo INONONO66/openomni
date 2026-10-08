@@ -53,7 +53,6 @@ test("spawn_depth allows below the row limit and denies at it; a non-child send 
       cap: "spawn_depth",
       limit: 3,
       observed: 3,
-      refusal: depthRefusal,
       reason: JSON.stringify(depthRefusal),
     },
   });
@@ -70,8 +69,7 @@ test("caps fail closed: an unknown session or a missing sessionId denies child c
     payload: {
       cap: "spawn_depth",
       limit: 3,
-      reason: "catalog read unavailable",
-      refusal: { code: "delegation_refused", cap: "spawn_depth", limit: 3, reason: "catalog read unavailable" },
+      reason: JSON.stringify({ code: "delegation_refused", cap: "spawn_depth", limit: 3, reason: "catalog read unavailable" }),
     },
   });
   expect(
@@ -81,13 +79,12 @@ test("caps fail closed: an unknown session or a missing sessionId denies child c
     payload: {
       cap: "spawn_children",
       limit: DEFAULT_DELEGATION_CAPS.maxActiveChildren,
-      reason: "catalog read unavailable",
-      refusal: {
+      reason: JSON.stringify({
         code: "delegation_refused",
         cap: "spawn_children",
         limit: DEFAULT_DELEGATION_CAPS.maxActiveChildren,
         reason: "catalog read unavailable",
-      },
+      }),
     },
   });
 });
@@ -101,7 +98,6 @@ test("spawn_children denies the fifth concurrent child under the default cap", (
       cap: "spawn_children",
       limit: 4,
       observed: 4,
-      refusal: childrenRefusal,
       reason: JSON.stringify(childrenRefusal),
     },
   });
@@ -167,7 +163,6 @@ test("a finished child frees a spawn_children slot; a liveness read failure coun
       cap: "spawn_children",
       limit: 4,
       observed: 4,
-      refusal: exhausted,
       reason: JSON.stringify(exhausted),
     },
   });
@@ -300,9 +295,7 @@ test("a cap-denied creation carries the parseable delegation_refused payload for
     // The reason string IS the refusal: the consulted-guard seam carries it
     // verbatim into the caller's ToolRefused, so the model reads it typed.
     if (typeof payload.reason !== "string") throw new Error("cap refusal reason missing");
-    const parsed = DelegationRefusal.parse(JSON.parse(payload.reason));
-    expect(payload.refusal).toEqual(parsed);
-    return parsed;
+    return DelegationRefusal.parse(JSON.parse(payload.reason));
   });
   expect(refusals).toEqual([
     { code: "delegation_refused", cap: "spawn_depth", limit: 3, observed: 3 },

@@ -78,28 +78,25 @@ function capVerdict(
   observed: number | undefined,
 ): GuardResult {
   if (observed === undefined) {
-    const refusal = DelegationRefusal.parse({
+    const refusal: DelegationRefusal = {
       code: "delegation_refused",
       cap,
       limit,
       reason: "catalog read unavailable",
-    });
+    };
     return {
       verdict: "deny",
-      payload: { cap, limit, reason: "catalog read unavailable", refusal },
+      payload: { cap, limit, reason: JSON.stringify(refusal) },
     };
   }
   if (observed < limit) return { verdict: "allow", payload: { cap, limit, observed } };
-  const refusal = DelegationRefusal.parse({
-    code: "delegation_refused",
-    cap,
-    limit,
-    observed,
-  });
-  // `reason` rides the consulted-guard seam into the caller's ToolRefused.
+  const refusal: DelegationRefusal = { code: "delegation_refused", cap, limit, observed };
+  // `reason` is the ONLY carrier: its canonical JSON rides the
+  // consulted-guard seam into the caller's ToolRefused, where the model (and
+  // the tests) parse it back through `DelegationRefusal`.
   return {
     verdict: "deny",
-    payload: { cap, limit, observed, refusal, reason: JSON.stringify(refusal) },
+    payload: { cap, limit, observed, reason: JSON.stringify(refusal) },
   };
 }
 
