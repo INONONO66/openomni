@@ -58,22 +58,22 @@ describe("Policy.Resource descriptors", () => {
       expect(
         Policy.Resource.Descriptor.safeParse({
           ...descriptor,
-          id: "worker:one:two:three",
-          kind: "worker",
+          id: "child:one:two:three",
+          kind: "child",
         }).success,
       ).toBe(false);
       expect(
         Policy.Resource.Descriptor.safeParse({
           ...descriptor,
-          id: "worker:",
-          kind: "worker",
+          id: "child:",
+          kind: "child",
         }).success,
       ).toBe(false);
       expect(
         Policy.Resource.Descriptor.safeParse({
           ...descriptor,
           id: "session:primary",
-          kind: "worker",
+          kind: "child",
         }).success,
       ).toBe(false);
     });

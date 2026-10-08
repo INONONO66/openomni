@@ -82,7 +82,7 @@ describe("Ingress.routeDecisionsEquivalent", () => {
   test.each([
     ["stage", { stage: "request_correlation" as const }],
     ["outcome", { outcome: "block" as const }],
-    ["target", { target: "worker" }],
+    ["target", { target: "child" }],
     ["sessionId", { sessionId: "s-2" }],
     ["actorId", { actorId: "actor-2" }],
     ["trustTier", { trustTier: "observer" as const }],

@@ -10,7 +10,7 @@ export namespace Actor {
    * and verdict fact speaks these values; "unknown" is the honest member for
    * unresolved provenance (a missing dispatch actor context is a fact, not a
    * default). The retired Command.ActorKind values mapped onto this
-   * vocabulary at the write side ("user"→"human", "worker"→"internal_worker");
+   * vocabulary at the write side ("user"→"human", the retired subordinate role→"internal_worker");
    * the dormant command fact schemas were deleted with their runtime — no
    * reader ever shipped.
    */

@@ -55,7 +55,7 @@ const MATCHER_ROW: Omit<PolicyRow.Row, "generation"> = {
         id: "message.qa.interrupt",
         table: "B",
         sender: "session",
-        senderRole: "worker",
+        senderRole: "child",
         type: "interrupt",
         check: { kind: "type" },
         effect: "deny",
@@ -67,7 +67,7 @@ const MATCHER_ROW: Omit<PolicyRow.Row, "generation"> = {
 
 const MATCHING_MESSAGE_CONTEXT = {
   sender: "session",
-  senderRole: "worker",
+  senderRole: "child",
   targetKind: "session",
   type: "interrupt",
   parentChild: true,
