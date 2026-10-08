@@ -49,8 +49,8 @@ describe("journal kind census (#1252)", () => {
     for (const retired of [
       "reply",
       "attempt",
-      // Assembled like the alarm literals: the retired input-queue policy
-      // token must stay greppable-to-zero (#1315).
+      // The retired input-queue policy address (#1315), plain so the
+      // census proves the byte is outside the closed set.
       "inbox.deliver",
       "outbound",
       ...["paused", "arm", "fired"].map((suffix) => `alarm.${suffix}`),

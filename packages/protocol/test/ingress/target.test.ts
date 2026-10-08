@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { Ingress } from "../../src/ingress/index.js";
 import { resolveTarget, targetKey } from "../../src/ingress/index.js";
 
-// #1315: the retired subordinate-target spelling is assembled so the
-// vocabulary-retirement grep stays at zero while the refusal stays tested.
+// #1315: the retired subordinate-target prefix, kept as a plain literal so
+// the refusal stays tested; the vocabulary-retirement grep excludes this file.
 const RETIRED_TARGET_PREFIX = "worker";
 
 describe("ingress target helpers", () => {

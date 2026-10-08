@@ -111,15 +111,19 @@ On `stab/15-bounded-tool-output-projection` (2026-10-08, base `2dc31be78`).
   `Inspect.toolOutput` and the codemode `tool_output` (1048576 bytes).
 - Kept reader: `rg -c 'toolResultText' -g '*.ts' packages apps` sums to 23.
 
-## #1315 retire the input-queue and job-title vocabulary (epic #1303, rung 11) — protocol + agent landed, app/channels in flight
+## #1315 retire the input-queue and job-title vocabulary (epic #1303, rung 11)
 
-On `stab/11-retire-inbox-worker-vocabulary` (2026-10-08, base `9b3832f0f`).
+On `stab/11-retire-inbox-worker-vocabulary` (2026-10-08, base `4b36d0f73`).
 
 - Rename (no alias exports): protocol `Inbox` namespace -> `Delivery`,
   `inboxId`/`inboxIds`/`inboxKind` -> `deliveryId`/`deliveryIds`/`deliveryKind`,
-  `LedgerSession.Role` `worker`-byte -> `child`; agent core/plugins/tests follow
-  (82 files). Ingress drops the retired string/object subordinate target with a
-  typed parse refusal (`packages/protocol/test/ingress/target.test.ts`).
+  `LedgerSession.Role` `worker`-byte -> `child`; agent core/plugins/tests,
+  channels router/store, codemode/machines Python prelude (`max_concurrency`
+  kwarg), apps/openomni composition/tools/policy-seed/message-policy
+  (`message.child.*` ids, tool visibility `child`) and the desktop `inbox`
+  route -> `automations` all follow (231 files). Ingress drops the retired
+  string/object subordinate target with a typed parse refusal
+  (`packages/protocol/test/ingress/target.test.ts`).
 - Versioned reads, bytes frozen: prompt/signal/turn declarations at version 2;
   `foldDeliveryPayload` renames version-1 fields strictly after chain-hash
   verification (`packages/protocol/test/journal/delivery-version.test.ts`);
@@ -127,77 +131,25 @@ On `stab/11-retire-inbox-worker-vocabulary` (2026-10-08, base `9b3832f0f`).
   (session decode, catalog index, gate `Match` role and message-rule
   sender/target roles); session-file pending/input SQL COALESCEs both JSON
   field spellings via the `V1_DELIVERY_*` constants — the one sanctioned home
-  for the legacy spellings is `packages/protocol/src/journal/core/prompt.ts`.
+  for the legacy field spellings is `packages/protocol/src/journal/core/prompt.ts`.
 - Catalog v2 -> v3: the two CHECK-constrained tables rebuild byte-for-byte so
   `child` rows and `ingress` policy rows insert while legacy bytes stay valid
   (`packages/agent/test/alarm-recovery.test.ts`); `translateLegacyPolicyRow`
   converts the retired input-queue policy address onto `ingress` for new
-  generations (`LEGACY_INGRESS_POLICY_KIND`, assembled spelling).
+  generations (`LEGACY_INGRESS_POLICY_KIND`).
+- Legacy bytes live as plain `as const` literals at exactly four sanctioned
+  sites (`l0.ts` `LEGACY_CHILD_ROLE`, `migrate.ts` `LEGACY_INGRESS_POLICY_KIND`,
+  `prompt.ts` `V1_DELIVERY_*`, and the tests that prove each retired byte is
+  refused); no string-assembly obfuscation anywhere (`rg '\["in", ?"box"\]'`
+  and `rg '\["wor", ?"ker"\]'` are 0).
 - Deliberately kept wire-frozen vocabulary: `Actor.Kind internal_worker`,
-  `TrustTier assigned_worker`, `PolicyResource kind "worker"`, Playwright
-  `workers: 1`, Python stdlib `max_workers`.
-- In flight on the same branch: packages/channels router surfaces,
-  apps/openomni composition/tools/policy-seed, the desktop `inbox` route and
-  the machines Python kernel; channels and apps/openomni `check-types` fail
-  against the renamed protocol until those land.
-
-## #1311 delegation lifecycle contract — typed cap refusals + once-only child settlement (epic #1303, rung 14)
-
-On `stab/14-delegation-lifecycle-contract` (2026-10-08, base `2dc31be78`).
-
-- Envelope: `Gateway.DelegationResult` in `packages/protocol/src/gateway/message.ts`
-  (strict: `status: completed|failed`, `preview` max 4096, `pointer: {session, action}`),
-  exported through `MessageContract`; 3 parse-failure tests
-  (`packages/protocol/test/send-message.test.ts` 16 pass). Protocol stays Effect-free.
-- Typed refusal: `DelegationRefusal` zod in `apps/openomni/src/bundles/delegation-policy`;
-  `capVerdict` deny payloads carry `refusal` plus `reason: JSON.stringify(refusal)` so the
-  canonical `delegation_refused` JSON reaches the model through the consulted-guard seam
-  (`gate/evaluate.ts` → `ToolRefused`) with zero core gate/dispatch edits.
-- Settlement: `parentReply` → `settleChild` (`rg -c parentReply packages apps` 19 → 0);
-  waiting AND interrupted seals return undefined (interrupted leaves the parent's
-  commission request OPEN — the deadline path bounds a silent child), `result`/`error`
-  build the `DelegationResult` envelope (preview sliced to 4096) and send it
-  `delivery: "followUp"` (`SessionTransition.OutboundMessage` optional field, forwarded by
-  `composition/message-session.ts`); `core/run.ts` guards once-only settlement (existing
-  outbound rows targeting the parent → skip), so interrupt-then-resume settles exactly once.
-- Tests: `delegation-policy.test.ts` 12 pass (typed refusal parse, settleChild arms,
-  truncation), `send-message-e2e.test.ts` 5 pass (exact-event trace: parent turn seals →
-  followUp delivery → settlement turn; interrupt-resume single settlement; 0 setTimeout),
-  `message-terminal-boundaries.test.ts` 4 pass. Base repair: `approval-policy.test.ts`
-  missing required `alarms` manifest field (pre-existing type error on the synthetic base).
-
-## #1319 legacy gate rows cut over to a versioned writer (epic #1303, rung 12)
-
-On `stab/12-legacy-rows-cutover` (2026-10-08, base `2dc31be78`).
-
-- Writer: `packages/agent/src/core/gate/rows.ts` owns gate-row identity
-  minting — `GATE_ROW_WRITER_VERSION = 1` and `gateRowId(row, point, ordinal)`
-  returning `<row name>/<point>#<ordinal>` (the shape the product bundles
-  already use, e.g. `hooks-json/tool.pre#3`). `project.ts` mints every
-  projected row id through it; the ordinal is the row's index in the
-  priority-sorted projection order, so same-name rows on one point stay
-  distinct.
-- Snapshot version: protocol `SessionGeneration.Snapshot` gains the optional
-  `rowsVersion`; `fence.ts` `generationSnapshot` (the one snapshot
-  constructor) records `rowsVersion: 1` on every new materialization.
-  Pre-cutover snapshots parse with the field absent — never defaulted.
-  Measured: `rg -n 'rowsVersion' packages apps -g '*.ts' | rg -v
-  'fence.ts|rows.ts|protocol/src|test/'` → no output (one writer).
-- History: decision facts recorded under pre-cutover ids keep their bytes —
-  they decode (`SessionHistory.PolicyDecision`) and replay (`GateDecision`
-  by recorded `inputHash`) without rewriting `matchedRuleIds`/`rowIds`.
-  A pre-existing session file read after the cutover is byte-identical
-  (sha256-verified); a freshly materialized generation records
-  `rowsVersion: 1`.
-- Rename: `legacy-rows.ts` → `row-parse.ts` (`git mv`; the parser was never
-  legacy), imports rewritten in `compile.ts`, `evaluate.ts`, `project.ts`;
-  no re-export alias. Measured greps: `rg -c 'legacy/' -g '*.ts' packages
-  apps` 1 → no output; `rg -c 'legacy-rows' -g '*.ts' packages apps` 5 → no
-  output.
-- Tests: `packages/agent/test/core/gate-row-writer.test.ts` (3 pass:
-  identity shape + same-name ordinals, pre-cutover decode/replay, snapshot
-  version); `generation-policy.test.ts`, `permission-row-migration.test.ts`,
-  `apps/openomni/test/policy-seed-rows.test.ts` pass unchanged.
+  `TrustTier assigned_worker`; third-party names untouched: Playwright
+  `workers: 1`, Python stdlib `ThreadPoolExecutor(max_workers=…)`.
+- Conformance snapshots (`script/conformance/*.json`) and `crash-matrix.json`
+  crash points refreshed to the renamed enum; `bun run lint:tools` passes.
+- Follow-ups (not in this rung): a pre-merge session-file fixture e2e over the
+  version-1 fold (the fold is unit-tested and the v2->v3 catalog rebuild is
+  integration-tested) — recorded in the epic receipt.
 
 ## #1309 executable product policy moved into app bundles behind seams (epic #1303, rung 9)
 

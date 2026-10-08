@@ -146,7 +146,7 @@ describe("SQLite adapter contract guards", () => {
     const rows = inspection
       .query(
         `SELECT name FROM sqlite_master WHERE type = 'table'
-         AND name IN ('conversation', 'lease', 'engagement', '${["in", "box"].join("")}', 'alarm', 'watch_source', '_migrations')
+         AND name IN ('conversation', 'lease', 'engagement', 'inbox', 'alarm', 'watch_source', '_migrations')
          ORDER BY name`,
       )
       .all();

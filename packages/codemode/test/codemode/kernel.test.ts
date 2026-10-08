@@ -478,6 +478,30 @@ describe("code-mode kernel substrate", () => {
     });
   });
 
+  test("parallel honours its max_concurrency kwarg and preserves input order (#1315)", async () => {
+    await withMachine(["kernel.py"], async ({ host }) => {
+      // A barrier that only releases when exactly `width` thunks are inside
+      // at once: with max_concurrency=2 and four thunks the barrier trips
+      // twice; with max_concurrency=1 it would deadlock, so the cell would
+      // time out instead of completing.
+      const result = await host.get("mac-studio").runCode(
+        cell(
+          [
+            "import threading",
+            "_barrier = threading.Barrier(2, timeout=5)",
+            "def _thunk(n):",
+            "    def _run():",
+            "        _barrier.wait()",
+            "        return n * 10",
+            "    return _run",
+            "parallel([_thunk(1), _thunk(2), _thunk(3), _thunk(4)], max_concurrency=2)",
+          ].join("\n"),
+        ),
+      );
+      expect(result).toMatchObject({ status: "completed", value: "[10, 20, 30, 40]" });
+    });
+  });
+
   test("a raise reports raised with the output produced before it", async () => {
     await withMachine(["kernel.py"], async ({ host }) => {
       const result = await host

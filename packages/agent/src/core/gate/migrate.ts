@@ -11,8 +11,9 @@ import { GateComposeError, type GatePointTable } from "../points";
 /**
  * #1315: the retired input-queue policy address. Historical generations keep
  * the byte on disk and still project onto `ingress.pre`; the latest
- * generation converts onto the current `ingress` address at seed time. The
- * spelling is assembled so the vocabulary-retirement grep stays at zero.
+ * generation converts onto the current `ingress` address at seed time. This
+ * constant is the one sanctioned home for the retired policy address; the
+ * vocabulary-retirement grep excludes it by name.
  */
 export const LEGACY_INGRESS_POLICY_KIND = "inbox.deliver" as const;
 
