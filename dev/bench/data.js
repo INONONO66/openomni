@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791426731620,
+  "lastUpdate": 1791461859640,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80305,6 +80305,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 219444,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c11ae71489a4b5359475afb083fa19e9887ba0d9",
+          "message": "Delete unused helpers and silent fallbacks; typed outcomes (#1312) (#1326)\n\n* refactor(channels): telegram poller adopts listenForAbort; a pre-aborted poll makes zero getUpdates calls (#1312)\n\n* feat(desktop): invalid OPENOMNI_WS_PORT is a typed DesktopConfigError; main refuses to boot on it (#1312)\n\n* refactor(ui): TranscriptMarkdown is a required-payload paragraph union; h2/bullets/code variants deleted with their branches (#1312)\n\n* #1312 band C: delete agent dead surface (atomic-file pair, eight single-file exports, Inspect transformer, unused Testing members)\n\n* #1312 band C: type model-catalog source failures as ModelCatalogError{cache|remote|cache_write}\n\n* #1312 band C: require createResidentGateway requests/stores/messaging ports; tests wire the production implementations\n\n* #1312 band C: add ModelCatalogError to the exhaustive LlmError contract fixture\n\n* feat(protocol): #1312 band A — runtime JsonShapedValueSchema and JSON-shaped policy evaluation records\n\n* refactor(machines): #1312 band A — one shared export-containment predicate for host and daemon\n\n* fix(machines): #1312 band A — a timed-out pty command surrenders its FIFO slot (TestClock-driven test)\n\n* wip(machines,protocol,codemode): lane 5a banked mid-commit-4 — peekCode kernel_not_available typed refusal in progress (#1312 band A)\n\nLane st_01a11541 died at 2h10m with a truncated reply ('Commit 4: peekCode kernel_not_available refusal. Inspecting the wire schemas and the raw-server test pattern first.'). Coherence unknown; banked by the lead so the next lane resumes from this tree.\n\n* feat(machines): #1312 band A — bounded IPC callback dispatcher with an injected bound and a typed queue-full refusal\n\nmakeDispatcher now takes a REQUIRED bound (no default — injection law) that\ncaps both queue depth and task fan-out (semaphore + bounded queue). A full\nlive queue answers the offerer with IpcQueueFullError instead of dropping the\ntask: the server condemns the overloaded connection with an error frame, the\nclient fails the stream, the daemon reschedules its reattach trigger, and the\ndisconnect callbacks fail loudly. Scope teardown refusals stay benign. The\nbound is chosen at the apps/openomni composition call sites (256) and passed\nexplicitly by tests.\n\n* wip(machines): lane 5a-b banked mid commit 6 — required callTool with typed host_tool_missing refusal in progress (#1312)\n\n* feat(machines): required callTool with typed host_tool_missing refusal (#1312 band A)\n\n* feat(machines): #1312 band A — computer-use spawn_failed/read_failed/probe_timeout typed reasons\n\n* feat(codemode): #1312 band A — browser cleanup failures are a typed browser_cleanup_failed outcome\n\n_shutdown and _stop_chromium in the Python prelude collect every failed\ncleanup step ({ok, failed:[{step,error}]}) instead of swallowing OSError /\nCDP / PTY-close / Playwright-stop exceptions; the driver's final lifecycle\nframe carries the failed list and kernel.ts decodes it into\nCodemodeError{reason: browser_cleanup_failed} naming each step, so close()\nnever resolves as a silent success over a failed cleanup. kernel.test.ts\nforces a kill_chromium failure (gone PID) and asserts the typed outcome.\n\n* fix(machines): test-helper dispatcher bound 256, matching the app composition (#1312 band A)\n\nThe codemode consumer suite runs 65 concurrent cells through the shared\nmachines test helpers; the helpers' previous 64 bound starved result\ndispatch past the cells' 5s timeout. The composition chooses the bound\n(injection law): the helpers now default to 256 like apps/openomni.\n\n* test(protocol): JsonShapedValueSchema refuses a hostile proxy (patch-coverage catch branch, #1312 band A)\n\n* docs: #1312 rung 5 receipts (SLOP row, implementation-status section, AGENTS.md stamp)\n\n* fix(protocol,machines): keep PeekResult's shape and add PeekRefused/PeekAnswer for the peek_code wire answer; type two test rejections (#1312)\n\n* fix(codemode,machines): drop two Effect runner sites — lifecycle frame parsed by protocol parseJson, pty late-marker test on the owner run() (#1312 gate r2)\n\n* test(machines): trailing/doubled-slash export roots through normalizeExportRoot and isContained (#1312 review M1)",
+          "timestamp": "2026-10-08T21:14:09+09:00",
+          "tree_id": "2666543bb20349a4016286999abb0ad3fc8fde2e",
+          "url": "https://github.com/INONONO66/openomni/commit/c11ae71489a4b5359475afb083fa19e9887ba0d9"
+        },
+        "date": 1791461858701,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1075,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1895,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1467,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1637791,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 437089,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 6928817,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 131,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1150,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 731,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 206296,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 855082,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 525644,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3596,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 12704599,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1500633,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 19661,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 182904,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 936600,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 288411,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 17044248,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 94,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 223972,
             "unit": "ns/op"
           }
         ]
