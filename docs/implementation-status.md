@@ -1,5 +1,30 @@
 # Implementation Status
 
+## #1311 delegation lifecycle contract — typed cap refusals + once-only child settlement (epic #1303, rung 14)
+
+On `stab/14-delegation-lifecycle-contract` (2026-10-08, base `0373ed38c`).
+
+- Envelope: `Gateway.DelegationResult` in `packages/protocol/src/gateway/message.ts`
+  (strict: `status: completed|failed`, `preview` max 4096, `pointer: {session, action}`),
+  exported through `MessageContract`; 3 parse-failure tests
+  (`packages/protocol/test/send-message.test.ts` 16 pass). Protocol stays Effect-free.
+- Typed refusal: `DelegationRefusal` zod in `apps/openomni/src/bundles/delegation-policy`;
+  `capVerdict` deny payloads carry `refusal` plus `reason: JSON.stringify(refusal)` so the
+  canonical `delegation_refused` JSON reaches the model through the consulted-guard seam
+  (`gate/evaluate.ts` → `ToolRefused`) with zero core gate/dispatch edits.
+- Settlement: `parentReply` → `settleChild` (`rg -c parentReply packages apps` 19 → 0);
+  waiting AND interrupted seals return undefined (interrupted leaves the parent's
+  commission request OPEN — the deadline path bounds a silent child), `result`/`error`
+  build the `DelegationResult` envelope (preview sliced to 4096) and send it
+  `delivery: "followUp"` (`SessionTransition.OutboundMessage` optional field, forwarded by
+  `composition/message-session.ts`); `core/run.ts` guards once-only settlement (existing
+  outbound rows targeting the parent → skip), so interrupt-then-resume settles exactly once.
+- Tests: `delegation-policy.test.ts` 12 pass (typed refusal parse, settleChild arms,
+  truncation), `send-message-e2e.test.ts` 5 pass (exact-event trace: parent turn seals →
+  followUp delivery → settlement turn; interrupt-resume single settlement; 0 setTimeout),
+  `message-terminal-boundaries.test.ts` 4 pass. Base repair: `approval-policy.test.ts`
+  missing required `alarms` manifest field (pre-existing type error on the synthetic base).
+
 ## #1305 bounded tool output projection (epic #1303, rung 15)
 
 On `stab/15-bounded-tool-output-projection` (2026-10-08, base `2dc31be78`).
