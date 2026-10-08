@@ -368,3 +368,53 @@ describe("six message observation families", () => {
     ).toEqual([{ code: "unrecognized_keys", path: [], keys: ["unknownField"] }]);
   });
 });
+
+describe("Gateway.DelegationResult", () => {
+  const pointer = { session: "child-1", action: "terminal-1" };
+
+  test("parses a bounded settlement and keeps the 4 KiB preview ceiling exact", () => {
+    const parsed = Gateway.DelegationResult.parse({
+      status: "completed",
+      preview: "x".repeat(4096),
+      pointer,
+    });
+    expect(parsed.status).toBe("completed");
+    expect(parsed.preview).toHaveLength(4096);
+    expect(parsed.pointer).toEqual(pointer);
+    expect(
+      Gateway.DelegationResult.parse({ status: "failed", preview: "", pointer }).status,
+    ).toBe("failed");
+  });
+
+  test("an oversize preview is a parse failure, never a silent truncation", () => {
+    expect(
+      issues(
+        Gateway.DelegationResult.safeParse({
+          status: "completed",
+          preview: "x".repeat(4097),
+          pointer,
+        }),
+      ),
+    ).toEqual([{ code: "too_big", path: ["preview"] }]);
+  });
+
+  test("a missing pointer, a partial pointer, and an unknown status are parse failures", () => {
+    expect(
+      issues(Gateway.DelegationResult.safeParse({ status: "completed", preview: "ok" })),
+    ).toEqual([{ code: "invalid_type", path: ["pointer"] }]);
+    expect(
+      issues(
+        Gateway.DelegationResult.safeParse({
+          status: "completed",
+          preview: "ok",
+          pointer: { session: "child-1" },
+        }),
+      ),
+    ).toEqual([{ code: "invalid_type", path: ["pointer", "action"] }]);
+    expect(
+      issues(
+        Gateway.DelegationResult.safeParse({ status: "interrupted", preview: "ok", pointer }),
+      ),
+    ).toEqual([{ code: "invalid_value", path: ["status"] }]);
+  });
+});

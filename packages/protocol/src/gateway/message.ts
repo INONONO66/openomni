@@ -166,6 +166,20 @@ const Observation = z.discriminatedUnion("kind", [
   ObservationBase.extend({ kind: z.literal("message.timed_out"), waitedMs: DurationMs }),
 ]);
 
+/**
+ * The bounded settlement envelope a child writes toward its parent (#1311):
+ * the terminal status, a preview capped at 4 KiB, and a pointer naming the
+ * child session and its terminal action — the full output stays readable in
+ * the child's journal through the pointer, never inlined.
+ */
+const DelegationResult = z
+  .object({
+    status: z.enum(["completed", "failed"]),
+    preview: z.string().max(4096),
+    pointer: z.object({ session: Id, action: Id }).strict(),
+  })
+  .strict();
+
 /** Internal schema assembly; public names are exposed through Gateway. */
 export const MessageContract = {
   SessionTarget,
@@ -179,4 +193,5 @@ export const MessageContract = {
   RuleTableA,
   RuleTableB,
   Observation,
+  DelegationResult,
 } as const;
