@@ -29,7 +29,7 @@ import type { SessionKernel } from "./store/fence";
 import { configureAction } from "./store/fence";
 import { consumptionSettings } from "./commit";
 import type { LedgerError } from "./store/errors";
-import type { SessionForkReceipt, SessionStore } from "./store/session-file/index.js";
+import type { SessionForkReceipt, SessionStore, ToolOutputWrite } from "./store/session-file/index.js";
 import { SESSION_FILE_SCHEMA_VERSION } from "./store/session-file/index.js";
 import type { SessionIndexInsert } from "./store/catalog";
 
@@ -124,6 +124,22 @@ function isArmRow(action: LedgerAction.Node): boolean {
   return action.kind === "alarm" && plainObject(action.intent.value)?.op === "arm";
 }
 
+/**
+ * Stored-output references inside one copied row (#1305): a projected tool
+ * row carries `{outputId, bytes, preview}` refs in its effect payload; the
+ * fork must copy those bytes so the child's `tool_output` reads resolve.
+ */
+function collectOutputIds(value: PlainValue, into: Set<string>): void {
+  if (value === null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const entry of value) collectOutputIds(entry, into);
+    return;
+  }
+  const outputId = value.outputId;
+  if (typeof outputId === "string" && /^sha256:[0-9a-f]{64}$/.test(outputId)) into.add(outputId);
+  for (const entry of Object.values(value)) collectOutputIds(entry, into);
+}
+
 function copiedBytes(action: LedgerAction.Node): number {
   const revert = "revert" in action ? JSON.stringify(action.revert.value) : "";
   return Buffer.byteLength(
@@ -197,6 +213,8 @@ function readParentPrefix(
 interface ForkPlan {
   readonly parentRow: ReturnType<SessionKernel["row"]>;
   readonly copies: readonly LedgerAction.Append[];
+  /** #1305: stored outputs the copied rows reference, re-stored on the child. */
+  readonly outputs: readonly ToolOutputWrite[];
   readonly forkedFrom: SessionGeneration.ForkAncestry;
 }
 
@@ -230,7 +248,18 @@ function planFork(ports: ForkPorts, input: ForkInput): ForkPlan | ForkRefused {
   // Generation-configured cap (#1257): folded off the parent's latest
   // `session.configure{settings}` row, exactly like the consumption widths.
   const cap = consumptionSettings(ports.parent, input.from).forkCopyByteCap ?? DEFAULT_FORK_COPY_BYTE_CAP;
-  const bytes = eligible.reduce((total, node) => total + copiedBytes(node), 0);
+  // #1305: stored outputs referenced by copied rows travel with the fork and
+  // count against the same byte cap — projection must not smuggle bytes past it.
+  const outputIds = new Set<string>();
+  for (const node of eligible) collectOutputIds(node.effect.value, outputIds);
+  const outputs: ToolOutputWrite[] = [];
+  for (const outputId of outputIds) {
+    const stored = ports.parent.toolOutput(outputId);
+    if (stored !== undefined) outputs.push(stored);
+  }
+  const bytes =
+    eligible.reduce((total, node) => total + copiedBytes(node), 0) +
+    outputs.reduce((total, output) => total + output.bytes.byteLength, 0);
   if (bytes > cap) return refuse("byte_cap", `copied bytes ${bytes} exceed the cap ${cap}`);
   const renames = new Map<string, string>();
   for (const node of eligible) {
@@ -242,6 +271,7 @@ function planFork(ports: ForkPorts, input: ForkInput): ForkPlan | ForkRefused {
   return {
     parentRow,
     copies: eligible.map((node) => copyAction(node, input.childId, ids, renames)),
+    outputs,
     forkedFrom: {
       session: input.from,
       anchor: anchor.actionHash,
@@ -259,7 +289,7 @@ export function forkSession(
   return Effect.gen(function* () {
     const plan = planFork(ports, input);
     if (plan instanceof ForkRefused) return yield* plan;
-    const { parentRow, copies, forkedFrom } = plan;
+    const { parentRow, copies, outputs, forkedFrom } = plan;
     const snapshot = ports.parent.latestGenerationFor(input.from);
     const child = ports.openChild();
     if (child.sessions.get(input.childId) !== undefined)
@@ -293,6 +323,7 @@ export function forkSession(
         }),
       },
       copies,
+      outputs,
     });
     ports.indexSession({
       id: input.childId,

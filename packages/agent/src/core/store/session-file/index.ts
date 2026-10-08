@@ -111,6 +111,11 @@ export const SESSION_FILE_SCHEMA: readonly string[] = [
     occurrence_id TEXT NOT NULL UNIQUE,
     fire_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS tool_outputs (
+    output_id TEXT PRIMARY KEY,
+    bytes BLOB NOT NULL,
+    media_type TEXT
+  )`,
 ];
 
 
@@ -680,6 +685,61 @@ function createArmedAlarmReads(db: Database): {
   };
 }
 
+// ─── #1305 bounded tool output projection: content-addressed output bytes ───
+
+/** One stored tool output write: digest-named bytes plus an optional media hint. */
+export interface ToolOutputWrite {
+  /** `canonicalDigest` identity of the bytes: `sha256:<64 hex>`. */
+  readonly outputId: string;
+  readonly bytes: Uint8Array;
+  readonly mediaType?: string;
+}
+
+/** One stored tool output read back by its identifier. */
+export interface ToolOutputRow {
+  readonly outputId: string;
+  readonly bytes: Uint8Array;
+  readonly mediaType?: string;
+}
+
+const ToolOutputSqlRow = z.object({
+  output_id: z.string(),
+  bytes: z.instanceof(Uint8Array),
+  media_type: z.string().nullable(),
+});
+
+/**
+ * Content-addressed tool output storage (#1305): `put` is idempotent — the
+ * digest key makes a repeated store of identical bytes a no-op, so a retried
+ * tool settlement never duplicates bytes. Writes run in their own implicit
+ * transaction BEFORE the referencing row commits: a crash between the two
+ * leaves an unreferenced output (harmless), never a dangling reference.
+ */
+export interface ToolOutputsAdapter {
+  put(write: ToolOutputWrite): void;
+  get(outputId: string): ToolOutputRow | undefined;
+}
+
+function createToolOutputs(db: Database): ToolOutputsAdapter {
+  return {
+    put(write) {
+      db.query("INSERT OR IGNORE INTO tool_outputs (output_id, bytes, media_type) VALUES (?, ?, ?)")
+        .run(write.outputId, write.bytes, write.mediaType ?? null);
+    },
+    get(outputId) {
+      const row = ToolOutputSqlRow.nullable().parse(
+        db.query("SELECT output_id, bytes, media_type FROM tool_outputs WHERE output_id = ?").get(outputId),
+      );
+      if (row === null) return undefined;
+      return {
+        outputId: row.output_id,
+        bytes: row.bytes,
+        ...(row.media_type === null ? {} : { mediaType: row.media_type }),
+      };
+    },
+  };
+}
+
 /** Any stored representation SQLite admits into a TEXT hash column; only a string can verify. */
 const HashCell = z.union([z.string(), z.null(), z.number(), z.bigint(), z.instanceof(Uint8Array)]);
 
@@ -835,6 +895,8 @@ export class SessionStore extends StoreHandle {
   /** #1254 S3: the durable armed-alarm index of this session file. */
   readonly armedAlarms: () => readonly ArmedAlarmRow[];
   readonly armedCount: () => number;
+  /** #1305: content-addressed tool output bytes of this session file. */
+  readonly toolOutputs: ToolOutputsAdapter;
   constructor(
     db: Database,
     observationSink: ObservationSink,
@@ -848,6 +910,7 @@ export class SessionStore extends StoreHandle {
     const armed = createArmedAlarmReads(db);
     this.armedAlarms = () => armed.armedAlarms();
     this.armedCount = () => armed.armedCount();
+    this.toolOutputs = createToolOutputs(db);
   }
 
   /**
@@ -870,6 +933,9 @@ export class SessionStore extends StoreHandle {
             return refuse(new CorruptRecord({ operation: "session.fork", id: copy.id }));
           receipt = appended;
         }
+        // #1305: outputs referenced by copied rows land in the same atomic
+        // write, so a forked child never carries a dangling outputRef.
+        for (const output of input.outputs ?? []) this.toolOutputs.put(output);
         const row = selectSession(this.db, materialize.row.id);
         if (row === undefined)
           return refuse(new CorruptRecord({ operation: "session.fork", id: materialize.row.id }));
@@ -884,6 +950,8 @@ interface SessionForkWrite {
   readonly materialize: LedgerSession.Materialize;
   /** Eligible pre-anchor parent rows, already remapped for the child chain. */
   readonly copies: readonly LedgerAction.Append[];
+  /** #1305: stored outputs the copied rows reference, copied under the same identifiers. */
+  readonly outputs?: readonly ToolOutputWrite[];
 }
 
 export interface SessionForkReceipt {
