@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { LedgerInvariant } from "../errors";
 import { parseStoredJson, SqliteCount, SqliteEpochMs } from "../json";
-import { LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
+import { foldDeliveryPayload, LedgerAction, LedgerSession, PolicyRow } from "@openomni/protocol";
 
 const actionRowSchema = LedgerAction.Node;
 
@@ -77,7 +77,8 @@ export function decodeSession(row: SessionSqlRow): LedgerSession.Row {
   return LedgerSession.Row.parse({
     id: row.id,
     parentId: row.parent_id,
-    role: row.role,
+    // #1315 versioned read: pre-rename files persist the retired role byte.
+    role: LedgerSession.foldLegacyRole(row.role),
     fenceOwner: row.lease_owner,
     fence: row.lease_fence,
     revision: row.revision,
@@ -89,13 +90,16 @@ export function decodeSession(row: SessionSqlRow): LedgerSession.Row {
 }
 
 export function decodeAction(row: ActionSqlRow): LedgerAction.Node {
+  // #1315 versioned read: version-1 input-plane payloads fold their retired
+  // field names to the version-2 `delivery*` names strictly after the chain
+  // hash was computed over the stored bytes.
   const common = {
     id: row.id,
     parentId: row.parent_id,
     sessionId: row.session_id,
     kind: row.kind,
-    intent: { encodingVersion: row.encoding_version, value: parseStoredJson(row.intent) },
-    effect: { encodingVersion: row.encoding_version, value: parseStoredJson(row.effect) },
+    intent: { encodingVersion: row.encoding_version, value: foldDeliveryPayload(parseStoredJson(row.intent)) },
+    effect: { encodingVersion: row.encoding_version, value: foldDeliveryPayload(parseStoredJson(row.effect)) },
     ts: row.ts,
     ordinal: row.ordinal,
     prevHash: row.prev_hash,
@@ -106,7 +110,7 @@ export function decodeAction(row: ActionSqlRow): LedgerAction.Node {
       ? { ...common, irreversible: row.irreversible === 1 }
       : {
           ...common,
-          revert: { encodingVersion: row.encoding_version, value: parseStoredJson(row.revert) },
+          revert: { encodingVersion: row.encoding_version, value: foldDeliveryPayload(parseStoredJson(row.revert)) },
         },
   );
 }

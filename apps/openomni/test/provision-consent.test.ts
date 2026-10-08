@@ -81,7 +81,7 @@ it("consent is a require_approval policy row on the contact and bundle authority
     true,
   );
 });
-it("the model cannot mint or decide Owner consent, and workers cannot see provision", async () => {
+it("the model cannot mint or decide Owner consent, and children cannot see provision", async () => {
   const dispatcher = dispatcherFixture([provision()], { executor });
   const forged: readonly PlainObject[] = [
     { op: "request", args: { actorId: "contact:mallory" } },
@@ -101,7 +101,7 @@ it("the model cannot mint or decide Owner consent, and workers cannot see provis
   expect(
     catalogDefinitions({ ...testToolPorts, provisioning: provisionPort() }).some(
       (tool: AnyToolDefinition) => tool.name === "provision" &&
-        (tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker")),
+        (tool.visibility.model.includes("child") || tool.visibility.cell.includes("child")),
     ),
   ).toBe(false);
   expect(malloryStanding()).toBe("provisional");

@@ -230,7 +230,7 @@ test("close commands recover focus from panels and tabs without stealing focus o
   await command("close-tab");
   expect(consoleStore.state.activeTabId).toBe(firstTab);
   expect(document.activeElement === node("textarea")).toBe(true);
-  await act(() => openTab({ kind: "route", route: "inbox" }));
+  await act(() => openTab({ kind: "route", route: "automations" }));
   const routeTab = consoleStore.state.activeTabId;
   await act(() => activateTab(firstTab));
   node("textarea").focus();

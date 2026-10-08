@@ -120,7 +120,7 @@ function commissionedChild(runtime: SessionRuntime) {
     yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
     yield* openSession(runtime, { id: "parent", role: "resident", runner: parentRunner });
     appendCommission();
-    const child = yield* openSession(runtime, { id: "child", parentId: "parent", role: "worker", runner: childRunner });
+    const child = yield* openSession(runtime, { id: "child", parentId: "parent", role: "child", runner: childRunner });
     return yield* child.prompt("work", origin);
   });
 }
@@ -133,7 +133,7 @@ test("a dropped receiving consumer leaves a sealed source obligation without mut
         seedPolicy();
         yield* Effect.addFinalizer(() => closeSessions(runtime).pipe(Effect.orDie));
         yield* openSession(runtime, { id: "parent", role: "resident", runner: parentRunner });
-        const child = yield* openSession(runtime, { id: "child", parentId: "parent", role: "worker", runner: childRunner });
+        const child = yield* openSession(runtime, { id: "child", parentId: "parent", role: "child", runner: childRunner });
         const kernel = isolatedLedger().kernel;
         const before = sessionTree(kernel, "parent");
         expect(yield* Effect.flip(child.prompt("work", origin))).toMatchObject({
@@ -208,7 +208,7 @@ test("restart after receiving commit reconciles exact bytes without dispatch or 
               {
                 id: "child",
                 parentId: "parent",
-                role: "worker",
+                role: "child",
                 runner: () => Effect.succeed({ kind: "result", text: "exact answer" }),
               },
               fixture,
@@ -265,7 +265,7 @@ test("a destination receipt for different bytes is refused and the obligation st
         expect(
           kernel
             .pendingMessages("parent")
-            .map((row: import("@openomni/protocol").Inbox.Row) => row.content),
+            .map((row: import("@openomni/protocol").Delivery.Row) => row.content),
         ).toEqual(["tampered answer"]);
       }),
     ),
@@ -402,7 +402,7 @@ test("a child answers the original request once and reconciles a lost ACK after 
             {
               id: "child",
               parentId: "parent",
-              role: "worker",
+              role: "child",
               runner: () =>
                 Effect.sync(() => {
                   childBodies += 1;

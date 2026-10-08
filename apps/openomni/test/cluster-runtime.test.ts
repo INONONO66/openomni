@@ -12,7 +12,7 @@ type SessionEntityTurnInput = Core.SessionEntityTurnInput;
 type ObservationPublishFailure = Core.ObservationPublishFailure;
 const openCatalogStore = Core.openCatalogStore;
 const openSessionStore = Core.openSessionStore;
-import type { Inbox, ObservationSink } from "@openomni/protocol";
+import type { Delivery, ObservationSink } from "@openomni/protocol";
 import { Effect, Fiber } from "effect";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import {
@@ -81,7 +81,7 @@ async function provisionSession(
 }
 
 function origin(sessionId: string, messageId: string): string {
-  const value: Inbox.MessageOrigin = {
+  const value: Delivery.MessageOrigin = {
     kind: "message",
     messageId,
     senderSessionId: sessionId,

@@ -343,7 +343,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
 
 /**
  * The per-turn identity and lease under which a dispatcher's tools commit.
- * Mirrors the fields both the resident and worker runners already pin on their
+ * Mirrors the fields both the resident and child runners already pin on their
  * {@link SessionRunnerInput}, so composing the executor+dispatcher has one owner
  * instead of being copied per role.
  */
@@ -427,7 +427,7 @@ interface TurnDispatchRuntime {
 
 /**
  * Compose the per-turn executor and dispatcher for a prepared runner turn. Both
- * the resident and worker runners build this identically; keeping it here makes
+ * the resident and child runners build this identically; keeping it here makes
  * "how a turn's tools commit durably" a single owner.
  */
 export function createTurnDispatcher(

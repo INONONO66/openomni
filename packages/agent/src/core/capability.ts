@@ -66,7 +66,7 @@ export class CapabilityHookError extends Schema.TaggedError<CapabilityHookError>
  */
 export interface CapabilityKindDeclaration {
   readonly schema: z.ZodType;
-  readonly version: 1;
+  readonly version: number;
   readonly reduce: (state: PlainValue, row: PlainValue) => PlainValue;
 }
 

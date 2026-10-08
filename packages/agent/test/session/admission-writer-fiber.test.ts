@@ -28,7 +28,7 @@ import { AdmissionFailure, AlarmOccurrence, type AlarmRpc, type DeliverRpc, type
 import type { SessionEntityPorts } from "../../src/core/run";
 import { clusterTempDir, makeTurnPort, resolvedRunner, sessionFileFor } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
-import type { Inbox } from "@openomni/protocol";
+import type { Delivery } from "@openomni/protocol";
 import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-writer-fiber-");
@@ -65,7 +65,7 @@ function envelope(
 }
 
 function origin(messageId: string): string {
-  const value: Inbox.MessageOrigin = {
+  const value: Delivery.MessageOrigin = {
     kind: "message",
     messageId,
     senderSessionId: "peer",

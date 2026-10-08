@@ -83,7 +83,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
     const planeRef: { current: AppLedgerPlane | undefined } = { current: undefined };
     const crashRef: { current: AppLedgerPlane | undefined } = { current: undefined };
     const saved = { current: false };
-    const interruptInbox = () => {
+    const interruptDelivery = () => {
       const plane = planeRef.current;
       if (plane === undefined) throw new Error("plane missing at interrupt");
       void commitInterrupt(plane, sessionId, `interrupt-${mode}`);
@@ -121,7 +121,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
               snapshot(sessionFilePath(sessionsDir, sessionId), sessionFilePath(crashSessionsDir, sessionId));
               snapshot(catalogPath, crashCatalogPath);
               saved.current = true;
-              interruptInbox();
+              interruptDelivery();
             }
           }
           if (mode === "error-window" && event === Tool.Events.Completed)
@@ -185,7 +185,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
         });
       },
     });
-    const services = await acquireEffect(generationServices({ definitions: { resident: definitions, worker: [] }, observations, plane }));
+    const services = await acquireEffect(generationServices({ definitions: { resident: definitions, child: [] }, observations, plane }));
     let unsubscribe: () => void = () => undefined;
     const drainScope = effectScope();
     try {
@@ -204,7 +204,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
           mode === "error-window"
         )
           return;
-        interruptInbox();
+        interruptDelivery();
       });
       const first = runEffect(handle.prompt("execute each slot once"));
       if (mode === "partial-wave") {
@@ -246,7 +246,7 @@ for (const mode of ["after-wave", "partial-wave", "crash-window", "error-window"
           listSessions: crashPlane.listSessions,
         };
         const recovered = await acquireEffect(
-          generationServices({ definitions: { resident: definitions, worker: [] }, plane: crashPlane }),
+          generationServices({ definitions: { resident: definitions, child: [] }, plane: crashPlane }),
         );
         await bounded(
           drainScope.run(

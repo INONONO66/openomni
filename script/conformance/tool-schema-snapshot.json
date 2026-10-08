@@ -285,7 +285,7 @@
   },
   {
     "name": "send_message",
-    "description": "Send one letter to a contact: a session, a new child session, a telegram or discord channel, a human, or an external CLI agent (cli:claude-code|codex|omp). Returns a handle without waiting for a reply; the reply arrives in your inbox.",
+    "description": "Send one letter to a contact: a session, a new child session, a telegram or discord channel, a human, or an external CLI agent (cli:claude-code|codex|omp). Returns a handle without waiting for a reply; the reply arrives as a delivered prompt in this session.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -315,7 +315,7 @@
                 },
                 "role": {
                   "type": "string",
-                  "enum": ["resident", "worker"]
+                  "enum": ["resident", "child"]
                 },
                 "runner": {
                   "type": "string",

@@ -81,7 +81,7 @@ class _Tools:
             if _cell is None:
                 raise ToolError(
                     "tool call refused: tools are reachable only from the cell's"
-                    " own execution or its parallel() workers, never from a"
+                    " own execution or its parallel() threads, never from a"
                     " thread that outlives its cell"
                 )
             _call_id = str(next(_call_ids))
@@ -108,7 +108,7 @@ class _Tools:
         return call
 
 
-def parallel(thunks, max_workers=8):
+def parallel(thunks, max_concurrency=8):
     """Run zero-argument callables concurrently and preserve input order."""
     _thunks = list(thunks)
     if not _thunks:
@@ -122,7 +122,7 @@ def parallel(thunks, max_workers=8):
 
         return _run
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as _executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrency) as _executor:
         _futures = [_executor.submit(_in_cell(_thunk)) for _thunk in _thunks]
         concurrent.futures.wait(_futures)
         return [_future.result() for _future in _futures]
@@ -662,7 +662,7 @@ _scope = {
 }
 threading.Thread(target=_read_stdin, name="driver-stdin", daemon=True).start()
 
-# One executor loop keeps cells serial while tool calls made by worker threads
+# One executor loop keeps cells serial while tool calls made by pool threads
 # can independently wait for their callId-routed answers.
 while True:
     _request = _cell_requests.get()

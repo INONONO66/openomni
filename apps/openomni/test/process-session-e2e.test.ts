@@ -45,21 +45,21 @@ function processPlane(fixture: { directory: string }): ProcessPlane {
   };
 }
 
-/** Commission a process-runner worker from the fixture session and return its row. */
-async function commissionWorker(
+/** Commission a process-runner child from the fixture session and return its row. */
+async function commissionChild(
   fixture: ReturnType<typeof messageFixture>,
   message: { content: string; replyTo: string; deadline?: number },
 ) {
   expect(
     (
       await fixture.send({
-        to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+        to: { kind: "new_session", role: "child", runner: "process", parent: "me" },
         type: "message",
         ...message,
       })
     ).isError,
   ).not.toBe(true);
-  const child = fixture.plane.listSessions().find((row) => row.role === "worker");
+  const child = fixture.plane.listSessions().find((row) => row.role === "child");
   if (child === undefined) throw new Error("missing commissioned process session");
   return child;
 }
@@ -173,7 +173,7 @@ test("process entry logs committed sessions and disposes its runtime", async () 
   const fixture = messageFixture(
     "resident",
     undefined,
-    projectTools(catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"))).session,
+    projectTools(catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("child") || tool.visibility.cell.includes("child"))).session,
   );
   const stdin = new PassThrough();
   let requests = 0;
@@ -213,7 +213,7 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     throw new Error(`unexpected process exit: ${code}`);
   });
   try {
-    const child = await commissionWorker(fixture, {
+    const child = await commissionChild(fixture, {
       content: "work",
       replyTo: "process-entry-original",
     });
@@ -297,7 +297,7 @@ test("process session drain consumes resume backlog through the entity fold", as
       intent: { encodingVersion: 1, value: { kind: "sdk" } },
       effect: {
         encodingVersion: 1,
-        value: { inboxKind: "resume", content: "continue" },
+        value: { deliveryKind: "resume", content: "continue" },
       },
       irreversible: true,
       ts: 100,
@@ -319,7 +319,7 @@ test("process session drain consumes resume backlog through the entity fold", as
       serveProcessSession(
         processRequest(fixture.sessionId, plane),
         () => {
-          throw new Error("an entity consume fold must not ring the inbox doorbell");
+          throw new Error("an entity consume fold must not ring the delivery doorbell");
         },
         undefined,
         runtime,
@@ -376,7 +376,7 @@ test("process session drain recovers an open turn through the default admission 
               value: {
                 phase: "intent",
                 resultId: `${turnId}:result`,
-                inboxIds: [],
+                deliveryIds: [],
                 resumeCount: 0,
                 boundaryActionId: null,
                 toolsGeneration: generation.generation,
@@ -420,7 +420,7 @@ test.each([
   const fixture = messageFixture(
     "resident",
     undefined,
-    toolSend ? projectTools(catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"))).session : [],
+    toolSend ? projectTools(catalogDefinitions(testToolPorts).filter((tool: import("@openomni/protocol").AnyToolDefinition) => tool.visibility.model.includes("child") || tool.visibility.cell.includes("child"))).session : [],
   );
   let requests = 0;
   const provider = Bun.serve({
@@ -435,7 +435,7 @@ test.each([
   const plane = processPlane(fixture);
   const { runtime } = plane;
   try {
-    const child = await commissionWorker(fixture, {
+    const child = await commissionChild(fixture, {
       content: "work",
       replyTo: "process-original",
       ...(toolSend ? {} : { deadline }),
@@ -491,10 +491,10 @@ test.each([
   {
     name: "reads policy generation for a new-session attempt",
     input: {
-      to: { kind: "new_session", role: "worker", runner: "resident", parent: "me" },
+      to: { kind: "new_session", role: "child", runner: "resident", parent: "me" },
       message: "PROCESS_NEW_SESSION",
     },
-    workerCount: 1,
+    childCount: 1,
     senderMessages: 0,
     failTarget: false,
     requestCount: 2,
@@ -505,14 +505,14 @@ test.each([
       to: { kind: "session", id: "sender" },
       message: "PROCESS_REFUSED_TARGET",
     },
-    workerCount: 1,
+    childCount: 1,
     senderMessages: 0,
     failTarget: true,
     requestCount: 2,
   },
 ])("process-session focused message path $name", async ({
   input,
-  workerCount,
+  childCount,
   senderMessages,
   failTarget,
   requestCount,
@@ -520,7 +520,7 @@ test.each([
   const tools = projectTools(
     catalogDefinitions(testToolPorts).filter(
       (tool: import("@openomni/protocol").AnyToolDefinition) =>
-        tool.visibility.model.includes("worker") || tool.visibility.cell.includes("worker"),
+        tool.visibility.model.includes("child") || tool.visibility.cell.includes("child"),
     ),
   ).session;
   const fixture = messageFixture("resident", undefined, tools);
@@ -536,7 +536,7 @@ test.each([
   const plane = processPlane(fixture);
   const { runtime } = plane;
   try {
-    const child = await commissionWorker(fixture, {
+    const child = await commissionChild(fixture, {
       content: "focused process path",
       replyTo: "focused-process",
     });
@@ -564,8 +564,8 @@ test.each([
     } else await serving;
 
     expect(requests).toBe(requestCount);
-    expect(fixture.plane.listSessions().filter((row) => row.role === "worker")).toHaveLength(
-      workerCount,
+    expect(fixture.plane.listSessions().filter((row) => row.role === "child")).toHaveLength(
+      childCount,
     );
     expect(
       receivedMessages(fixture.plane, "sender").filter(
@@ -626,7 +626,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
             id: "process-send",
             tool: "send_message",
             input: {
-              to: { kind: "new_session", role: "worker", runner: "process", parent: "me" },
+              to: { kind: "new_session", role: "child", runner: "process", parent: "me" },
               message: "run process",
               reply_to: "process-binding",
               // #1258: delegation policy refuses child creation without a spend cap.
@@ -645,7 +645,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
   await ownerStart(app, "initial-process");
   expect(await received).toEqual({ ok: true });
   const plane = await planeOf(app.runtime);
-  const child = plane.listSessions().find((row) => row.role === "worker");
+  const child = plane.listSessions().find((row) => row.role === "child");
   if (child?.parentId === undefined || child.parentId === null)
     throw new Error("missing process child");
   const replies = receivedMessages(plane, child.parentId).filter((row) =>

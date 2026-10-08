@@ -21,7 +21,7 @@ function transport(scenario: string, answer?: SessionTransition.Resolution | Err
     answers,
     sessions: createProcessSessionTransport({
       command: [process.execPath, CHILD, scenario],
-      worker: {
+      child: {
         catalogPath: "unused-catalog.sqlite",
         sessionsDir: "unused-sessions",
         entityIdleMs: 60_000,
@@ -46,17 +46,17 @@ function transport(scenario: string, answer?: SessionTransition.Resolution | Err
 
 test("process transport relays the child's doorbell and both receipt outcomes", async () => {
   const f = transport("conversation", "resolved");
-  const done = f.sessions.wake("worker");
-  expect(f.sessions.wake("worker")).toBe(done);
+  const done = f.sessions.wake("child");
+  expect(f.sessions.wake("child")).toBe(done);
   await bounded(done);
   expect(f.committed).toEqual([["child-a", "child-b"]]);
   expect(f.answers.map((answer) => answer.inputId)).toEqual(["first", "second"]);
-  expect(f.answers[0]?.principal.principalId).toBe("worker");
+  expect(f.answers[0]?.principal.principalId).toBe("child");
 });
 
 test("an answer whose principal is not the authenticated child is refused", async () => {
   const f = transport("impostor", "resolved");
-  await expect(bounded(f.sessions.wake("worker"))).rejects.toThrow(
+  await expect(bounded(f.sessions.wake("child"))).rejects.toThrow(
     "process answer principal does not match its authenticated child",
   );
   expect(f.answers).toEqual([]);
@@ -97,14 +97,14 @@ test("native process entry validates and releases a request for a missing durabl
 
 test("a child exiting without settling surfaces its exit code", async () => {
   const f = transport("crash");
-  await expect(bounded(f.sessions.wake("worker"))).rejects.toThrow(
-    "session process exited 2: worker",
+  await expect(bounded(f.sessions.wake("child"))).rejects.toThrow(
+    "session process exited 2: child",
   );
 });
 
 test("closing the transport kills lingering children", async () => {
   const f = transport("linger");
-  const done = f.sessions.wake("worker");
+  const done = f.sessions.wake("child");
   const settled = done.then(
     () => "resolved" as const,
     (error: Error) => error.message,
@@ -112,22 +112,22 @@ test("closing the transport kills lingering children", async () => {
   await bounded(f.ready);
   await bounded(f.sessions.close());
   expect(await bounded(settled)).toMatch(/^session process exited /);
-  expect(f.committed).toEqual([["worker"]]);
+  expect(f.committed).toEqual([["child"]]);
 });
 
 test("a doorbell is not successful settlement when the child crashes", async () => {
   const f = transport("ack-crash");
-  await expect(bounded(f.sessions.wake("worker"))).rejects.toThrow(
-    "session process exited 2: worker",
+  await expect(bounded(f.sessions.wake("child"))).rejects.toThrow(
+    "session process exited 2: child",
   );
-  expect(f.committed).toEqual([["worker"]]);
+  expect(f.committed).toEqual([["child"]]);
   expect(f.answers).toEqual([]);
 });
 
 test("malformed child output rejects the wire rather than being acknowledged", async () => {
   const f = transport("malformed");
   try {
-    await expect(bounded(f.sessions.wake("worker"))).rejects.toBeInstanceOf(SyntaxError);
+    await expect(bounded(f.sessions.wake("child"))).rejects.toBeInstanceOf(SyntaxError);
     expect(f.answers).toEqual([]);
     expect(f.committed).toEqual([]);
   } finally {

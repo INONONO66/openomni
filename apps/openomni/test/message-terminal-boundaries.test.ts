@@ -53,7 +53,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
       if (event.kind === "message.replied" && kind !== "interrupted") delivered.resolve();
       if (
         event.kind === "message.rejected" &&
-        event.matchedRuleIds.includes("message.worker.deadline")
+        event.matchedRuleIds.includes("message.child.deadline")
       ) {
         delivered.reject(new Error("terminal refused by inherited deadline"));
       }
@@ -89,7 +89,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
         run: (input, sink) => Effect.gen(function* () {
           const runPlane = planeRef.current;
           if (runPlane === undefined) throw new Error("plane not resolved before model run");
-          if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
+          if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "child") {
             entered.resolve(input.trace.sessionId);
             if (kind === "interrupted") yield* Effect.promise(() => release.promise);
             if (kind === "error") throw new Error("CHILD_ERROR");
@@ -123,7 +123,7 @@ for (const kind of ["result", "error", "interrupted"] as const) {
       await interrupt;
     }
     expect(await delivery).toEqual({ ok: true });
-    const child = plane.listSessions().find((row) => row.role === "worker");
+    const child = plane.listSessions().find((row) => row.role === "child");
     if (child === undefined || child.parentId === null) throw new Error("missing child");
     const terminals = sessionTree(child.id, plane.sessionStore(child.id).actions).flatMap((action) => {
       const terminal = Core.SessionHandleStore.turnTerminal(action);

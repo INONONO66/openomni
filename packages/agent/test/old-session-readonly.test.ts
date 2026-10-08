@@ -30,7 +30,7 @@ test("#1252 newer catalog schemaVersion: reads work, Deliver/fork refused typed,
 
     // The marker is stamped at create; bump it out of band past this build.
     const stamped = new Database(path);
-    expect(stamped.query("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+    expect(stamped.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
     stamped.run("PRAGMA user_version = 99");
     stamped.close();
     const before = fileHash(path);
@@ -51,17 +51,17 @@ test("#1252 newer catalog schemaVersion: reads work, Deliver/fork refused typed,
       // Fork (session indexing) is refused with the typed error.
       let indexRefusal: Error | undefined;
       try {
-        reopened.indexSession({ id: "s-2", parentId: "s-1", role: "worker", createdAt: 2 });
+        reopened.indexSession({ id: "s-2", parentId: "s-1", role: "child", createdAt: 2 });
       } catch (error) {
         indexRefusal = error instanceof Error ? error : new Error(String(error));
       }
       expect(indexRefusal).toBeInstanceOf(CatalogVersionRefused);
       if (indexRefusal instanceof CatalogVersionRefused) {
         expect(indexRefusal.fileVersion).toBe(99);
-        expect(indexRefusal.codeVersion).toBe(2);
+        expect(indexRefusal.codeVersion).toBe(3);
         expect(indexRefusal.operation).toBe("indexSession");
         expect(indexRefusal.message).toBe(
-          "catalog schemaVersion 99 is newer than this build (2); indexSession refused — catalog is read-only",
+          "catalog schemaVersion 99 is newer than this build (3); indexSession refused — catalog is read-only",
         );
       }
 
@@ -75,7 +75,7 @@ test("#1252 newer catalog schemaVersion: reads work, Deliver/fork refused typed,
       expect(fenceRefusal).toBeInstanceOf(CatalogVersionRefused);
       if (fenceRefusal instanceof CatalogVersionRefused) {
         expect(fenceRefusal.fileVersion).toBe(99);
-        expect(fenceRefusal.codeVersion).toBe(2);
+        expect(fenceRefusal.codeVersion).toBe(3);
         expect(fenceRefusal.operation).toBe("rotateFence");
       }
     } finally {

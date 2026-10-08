@@ -4,7 +4,7 @@ import {
   Alarm,
   Journal,
   canonicalDigest,
-  Inbox,
+  Delivery,
   LedgerAction,
   LedgerSession,
   PolicyRow,
@@ -86,9 +86,9 @@ describe("L0 ledger protocol", () => {
     ).toBe(false);
   });
 
-  test("child inbox materialization requires pinned limits but root admission does not", () => {
+  test("child delivery materialization requires pinned limits but root admission does not", () => {
     const admission = {
-      id: "inbox-1",
+      id: "delivery-1",
       sessionId: "session-1",
       kind: "prompt",
       content: "hello",
@@ -116,17 +116,17 @@ describe("L0 ledger protocol", () => {
         ts: 100,
       },
     };
-    expect(Inbox.Commit.parse(admission).parentActionId).toBeNull();
-    expect(Inbox.Commit.safeParse({ ...admission, createSession }).success).toBe(true);
+    expect(Delivery.Commit.parse(admission).parentActionId).toBeNull();
+    expect(Delivery.Commit.safeParse({ ...admission, createSession }).success).toBe(true);
     const child = {
       ...createSession,
-      row: { ...createSession.row, parentId: "parent-1", role: "worker" },
+      row: { ...createSession.row, parentId: "parent-1", role: "child" },
     };
-    const refused = Inbox.Commit.safeParse({ ...admission, createSession: child });
+    const refused = Delivery.Commit.safeParse({ ...admission, createSession: child });
     expect(refused.success).toBe(false);
     expect(refused.error?.issues.map(({ path }) => path)).toEqual([["limits"]]);
     expect(
-      Inbox.Commit.safeParse({
+      Delivery.Commit.safeParse({
         ...admission,
         createSession: child,
         limits: { fanout: 0, depth: 0 },
@@ -175,7 +175,7 @@ describe("L0 ledger protocol", () => {
     expect(Alarm.occurrenceId("session-1", "alarm-1", 7, "deadline")).not.toBe(id);
   });
 
-  test("parses session, inbox, fence-adoption, and global policy rows", () => {
+  test("parses session, delivery, fence-adoption, and global policy rows", () => {
     expect(
       LedgerSession.Row.parse({
         id: "session-1",
@@ -189,8 +189,8 @@ describe("L0 ledger protocol", () => {
     ).toMatchObject({ role: "resident", revision: 0, state: "idle" });
 
     expect(
-      Inbox.Row.parse({
-        id: "inbox-1",
+      Delivery.Row.parse({
+        id: "delivery-1",
         sessionId: "session-1",
         kind: "prompt",
         content: "hello",
@@ -232,4 +232,12 @@ test("the loop-reserved alarm purpose set is closed and classifies exactly its m
   }
   expect(isReservedAlarmPurpose("monitor.hit")).toBe(false);
   expect(isReservedAlarmPurpose("cron.tick")).toBe(false);
+});
+
+describe("LedgerSession.foldLegacyRole", () => {
+  test("folds the retired delegated-session role byte to child and leaves every other role alone", () => {
+    expect(LedgerSession.foldLegacyRole(LedgerSession.LEGACY_CHILD_ROLE)).toBe("child");
+    expect(LedgerSession.foldLegacyRole("child")).toBe("child");
+    expect(LedgerSession.foldLegacyRole("resident")).toBe("resident");
+  });
 });

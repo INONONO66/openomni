@@ -2,7 +2,7 @@ import {
   canonicalDigest,
   type ConfigureDisabled,
   type ConsumptionSettings,
-  Inbox,
+  Delivery,
   PlainObjectSchema,
   type PlainValue,
   type LedgerAction,
@@ -346,15 +346,15 @@ function outboundRowsIn(
 
 /** The chain effect one received message committed; the pending fold reads it back. */
 const ReceivedEffect = z.object({
-  inboxKind: Inbox.Kind,
+  deliveryKind: Delivery.Kind,
   content: z.string(),
   delivery: z.enum(["steer", "followUp"]).optional(),
 });
 
 /**
- * Pending-message projection (W5.2): `prompt` actions carrying an inbox
+ * Pending-message projection (W5.2): `prompt` actions carrying a delivered-input
  * payload whose id no delivery row references yet, folded from the
- * chain — there is no inbox table.
+ * chain — there is no input-queue table.
  */
 /**
  * The `after` cursor a deferred `action` input's intent carries (#1256 H-3),
@@ -372,7 +372,7 @@ function afterCursorOf(intent: PlainValue): number | undefined {
  * comes from the
  * same delivery-reference rule the pending read uses.
  */
-function inputMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
+function inputMessagesIn(context: SessionKernelContext, sessionId: string): Delivery.Row[] {
   const pending = new Set(
     requiredActionsIn(context)
       .pendingMessages(sessionId)
@@ -382,10 +382,10 @@ function inputMessagesIn(context: SessionKernelContext, sessionId: string): Inbo
     .inputMessages(sessionId)
     .map((action, index) => {
       const effect = ReceivedEffect.parse(action.effect.value);
-      return Inbox.Row.parse({
+      return Delivery.Row.parse({
         id: action.id,
         sessionId: action.sessionId,
-        kind: effect.inboxKind,
+        kind: effect.deliveryKind,
         content: effect.content,
         origin: action.intent,
         ...(effect.delivery === undefined ? {} : { delivery: effect.delivery }),
@@ -398,16 +398,16 @@ function inputMessagesIn(context: SessionKernelContext, sessionId: string): Inbo
     });
 }
 
-function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Inbox.Row[] {
+function pendingMessagesIn(context: SessionKernelContext, sessionId: string): Delivery.Row[] {
   return requiredActionsIn(context)
     .pendingMessages(sessionId)
     .map((action, index) => {
       const effect = ReceivedEffect.parse(action.effect.value);
       const after = afterCursorOf(action.intent.value);
-      return Inbox.Row.parse({
+      return Delivery.Row.parse({
         id: action.id,
         sessionId: action.sessionId,
-        kind: effect.inboxKind,
+        kind: effect.deliveryKind,
         content: effect.content,
         origin: action.intent,
         ...(effect.delivery === undefined ? {} : { delivery: effect.delivery }),
@@ -902,11 +902,11 @@ function makeSessionKernel(context: SessionKernelContext) {
     adoptFence: (input: LedgerSession.AdoptFence): Effect.Effect<AdoptReceipt, LedgerError> =>
       sessionWritesIn(context).pipe(Effect.flatMap((sessions) => sessions.adoptFence(input))),
     commit: (input: LedgerSession.Commit) => commitIn(context, input),
-    pendingMessages: (sessionId: string): Inbox.Row[] => pendingMessagesIn(context, sessionId),
+    pendingMessages: (sessionId: string): Delivery.Row[] => pendingMessagesIn(context, sessionId),
     /** Ordinal of the latest executed compaction, else 0 — the staleness horizon for `action` inputs (#1256 H-3). */
     compactionHead: (sessionId: string): number =>
       requiredActionsIn(context).latestCompaction(sessionId)?.ordinal ?? 0,
-    inputMessages: (sessionId: string): Inbox.Row[] => inputMessagesIn(context, sessionId),
+    inputMessages: (sessionId: string): Delivery.Row[] => inputMessagesIn(context, sessionId),
     latestAction: (
       sessionId: string,
       throughRevision = Number.MAX_SAFE_INTEGER,
@@ -1011,7 +1011,7 @@ export type SessionKernel = ReturnType<typeof makeSessionKernel>;
 /**
  * Handle-scoped kernel factory (W5.2 review F1): session facts (row, chain,
  * snapshots) come from one per-session store; policy rows come from the
- * catalog. There is no inbox table — `pendingMessages` folds the pending
+ * catalog. There is no input-queue table — `pendingMessages` folds the pending
  * projection straight from the action chain.
  */
 export function createSessionKernel(session: SessionStore, catalog: CatalogStore): SessionKernel {

@@ -2,7 +2,7 @@
 import * as SessionHandleStore from "./store/fence";
 import { computeActionHash, storedActionRow } from "./store/action-hash";
 import { CommitRefused, FenceRefused, SessionNotFound, type LedgerError } from "./store/errors";
-import { canonicalJson, Inbox as InboxSchema, PlainObjectSchema, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction } from "@openomni/protocol";
+import { canonicalJson, Delivery, PlainObjectSchema, PlainValueSchema, SessionTransition, type LedgerAction } from "@openomni/protocol";
 import { z } from "zod";
 import { Cause, Context, Effect, Exit, Option, Queue, Schema, type Scope, Semaphore } from "effect";
 import { Entity, type Envelope, type Sharding } from "effect/cluster";
@@ -147,7 +147,7 @@ interface ReceivedEnvelope {
  */
 function receivedActionFor(
   sessionId: string,
-  kind: Inbox.Kind,
+  kind: Delivery.Kind,
   message: ReceivedEnvelope,
   at: number,
   delivery?: "steer" | "followUp",
@@ -180,7 +180,7 @@ function receivedActionFor(
  */
 function replayedReceived(
   handle: ActivationHandle,
-  kind: Inbox.Kind,
+  kind: Delivery.Kind,
   message: ReceivedEnvelope,
   delivery?: "steer" | "followUp",
   after?: number,
@@ -203,7 +203,7 @@ function replayedReceived(
 /** Idempotent receive (F4): a redelivered envelope resolves to its existing chain action; a conflicting one is the typed `idempotency_conflict` (#1313). */
 function appendReceived(
   handle: ActivationHandle,
-  kind: Inbox.Kind,
+  kind: Delivery.Kind,
   message: ReceivedEnvelope,
   delivery?: "steer" | "followUp",
   after?: number,
@@ -352,7 +352,7 @@ function admissionSnapshot(handle: ActivationHandle): SessionAdmissionSnapshot {
 }
 
 /** Commits `<id>:delivery` no-op records so consumed interrupts/resumes leave the fold. */
-function consumePending(handle: ActivationHandle, items: readonly Inbox.Row[]): Effect.Effect<void, LedgerError> {
+function consumePending(handle: ActivationHandle, items: readonly Delivery.Row[]): Effect.Effect<void, LedgerError> {
   const { kernel, authority, env } = handle;
   const row = kernel.row(authority.sessionId);
   const parentId = kernel.latestAction(authority.sessionId)?.id ?? null;
@@ -362,7 +362,7 @@ function consumePending(handle: ActivationHandle, items: readonly Inbox.Row[]): 
     fence: authority.fence,
     now: env.clock(),
     expectedRevision: row.revision,
-    actions: deliveryActions(items, { kind: "inbox" }, "before_llm", parentId),
+    actions: deliveryActions(items, { kind: "pending" }, "before_llm", parentId),
     state: row.state,
   }).pipe(Effect.asVoid);
 }
@@ -472,13 +472,13 @@ function deliverCandidate(
   handle: ActivationHandle,
   payload: { readonly source: string; readonly idempotencyKey: string },
   body: DeliverBody,
-  inboxKind: Inbox.Kind,
-): Inbox.Row {
+  deliveryKind: Delivery.Kind,
+): Delivery.Row {
   const { kernel, authority, env } = handle;
-  return InboxSchema.Row.parse({
+  return Delivery.Row.parse({
     id: payload.idempotencyKey,
     sessionId: authority.sessionId,
-    kind: inboxKind,
+    kind: deliveryKind,
     content: body.content,
     origin: { encodingVersion: 1, value: PlainValueSchema.parse(JSON.parse(payload.source)) },
     ...(body.delivery === undefined ? {} : { delivery: body.delivery }),
@@ -525,7 +525,7 @@ function deliver(
     // stays a reserved refusal code for the wire contract.
     const row = kernel.row(authority.sessionId);
     const body = decodeDeliverBody(JSON.parse(payload.body));
-    const inboxKind: Inbox.Kind =
+    const deliveryKind: Delivery.Kind =
       payload.kind === "prompt"
         ? "prompt"
         : payload.kind === "action"
@@ -534,13 +534,13 @@ function deliver(
             (yield* Effect.die(new Error("signal delivery without a control op"))));
     const replayed = yield* replayedReceived(
       handle,
-      inboxKind,
+      deliveryKind,
       { messageId: payload.idempotencyKey, content: body.content, origin: payload.source },
       body.delivery,
       body.after,
     );
     if (replayed !== undefined) return { seq: replayed.ordinal, existed: true };
-    const candidate = deliverCandidate(handle, payload, body, inboxKind);
+    const candidate = deliverCandidate(handle, payload, body, deliveryKind);
     const snapshot = admissionSnapshot(handle);
     const decision = decideSessionAdmission({
       ...snapshot,
@@ -553,7 +553,7 @@ function deliver(
       });
     const receipt = yield* appendReceived(
       handle,
-      inboxKind,
+      deliveryKind,
       {
         messageId: payload.idempotencyKey,
         content: body.content,
@@ -1265,7 +1265,7 @@ export function createSessionEntityRunTurn(
     const { runTurn, seal } = createSessionTurn(kernel, authority.sessionId, runner, runtime, state, authority.owner, runtime.clock, runtime.entropy, scope, {
       createExecutionLedger: (...args) => admission.createExecutionLedger(...args),
       evaluatePromptPolicies: (...args) => admission.evaluatePromptPolicies(...args),
-      consumePolicyBlockedInbox: (...args) => admission.consumePolicyBlockedInbox(...args),
+      consumePolicyBlockedDeliveries: (...args) => admission.consumePolicyBlockedDeliveries(...args),
       hibernate: () => Effect.void,
     });
     // The synthetic result never persists: seals ride the detached body, and
@@ -1277,7 +1277,7 @@ export function createSessionEntityRunTurn(
     const admission = createSessionAdmission(kernel, authority.sessionId, runtime, state, authority.owner, runtime.clock, runtime.entropy, { awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal });
     const recovery = createSessionRecovery(kernel, authority.sessionId, runtime, runtime.clock, runtime.entropy, {
       awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal,
-      commitSession: admission.commitSession, createExecutionLedger: admission.createExecutionLedger, consumeNoopInbox: admission.consumeNoopInbox,
+      commitSession: admission.commitSession, createExecutionLedger: admission.createExecutionLedger, consumeNoopDeliveries: admission.consumeNoopDeliveries,
     });
     switch (decision.kind) {
       case "start": return void (yield* admission.startTurn());

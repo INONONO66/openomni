@@ -20,7 +20,7 @@ describe("Ingress meta contracts", () => {
         trusted: true,
       },
       target: {
-        kind: "worker",
+        kind: "resident",
         sessionId: "sess-1",
       },
       traceId: "trace-1",
@@ -28,18 +28,8 @@ describe("Ingress meta contracts", () => {
 
     expect(meta.actor?.role).toBe("resident");
     expect(meta.actor?.trusted).toBe(true);
-    expect(meta.target?.kind).toBe("worker");
+    expect(meta.target?.kind).toBe("resident");
     expect(meta.target?.sessionId).toBe("sess-1");
-  });
-
-  test("parses worker target without identity as new worker request", () => {
-    const meta = Ingress.MetaSchema.parse({
-      target: {
-        kind: "worker",
-      },
-    });
-
-    expect(meta.target).toEqual({ kind: "worker" });
   });
 });
 
@@ -81,29 +71,16 @@ describe("DirectEvent validation", () => {
     expect(resident.target).toEqual({ kind: "resident" });
     expect(resident.meta?.actor?.role).toBe("user");
 
-    const worker = Ingress.DirectEventSchema.parse({
-      id: "event-worker-1",
+    const pinned = Ingress.DirectEventSchema.parse({
+      id: "event-pinned-1",
       traceId: "trace-test",
       surface: "cli",
       mode: "direct",
-      target: "worker:worker-7",
+      target: { kind: "resident", sessionId: "sess-7" },
       payload: "continue",
       meta: { actor: { role: "resident" } },
     });
-    expect(worker.target).toEqual({ kind: "worker", workerId: "worker-7" });
-  });
-
-  test("parses worker target without workerId or sessionId", () => {
-    const event = Ingress.DirectEventSchema.parse({
-      id: "event-worker-new",
-      traceId: "trace-test",
-      surface: "cli",
-      mode: "direct",
-      target: { type: "worker" },
-      payload: "start",
-    });
-
-    expect(event.target).toEqual({ kind: "worker" });
+    expect(pinned.target).toEqual({ kind: "resident", sessionId: "sess-7" });
   });
 
   test("should reject missing id", () => {

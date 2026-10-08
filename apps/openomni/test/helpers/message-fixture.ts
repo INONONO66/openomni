@@ -18,7 +18,7 @@ import {
   messageMaterialization,
   prepareMessage,
 } from "../../src/composition/message-session";
-import { localInbox } from "./ledger";
+import { localDelivery } from "./ledger";
 import { allowConfigure, generationServices } from "./generation-services";
 const ToolCatalog = Core.ToolCatalog;
 import { seedKernelPolicyRows } from "../../src/policy-seed";
@@ -61,7 +61,7 @@ export function messageFixture(
     id: testIds("message-fixture"),
     requests: channelRequests(requests),
     stores: createChannelStores(channelStoreSource(plane, () => 100)),
-    inbox: { commit: (input) => localInbox(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
+    delivery: { commit: (input) => localDelivery(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("delivery.commit"))) },
     prepare: prepareMessage(plane, (id, parentId, childRole, runner) =>
       messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration(), testIds("materialize"))({
         id,

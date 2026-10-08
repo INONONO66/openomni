@@ -50,7 +50,7 @@ describe("GatewayRouter kernel routing", () => {
       inboundTreatment: "full_access",
     });
   });
-  test("routing publication failure does not invoke inbox commit", async () => {
+  test("routing publication failure does not invoke delivery commit", async () => {
     registerOwnerDm();
     createMappedOwnerSession();
     const publish = Bus.publish;

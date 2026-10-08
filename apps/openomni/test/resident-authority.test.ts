@@ -14,7 +14,7 @@ import { assistantMessage, requestToolStep } from "./helpers/assistant-message";
 import { residentRunner } from "./helpers/resident-runner";
 import { runEffect, runSyncEffect } from "./helpers/scoped-effect";
 import { effectScope } from "./helpers/effect-scope";
-import { drainSession, localInbox, resolvedRuntimeFor } from "./helpers/ledger";
+import { drainSession, localDelivery, resolvedRuntimeFor } from "./helpers/ledger";
 import { fakeProviderModel } from "./helpers/resident-suite";
 import { provisionPort } from "./helpers/provision-port";
 import { testIds } from "./helpers/test-entropy";
@@ -48,9 +48,9 @@ for (const scenario of [
       return yield* createResidentGateway({
         now: Date.now,
         id: testIds("authority-gateway"),
-        inbox: { commit: (input) =>
-          localInbox(resident.plane, "authority-gateway", Date.now)(input).pipe(
-            Effect.mapError(decodeChannelFailure("inbox.commit")),
+        delivery: { commit: (input) =>
+          localDelivery(resident.plane, "authority-gateway", Date.now)(input).pipe(
+            Effect.mapError(decodeChannelFailure("delivery.commit")),
           ) },
         prepare: prepareMessage(resident.plane, resident.materialize),
         ...(yield* residentGatewayPorts(resident.plane, Date.now)),

@@ -41,7 +41,7 @@ function turnIntentAction(input: {
       value: SessionTurn.HistoricalIntent.parse({
         phase: "intent",
         resultId: `${input.id}:result`,
-        inboxIds: [],
+        deliveryIds: [],
         toolsGeneration: input.generation.generation,
         toolsHash: input.generation.toolsHash,
         systemHash: input.generation.systemHash,
@@ -175,7 +175,7 @@ test("createSessionKernel serves session facts from the session file and policy 
     expect(kernel.policyRows()).toHaveLength(1);
     expect(kernel.currentPolicyGeneration()).toBe(1);
 
-    // The inbox-table plane is gone (W5.2 #1197): pending work is a pure
+    // The input-queue-table plane is gone (W5.2 #1197): pending work is a pure
     // projection over undelivered prompt actions, and a fresh file has none.
     expect(kernel.pendingMessages("s1")).toEqual([]);
   } finally {

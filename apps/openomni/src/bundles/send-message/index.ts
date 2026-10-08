@@ -300,10 +300,10 @@ export function createSendMessageTool(
     name: "send_message",
     category: "authority",
     description:
-      "Send one letter to a contact: a session, a new child session, a telegram or discord channel, a human, or an external CLI agent (cli:claude-code|codex|omp). Returns a handle without waiting for a reply; the reply arrives in your inbox.",
+      "Send one letter to a contact: a session, a new child session, a telegram or discord channel, a human, or an external CLI agent (cli:claude-code|codex|omp). Returns a handle without waiting for a reply; the reply arrives as a delivered prompt in this session.",
     input: SendMessageInput,
     output: SendMessageOutput,
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     async execute(input, context) {
       const address = input.to.kind === "contact" ? parseContactAddress(input.to.id) : undefined;
       if (address !== undefined) return routeContact(registry, contacts, address, input, context);

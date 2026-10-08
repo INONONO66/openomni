@@ -23,7 +23,7 @@ import {
 import { assistantMessage } from "./helpers/assistant-message";
 import { runEffect } from "./helpers/effect";
 import { runAppEffect } from "../src/gateway";
-import { localInbox, planeOf } from "./helpers/ledger";
+import { localDelivery, planeOf } from "./helpers/ledger";
 import { ownerStart } from "./helpers/owner-start";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
@@ -169,7 +169,7 @@ test("a new child with a deadline arms delegation.deadline for the created child
     deadline: { arm: (input) => Effect.sync(() => void armed.push(input)) },
   });
   await tool.execute(
-    { to: { kind: "new_session", role: "worker", runner: "native", parent: "me" }, message: "go", kind: "prompt", deadline_ms: 500, spend_cap: 1 },
+    { to: { kind: "new_session", role: "child", runner: "native", parent: "me" }, message: "go", kind: "prompt", deadline_ms: 500, spend_cap: 1 },
     context,
   );
   expect(armed).toEqual([{ sessionId: "sender", turnId: "turn-1", child: "child-9", at: 2_500 }]);
@@ -257,7 +257,7 @@ test("boot binds both bundles: guard rows seeded on the live policy plane and th
   // Journal replay: a key committed by the child-side local door (the real
   // out-of-band writer) answers from the chain itself — {seq, existed: true}.
   const direct = await runEffect(
-    localInbox(plane, "contacts-test", () => Date.now())({
+    localDelivery(plane, "contacts-test", () => Date.now())({
       id: "contact-m2",
       sessionId: resident.id,
       kind: "prompt",

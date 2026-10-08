@@ -63,7 +63,7 @@ test("history dispatch stays in its tab when another tab currently shows its des
   const first = currentTab();
   dispatchShellCommand("new-tab");
   const second = currentTab();
-  navigate({ kind: "route", route: "inbox" });
+  navigate({ kind: "route", route: "automations" });
   activateTab(first.id);
   navigate(second.place);
   navigate({ kind: "route", route: "automations" });

@@ -260,7 +260,7 @@ epoch budget and dedupe, cancellation is terminal, and persistent source
 recovery does not replay a live-stream gap.
 
 [Implementation Status](implementation-status.md) distinguishes branch evidence
-from merged delivery. The retained `Alarm.Watch*` and `Inbox.Commit` protocol
+from merged delivery. The retained `Alarm.Watch*` and `Delivery.Commit` protocol
 names are wire vocabulary only; their live consumer is the entity and they do
 not imply separate persistence or worker planes.
 

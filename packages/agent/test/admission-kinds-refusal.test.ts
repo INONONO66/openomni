@@ -7,7 +7,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Effect } from "effect";
-import { Inbox, type LedgerSession } from "@openomni/protocol";
+import { Delivery, type LedgerSession } from "@openomni/protocol";
 import { decideSessionAdmission } from "../src/core/admission";
 import type { DeliverRefused } from "../src/core/messages";
 import { clusterTempDir, readChain, runCluster, sendDeliver, sessionFileFor } from "./helpers/cluster-runtime";
@@ -30,7 +30,7 @@ const sessionRow: LedgerSession.Row = {
   policyGeneration: 1,
 };
 
-const pendingPrompt = Inbox.Row.parse({
+const pendingPrompt = Delivery.Row.parse({
   id: "in-1",
   sessionId: "s1",
   kind: "prompt",

@@ -17,7 +17,7 @@ import { openCatalogStore } from "../src/core/store/catalog";
 import { openSessionStore } from "../src/core/store/session-file";
 import * as SessionHandleStore from "../src/core/store/fence";
 import type { SessionKernel } from "../src/core/entity";
-import { type BusEvent, canonicalDigest, type Inbox, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
+import { type BusEvent, canonicalDigest, type Delivery, type LedgerAction, type LedgerSession, L0Observation, type ObservationSink, type PlainValue, type PolicyRow, type SessionTransition, type SessionTurn, } from "@openomni/protocol";
 import { createExecutor } from "../src/core/gate/decide";
 import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult, } from "../src/core/gate/decide";
 import { closeSessions, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult } from "../src/core/run";
@@ -30,7 +30,7 @@ import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 // HARNESS (docs/session-lifecycle-contract.md section 6): real ledger, session
 // controller, executor waves, request transitions and outbound obligations on
 // the entity plane (W5.2): handle-scoped kernels, fence adoption instead of
-// TTL leases, chain-fold inbox. Every step snapshots the complete durable
+// TTL leases, chain-fold deliveries. Every step snapshots the complete durable
 // product of each traced session, checks the standing invariants, and the
 // finished trace is replayed from the file-backed SQLite image with zero
 // dispatch.
@@ -105,7 +105,7 @@ class TraceSink implements ObservationSink {
 interface SessionSnapshot {
     readonly row: LedgerSession.Row;
     readonly actions: readonly LedgerAction.Node[];
-    readonly inbox: readonly Inbox.Row[];
+    readonly deliveries: readonly Delivery.Row[];
     readonly requests: readonly SessionTransition.Request[];
     readonly outbound: readonly SessionTransition.Outbound[];
     readonly tail: SessionTurn.Snapshot;
@@ -119,7 +119,7 @@ function snapshotFrom(reads: SessionKernel, sessionId: string): SessionSnapshot 
     return {
         row: reads.row(sessionId),
         actions: sessionTree(reads, sessionId),
-        inbox: reads.inputMessages(sessionId),
+        deliveries: reads.inputMessages(sessionId),
         requests: reads.requestRows(sessionId),
         outbound: reads.outboundRows(sessionId),
         tail: reads.getSnapshot(sessionId, 4),
@@ -141,7 +141,7 @@ function assertAppendOnly(before: SessionSnapshot | undefined, after: SessionSna
     if (before === undefined)
         return;
     expect(after.actions.slice(0, before.actions.length)).toEqual([...before.actions]);
-    expect(after.inbox.length).toBeGreaterThanOrEqual(before.inbox.length);
+    expect(after.deliveries.length).toBeGreaterThanOrEqual(before.deliveries.length);
 }
 function assertCausalLinks(after: SessionSnapshot): void {
     const seen = new Set<string>();
@@ -174,12 +174,12 @@ function assertInputConsumption(after: SessionSnapshot): void {
     for (const action of after.actions) {
         const delivery = SessionHandleStore.delivery(action);
         if (delivery !== undefined)
-            deliveries.set(delivery.inboxId, (deliveries.get(delivery.inboxId) ?? 0) + 1);
+            deliveries.set(delivery.deliveryId, (deliveries.get(delivery.deliveryId) ?? 0) + 1);
     }
-    for (const row of after.inbox) {
+    for (const row of after.deliveries) {
         expect(after.actions.some((action: LedgerAction.Node) => action.id === row.id)).toBe(true);
         expect(deliveries.get(row.id) ?? 0).toBeLessThanOrEqual(1);
-        // The chain is the inbox: consumption is the delivery action itself.
+        // The chain is the queue: consumption is the delivery action itself.
         expect(deliveries.has(row.id)).toBe(row.status === "consumed");
     }
 }
@@ -297,7 +297,7 @@ function replayEffectFree(expected: ReadonlyMap<string, SessionSnapshot>, dispat
                 if (replayed === undefined)
                     throw new Error(`replay lost session ${sessionId}`);
                 expect(replayed.actions).toEqual(snapshot.actions);
-                expect(replayed.inbox).toEqual(snapshot.inbox);
+                expect(replayed.deliveries).toEqual(snapshot.deliveries);
                 expect(replayed.requests).toEqual(snapshot.requests);
                 expect(replayed.outbound).toEqual(snapshot.outbound);
                 expect(replayed.tail.turns).toEqual(snapshot.tail.turns);
@@ -588,7 +588,7 @@ describe("session lifecycle conformance", () => {
             revision: 8,
             state: "idle",
         });
-        expect(done?.inbox.map((row: Inbox.Row) => row.status)).toEqual(["consumed"]);
+        expect(done?.deliveries.map((row: Delivery.Row) => row.status)).toEqual(["consumed"]);
         expect(done?.tail.turns.at(-1)).toMatchObject({
             state: "idle",
             messages: [
@@ -768,7 +768,7 @@ describe("session lifecycle conformance", () => {
         expect(cancelled?.actions.flatMap((action: LedgerAction.Node) => action.kind === "tool" && phaseOf(action) === "result"
             ? [objectValue(action.effect.value)?.terminal]
             : [])).toEqual(["interrupted", "blocked_pre", "interrupted", "interrupted"]);
-        expect(cancelled?.inbox.map((row: Inbox.Row) => [row.kind, row.status])).toEqual([
+        expect(cancelled?.deliveries.map((row: Delivery.Row) => [row.kind, row.status])).toEqual([
             ["prompt", "consumed"],
             ["interrupt", "consumed"],
         ]);
@@ -871,7 +871,7 @@ describe("session lifecycle conformance", () => {
             ["user", "hello"],
         ]);
         expect(resumed?.row).toMatchObject({ state: "idle", toolsGeneration: 2 });
-        expect(resumed?.inbox.map((row: Inbox.Row) => [row.kind, row.status])).toEqual([
+        expect(resumed?.deliveries.map((row: Delivery.Row) => [row.kind, row.status])).toEqual([
             ["prompt", "consumed"],
             ["interrupt", "consumed"],
             ["resume", "consumed"],
@@ -993,7 +993,7 @@ describe("session lifecycle conformance", () => {
     test("lifecycle v1 product totality and effect-free prefix replay", () => traceTest(() => Effect.gen(function* () {
         const runtime = runtimeFor();
         const port = (yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(createSessionRequests(fixture), fixture); }));
-        // Inbox ids are store-wide: a delivered reply keeps its input id, so each
+        // Delivery ids are store-wide: a delivered reply keeps its input id, so each
         // session's contenders carry session-scoped input ids.
         const contenders = {
             answer: (q: SessionTransition.Request) => port.answer(reply(q, `${q.sessionId}:reply-1`, 1099)),
@@ -1083,7 +1083,7 @@ describe("session lifecycle conformance", () => {
                             principal: { kind: "session", principalId: "impostor", evidenceId: "other" },
                         })))).toBe("rejected");
                         expect(sessionTree(kernel(), q.sessionId)).toHaveLength(settled);
-                        expect(kernel().requestById(q.requestId)?.replies.map((r: SessionTransition.Request["replies"][number]) => r.responderId)).toEqual(["worker"]);
+                        expect(kernel().requestById(q.requestId)?.replies.map((r: SessionTransition.Request["replies"][number]) => r.responderId)).toEqual(["child"]);
                     }),
                 },
             ],
@@ -1204,14 +1204,14 @@ function assertRequestRaces(result: TraceResult): void {
         ["alarm", undefined],
         ["request", "duplicate"],
     ]);
-    expect(cancelled?.inbox).toEqual([]);
+    expect(cancelled?.deliveries).toEqual([]);
     const answered = result.final.get("QANSWER");
     expect(answered?.requests[0]).toMatchObject({
         state: "resolved",
         outcome: "answered",
-        replies: [{ replyId: "reply-1", responderId: "worker", content: "ok", receivedAt: 1099 }],
+        replies: [{ replyId: "reply-1", responderId: "child", content: "ok", receivedAt: 1099 }],
     });
-    // The winning reply is delivered to the turn as pending inbox input; the
+    // The winning reply is delivered to the turn as pending delivery input; the
     // later Owner cancel is recorded once as a duplicate and changes nothing.
     expect(resolutions(answered)).toEqual([
         ["request", "opened"],
@@ -1222,7 +1222,7 @@ function assertRequestRaces(result: TraceResult): void {
         ["prompt", undefined],
         ["request", "duplicate"],
     ]);
-    expect(answered?.inbox.map((row: Inbox.Row) => [row.id, row.kind, row.status])).toEqual([
+    expect(answered?.deliveries.map((row: Delivery.Row) => [row.id, row.kind, row.status])).toEqual([
         ["reply-1", "prompt", "pending"],
     ]);
     const rejected = result.final.get("QREJECT");
@@ -1247,12 +1247,12 @@ function assertLossBoundary(result: TraceResult, parentChild: ReturnType<typeof 
     expect(named(result, "CP_SEALED", "CHILD").outbound).toMatchObject([
         { state: "pending", destinationReceipt: null },
     ]);
-    expect(named(result, "CP_SEALED", "PARENT").inbox).toEqual([]);
+    expect(named(result, "CP_SEALED", "PARENT").deliveries).toEqual([]);
     expect(named(result, "CP_RECEIVED", "CHILD").outbound.map((row: SessionTransition.Outbound) => row.state)).toEqual([
         "pending",
     ]);
     const receivedParent = named(result, "CP_RECEIVED", "PARENT");
-    expect(receivedParent.inbox).toHaveLength(1);
+    expect(receivedParent.deliveries).toHaveLength(1);
     const ackedParent = named(result, "CP_ACKED", "PARENT");
     expect(ackedParent.actions).toEqual(receivedParent.actions);
     const [delivered] = named(result, "CP_ACKED", "CHILD").outbound;
@@ -1263,7 +1263,7 @@ function assertLossBoundary(result: TraceResult, parentChild: ReturnType<typeof 
         message: { replyTo: "mCR", destinationSessionId: "PARENT", terminal: "completed" },
     });
     expect(delivered.destinationReceipt?.id).toBe(delivered.message.messageId);
-    expect(ackedParent.inbox.map((row: Inbox.Row) => row.id)).toEqual([delivered.message.messageId]);
+    expect(ackedParent.deliveries.map((row: Delivery.Row) => row.id)).toEqual([delivered.message.messageId]);
     expect(parentChild.sent()).toHaveLength(1);
     expect(parentChild.consumed()).toBe(1);
 }
@@ -1304,7 +1304,7 @@ function reply(q: SessionTransition.Request, inputId: string, receivedAt: number
         requestId: q.requestId,
         sessionId: q.sessionId,
         receivedAt,
-        principal: { kind: "session", principalId: "worker", evidenceId: "worker-credential" },
+        principal: { kind: "session", principalId: "child", evidenceId: "child-credential" },
         bindingDigest: q.bindingDigest,
         inputHash: q.inputHash,
         effectHash: q.effectHash,
@@ -1328,7 +1328,7 @@ function pendingTurn(sessionId: string, turnId: string, boundaryActionId: string
             value: {
                 phase: "intent",
                 resultId,
-                inboxIds: [],
+                deliveryIds: [],
                 resumeCount: 0,
                 boundaryActionId,
                 toolsGeneration: generation.generation,
@@ -1428,7 +1428,7 @@ function openRequest(port: Effect.Success<ReturnType<typeof createSessionRequest
         const request = yield* port.open({
             requestId: `${id}:q`,
             sessionId: id,
-            expectedResponders: ["worker"],
+            expectedResponders: ["child"],
             correlation: { channelId: "ch", replyToMessageId: "platform-1" },
             allowedActions: ["report_result"],
             resolution: "first",
@@ -1515,7 +1515,7 @@ function childParentFixture() {
                 const child = (yield* Effect.gen(function* () { const fixture: SessionFixture = first; return yield* withSessionServices(session({
                     id: "CHILD",
                     parentId: "PARENT",
-                    role: "worker",
+                    role: "child",
                     runner: () => Effect.succeed({ kind: "result" as const, text: "done" }),
                 }, fixture), fixture); }));
                 // The parent's real source action: the reply observation resolves it.
@@ -1532,7 +1532,7 @@ function childParentFixture() {
                     },
                 })))).toBeInstanceOf(Error);
                 // Process loss closes fiber ownership, not the graceful session
-                // API, which would append a new interrupt to the parent inbox.
+                // API, which would append a new interrupt to the parent queue.
                 runtimes.splice(runtimes.indexOf(first), 1);
             }));
         },

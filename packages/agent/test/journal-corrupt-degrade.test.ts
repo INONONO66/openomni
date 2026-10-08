@@ -57,7 +57,7 @@ test("a corrupt row degrades to opaque with one journal.corrupt observation and 
             sessionId: "s1",
             kind: "prompt",
             intent: { encodingVersion: 1, value: { origin: "human" } },
-            effect: { encodingVersion: 1, value: { inboxKind: "prompt", content: "hello" } },
+            effect: { encodingVersion: 1, value: { deliveryKind: "prompt", content: "hello" } },
             irreversible: true,
             ts: 2,
           },

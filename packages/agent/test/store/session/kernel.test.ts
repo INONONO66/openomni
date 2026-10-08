@@ -139,7 +139,7 @@ function turnIntent(input: {
       value: SessionTurn.HistoricalIntent.parse({
         phase: "intent",
         resultId: input.resultId,
-        inboxIds: [],
+        deliveryIds: [],
         ...pinned(input.generation),
         resumeCount: 0,
         boundaryActionId: null,
@@ -241,7 +241,7 @@ function delivery(input: {
   readonly sessionId: string;
   readonly parentId: string | null;
   readonly turnId: string;
-  readonly inboxId: string;
+  readonly deliveryId: string;
   readonly content: string;
 }): LedgerAction.Append {
   return {
@@ -249,13 +249,13 @@ function delivery(input: {
     parentId: input.parentId,
     sessionId: input.sessionId,
     kind: "prompt",
-    intent: { encodingVersion: 1, value: { inboxId: input.inboxId } },
+    intent: { encodingVersion: 1, value: { deliveryId: input.deliveryId } },
     effect: {
       encodingVersion: 1,
       value: SessionTurn.Delivery.parse({
         phase: "delivery",
         turnId: input.turnId,
-        inboxId: input.inboxId,
+        deliveryId: input.deliveryId,
         kind: "prompt",
         content: input.content,
         origin: { encodingVersion: 1, value: { source: "test" } },
@@ -267,7 +267,7 @@ function delivery(input: {
   };
 }
 
-/** A received message on the chain: a `prompt` action carrying the inbox payload. */
+/** A received message on the chain: a `prompt` action carrying the delivery payload. */
 function prompt(
   id: string,
   sessionId: string,
@@ -280,7 +280,7 @@ function prompt(
     sessionId,
     kind: "prompt",
     intent: { encodingVersion: 1, value: { source: "test" } },
-    effect: { encodingVersion: 1, value: { inboxKind: "prompt", content } },
+    effect: { encodingVersion: 1, value: { deliveryKind: "prompt", content } },
     irreversible: true,
     ts: 5,
   };
@@ -409,7 +409,7 @@ describe("session kernel folds", () => {
         sessionId: "folded",
         parentId: "checkpoint-1",
         turnId: "turn-1",
-        inboxId: "prompt-1",
+        deliveryId: "prompt-1",
         content: "continue",
       }),
       5,
@@ -475,7 +475,7 @@ describe("session kernel folds", () => {
       sessionId,
       parentId: second.id,
       turnId: "turn-1",
-      inboxId: first.id,
+      deliveryId: first.id,
       content: "first",
     });
     const deliveredSecond = delivery({
@@ -483,7 +483,7 @@ describe("session kernel folds", () => {
       sessionId,
       parentId: deliveredFirst.id,
       turnId: "turn-1",
-      inboxId: second.id,
+      deliveryId: second.id,
       content: "second",
     });
     const intent = turnIntent({
@@ -529,7 +529,7 @@ describe("session kernel folds", () => {
       sessionId,
       parentId: continuation.id,
       turnId: "turn-1",
-      inboxId: continuation.id,
+      deliveryId: continuation.id,
       content: "third",
     });
     const checked = checkpoint({

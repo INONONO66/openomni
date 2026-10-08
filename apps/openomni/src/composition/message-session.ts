@@ -3,7 +3,7 @@ import { Core } from "@openomni/agent";
 const AgentFailure = Core.AgentFailure;
 type AgentFailure = Core.AgentFailure;
 const SessionEntity = Core.SessionEntity;
-import { Inbox, Gateway, SessionGeneration, type ConsumptionSettings, type LedgerSession } from "@openomni/protocol";
+import { Delivery, Gateway, SessionGeneration, type ConsumptionSettings, type LedgerSession } from "@openomni/protocol";
 import { SendAdmissionConflict, type createGatewayRouter } from "@openomni/channels";
 import type { AppLedgerPlane } from "./cluster-runtime";
 import { outboundMessage } from "./terminal-message";
@@ -13,14 +13,14 @@ type Ports = Parameters<typeof createGatewayRouter>[0];
 /** The Session entity client resolved once at boot (host-scoped). */
 type SessionEntityClient = Effect.Success<typeof SessionEntity.client>;
 
-export interface MessageInboxDeps {
+export interface MessageDeliveryDeps {
   readonly plane: AppLedgerPlane;
   readonly client: SessionEntityClient;
   readonly clock: () => number;
 }
 
-/** Pending inbox projection shared by entity and process delivery receipts. */
-export function pendingInboxRow(input: Inbox.Commit, ordinal: number): Inbox.Row {
+/** Pending delivery projection shared by entity and process delivery receipts. */
+export function pendingDeliveryRow(input: Delivery.Commit, ordinal: number): Delivery.Row {
   return {
     id: input.id,
     sessionId: input.sessionId,
@@ -46,9 +46,9 @@ export function pendingInboxRow(input: Inbox.Commit, ordinal: number): Inbox.Row
  * Materializes the destination a prepared send declared (fanout-guarded),
  * idempotently: an existing row is left untouched and only re-indexed.
  */
-export function materializeInboxTarget(
+export function materializeDeliveryTarget(
   plane: AppLedgerPlane,
-  input: Inbox.Commit,
+  input: Delivery.Commit,
   clock: () => number,
 ): Effect.Effect<void, AgentFailure> {
   return Effect.gen(function* () {
@@ -111,10 +111,10 @@ export function materializeInboxTarget(
   });
 }
 
-export function createMessageInboxCommit(deps: MessageInboxDeps) {
-  return function commitMessageInbox(
-    input: Inbox.Commit,
-  ): Effect.Effect<Inbox.Row, AgentFailure> {
+export function createMessageDeliveryCommit(deps: MessageDeliveryDeps) {
+  return function commitMessageDelivery(
+    input: Delivery.Commit,
+  ): Effect.Effect<Delivery.Row, AgentFailure> {
     return Effect.gen(function* () {
       const outbound = yield* outboundMessage;
       const message = outbound?.input.message;
@@ -126,10 +126,10 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
       ) {
         return yield* new AgentFailure({
           operation: "message.commit",
-          cause: "outbound inbox binding mismatch",
+          cause: "outbound delivery binding mismatch",
         });
       }
-      yield* materializeInboxTarget(deps.plane, input, deps.clock);
+      yield* materializeDeliveryTarget(deps.plane, input, deps.clock);
       const entity = deps.client(input.sessionId);
       // #1253: every input lands through the entity's one `deliver` door. An
       // interrupt/resume rides the `signal` kind with its control op in the
@@ -156,7 +156,7 @@ export function createMessageInboxCommit(deps: MessageInboxDeps) {
             (error) => new AgentFailure({ operation: "message.deliver", cause: String(error) }),
           ),
         );
-      return pendingInboxRow(input, receipt.seq);
+      return pendingDeliveryRow(input, receipt.seq);
     });
   };
 }
@@ -257,7 +257,7 @@ function prepareExternal(
     ...(source === undefined || send.replyTo === undefined
       ? {}
       : {
-          origin: Inbox.ReplyOrigin.parse({
+          origin: Delivery.ReplyOrigin.parse({
             kind: "external_reply",
             messageId: send.replyTo,
             sourceActionId: source.id,
@@ -335,7 +335,7 @@ export function prepareMessage(
       const recipient =
         send.to.kind === "session" ? plane.openKernel(target).row(target) : undefined;
       const origins = kernel.pendingMessages(sender.id).flatMap((row) => {
-        const parsed = Inbox.MessageOrigin.safeParse(row.origin.value);
+        const parsed = Delivery.MessageOrigin.safeParse(row.origin.value);
         return parsed.success ? [parsed.data] : [];
       });
       const parentDeadline = origins.at(-1)?.deadline;

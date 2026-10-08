@@ -98,8 +98,8 @@ describe("session creation and titles", () => {
     const otherTab = currentTab();
     setSessionTitleIfPlaceholder(other, "  earned title  ");
     expect(placeTitle(otherTab.place)).toBe("earned title");
-    openTab({ kind: "route", route: "inbox" });
-    expect(placeTitle(currentTab().place)).toBe("Inbox");
+    openTab({ kind: "route", route: "automations" });
+    expect(placeTitle(currentTab().place)).toBe("Automations");
   });
 });
 
@@ -138,7 +138,7 @@ describe("tab history has browser semantics", () => {
     const second = createSession(2);
     navigate({ kind: "session", sessionId: first });
     navigate({ kind: "session", sessionId: second });
-    navigate({ kind: "route", route: "inbox" });
+    navigate({ kind: "route", route: "automations" });
     back();
     back();
     expect(activeTab(consoleStore.state)?.place ?? null).toEqual({
@@ -156,7 +156,7 @@ describe("tab history has browser semantics", () => {
 
   test("a new place truncates forward entries", () => {
     openTab({ kind: "route", route: "sessions" });
-    navigate({ kind: "route", route: "inbox" });
+    navigate({ kind: "session", sessionId: createSession(1) });
     back();
     navigate({ kind: "route", route: "automations" });
     expect(currentTab().history.entries).toEqual([
@@ -168,7 +168,7 @@ describe("tab history has browser semantics", () => {
 
   test("same-place selection neither pushes nor truncates forward history", () => {
     openTab({ kind: "route", route: "sessions" });
-    navigate({ kind: "route", route: "inbox" });
+    navigate({ kind: "route", route: "automations" });
     back();
     const before = currentTab();
     navigate({ kind: "route", route: "sessions" });
@@ -178,7 +178,7 @@ describe("tab history has browser semantics", () => {
 
   test("integer cursor jumps do not push", () => {
     openTab({ kind: "route", route: "sessions" });
-    navigate({ kind: "route", route: "inbox" });
+    navigate({ kind: "session", sessionId: createSession(1) });
     navigate({ kind: "route", route: "automations" });
     jumpTo(0);
     expect(currentTab().history.cursor).toBe(0);
@@ -241,7 +241,7 @@ describe("the sidebar's width and mode", () => {
     const id = createSession(1);
     toggleSidebar();
     setSidebarFloating(true);
-    navigate({ kind: "route", route: "inbox" });
+    navigate({ kind: "route", route: "automations" });
     expect(consoleStore.state.sidebarFloating).toBe(true);
     expect(consoleStore.state.sidebarOpen).toBe(false);
     navigate({ kind: "session", sessionId: id });
@@ -267,8 +267,8 @@ test("an unbound store refuses to mint instead of reaching for ambient entropy",
   const unbound = (await import(`../src/renderer/state/store?${"unbound"}`)) as
     typeof import("../src/renderer/state/store");
   expect(() => unbound.createSession(1)).toThrow(RendererInvariantError);
-  expect(() => unbound.openTab({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);
-  expect(() => unbound.navigate({ kind: "route", route: "inbox" })).toThrow(RendererInvariantError);
+  expect(() => unbound.openTab({ kind: "route", route: "automations" })).toThrow(RendererInvariantError);
+  expect(() => unbound.navigate({ kind: "route", route: "automations" })).toThrow(RendererInvariantError);
   expect(() => unbound.newSessionTab()).toThrow(RendererInvariantError);
 
   // Once bound, every mint reads the injected clock and ids — never ambient.

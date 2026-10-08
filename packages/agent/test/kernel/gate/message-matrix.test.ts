@@ -37,7 +37,7 @@ const session = {
   sender: "session",
   senderRole: "resident",
   targetKind: "session",
-  targetRole: "worker",
+  targetRole: "child",
   type: "message",
   parentChild: true,
   fanout: 0,
@@ -86,7 +86,7 @@ test.each([
     sender: "session",
     senderRole: "resident",
     targetKind: "session",
-    targetRole: "worker",
+    targetRole: "child",
     type: "message",
     effect: "deny",
     check,
@@ -96,7 +96,7 @@ test.each([
     policy.evaluate({ kind: "message", phase: "pre", value: {}, message }).matchedRuleIds;
   expect(evaluate(session)).toEqual([]);
   expect(evaluate({ ...session, ...violation })).toEqual(["rule"]);
-  expect(evaluate({ ...session, ...violation, senderRole: "worker" })).toEqual([]);
+  expect(evaluate({ ...session, ...violation, senderRole: "child" })).toEqual([]);
   expect(evaluate({ ...session, ...violation, targetKind: "actor" })).toEqual([]);
   expect(evaluate({ ...session, ...violation, targetRole: "resident" })).toEqual([]);
   expect(evaluate({ ...session, ...violation, type: "resume" })).toEqual([]);

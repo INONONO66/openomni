@@ -16,7 +16,7 @@ import { immediateRetryAlarm as nullRetryAlarm } from "./immediate-retry-alarm";
 import { createResident, type ResidentOptions } from "../../src/resident";
 import { runEffect, runSyncEffect } from "./effect";
 import { effectScope } from "./effect-scope";
-import { drainSession, localInbox, resolvedRuntimeFor, testPlane } from "./ledger";
+import { drainSession, localDelivery, resolvedRuntimeFor, testPlane } from "./ledger";
 import type { AppLedgerPlane } from "../../src/composition/cluster-runtime";
 
 import { seedKernelPolicyRows } from "../../src/policy-seed";
@@ -90,7 +90,7 @@ export function residentRunner(
     drain,
     async prompt(sessionId: string, content: string) {
       const exists = plane.listSessions().some((row) => row.id === sessionId);
-      await runEffect(localInbox(plane, "resident-runner", fixture?.clock ?? Date.now)({
+      await runEffect(localDelivery(plane, "resident-runner", fixture?.clock ?? Date.now)({
         id: crypto.randomUUID(),
         sessionId,
         kind: "prompt",

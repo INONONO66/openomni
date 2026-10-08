@@ -1,6 +1,6 @@
 import { LlmLive } from "../../src/model";
 import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
-import { canonicalDigest, Inbox, LedgerAction, SessionTransition, type LedgerSession, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
+import { canonicalDigest, Delivery, LedgerAction, SessionTransition, type LedgerSession, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
 import { Clock, type Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { GenerationHandlers } from "../../src/core/compose";
 import type { SessionKernel } from "../../src/core/entity";
@@ -30,7 +30,7 @@ function fixtureSettleChild(
 ): SessionTransition.OutboundMessage | undefined {
   if (row.parentId === null || result.kind === "waiting") return undefined;
   const origin = kernel.inputMessages(row.id)
-    .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
+    .map((item) => Delivery.MessageOrigin.safeParse(item.origin.value))
     .flatMap((parsed) => parsed.success && parsed.data.senderSessionId === row.parentId ? [parsed.data] : [])
     .at(-1);
   if (origin === undefined) return undefined;

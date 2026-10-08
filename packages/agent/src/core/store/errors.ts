@@ -26,7 +26,7 @@ export class FenceRefused extends Data.TaggedError("FenceRefused")<{
 
 export class CommitRefused extends Data.TaggedError("CommitRefused")<{
   readonly sessionId: string;
-  readonly reason: "revision" | "fence" | "inbox";
+  readonly reason: "revision" | "fence" | "delivery";
   readonly expectedRevision: number;
   readonly currentRevision: number;
   readonly fence: number;

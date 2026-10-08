@@ -85,7 +85,7 @@ test("a failing stale-projection witness is not silently swallowed", () =>
 
 for (const point of [
   "turn_intent_before_llm_entry",
-  "inbox_admitted_before_turn_open",
+  "delivery_admitted_before_turn_open",
   "outbound_reply_before_delivery_settle",
   "fold_checkpoint_transaction_before_commit",
 ] as const) {

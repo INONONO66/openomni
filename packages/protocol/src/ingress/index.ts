@@ -30,23 +30,22 @@ const ActorSchemaImpl = z
     sessionId: z.string().optional(),
     runId: z.string().optional(),
     agentName: z.string().optional(),
-    workerId: z.string().optional(),
     isResident: z.boolean().optional(),
     isMain: z.boolean().optional(),
   })
   .catchall(z.unknown());
 
 /**
- * The two executable delivery kinds. `workerId` is the string-form
- * ("worker:<id>") wire artifact this seam owns; the catchall keeps the
- * historical tolerance for extra inbound keys.
+ * The one executable delivery kind (#1315): `resident`, optionally pinned to
+ * a session. The retired subordinate-target string form is a typed parse
+ * failure now; a delivered-to-child input rides a session-pinned target. The
+ * catchall keeps the historical tolerance for extra inbound keys.
  */
 const RawTargetSchema = z
   .object({
-    kind: z.enum(["resident", "worker"]),
+    kind: z.literal("resident"),
     sessionId: z.string().min(1).optional(),
     parentSessionId: z.string().min(1).optional(),
-    workerId: z.string().optional(),
   })
   .catchall(PlainValueSchema);
 
@@ -61,10 +60,6 @@ const LegacyTargetSchema = z
 // be contextually typed `unknown`; a generic parameter carries no top type.
 function normalizeTargetInput<Input>(input: Input) {
   if (input === "resident") return { kind: "resident" };
-  if (typeof input === "string" && input.startsWith("worker:")) {
-    const id = input.slice("worker:".length);
-    return { kind: "worker", workerId: id };
-  }
   const legacyTarget = LegacyTargetSchema.safeParse(input);
   if (legacyTarget.success) {
     const { type, ...rest } = legacyTarget.data;
@@ -185,9 +180,5 @@ export function resolveTarget(event: {
 }
 
 export function targetKey(target: Ingress.Target): string {
-  if (target.kind === "resident") {
-    return target.sessionId ? `resident:${target.sessionId}` : "resident";
-  }
-  if (target.sessionId) return `worker-session:${target.sessionId}`;
-  return target.workerId ? `worker:${target.workerId}` : "worker";
+  return target.sessionId ? `resident:${target.sessionId}` : "resident";
 }

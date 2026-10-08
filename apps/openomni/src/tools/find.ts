@@ -19,7 +19,7 @@ export function createFindTool(ports: FilePorts) {
       })
       .strict(),
     output: z.object({ paths: z.array(z.string()), truncated: z.boolean() }),
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     execute: (args, ctx) =>
       fileOperation("find", async () => {
         const glob = new Bun.Glob(args.pattern);

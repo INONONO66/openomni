@@ -52,7 +52,7 @@ test("fence adoption reports a refused SQL compare-and-set without advancing its
     "CREATE TRIGGER refuse_fence BEFORE UPDATE OF lease_fence ON session BEGIN SELECT RAISE(IGNORE); END",
   );
   expect(() =>
-    run(adapter.sessions.adoptFence({ sessionId: "fenced", owner: "worker", fence: 1 })),
+    run(adapter.sessions.adoptFence({ sessionId: "fenced", owner: "child", fence: 1 })),
   ).toThrow(expect.objectContaining({ _tag: "FenceRefused", reason: "stale", fence: 0 }));
   expect(adapter.sessions.get("fenced")?.fenceOwner).toBeNull();
 });

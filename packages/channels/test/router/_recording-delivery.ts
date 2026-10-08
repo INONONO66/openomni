@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import type { Inbox } from "@openomni/protocol";
+import type { Delivery } from "@openomni/protocol";
 
-export function recordingInbox(commits: Inbox.Commit[]) {
+export function recordingDelivery(commits: Delivery.Commit[]) {
   return {
-    commit: (row: Inbox.Commit) => Effect.sync(() => {
+    commit: (row: Delivery.Commit) => Effect.sync(() => {
       commits.push(row);
       return { ...row, status: "pending" as const, consumedBy: null, consumedAt: null, ordinal: 1 };
     }),

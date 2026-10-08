@@ -104,7 +104,7 @@ export function requestToolStep(
   return undefined;
 }
 
-/** send_message input that commissions one native worker child under the calling session. */
+/** send_message input that commissions one native child child under the calling session. */
 export function commissionInput(send: {
   readonly message: string;
   readonly reply_to: string;
@@ -112,7 +112,7 @@ export function commissionInput(send: {
   readonly spend_cap?: number;
 }) {
   return {
-    to: { kind: "new_session", role: "worker", runner: "native", parent: "me" } as const,
+    to: { kind: "new_session", role: "child", runner: "native", parent: "me" } as const,
     // #1258: delegation policy refuses child creation without a spend cap.
     spend_cap: 1,
     ...send,

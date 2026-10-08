@@ -98,16 +98,16 @@ describe("SessionHistory projections", () => {
     digest: "d",
   };
 
-  test("causes are one of action, inbox or root and carry only identities", () => {
+  test("causes are one of action, delivery or root and carry only identities", () => {
     const causes: SessionHistory.Cause[] = [
       { kind: "action", actionId: "a" },
-      { kind: "inbox", inboxIds: ["i"] },
+      { kind: "delivery", deliveryIds: ["i"] },
       { kind: "root" },
     ];
     for (const cause of causes)
       expect(SessionHistory.Transition.parse({ ...transition, cause }).cause).toEqual(cause);
     for (const cause of [
-      { kind: "inbox", inboxIds: [] },
+      { kind: "delivery", deliveryIds: [] },
       { kind: "root", actionId: "a" },
     ])
       expect(SessionHistory.Transition.safeParse({ ...transition, cause }).success).toBe(false);

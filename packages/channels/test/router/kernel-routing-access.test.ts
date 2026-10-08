@@ -16,7 +16,7 @@ import {
 beforeEach(resetRouterState);
 
 describe("GatewayRouter access routing", () => {
-  test("missing channel grant refuses before inbox commit", async () => {
+  test("missing channel grant refuses before delivery commit", async () => {
     expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
       status: "blocked_pre",
     });
@@ -64,7 +64,7 @@ describe("GatewayRouter access routing", () => {
     });
     expectEvidenceOnlyCommit();
   });
-  test("blocked channel refuses before inbox commit", async () => {
+  test("blocked channel refuses before delivery commit", async () => {
     registerChannelGrant({ kind: "blocked_channel" });
     expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
       status: "blocked_pre",

@@ -73,7 +73,7 @@ test("gateway request port commits physical bindings and receiving intake withou
     observations: { publish: () => undefined },
     authorizeConfigure: allowConfigure,
     ...isolatedRuntime(),
-    onInboxCommitted: (ids) => {
+    onDeliveryCommitted: (ids) => {
       // No release plane: the gateway's fenced intake leaves its adopted owner durable.
       expect(isolatedLedger().kernel.row("source").fenceOwner).not.toBeNull();
       received.push(...ids);
@@ -166,7 +166,7 @@ test("request opening uses its original turn generation, never a later catalog",
       value: {
         phase: "intent",
         resultId: "result",
-        inboxIds: [],
+        deliveryIds: [],
         resumeCount: 0,
         boundaryActionId: "configure",
         toolsGeneration: generation.generation,

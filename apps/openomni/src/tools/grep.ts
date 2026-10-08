@@ -60,7 +60,7 @@ export function createGrepTool(ports: FilePorts) {
     category: "query",
     input: Input,
     output: z.object({ matches: z.array(Match), truncated: z.boolean() }),
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     execute: (args, ctx) =>
       fileOperation("grep", async () => {
         const pattern = compile(args);

@@ -117,7 +117,7 @@ describe("SlackAdapter", () => {
     );
     adapter.onMessage(async () => {
       attempts += 1;
-      if (attempts === 1) throw new Error("inbox refused");
+      if (attempts === 1) throw new Error("delivery refused");
       retried.resolve();
     });
     try {

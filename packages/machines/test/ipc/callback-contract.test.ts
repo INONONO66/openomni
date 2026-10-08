@@ -78,10 +78,10 @@ describe("bounded callback dispatcher (#1312)", () => {
       const dispatch = yield* makeDispatcher({ bound: 1 });
       const running = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
-      // Occupy the single worker; `running` resolves once the worker took it.
+      // Occupy the single executor; `running` resolves once the executor took it.
       expect(dispatch(Deferred.succeed(running, undefined).pipe(Effect.andThen(Deferred.await(release))))).toBeUndefined();
       yield* Deferred.await(running);
-      // Fill the single queue slot behind the blocked worker.
+      // Fill the single queue slot behind the blocked executor.
       expect(dispatch(Effect.void)).toBeUndefined();
       // The bound is reached: the offerer gets the typed refusal, not a drop.
       const full = dispatch(Effect.void);

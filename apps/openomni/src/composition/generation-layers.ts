@@ -227,7 +227,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
           return composedPolicyRegistry(generation, consultants, delegationGuardHandlers(catalogDelegationReads(
             plane.listSessions,
             // #1258 M-4: a child is active while work is in flight — an open
-            // turn or an undelivered inbox message, both durable journal facts.
+            // turn or an undelivered input, both durable journal facts.
             (childId) => {
               const kernel = plane.openKernel(childId);
               return kernel.latestOpenTurn(childId) !== undefined ||
@@ -270,7 +270,7 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
   return {
     initialize: (input: GenerationDefinitions) => Effect.suspend(() => {
       if (definitions !== undefined) return Effect.fail(new AgentFailure({ operation: "generation.initialize", cause: "already_initialized" }));
-      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), worker: Object.freeze([...input.worker]), catalogLayer: input.catalogLayer, deliverLate: input.deliverLate });
+      definitions = Object.freeze({ resident: Object.freeze([...input.resident]), child: Object.freeze([...input.child]), catalogLayer: input.catalogLayer, deliverLate: input.deliverLate });
       return Effect.void;
     }),
     capture: (id: SessionGeneration.Id) => Effect.gen(function* () {

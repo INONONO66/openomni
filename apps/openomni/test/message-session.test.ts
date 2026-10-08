@@ -2,11 +2,11 @@ import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { expect, test } from "bun:test";
 import { Core } from "@openomni/agent";
 const createExecutor = Core.createExecutor;
-import { Inbox, type LedgerSession, type SessionTransition } from "@openomni/protocol";
+import { Delivery, type LedgerSession, type SessionTransition } from "@openomni/protocol";
 import { Effect } from "effect";
 import {
-  createMessageInboxCommit,
-  materializeInboxTarget,
+  createMessageDeliveryCommit,
+  materializeDeliveryTarget,
   messageMaterialization,
 } from "../src/composition/message-session";
 import { outboundMessage } from "../src/composition/terminal-message";
@@ -25,12 +25,12 @@ const origin = {
   },
 } as const;
 
-function inboxCommit(
+function deliveryCommit(
   id: string,
   createSession?: LedgerSession.Materialize,
   limits?: { readonly fanout: number; readonly depth: number },
-): Inbox.Commit {
-  return Inbox.Commit.parse({
+): Delivery.Commit {
+  return Delivery.Commit.parse({
     id: `${id}:message`,
     sessionId: id,
     kind: "prompt",
@@ -43,14 +43,14 @@ function inboxCommit(
   });
 }
 
-test("inbox target materialization refuses a child beyond its pinned fanout", async () => {
+test("delivery target materialization refuses a child beyond its pinned fanout", async () => {
   const plane = testPlane();
   const materialize = messageMaterialization(() => 1, testIds("materialize"));
   try {
     await runEffect(
-      materializeInboxTarget(
+      materializeDeliveryTarget(
         plane,
-        inboxCommit(
+        deliveryCommit(
           "parent",
           materialize({
             id: "parent",
@@ -66,17 +66,17 @@ test("inbox target materialization refuses a child beyond its pinned fanout", as
       ),
     );
     await runEffect(
-      materializeInboxTarget(
+      materializeDeliveryTarget(
         plane,
-        inboxCommit(
+        deliveryCommit(
           "first-child",
           materialize({
             id: "first-child",
             parentId: "parent",
-            role: "worker",
+            role: "child",
             tools: [],
             preset: "",
-            runner: "worker",
+            runner: "child",
             at: 101,
           }),
           { fanout: 1, depth: 2 },
@@ -86,17 +86,17 @@ test("inbox target materialization refuses a child beyond its pinned fanout", as
     );
     await expect(
       runEffect(
-        materializeInboxTarget(
+        materializeDeliveryTarget(
           plane,
-          inboxCommit(
+          deliveryCommit(
             "second-child",
             materialize({
               id: "second-child",
               parentId: "parent",
-              role: "worker",
+              role: "child",
               tools: [],
               preset: "",
-              runner: "worker",
+              runner: "child",
               at: 102,
             }),
             { fanout: 1, depth: 2 },
@@ -118,7 +118,7 @@ test("inbox target materialization refuses a child beyond its pinned fanout", as
   }
 });
 
-test("entity inbox refuses bytes that do not match the outbound letter", async () => {
+test("entity delivery refuses bytes that do not match the outbound letter", async () => {
   const plane = testPlane();
   const message: SessionTransition.OutboundMessage = {
     messageId: "letter",
@@ -134,12 +134,12 @@ test("entity inbox refuses bytes that do not match the outbound letter", async (
   const executor = await runEffect(
     createExecutor({
       approvalPolicy: APPROVAL_POLICY,
-      identity: { sessionId: "child", role: "worker", parentActionId: "terminal" },
+      identity: { sessionId: "child", role: "child", parentActionId: "terminal" },
       ledger: { commit: () => Effect.die(new Error("unused executor commit")) },
     }).pipe(Effect.provide(runnerTestLayer)),
   );
   const unreachable = () => Effect.die(new Error("entity client must not run"));
-  const commit = createMessageInboxCommit({
+  const commit = createMessageDeliveryCommit({
     plane,
     client: () => ({
       Deliver: unreachable,
@@ -170,7 +170,7 @@ test("entity inbox refuses bytes that do not match the outbound letter", async (
     ).rejects.toMatchObject({
       _tag: "AgentFailure",
       operation: "message.commit",
-      cause: "outbound inbox binding mismatch",
+      cause: "outbound delivery binding mismatch",
     });
     expect(plane.listSessions()).toEqual([]);
   } finally {

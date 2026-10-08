@@ -247,16 +247,16 @@ function deliveryCause(
   action: LedgerAction.Node,
   effect: PlainObject,
 ): SessionHistory.Cause | undefined {
-  const inboxId = text(effect.inboxId);
-  return SessionHandleStore.delivery(action) !== undefined && inboxId !== undefined
-    ? { kind: "inbox", inboxIds: [inboxId] }
+  const deliveryId = text(effect.deliveryId);
+  return SessionHandleStore.delivery(action) !== undefined && deliveryId !== undefined
+    ? { kind: "delivery", deliveryIds: [deliveryId] }
     : undefined;
 }
 
 function lineageCause(action: LedgerAction.Node): SessionHistory.Cause {
   if (action.parentId !== null) return { kind: "action", actionId: action.parentId };
-  // Turns always descend from `session.configure`, so a root action is never a turn with inbox ids.
-  return action.kind === "prompt" ? { kind: "inbox", inboxIds: [action.id] } : { kind: "root" };
+  // Turns always descend from `session.configure`, so a root action is never a turn with delivery ids.
+  return action.kind === "prompt" ? { kind: "delivery", deliveryIds: [action.id] } : { kind: "root" };
 }
 
 function causeOf(

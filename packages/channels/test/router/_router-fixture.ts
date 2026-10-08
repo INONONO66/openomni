@@ -5,7 +5,7 @@ import { channelRequests } from "../helpers/channel-requests";
 import { channelTransaction } from "../helpers/channel-transaction";
 import { originalAction, requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
-import { Channel, Ingress, Gateway, type Inbox } from "@openomni/protocol";
+import { Channel, Ingress, Gateway, type Delivery } from "@openomni/protocol";
 import { Core } from "@openomni/agent";
 const KERNEL_POLICY_REGISTRY = Core.KERNEL_POLICY_REGISTRY;
 const compilePolicySnapshot = Core.compilePolicySnapshot;
@@ -53,7 +53,7 @@ export function makeInboundEvent(
   return { id: "evt-1", traceId: "trace-test", surface: "test", mode: "direct", ...overrides };
 }
 
-export const commits: Inbox.Commit[] = [];
+export const commits: Delivery.Commit[] = [];
 const decisions: Ingress.RoutingDecisionPayload[] = [];
 let router: GatewayRouter | undefined;
 
@@ -165,7 +165,7 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
     requests: channelRequests(requestPort(now, (sessionIds: readonly string[]) => {
       for (const sessionId of sessionIds) {
         for (const row of ledger().kernel.pendingMessages(sessionId)) {
-          if (commits.some((existing: Inbox.Commit) => existing.id === row.id)) continue;
+          if (commits.some((existing: Delivery.Commit) => existing.id === row.id)) continue;
           commits.push({ ...row, parentActionId: null });
           overrides.committed?.(row);
         }
@@ -177,8 +177,8 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
       }
       Bus.publish(event, data);
     },
-    inbox: {
-      commit: (row: Inbox.Commit) => Effect.gen(function* () {
+    delivery: {
+      commit: (row: Delivery.Commit) => Effect.gen(function* () {
         yield* ledger().kernel.materialize({
           id: row.sessionId,
           parentId: null,
@@ -190,12 +190,12 @@ export function makeRouter(overrides: Partial<GatewayRouterPorts> = {}): Gateway
           at: 0,
         });
         const existed = ledger().kernel.pendingMessages(row.sessionId).some(
-          (input: Inbox.Row) => input.id === row.id,
+          (input: Delivery.Row) => input.id === row.id,
         );
         const received = yield* commitReceivedMessage(row);
         if (!existed) commits.push(row);
         return received.row;
-      }).pipe(Effect.mapError(decodeChannelFailure("fixture.inbox"))),
+      }).pipe(Effect.mapError(decodeChannelFailure("fixture.delivery"))),
     },
     prepare: (sender: Gateway.IngestSender, send: Gateway.SendMessage, target: string) => Effect.succeed({
       target,

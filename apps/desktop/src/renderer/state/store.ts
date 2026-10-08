@@ -47,9 +47,9 @@ export interface Session extends LocalSession {
   readonly latestForkAnchor?: string;
 }
 
-export type Route = "sessions" | "inbox" | "automations";
+export type Route = "sessions" | "automations";
 
-export const ROUTES: readonly Route[] = ["sessions", "inbox", "automations"];
+export const ROUTES: readonly Route[] = ["sessions", "automations"];
 
 export type Place =
   | { readonly kind: "session"; readonly sessionId: SessionId }
@@ -308,7 +308,6 @@ function samePlace(a: Place, b: Place): boolean {
 
 export const ROUTE_LABEL: Record<Route, string> = {
   sessions: "Sessions",
-  inbox: "Inbox",
   automations: "Automations",
 };
 

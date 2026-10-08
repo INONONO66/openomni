@@ -9,7 +9,7 @@ export namespace PolicyResource {
     "tool",
     "skill",
     "mcpSource",
-    "worker",
+    "child",
     "credential",
     "session",
     "policy",

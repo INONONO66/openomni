@@ -23,7 +23,7 @@ process.on("message", () => { throw new Error("unexpected parent command"); });
 await acquireAppResource(runtime, Effect.gen(function* () {
   const plane = yield* AppLedger;
   const generations = yield* GenerationLayers;
-  yield* generations.initialize({ resident: [], worker: [] });
+  yield* generations.initialize({ resident: [], child: [] });
   seedKernelPolicyRows(plane.catalog.policies);
   const entered = yield* Deferred.make<void>();
   const held = yield* Deferred.make<void>();

@@ -11,7 +11,7 @@ import {
 
 beforeEach(resetRouterState);
 
-test("unauthorized external sender cannot reach inbox commit", async () => {
+test("unauthorized external sender cannot reach delivery commit", async () => {
   registerChannelGrant();
   expect(await runEffect(kernelRouter().ingest(ownerSender, ownerFacts))).toMatchObject({
     status: "blocked_pre",

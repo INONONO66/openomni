@@ -18,7 +18,7 @@ export function createLsTool(ports: FilePorts) {
       ),
       truncated: z.boolean(),
     }),
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     execute: (args, ctx) =>
       fileOperation("ls", async () => {
         ctx.signal.throwIfAborted();

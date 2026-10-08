@@ -42,9 +42,9 @@
       "note": "The summary, successor projection and accounting committed in one ledger transaction before any publication. Recovery folds to the committed boundary without resummarizing."
     },
     {
-      "crashPoint": "inbox_admitted_before_turn_open",
+      "crashPoint": "delivery_admitted_before_turn_open",
       "recovery": "rearmed",
-      "note": "The atomic inbox admission committed, but no turn opened. A new handle consumes that same inbox message once. No partial SQLite transaction is simulated."
+      "note": "The atomic delivery admission committed, but no turn opened. A new handle consumes that same delivery message once. No partial SQLite transaction is simulated."
     },
     {
       "crashPoint": "outbound_reply_before_delivery_settle",
@@ -84,7 +84,7 @@
     {
       "crashPoint": "compaction_concurrent_tail_committed_before_owner_crash",
       "recovery": "resumed_without_reexecution",
-      "note": "The summarizer admits a foreign tail prompt before returning; cut follows the compaction result commit. Recovery preserves the summary projection unchanged and exactly one pending tail inbox row. This current cut demonstrates inbox preservation, not a durable watermark/ceiling or successor handoff."
+      "note": "The summarizer admits a foreign tail prompt before returning; cut follows the compaction result commit. Recovery preserves the summary projection unchanged and exactly one pending tail delivery row. This current cut demonstrates delivery preservation, not a durable watermark/ceiling or successor handoff."
     },
     {
       "crashPoint": "outbound_flood_deadline_before_timer_rearm",

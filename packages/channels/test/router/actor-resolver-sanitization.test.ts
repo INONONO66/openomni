@@ -21,7 +21,7 @@ const spoof = {
   trusted: true,
   isTrustedManager: true,
   sessionId: "spoofed-session",
-  workerId: "spoofed-worker",
+  childId: "spoofed-child",
   futureTrustField: true,
 } as const;
 

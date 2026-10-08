@@ -1,5 +1,6 @@
 import {
   Gateway,
+  LedgerSession,
   NamedError,
   type PlainValue,
   type RowVerdict,
@@ -100,14 +101,38 @@ function compileErrorMessage(options: CompileErrorOptions): string {
   }
 }
 
+/**
+ * #1315 versioned role read: durable gate rows written before the role
+ * rename persist the retired role byte; compile folds it to `child` so a
+ * pinned historical generation keeps compiling. Named generic preprocessor:
+ * an inline callback parameter would be contextually typed `unknown`.
+ */
+function foldMatchRoles<Input>(input: Input) {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return input;
+  return Object.fromEntries(
+    Object.entries(input).map(([key, value]) =>
+      (key === "senderRole" || key === "targetRole") && typeof value === "string"
+        ? [key, LedgerSession.foldLegacyRole(value)]
+        : [key, value],
+    ),
+  );
+}
+
+const FoldedRole = z
+  .string()
+  .transform((role) => LedgerSession.foldLegacyRole(role))
+  .pipe(LedgerSession.Role);
+
 export const Match = z
   .object({
     op: z.string().min(1).optional(),
     /** The `operation.op` discriminator inside a multi-operation tool input. */
     operation: z.string().min(1).optional(),
-    role: z.enum(["resident", "worker"]).optional(),
+    role: FoldedRole.optional(),
     sessionId: z.string().min(1).optional(),
-    message: z.union([Gateway.RuleTableA, Gateway.RuleTableB]).optional(),
+    message: z
+      .preprocess(foldMatchRoles, z.union([Gateway.RuleTableA, Gateway.RuleTableB]))
+      .optional(),
   })
   .strict();
 export type Match = z.infer<typeof Match>;

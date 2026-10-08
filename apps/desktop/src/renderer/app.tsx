@@ -375,6 +375,5 @@ function isEditing(target: EventTarget | null): boolean {
 }
 
 const ROUTE_EMPTY = {
-  inbox: "Nothing in the inbox.",
   automations: "No automations yet.",
 } as const satisfies Record<Exclude<Route, "sessions">, string>;

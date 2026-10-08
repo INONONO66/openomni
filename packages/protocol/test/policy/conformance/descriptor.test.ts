@@ -89,7 +89,7 @@ const descriptorFixtures: Policy.Resource.Descriptor[] = [
     id: "tool:agent:sendMessage",
     kind: "tool",
     labels: ["source:agent", "message.session"],
-    capabilities: ["worker.spawn"],
+    capabilities: ["child.spawn"],
     effects: ["session.create"],
     source: { type: "agent", agentId: "main-persona", agentProfileRef: "agent-profile:main" },
   }),

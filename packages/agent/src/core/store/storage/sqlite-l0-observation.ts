@@ -2,7 +2,7 @@ import { z } from "zod";
 import { LedgerInvariant } from "../errors";
 import { parseStoredJson } from "../json";
 import type { Database } from "bun:sqlite";
-import { Gateway, Inbox, type LedgerAction, PlainValueSchema, SessionTransition, L0Observation, type ObservationSink, } from "@openomni/protocol";
+import { Gateway, Delivery, type LedgerAction, PlainValueSchema, SessionTransition, L0Observation, type ObservationSink, } from "@openomni/protocol";
 
 /** A post-commit observation publish that failed without unwinding the committed write. */
 export interface ObservationPublishFailure {
@@ -94,7 +94,7 @@ function publishMessageTerminal(
   }
   if (action.kind !== "prompt") return;
   const native = SessionTransition.OutboundMessage.safeParse(action.intent.value);
-  const external = Inbox.ReplyOrigin.safeParse(action.intent.value);
+  const external = Delivery.ReplyOrigin.safeParse(action.intent.value);
   const binding = native.success
     ? { requestId: native.data.requestId, replyTo: native.data.replyTo }
     : external.success

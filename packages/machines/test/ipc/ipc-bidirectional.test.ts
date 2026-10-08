@@ -58,7 +58,7 @@ describe("IPC bidirectional", () => {
 
   test("a throwing/rejecting onNotification never escapes the socket listener", async () => {
     // A throw here would surface as an uncaughtException in the process
-    // hosting the client (e.g. the coordinator supervising its workers).
+    // hosting the client (e.g. a parent process supervising its children).
     // The contract mirrors the server: log, keep the connection draining.
     const socketPath = socketPathForTest("notifThrow");
     const srv = await createIpcServer(socketPath, () => undefined);

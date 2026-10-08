@@ -5,14 +5,14 @@ import { canonicalDigest, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 import { Message as ModelMessage } from "../message/index.js";
 import { Journal } from "../journal/index.js";
-import { Delivery, EncodedPayload } from "../journal/declaration.js";
+import { Delivery as DeliveryWidth, EncodedPayload } from "../journal/declaration.js";
 import { ForkedFrom, Settings as ConsumptionSettings } from "../journal/core/session-configure.js";
 
 export { SessionTransition } from "./session-transition.js";
 
 const Identifier = z.string().min(1);
 
-/** The one definition of deliverable input kinds (#1252); `Inbox.Kind` aliases it. */
+/** The one definition of deliverable input kinds (#1252); `Delivery.Kind` aliases it. */
 /** `cancel` (#1258) rides the existing `signal` journal kind, like interrupt/resume. */
 const InputKind = z.enum(["prompt", "interrupt", "resume", "cancel", "action"]);
 const NullableIdentifier = Identifier.nullable();
@@ -129,8 +129,20 @@ export namespace FoldCheckpoint {
 }
 
 export namespace LedgerSession {
-  export const Role = z.enum(["resident", "worker"]);
+  export const Role = z.enum(["resident", "child"]);
   export type Role = z.infer<typeof Role>;
+
+  /**
+   * #1315 versioned role read: rows persisted before the rename carry the
+   * retired job-title byte for the delegated-session role. Old bytes stay on
+   * disk, every reader folds through here, writers only ever write `child`,
+   * and no alias is exported. This constant is the one sanctioned home for
+   * the retired role byte; the vocabulary-retirement grep excludes it by name.
+   */
+  export const LEGACY_CHILD_ROLE = "worker" as const;
+  export function foldLegacyRole(role: string): string {
+    return role === LEGACY_CHILD_ROLE ? "child" : role;
+  }
 
   export const State = z.enum(["idle", "running", "interrupted"]);
   export type State = z.infer<typeof State>;
@@ -379,7 +391,7 @@ export namespace SessionTurn {
   export const HistoricalIntent = PinnedGeneration.extend({
     phase: z.literal("intent"),
     resultId: Identifier,
-    inboxIds: z.array(Identifier),
+    deliveryIds: z.array(Identifier),
     /** #1256 H-3: stale `action` inputs (after < compaction head) closed by this turn WITHOUT execution. */
     consumedStale: z.array(Identifier).optional(),
     resumeCount: z.number().int().nonnegative(),
@@ -465,7 +477,7 @@ export namespace SessionTurn {
     .object({
       phase: z.literal("delivery"),
       turnId: Identifier,
-      inboxId: Identifier,
+      deliveryId: Identifier,
       kind: InputKind,
       content: z.string(),
       origin: EncodedPayload,
@@ -551,7 +563,7 @@ export namespace SessionTurn {
   export type Observation = z.infer<typeof Observation>;
 }
 
-export namespace Inbox {
+export namespace Delivery {
   export const ReplyOrigin = z
     .object({
       kind: z.enum(["child_terminal", "external_reply"]),
@@ -590,7 +602,7 @@ export namespace Inbox {
       content: z.string(),
       origin: EncodedPayload,
       /** Loop-consumption mode (#1253): `steer` drains at tool.post boundaries, `followUp` only at turn end. Absent folds to `followUp`. */
-      delivery: Delivery.optional(),
+      delivery: DeliveryWidth.optional(),
       /** #1256 H-3 (`action` inputs): the journal ordinal the deferred payload was computed against; older than the compaction head means stale. */
       after: z.number().int().nonnegative().optional(),
       status: Status,

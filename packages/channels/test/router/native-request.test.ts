@@ -31,7 +31,7 @@ function outbound(
   return { ...payload, digest: canonicalDigest(payload) };
 }
 
-test("native reply reaches the canonical receiving inbox once and retains its original binding", async () => {
+test("native reply reaches the canonical receiving delivery once and retains its original binding", async () => {
   await runEffect(await openRequest("original", {
     expectedResponders: [sender.id],
     correlation: {},
@@ -51,7 +51,7 @@ test("native reply reaches the canonical receiving inbox once and retains its or
       origin: message,
       message: {
         sender: "session",
-        senderRole: "worker",
+        senderRole: "child",
         targetKind: "session",
         type: "message",
         parentChild: true,
@@ -60,7 +60,7 @@ test("native reply reaches the canonical receiving inbox once and retains its or
         withinParentDeadline: true,
       },
     }),
-    inbox: {
+    delivery: {
       commit: () => {
         throw new Error("native answer bypassed request admission");
       },

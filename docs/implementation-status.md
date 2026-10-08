@@ -111,6 +111,46 @@ On `stab/15-bounded-tool-output-projection` (2026-10-08, base `2dc31be78`).
   `Inspect.toolOutput` and the codemode `tool_output` (1048576 bytes).
 - Kept reader: `rg -c 'toolResultText' -g '*.ts' packages apps` sums to 23.
 
+## #1315 retire the input-queue and job-title vocabulary (epic #1303, rung 11)
+
+On `stab/11-retire-inbox-worker-vocabulary` (2026-10-08, base `4b36d0f73`).
+
+- Rename (no alias exports): protocol `Inbox` namespace -> `Delivery`,
+  `inboxId`/`inboxIds`/`inboxKind` -> `deliveryId`/`deliveryIds`/`deliveryKind`,
+  `LedgerSession.Role` `worker`-byte -> `child`; agent core/plugins/tests,
+  channels router/store, codemode/machines Python prelude (`max_concurrency`
+  kwarg), apps/openomni composition/tools/policy-seed/message-policy
+  (`message.child.*` ids, tool visibility `child`) and the desktop `inbox`
+  route -> `automations` all follow (231 files). Ingress drops the retired
+  string/object subordinate target with a typed parse refusal
+  (`packages/protocol/test/ingress/target.test.ts`).
+- Versioned reads, bytes frozen: prompt/signal/turn declarations at version 2;
+  `foldDeliveryPayload` renames version-1 fields strictly after chain-hash
+  verification (`packages/protocol/test/journal/delivery-version.test.ts`);
+  `LedgerSession.foldLegacyRole` folds the retired role byte at every reader
+  (session decode, catalog index, gate `Match` role and message-rule
+  sender/target roles); session-file pending/input SQL COALESCEs both JSON
+  field spellings via the `V1_DELIVERY_FIELDS` object — the one sanctioned home
+  for the legacy field spellings is `packages/protocol/src/journal/core/prompt.ts`.
+- Catalog v2 -> v3: the two CHECK-constrained tables rebuild byte-for-byte so
+  `child` rows and `ingress` policy rows insert while legacy bytes stay valid
+  (`packages/agent/test/alarm-recovery.test.ts`); `translateLegacyPolicyRow`
+  converts the retired input-queue policy address onto `ingress` for new
+  generations (`LEGACY_INGRESS_POLICY_KIND`).
+- Legacy bytes live as plain `as const` literals at exactly four sanctioned
+  sites (`l0.ts` `LEGACY_CHILD_ROLE`, `migrate.ts` `LEGACY_INGRESS_POLICY_KIND`,
+  `prompt.ts` `V1_DELIVERY_FIELDS`, and the tests that prove each retired byte is
+  refused); no string-assembly obfuscation anywhere (`rg '\["in", ?"box"\]'`
+  and `rg '\["wor", ?"ker"\]'` are 0).
+- Deliberately kept wire-frozen vocabulary: `Actor.Kind internal_worker`,
+  `TrustTier assigned_worker`; third-party names untouched: Playwright
+  `workers: 1`, Python stdlib `ThreadPoolExecutor(max_workers=…)`.
+- Conformance snapshots (`script/conformance/*.json`) and `crash-matrix.json`
+  crash points refreshed to the renamed enum; `bun run lint:tools` passes.
+- Follow-ups (not in this rung): a pre-merge session-file fixture e2e over the
+  version-1 fold (the fold is unit-tested and the v2->v3 catalog rebuild is
+  integration-tested) — recorded in the epic receipt.
+
 ## #1309 executable product policy moved into app bundles behind seams (epic #1303, rung 9)
 
 On `stab/9-core-policy-to-bundles` (2026-10-08, base `c11ae7148`).

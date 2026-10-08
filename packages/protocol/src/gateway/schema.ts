@@ -81,8 +81,8 @@ const DeliveredEventSchema = Ingress.DirectEventSchema;
  *
  * Stage-2 measurement corrections to the stage-0 draft (#707):
  * - `sessionId` is optional — it is the gateway's routed session label
- *   (request-owner / surface-map / router-minted). Worker-target deliveries
- *   carry no label: work placement (child/worker session selection) is brain
+ *   (request-owner / surface-map / router-minted). Child-target deliveries
+ *   carry no label: work placement (child session selection) is brain
  *   judgment (kernel-contract §8.5), so the brain resolves it from the
  *   pinned event.
  * - `actorContext` is optional — present for surface-default admissions

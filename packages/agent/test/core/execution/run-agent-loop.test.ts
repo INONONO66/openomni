@@ -261,7 +261,7 @@ test("compaction projection and lossless revert survive SQLite reopen without de
           const second = yield* Effect.forkScoped(handle.prompt("second"));
           yield* Effect.promise(() => summarizing.promise).pipe(Effect.timeout("5 seconds"));
           const admitted = Promise.withResolvers<void>();
-          // W5.2: the inbox table is gone; ingress is a committed `prompt`
+          // W5.2: the input-queue table is gone; ingress is a committed `prompt`
           // chain action, so the durable-admission tap rides kernel.commit.
           const kernel = isolatedLedger().kernel;
           const commit = kernel.commit.bind(kernel);

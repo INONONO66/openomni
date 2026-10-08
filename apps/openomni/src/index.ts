@@ -81,7 +81,7 @@ import {
 import { createCompletionPort } from "./composition/completion";
 import { processEntryPath } from "./process-entry-path";
 import { createProcessSessionTransport } from "./composition/process-session";
-import { createMessageInboxCommit, prepareMessage } from "./composition/message-session";
+import { createMessageDeliveryCommit, prepareMessage } from "./composition/message-session";
 import { dispatchOutboundMessage } from "./composition/terminal-message";
 import {
   DELEGATION_DEADLINE,
@@ -205,7 +205,7 @@ async function composeMachinePlane(
           : machines.enrolled.find((e) => e.machineId === machineId),
       events: deps.events,
       id: deps.id,
-      // #1312: injected IPC callback bound — queue depth and worker fan-out
+      // #1312: injected IPC callback bound — queue depth and callback fan-out
       // per listener; chosen here, the machines package carries no default.
       dispatcherBound: 256,
       now: deps.now,
@@ -443,11 +443,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       requestDomainRevisions: domainRevisions,
       onRequestReady: (id) => {
         notifyLiveApprovals(id);
-        sessionRuntime.onInboxCommitted?.([id]);
+        sessionRuntime.onDeliveryCommitted?.([id]);
       },
       // Entity sessions drain inside the delivering RPC before it acks; only
       // process-runner sessions still need this doorbell.
-      onInboxCommitted: (ids) => {
+      onDeliveryCommitted: (ids) => {
         for (const id of ids) void wake(id);
       },
       authorizeApproval: (credential, request) =>
@@ -802,7 +802,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       answer: (answer) =>
         runAppEffect(runtime, requests.answer({ ...answer, receivedAt: services.now() })),
       command: [process.execPath, processEntryPath(import.meta.url)],
-      worker: {
+      child: {
         ...resolveClusterStorage(config),
         model: config.model,
         apiKey: config.model.apiKey,
@@ -838,7 +838,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       if (sessionRunner(id) !== "process") return Promise.resolve();
       return processSessions.wake(id).catch((error: Error) => incident("process session wake failed", error));
     };
-    const commitInbox = createMessageInboxCommit({
+    const commitDelivery = createMessageDeliveryCommit({
       plane,
       client: entityClient,
       clock: services.now,
@@ -889,9 +889,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
       runtime,
       createResidentGateway(
         {
-          inbox: {
+          delivery: {
             commit: (input) =>
-              commitInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))),
+              commitDelivery(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))),
           },
           prepare: prepareMessage(plane, resident.materialize),
           requests: requestsWithDeadlines,

@@ -28,7 +28,7 @@ export function createReadTool(ports: FilePorts) {
     category: "query",
     input: Input,
     output: z.object({ content: z.string(), bytes: z.number().int().nonnegative() }),
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     execute: (args, ctx) =>
       fileOperation("read", async () => {
         ctx.signal.throwIfAborted();

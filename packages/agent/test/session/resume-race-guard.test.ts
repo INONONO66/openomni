@@ -100,13 +100,13 @@ test("a resume admitted against a settled turn is consumed as a no-op delivery",
           seal: () => Effect.die(new Error("resume guard must not seal")),
           commitSession: admission.commitSession,
           createExecutionLedger: admission.createExecutionLedger,
-          consumeNoopInbox: admission.consumeNoopInbox,
+          consumeNoopDeliveries: admission.consumeNoopDeliveries,
         });
         const result = yield* recovery.resumeInterrupted(item);
         expect(result).toBeUndefined();
       }),
     );
-    // The item was consumed by an inbox.deliver no-op, not left pending.
+    // The item was consumed by a delivery no-op, not left pending.
     expect(kernel.pendingMessages("race")).toHaveLength(0);
     expect(kernel.row("race").state).toBe("idle");
   } finally {

@@ -3,7 +3,7 @@ import { ChannelsFailure, SendAdmissionConflict } from "../errors";
 import type { ChannelError } from "../errors";
 import type { ChannelStores } from "./stores.js";
 import {
-  Inbox,
+  Delivery,
   canonicalDigest,
   type Gateway,
   type LedgerAction,
@@ -32,7 +32,7 @@ interface MessageContext {
 
 interface MessageProgress {
   commitMs: number;
-  committed: Inbox.Row | undefined;
+  committed: Delivery.Row | undefined;
 }
 
 function transformedContent(
@@ -73,12 +73,12 @@ function transformedContent(
   return content;
 }
 
-function inboxAdmission(
+function deliveryAdmission(
   context: MessageContext,
   intent: LedgerAction.Receipt,
   content: string,
   commitAt: number,
-): Inbox.Commit {
+): Delivery.Commit {
   const { sender, send, prepared, messageId, external } = context;
   return {
     id: messageId,
@@ -95,7 +95,7 @@ function inboxAdmission(
       value: {
         ...(prepared.origin ??
         (sender.kind === "session"
-          ? Inbox.MessageOrigin.parse({
+          ? Delivery.MessageOrigin.parse({
               kind: "message",
               messageId,
               senderSessionId: sender.id,
@@ -180,7 +180,7 @@ export function executeMessage(
   if (yield* answerNativeRequest(ports.requests, sender, prepared.origin, content, clock()))
     return sessionResult;
   const commitAt = clock();
-  const admission = inboxAdmission(context, intent, content, commitAt);
+  const admission = deliveryAdmission(context, intent, content, commitAt);
   yield* openNativeRequest(
     ports.requests,
     intent,
@@ -190,7 +190,7 @@ export function executeMessage(
     startedAt,
     admission,
   );
-  const row = yield* ports.inbox.commit(admission);
+  const row = yield* ports.delivery.commit(admission);
   progress.commitMs = clock() - commitAt;
   progress.committed = row;
   context.admitReplyGrant();

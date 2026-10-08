@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { Gateway, type Inbox, L0Observation, LedgerAction, type ObservationSink, SessionTransition, } from "@openomni/protocol";
+import { Gateway, type Delivery, L0Observation, LedgerAction, type ObservationSink, SessionTransition, } from "@openomni/protocol";
 import { type ObservationPublishFailure, publishCommitted } from "../../../src/core/store/storage/sqlite-l0-observation";
 import { createActions } from "../../../src/core/store/session-file";
 import { openLedgerDatabase } from "../helpers/ledger";
@@ -60,7 +60,7 @@ test("a committed reply prompt publishes its scoped platform message identity", 
   using db = openLedgerDatabase();
   requestRow(db);
   const { events, sink } = capture();
-  const origin: Inbox.ReplyOrigin = {
+  const origin: Delivery.ReplyOrigin = {
     kind: "external_reply",
     messageId: "reply-1",
     sourceActionId: "original",
@@ -93,7 +93,7 @@ test("a native outbound message uses its request binding for the reply observati
   const { events, sink } = capture();
   const outbound: SessionTransition.OutboundMessage = {
     messageId: "outbound",
-    sourceSessionId: "worker",
+    sourceSessionId: "child",
     sourceActionId: "terminal",
     destinationSessionId: "session",
     requestId: "original",

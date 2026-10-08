@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Context, Effect } from "effect";
 import { z } from "zod";
-import { Inbox, Journal, type LedgerSession, type PlainValue } from "@openomni/protocol";
+import { Delivery, Journal, type LedgerSession, type PlainValue } from "@openomni/protocol";
 import { Capability, Manifest, type SeamTag } from "../src/core/capability";
 import { runTestPromise } from "./helpers/isolated";
 import { compose } from "../src/core/compose";
@@ -118,7 +118,7 @@ test("off-capability rows stay opaque with hashes intact and deliver refuses the
     systemHash: "system",
     policyGeneration: 1,
   };
-  const pendingAction = Inbox.Row.parse({
+  const pendingAction = Delivery.Row.parse({
     id: "in-action",
     sessionId,
     kind: "action",

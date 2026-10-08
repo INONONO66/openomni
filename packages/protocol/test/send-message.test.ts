@@ -14,7 +14,7 @@ function issues<T>(result: z.ZodSafeParseResult<T>) {
 
 const targets = [
   { kind: "session", id: "session-1" },
-  { kind: "new_session", role: "worker", runner: "inline", parent: "me" },
+  { kind: "new_session", role: "child", runner: "inline", parent: "me" },
   { kind: "actor", actorId: "actor-1" },
 ] as const;
 const send = { to: targets[0], type: "message", content: "hello" } as const;
@@ -38,10 +38,10 @@ const rowA = {
   check: "identity",
 } as const;
 const rowB = {
-  id: "worker-external-deny",
+  id: "child-external-deny",
   table: "B",
   sender: "session",
-  senderRole: "worker",
+  senderRole: "child",
   targetKind: "actor",
   effect: "deny",
   check: { kind: "actor_send" },
@@ -92,7 +92,7 @@ describe("sendMessage stage-1 protocol", () => {
       { code: "invalid_value", path: ["type"] },
     ]);
     expect(
-      issues(Gateway.SendMessage.safeParse({ ...send, to: { kind: "worker", id: "s" } })),
+      issues(Gateway.SendMessage.safeParse({ ...send, to: { kind: "subordinate", id: "s" } })),
     ).toEqual([{ code: "invalid_union", path: ["to", "kind"] }]);
     expect(
       issues(Gateway.SendMessage.safeParse({ ...send, to: { ...targets[1], parent: "other" } })),
@@ -262,7 +262,7 @@ describe("rule table shapes", () => {
     ]);
   });
 
-  test("session rows express bounded checks and the worker deny fixtures", () => {
+  test("session rows express bounded checks and the child deny fixtures", () => {
     const actorDeny: Gateway.RuleTableB = Gateway.RuleTableB.parse(rowB);
     expect(actorDeny).toEqual(rowB);
     const interruptDeny = {

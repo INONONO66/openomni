@@ -22,7 +22,7 @@ export const fixtureTurn = fixtureNode(
     parentId: null,
     sessionId: "S",
     resultId: "R",
-    inboxIds: [],
+    deliveryIds: [],
     generation: fixtureGeneration,
     resumeCount: 0,
     boundaryActionId: null,

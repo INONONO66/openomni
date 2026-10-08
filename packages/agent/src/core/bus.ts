@@ -1,4 +1,4 @@
-import { BusEvent, type ObservationSink, Gateway, type Inbox, type SessionTurn } from "@openomni/protocol";
+import { BusEvent, type ObservationSink, Gateway, type Delivery, type SessionTurn } from "@openomni/protocol";
 import { Data, Effect, FiberSet, Layer, PubSub, type Scope, Stream } from "effect";
 import { z } from "zod";
 import { ObservationSink as ObservationSinkTag } from "./ports";
@@ -277,9 +277,9 @@ export function scopeObservation(
   return scoped;
 }
 
-/** Invoked only after the consuming inbox/action transaction returns its receipt. */
+/** Invoked only after the consuming delivery/action transaction returns its receipt. */
 export function observeDrained(
-  rows: readonly Inbox.Row[],
+  rows: readonly Delivery.Row[],
   turnId: string,
   boundary: SessionTurn.Boundary,
   at: number,

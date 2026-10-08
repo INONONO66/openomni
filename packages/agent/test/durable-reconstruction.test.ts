@@ -14,7 +14,7 @@ import { reconstructionSession } from "./helpers/reconstruction-fixture";
 import { bounded } from "./helpers/bounded";
 import { z } from "zod";
 
-const worker = new URL("./helpers/durable-reconstruction.ts", import.meta.url).pathname;
+const helperScript = new URL("./helpers/durable-reconstruction.ts", import.meta.url).pathname;
 const witnessSchema = reconstructionWitness;
 
 /**
@@ -37,7 +37,7 @@ const refusalSchema = z.object({
 
 async function child<S extends z.ZodType>(stage: string, dbPath: string, schema: S) {
   const witnessPath = `${dbPath}.${stage}.witness.json`;
-  const process = Bun.spawn([Bun.which("bun") ?? "bun", worker, witnessPath, stage, dbPath], {
+  const process = Bun.spawn([Bun.which("bun") ?? "bun", helperScript, witnessPath, stage, dbPath], {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

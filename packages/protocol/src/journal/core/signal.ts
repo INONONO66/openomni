@@ -1,7 +1,9 @@
 /**
  * `signal` — interrupt/resume/cancel control, consumed at the next boundary,
  * never a turn input. Single writer: the entity deliver path
- * (`packages/agent/src/core/commit.ts`).
+ * (`packages/agent/src/core/commit.ts`). Version 2 (#1315): payloads name
+ * the delivered input `deliveryId`; version-1 rows fold through the
+ * `prompt` declaration's `foldDeliveryPayload` reader.
  */
 import { z } from "zod";
 import { RowBody, declare, refineField } from "../declaration.js";
@@ -12,4 +14,5 @@ export type Control = z.infer<typeof Control>;
 export const signal = declare(
   "signal",
   RowBody.superRefine(refineField("intent", "control", Control)),
+  2,
 );

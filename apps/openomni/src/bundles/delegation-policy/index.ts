@@ -2,7 +2,7 @@ import { Bundle, type Core } from "@openomni/agent";
 import {
   canonicalDigest,
   Gateway,
-  Inbox,
+  Delivery,
   SessionTransition,
   type LedgerAction,
   type LedgerSession,
@@ -262,7 +262,7 @@ export function settleChild(
   if (result.kind !== "result" && result.kind !== "error") return undefined;
   const original = kernel
     .inputMessages(row.id)
-    .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
+    .map((item) => Delivery.MessageOrigin.safeParse(item.origin.value))
     .find((origin) => origin.success && origin.data.senderSessionId === row.parentId);
   if (original === undefined || !original.success) return undefined;
   const settlement = Gateway.DelegationResult.parse({
@@ -288,7 +288,7 @@ export function settleChild(
  * Catalog-backed reads over the ledger's session rows (parent links = depth,
  * children = live rows). `isActiveChild` is the composition-bound liveness
  * fact (#1258 M-4): a child counts against `spawn_children` only while it
- * still has work in flight — an open turn or an undelivered inbox message.
+ * still has work in flight — an open turn or an undelivered input.
  * When the read is absent or throws, the child counts (conservative: the cap
  * stays tight rather than leaking).
  */

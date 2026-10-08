@@ -19,7 +19,7 @@ beforeEach(() => {
   registerOwnerDm();
 });
 
-test("inbox receipt target equals the durable route decision", async () => {
+test("delivery receipt target equals the durable route decision", async () => {
   const mapped = createMappedOwnerSession();
   const result = await runEffect(kernelRouter().ingest(ownerSender, ownerFacts));
   expect(result).toMatchObject({
@@ -38,7 +38,7 @@ test("inbox receipt target equals the durable route decision", async () => {
   });
 });
 
-test("Request correlation selects the owner inbox instead of the default session", async () => {
+test("Request correlation selects the owner delivery instead of the default session", async () => {
   const mapped = createMappedOwnerSession();
   await runEffect(await openRequest("request-contract", {
     correlation: { tokenHash: "token", channelId: ownerFacts.channelId },

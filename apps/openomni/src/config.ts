@@ -163,7 +163,7 @@ export interface RegisteredActor {
 /**
  * The operator's transport config in the shape the agent and llm packages
  * take, or absent when the operator configured neither. One owner for the
- * translation, so every call site (Resident, worker loop, process worker, the
+ * translation, so every call site (Resident, child loop, process child, the
  * llm tool) sends the same thing.
  */
 export function modelTransport(

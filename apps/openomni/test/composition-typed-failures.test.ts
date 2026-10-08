@@ -52,7 +52,7 @@ test("child preparation refuses a pinned policy without admission bounds", () =>
   try {
     const failure = runSyncEffect(Effect.flip(prepareMessage(plane, materialize(plane))(
       { kind: "session", id: "sender" },
-      { to: { kind: "new_session", role: "worker", runner: "worker", parent: "me" }, type: "message", content: "hello" },
+      { to: { kind: "new_session", role: "child", runner: "child", parent: "me" }, type: "message", content: "hello" },
       "child", "message",
     )));
     expect(failure._tag).toBe("SendAdmissionConflict");
@@ -62,7 +62,7 @@ test("child preparation refuses a pinned policy without admission bounds", () =>
   }
 });
 
-// W5.2: the alarm worker's lifecycle tests left with the worker itself — the
+// W5.2: the alarm child's lifecycle tests left with the child itself — the
 // entity mailbox owns wake delivery now (see the receipt for the deletions).
 
 test("ingress commit without a receipt becomes a typed corrupt-record commit failure", async () => {

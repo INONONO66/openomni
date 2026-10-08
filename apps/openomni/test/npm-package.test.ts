@@ -137,11 +137,11 @@ describe("npm package staging", () => {
       }
     }
 
-    // The bundled worker must be executable, not merely present: with stdin
+    // The bundled child must be executable, not merely present: with stdin
     // closed it must reach its own request-line guard and exit with the
     // dedicated sentinel code — load errors and top-level exceptions exit 1
     // and cannot fake this.
-    const worker = Bun.spawnSync(
+    const child = Bun.spawnSync(
       [process.execPath, join(staging, "dist", "app", "process-entry.js")],
       {
         cwd: staging,
@@ -153,8 +153,8 @@ describe("npm package staging", () => {
         stderr: "pipe",
       },
     );
-    expect(worker.exitCode).toBe(PROCESS_SESSION_NO_REQUEST_EXIT);
-    expect(worker.stdout.toString()).toBe("");
+    expect(child.exitCode).toBe(PROCESS_SESSION_NO_REQUEST_EXIT);
+    expect(child.stdout.toString()).toBe("");
   }, 30_000);
 });
 

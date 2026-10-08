@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Result } from "effect";
 import { armAction, firedAction, type AlarmCapability } from "../src/core/alarm";
+import { LedgerSession } from "@openomni/protocol";
 import { openCatalogStore } from "../src/core/store/catalog";
+import { LEGACY_INGRESS_POLICY_KIND } from "../src/core/gate/migrate";
 import { CatalogVersionRefused, type LedgerError } from "../src/core/store/errors";
 import { openSessionStore } from "../src/core/store/session-file";
 import * as SessionHandleStore from "../src/core/store/fence";
@@ -241,7 +243,7 @@ describe("catalog schema v2 (has_armed)", () => {
       v1.run(`CREATE TABLE session_index (
         id TEXT PRIMARY KEY,
         parent_id TEXT,
-        role TEXT NOT NULL CHECK (role IN ('resident', 'worker')),
+        role TEXT NOT NULL CHECK (role IN ('resident', '${LedgerSession.LEGACY_CHILD_ROLE}')),
         fence INTEGER NOT NULL DEFAULT 0 CHECK (fence >= 0),
         created_at INTEGER NOT NULL
       )`);
@@ -270,7 +272,7 @@ describe("catalog schema v2 (has_armed)", () => {
       }
       const reopened = new Database(path, { readonly: true });
       try {
-        expect(reopened.query("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+        expect(reopened.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
       } finally {
         reopened.close();
       }
@@ -279,14 +281,86 @@ describe("catalog schema v2 (has_armed)", () => {
     }
   });
 
-  test("a newer (v3) catalog opens read-only: markArmed refuses typed", () => {
-    const directory = mkdtempSync(join(tmpdir(), "catalog-v3-"));
+  test("a v2 catalog rebuilds its CHECKs: legacy role rows fold to child, ingress policy rows insert", () => {
+    const directory = mkdtempSync(join(tmpdir(), "catalog-v2-"));
+    const path = join(directory, "catalog.sqlite");
+    const legacyRole = LedgerSession.LEGACY_CHILD_ROLE;
+    try {
+      const v2 = new Database(path);
+      v2.run(`CREATE TABLE session_index (
+        id TEXT PRIMARY KEY,
+        parent_id TEXT,
+        role TEXT NOT NULL CHECK (role IN ('resident', '${legacyRole}')),
+        fence INTEGER NOT NULL DEFAULT 0 CHECK (fence >= 0),
+        created_at INTEGER NOT NULL,
+        has_armed INTEGER NOT NULL DEFAULT 0 CHECK (has_armed IN (0, 1))
+      )`);
+      v2.run(`CREATE TABLE policy (
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('prompt', '${LEGACY_INGRESS_POLICY_KIND}')),
+        phase TEXT NOT NULL CHECK (phase IN ('pre', 'post')),
+        match TEXT NOT NULL CHECK (json_valid(match)),
+        verdict TEXT NOT NULL CHECK (json_valid(verdict)),
+        encoding_version INTEGER NOT NULL CHECK (encoding_version = 1),
+        priority INTEGER NOT NULL,
+        generation INTEGER NOT NULL CHECK (generation > 0),
+        PRIMARY KEY (generation, name, kind, phase)
+      )`);
+      v2.run(
+        `INSERT INTO session_index (id, parent_id, role, fence, created_at) VALUES ('s-legacy', 's-parent', '${legacyRole}', 2, 5)`,
+      );
+      v2.run(
+        `INSERT INTO policy (name, kind, phase, match, verdict, encoding_version, priority, generation)
+         VALUES ('ingress-screen', '${LEGACY_INGRESS_POLICY_KIND}', 'pre', '{}', '{"type":"allow"}', 1, 0, 1)`,
+      );
+      v2.run("PRAGMA user_version = 2");
+      v2.close();
+
+      const store = openCatalogStore(path, { now: () => 1 });
+      try {
+        // The legacy role byte stays on disk; the read folds it.
+        expect(store.sessionIndex("s-legacy")).toEqual({
+          id: "s-legacy",
+          parentId: "s-parent",
+          role: "child",
+          fence: 2,
+          createdAt: 5,
+          hasArmed: false,
+        });
+        // The rebuilt CHECK admits the current vocabulary.
+        store.indexSession({ id: "s-new", parentId: "s-legacy", role: "child", createdAt: 9 });
+        expect(store.sessionIndex("s-new")?.role).toBe("child");
+      } finally {
+        store.close();
+      }
+      const reopened = new Database(path);
+      try {
+        expect(reopened.query("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+        // Historical policy bytes survive the rebuild unchanged...
+        expect(reopened.query("SELECT kind FROM policy WHERE name = 'ingress-screen'").get()).toEqual({
+          kind: LEGACY_INGRESS_POLICY_KIND,
+        });
+        // ...and the rebuilt CHECK admits the current ingress address.
+        reopened.run(
+          `INSERT INTO policy (name, kind, phase, match, verdict, encoding_version, priority, generation)
+           VALUES ('ingress-screen', 'ingress', 'pre', '{}', '{"type":"allow"}', 1, 0, 2)`,
+        );
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      rmSync(directory, { recursive: true });
+    }
+  });
+
+  test("a newer (v4) catalog opens read-only: markArmed refuses typed", () => {
+    const directory = mkdtempSync(join(tmpdir(), "catalog-v4-"));
     const path = join(directory, "catalog.sqlite");
     try {
       const created = openCatalogStore(path, { now: () => 1 });
       created.close();
       const stamped = new Database(path);
-      stamped.run("PRAGMA user_version = 3");
+      stamped.run("PRAGMA user_version = 4");
       stamped.close();
 
       const reopened = openCatalogStore(path, { now: () => 1 });
@@ -300,8 +374,8 @@ describe("catalog schema v2 (has_armed)", () => {
         expect(refusal).toBeInstanceOf(CatalogVersionRefused);
         if (refusal instanceof CatalogVersionRefused) {
           expect(refusal.operation).toBe("markArmed");
-          expect(refusal.fileVersion).toBe(3);
-          expect(refusal.codeVersion).toBe(2);
+          expect(refusal.fileVersion).toBe(4);
+          expect(refusal.codeVersion).toBe(3);
         }
       } finally {
         reopened.close();

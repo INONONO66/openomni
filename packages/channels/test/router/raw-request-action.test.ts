@@ -6,10 +6,10 @@ import { effectFailure } from "../helpers/effect-failure";
 import { runEffect } from "../helpers/effect";
 import { openRequest, requestPort } from "../helpers/requests";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { type Gateway, type Inbox, type BusEvent, type PlainValue, Ingress } from "@openomni/protocol";
+import { type Gateway, type Delivery, type BusEvent, type PlainValue, Ingress } from "@openomni/protocol";
 import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
 import { IngressRoutingError } from "../../src/errors";
-import { recordingInbox } from "./_recording-inbox";
+import { recordingDelivery } from "./_recording-delivery";
 
 beforeEach(() => {
   resetLedger();
@@ -43,7 +43,7 @@ test.each([
     correlation: { channelId: "dm", tokenHash: "token" },
     expectedResponders: ["responder"],
   }));
-  const commits: Inbox.Commit[] = [];
+  const commits: Delivery.Commit[] = [];
   const decisions: Ingress.RoutingDecisionPayload[] = [];
   const ids = { value: 0 };
   const router = createGatewayRouter({
@@ -57,7 +57,7 @@ test.each([
         decisions.push(Ingress.Events.RoutingDecision.schema.parse(data));
       }
     },
-    inbox: recordingInbox(commits),
+    delivery: recordingDelivery(commits),
     prepare: (_sender: Gateway.IngestSender, _message: Gateway.SendMessage, target: string) => Effect.succeed({
       target,
       message: {

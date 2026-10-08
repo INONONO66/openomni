@@ -19,7 +19,7 @@ import { messageMaterialization } from "./composition/message-session";
 import { classifyTurnFailure } from "./observation/llm-failure";
 import { observeComponent } from "./observation/component";
 import { buildAgentPrompt } from "./prompt/build";
-import { RESIDENT_PRESET, WORKER_PRESET } from "./prompt/roles";
+import { CHILD_PRESET, RESIDENT_PRESET } from "./prompt/roles";
 import { toolCatalogLayer, type GenerationDefinitions } from "./composition/generation-layers";
 import { catalogDefinitions, type ToolPorts } from "./tools/core/catalog";
 
@@ -63,7 +63,7 @@ export interface ResidentOptions {
   readonly toolOutputBudgetBytes?: number;
 }
 
-/** Resident and worker use the same session-owned runner and dispatcher. */
+/** Resident and child use the same session-owned runner and dispatcher. */
 export function createResident(options: ResidentOptions) {
   const ports = options.tools;
   const catalog = catalogDefinitions(ports);
@@ -71,7 +71,7 @@ export function createResident(options: ResidentOptions) {
     catalog.filter((tool) => tool.visibility.model.includes(role) || tool.visibility.cell.includes(role));
   const definitions: GenerationDefinitions = {
     resident: definitionsFor("resident"),
-    worker: definitionsFor("worker"),
+    child: definitionsFor("child"),
     catalogLayer: (select) => toolCatalogLayer(ports, select),
   };
   /**
@@ -171,7 +171,7 @@ export function createResident(options: ResidentOptions) {
     runnerFor,
     definitions,
     materialize(id: string, parentId: string | null, role: LedgerSession.Role, runner: string) {
-      if (!["resident", "worker", "native", "process"].includes(runner)) {
+      if (!["resident", "child", "native", "process"].includes(runner)) {
         throw new AppInvariantError(`runner is not registered: ${runner}`);
       }
       const composed = options.composed?.current();
@@ -182,7 +182,7 @@ export function createResident(options: ResidentOptions) {
         runner,
         tools: composedFaces(role),
         bundles: composed?.generation.bundles ?? [],
-        preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : WORKER_PRESET),
+        preset: buildAgentPrompt(role === "resident" ? RESIDENT_PRESET : CHILD_PRESET),
         at: ports.clock(),
         // #1306: an off cascade leaves genesis unstamped so the first turn's
         // adoption appends the `session.configure{operation: "compose"}` row
@@ -217,7 +217,7 @@ export function createResident(options: ResidentOptions) {
       const composed = options.composed?.current();
       if (composed === undefined) return undefined;
       const union = [...composedFaces("resident")];
-      for (const face of composedFaces("worker"))
+      for (const face of composedFaces("child"))
         if (!union.some((existing) => existing.name === face.name)) union.push(face);
       return {
         hash: composed.generation.hash,

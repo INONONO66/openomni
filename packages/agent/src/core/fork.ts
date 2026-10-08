@@ -14,11 +14,11 @@
  * store-internal and carry parent ordinals, so they are excluded too.
  *
  * Deduplication rebuilds only after genesis: copied input rows (the rows
- * carrying an `inboxKind` effect, whose ids are the deliver door's
- * idempotency keys) AND their delivery rows (`<inboxId>:delivery`, the one
+ * carrying an `deliveryKind` effect, whose ids are the deliver door's
+ * idempotency keys) AND their delivery rows (`<deliveryId>:delivery`, the one
  * deterministic id consumption re-mints — core/commit.ts `deliveryActions`)
  * are renamed `fork:<parentSessionId>:<id>` — the embedded parent session id
- * marks a leaked key stale — with every `inboxId`/`turnId` reference and
+ * marks a leaked key stale — with every `deliveryId`/`turnId` reference and
  * parent pointer remapped alongside, so a pre-fork `idempotencyKey` delivered
  * to the child is admitted fresh AND completes its turn: no copied row
  * occupies an id the child's own admission or consumption will need.
@@ -107,11 +107,11 @@ export function isForkBoundary(action: LedgerAction.Node): boolean {
 /** Input rows carry the deliver door's idempotency key as their id. */
 function isInputRow(action: LedgerAction.Node): boolean {
   if (action.kind !== "prompt" && action.kind !== "signal" && action.kind !== "action") return false;
-  return typeof plainObject(action.effect.value)?.inboxKind === "string";
+  return typeof plainObject(action.effect.value)?.deliveryKind === "string";
 }
 
 /**
- * Delivery rows: consumption deterministically re-mints `<inboxId>:delivery`
+ * Delivery rows: consumption deterministically re-mints `<deliveryId>:delivery`
  * (core/commit.ts `deliveryActions`) for a re-admitted key, so a copied one
  * must never keep that id slot on the child chain.
  */
@@ -147,7 +147,7 @@ function copiedBytes(action: LedgerAction.Node): number {
   );
 }
 
-/** Remaps renamed-row references (`inboxId`/`turnId`) inside one payload. */
+/** Remaps renamed-row references (`deliveryId`/`turnId`) inside one payload. */
 function remapPayload(
   payload: LedgerAction.Node["intent"],
   renames: ReadonlyMap<string, string>,
@@ -155,7 +155,7 @@ function remapPayload(
   const value = plainObject(payload.value);
   if (value === undefined) return payload;
   let next: Record<string, PlainValue> | undefined;
-  for (const field of ["inboxId", "turnId"] as const) {
+  for (const field of ["deliveryId", "turnId"] as const) {
     const reference = value[field];
     if (typeof reference !== "string") continue;
     const renamed = renames.get(reference);

@@ -264,8 +264,8 @@ test("a cell creates three child sessions through send_message", async () => {
       run: (input: RunInput, sink: Sink) => Effect.sync(() => {
         const plane = planeRef.current;
         if (plane === undefined) throw new Error("plane not resolved before model run");
-        if (plane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
-          // Each worker answers with the instruction it was actually given, so
+        if (plane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "child") {
+          // Each child answers with the instruction it was actually given, so
           // a cell that dropped or duplicated one would be visible.
           const asked = (input.messages.at(-1)?.parts ?? [])
             .flatMap((part) => (part.type === "text" ? [part.text] : []))
@@ -284,7 +284,7 @@ test("a cell creates three child sessions through send_message", async () => {
               op: "run",
               code: [
                 "answers = [",
-                "  tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message=f'check {name}', spend_cap=1)['target']",
+                "  tool.send_message(to={'kind':'new_session','role':'child','runner':'native','parent':'me'}, message=f'check {name}', spend_cap=1)['target']",
                 "  for name in ('lint', 'types', 'tests')",
                 "]",
                 "len(set(answers))",
@@ -321,10 +321,10 @@ test("a cell creates three child sessions through send_message", async () => {
   expect(answer).toContain(
     "offered=[bash,edit,eval,find,grep,ls,monitor,provision,read,send_message,write]",
   );
-  // Three workers ran and their answers came back inside the cell. The value
+  // Three children ran and their answers came back inside the cell. The value
   // is the cell's final expression as Python rendered it, quotes included.
   expect(answer).toContain("cell=3");
-  expect(planeRef.current.listSessions().filter((row) => row.role === "worker")).toHaveLength(3);
+  expect(planeRef.current.listSessions().filter((row) => row.role === "child")).toHaveLength(3);
   // One Resident turn, not three: that is what code mode bought.
   expect(residentTurns.length).toBeGreaterThanOrEqual(2);
   expect(new Set(residentTurns).size).toBe(1);
@@ -375,7 +375,7 @@ test("a cell's refused send_message surfaces as ToolError inside the cell, not a
               op: "run",
               code: [
                 "try:",
-                "    tool.send_message(to={'kind':'new_session','role':'worker','runner':'native','parent':'me'}, message='no cap')",
+                "    tool.send_message(to={'kind':'new_session','role':'child','runner':'native','parent':'me'}, message='no cap')",
                 "    outcome = 'created'",
                 "except ToolError as error:",
                 "    outcome = 'refused: ' + str(error)",
@@ -409,7 +409,7 @@ test("a cell's refused send_message surfaces as ToolError inside the cell, not a
   expect(answer).toContain("refused: send_message refused");
   expect(answer).not.toContain("created");
   // The refused send created no child session.
-  expect(planeRef.current.listSessions().filter((row) => row.role === "worker")).toHaveLength(0);
+  expect(planeRef.current.listSessions().filter((row) => row.role === "child")).toHaveLength(0);
   await suite.cleanup();
 }, 60_000);
 

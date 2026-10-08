@@ -1,5 +1,5 @@
 import { Effect, Result } from "effect";
-import type { Inbox, LedgerAction } from "@openomni/protocol";
+import type { Delivery, LedgerAction } from "@openomni/protocol";
 import { runLedgerSync } from "./effect";
 import type { LedgerStores } from "./storage";
 import { adoptWriter, materializeSession } from "./session";
@@ -39,7 +39,7 @@ export function forkFixture(stores: LedgerStores, child: () => ChildStore) {
     );
   }
 
-  function inboxRow(id: string, content: string, createdAt: number): Inbox.Row {
+  function deliveryRow(id: string, content: string, createdAt: number): Delivery.Row {
     return {
       id,
       sessionId: PARENT,
@@ -71,7 +71,7 @@ export function forkFixture(stores: LedgerStores, child: () => ChildStore) {
       at: 2,
     });
     const [delivery] = deliveryActions(
-      [inboxRow("msg-1", "first", 2)],
+      [deliveryRow("msg-1", "first", 2)],
       { kind: "turn", turnId: "turn-1" },
       "before_llm",
       input.id,

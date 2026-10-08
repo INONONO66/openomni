@@ -145,7 +145,7 @@ export function createBashTool(ports: FilePorts) {
     sequential: true,
     input: Input,
     output: Output,
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     execute: (args, ctx) =>
       fileOperation("bash", () => {
         ctx.signal.throwIfAborted();

@@ -1,8 +1,10 @@
 /**
  * `turn` — one loop turn: open/checkpoint/tool.start/tool.result/terminal
- * phases, consumed input seqs (`inboxIds`) plus `consumedStale` for inputs
- * closed without execution. Single writer: the session loop
- * (`packages/agent/src/core/commit.ts` turn constructors).
+ * phases, consumed input seqs (`deliveryIds`) plus `consumedStale` for
+ * inputs closed without execution. Single writer: the session loop
+ * (`packages/agent/src/core/commit.ts` turn constructors). Version 2
+ * (#1315): intents name consumed inputs `deliveryIds`; version-1 rows fold
+ * through the `prompt` declaration's `foldDeliveryPayload` reader.
  */
 import { z } from "zod";
 import { RowBody, declare, refineField } from "../declaration.js";
@@ -15,4 +17,5 @@ export const turn = declare(
   RowBody.superRefine(refineField("intent", "consumedStale", z.array(z.string().min(1)))).superRefine(
     refineField("intent", "outcome", ToolOutcome),
   ),
+  2,
 );

@@ -1,6 +1,6 @@
 import { Effect, Fiber, Option, type Scope } from "effect";
 import { FenceRefused } from "../core/store/errors";
-import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
+import type { Delivery, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "../core/failure";
 import { toolSnapshot, internalOrigin, turnTerminalAction, receivedMessageAction } from "../core/commit";
 import { createSessionTurn } from "../core/run";
@@ -47,7 +47,7 @@ export function createController(
     const { runTurn, seal } = createSessionTurn(kernel, sessionId, runner, runtime, state, owner, clock, entropy, scope, {
       createExecutionLedger: (...args) => admission.createExecutionLedger(...args),
       evaluatePromptPolicies: (...args) => admission.evaluatePromptPolicies(...args),
-      consumePolicyBlockedInbox: (...args) => admission.consumePolicyBlockedInbox(...args),
+      consumePolicyBlockedDeliveries: (...args) => admission.consumePolicyBlockedDeliveries(...args),
       hibernate,
     });
     const admission = createSessionAdmission(kernel, sessionId, runtime, state, owner, clock, entropy, {
@@ -55,7 +55,7 @@ export function createController(
     });
     const recovery = createSessionRecovery(kernel, sessionId, runtime, clock, entropy, {
       awaitRetainedRunner, runTurn, seal,
-      commitSession: admission.commitSession, createExecutionLedger: admission.createExecutionLedger, consumeNoopInbox: admission.consumeNoopInbox,
+      commitSession: admission.commitSession, createExecutionLedger: admission.createExecutionLedger, consumeNoopDeliveries: admission.consumeNoopDeliveries,
     });
     function replacement(): Effect.Effect<SessionHandle | undefined, SessionError> {
       return Effect.gen(function* () {
@@ -106,7 +106,7 @@ export function createController(
     const handle: SessionHandle = {
       id: sessionId, tools, system: { blocks },
       requests: {
-        transition: (payload, inputId, at, inbox) => Effect.gen(function* () {
+        transition: (payload, inputId, at, admission) => Effect.gen(function* () {
           const current = kernel.row(sessionId);
           // A foreign adoption over this activation makes every commit stale;
           // the pinned fence is never silently re-adopted beneath a live turn.
@@ -114,7 +114,7 @@ export function createController(
             return yield* Effect.fail(new CommitFailed({ error: new FenceRefused({
               sessionId, reason: "stale", holder: current.fenceOwner, fence: current.fence, expiresAt: null,
             }) }));
-          return yield* commitSessionRequest(kernel, sessionId, { owner, fence: state.fence }, payload, inputId, Math.max(at, clock()), runtime, inbox).pipe(
+          return yield* commitSessionRequest(kernel, sessionId, { owner, fence: state.fence }, payload, inputId, Math.max(at, clock()), runtime, admission).pipe(
             Effect.tap((decision) => Effect.sync(() => {
               if (decision.request !== undefined) state.activeApprovals?.notify?.(decision.request);
             })),
@@ -164,11 +164,11 @@ export function createController(
     };
 
     /**
-     * Ingress is a fenced received-message chain action (the inbox table is
+     * Ingress is a fenced received-message chain action (the input-queue table is
      * gone). An interrupt under a running turn lands its durable interrupted
      * mark in the same commit; the abort below still fires either way.
      */
-    function recordIngress(kind: Inbox.Kind, content: string, origin: Inbox.Origin) {
+    function recordIngress(kind: Delivery.Kind, content: string, origin: Delivery.Origin) {
       return Effect.gen(function* () {
         const current = kernel.row(sessionId);
         const received = receivedMessageAction({
@@ -184,7 +184,7 @@ export function createController(
       });
     }
 
-    function enqueue(kind: Inbox.Kind, content: string, origin: Inbox.Origin) {
+    function enqueue(kind: Delivery.Kind, content: string, origin: Delivery.Origin) {
       return Effect.gen(function* () {
         if (state.closed) return yield* new AgentFailure({ operation: "session.enqueue", cause: "closed" });
         const running = kernel.row(sessionId).state === "running";
@@ -226,7 +226,7 @@ export function createController(
           case "recover": return { stop: false, result: yield* recovery.resumeTurn(decision.open) };
           case "resume": return { stop: false, result: yield* recovery.resumeInterrupted(decision.item) };
           case "consume":
-            yield* admission.consumeNoopInbox(decision.items);
+            yield* admission.consumeNoopDeliveries(decision.items);
             return { stop: false };
         }
       });

@@ -491,10 +491,10 @@ describe("channel administration ends in reconcile (§5, §8.7)", () => {
     const provisionTools = ["provision"];
     const definitions = catalogDefinitions({ ...testToolPorts, provisioning: port });
     const resident = definitions.filter((entry: import("@openomni/protocol").AnyToolDefinition) => entry.visibility.model.includes("resident")).map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
-    const worker = definitions.filter((entry: import("@openomni/protocol").AnyToolDefinition) => entry.visibility.model.includes("worker")).map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
+    const child = definitions.filter((entry: import("@openomni/protocol").AnyToolDefinition) => entry.visibility.model.includes("child")).map((entry: import("@openomni/protocol").AnyToolDefinition) => entry.name);
     for (const name of provisionTools) {
       expect(resident).toContain(name);
-      expect(worker).not.toContain(name);
+      expect(child).not.toContain(name);
     }
   });
 

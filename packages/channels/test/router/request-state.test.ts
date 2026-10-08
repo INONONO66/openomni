@@ -111,15 +111,15 @@ test("cancellation preserves partial replies and cannot be reversed by late inpu
 
 test.each([10, 11])("answer at %s cannot cross the deadline", async (at: number) => {
   await runEffect(await openRequest("original", { deadline: 10 }));
-  expect(await runEffect(answer("original", "actor-external-worker", "late", at))).toBe("late_unknown");
+  expect(await runEffect(answer("original", "actor-external-child", "late", at))).toBe("late_unknown");
   expect(ledger().kernel.requestById("original")?.replies).toEqual([]);
   expect(ledger().kernel.requestById("original")?.state).toBe("expired");
 });
 
 test("resolved request cannot reopen for supplementary replies", async () => {
   await runEffect(await openRequest("original"));
-  expect(await runEffect(answer("original", "actor-external-worker", "first", 2))).toBe("resolved");
-  expect(await runEffect(answer("original", "actor-external-worker", "second", 3))).toBe("duplicate");
+  expect(await runEffect(answer("original", "actor-external-child", "first", 2))).toBe("resolved");
+  expect(await runEffect(answer("original", "actor-external-child", "second", 3))).toBe("duplicate");
   expect(ledger().kernel.requestById("original")?.replies).toHaveLength(1);
 });
 

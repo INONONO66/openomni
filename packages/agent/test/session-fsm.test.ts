@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import * as SessionHandleStore from "../src/core/store/fence";
-import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type LedgerSession, type SessionTransition, } from "@openomni/protocol";
+import { canonicalDigest, PlainObjectSchema, type Delivery, type LedgerAction, type LedgerSession, type SessionTransition, } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
 import { decideSessionAdmission } from "../src/core/admission";
 import { decideRequestTransition } from "../src/core/request";
@@ -43,7 +43,7 @@ const node = fixtureNode;
 const turn = fixtureTurn;
 const open: SessionHandleStore.OpenTurn = fixtureOpenTurn;
 const terminal = fixtureTerminal;
-function inbox(kind: Inbox.Kind, ordinal = 1): Inbox.Row {
+function pendingRow(kind: Delivery.Kind, ordinal = 1): Delivery.Row {
   return {
     id: `I${ordinal}`,
     sessionId: "S",
@@ -147,11 +147,11 @@ function expectedAdmissionKind(
   return fallback;
 }
 
-function expectIdentitySubstitutionsRefused(snapshot: AdmissionSnapshot, event: Inbox.Kind): void {
+function expectIdentitySubstitutionsRefused(snapshot: AdmissionSnapshot, event: Delivery.Kind): void {
   const foreignTerminal = terminal("interrupted");
   const substitutions: readonly AdmissionSnapshot[] = [
-    { ...snapshot, pending: [{ ...inbox(event), sessionId: "foreign" }] },
-    { ...snapshot, pending: [{ ...inbox(event), status: "consumed" }] },
+    { ...snapshot, pending: [{ ...pendingRow(event), sessionId: "foreign" }] },
+    { ...snapshot, pending: [{ ...pendingRow(event), status: "consumed" }] },
     { ...snapshot, open: { ...open, action: { ...turn, sessionId: "foreign" } } },
     {
       ...snapshot,
@@ -183,7 +183,7 @@ describe("T02/T05/T07/T08/T10 admission Cartesian product", () => {
           for (const prior of terminals) {
             const snapshot = {
               row: { ...row, state },
-              pending: [inbox(event)],
+              pending: [pendingRow(event)],
               capabilityKinds: ["tool", "compaction"] as const,
               open: hasOpen ? open : undefined,
               terminal: prior,
@@ -195,17 +195,17 @@ describe("T02/T05/T07/T08/T10 admission Cartesian product", () => {
           }
         });
       }
-  test("empty inbox and control prefix have explicit decisions without consuming a following prompt", () => {
+  test("empty pending queue and control prefix have explicit decisions without consuming a following prompt", () => {
     expect(
       decideSessionAdmission({ row: { ...row, state: "idle" }, pending: [], capabilityKinds: ["tool", "compaction"] }),
     ).toEqual({
       kind: "stop",
     });
-    const control = inbox("resume");
+    const control = pendingRow("resume");
     expect(
       decideSessionAdmission({
         row: { ...row, state: "idle" },
-        pending: [control, inbox("prompt", 2)],
+        pending: [control, pendingRow("prompt", 2)],
         capabilityKinds: ["tool", "compaction"],
       }),
     ).toEqual({ kind: "consume", items: [control] });
@@ -402,7 +402,7 @@ describe("T01-T15 real controller transition witnesses", () => {
         const other = fixture();
         const conflict = yield* Effect.exit(
           withSessionServices(
-            session({ id: "S", role: "worker", parentId: "parent", runner }, other),
+            session({ id: "S", role: "child", parentId: "parent", runner }, other),
             other,
           ),
         );
@@ -673,7 +673,7 @@ describe("T01-T15 real controller transition witnesses", () => {
                 parentId: "cfg",
                 sessionId: "S",
                 resultId: "R",
-                inboxIds: [],
+                deliveryIds: [],
                 generation,
                 resumeCount,
                 boundaryActionId: "cfg",

@@ -32,7 +32,7 @@ function facts(
 function scope(id: string) {
   return { surface: "telegram", channel: "telegram:dm", id: `telegram::telegram%3Adm:${id}` };
 }
-function registerResponder(actorId = "actor-external-worker", externalId = "seller-1"): void {
+function registerResponder(actorId = "actor-external-child", externalId = "seller-1"): void {
   ledger().stores.actors.registerIdentity({ id: actorId, kind: "human", trustTier: "assigned_worker" });
   ledger().stores.actors.registerEndpoint({
     id: `telegram:${externalId}`,
@@ -75,13 +75,13 @@ test("correlated reply resolves the request and commits only to its owner", asyn
   expect(ledger().kernel.requestById("request-session-owner")).toMatchObject({
     state: "resolved",
 
-    replies: [{ replyId: scope("reply").id, responderId: "actor-external-worker" }],
+    replies: [{ replyId: scope("reply").id, responderId: "actor-external-child" }],
   });
 });
 
 test("first quorum reply commits input but leaves the request open", async () => {
   await runEffect(await openRequest("quorum", {
-    expectedResponders: ["actor-external-worker", "b", "c"],
+    expectedResponders: ["actor-external-child", "b", "c"],
     resolution: "quorum",
     threshold: 2,
   }));
@@ -102,7 +102,7 @@ async function expectStableReplyReplay(): Promise<void> {
 
 test("duplicate unresolved reply reuses its receipt without another durable input", async () => {
   await runEffect(await openRequest("duplicate", {
-    expectedResponders: ["actor-external-worker", "b"],
+    expectedResponders: ["actor-external-child", "b"],
     resolution: "quorum",
     threshold: 2,
   }));
@@ -114,7 +114,7 @@ test("duplicate unresolved reply reuses its receipt without another durable inpu
 
 test("late reply lazily expires the request while retaining partial progress", async () => {
   await runEffect(await openRequest("late", {
-    expectedResponders: ["actor-external-worker", "b"],
+    expectedResponders: ["actor-external-child", "b"],
     resolution: "quorum",
     threshold: 2,
     deadline: 10_000,
@@ -159,16 +159,16 @@ test("resolved reply redelivery preserves the original request revision", async 
   const resolved = ledger().kernel.requestById("redelivery");
   await expectStableReplyReplay();
   expect(ledger().kernel.requestById("redelivery")).toEqual(resolved);
-  // Kernel admission and receiving inbox are one durable transition.
+  // Kernel admission and receiving delivery are one durable transition.
   expect(commits).toHaveLength(1);
 });
 
 test.each([
   "before",
   "after",
-] as const)("reply redelivery repairs a crash %s the owner inbox commit without another input", async (site: "before" | "after") => {
+] as const)("reply redelivery repairs a crash %s the owner delivery commit without another input", async (site: "before" | "after") => {
   await runEffect(await openRequest("handoff"));
-  const handoffFault = new Error("inbox handoff fault");
+  const handoffFault = new Error("delivery handoff fault");
   let fault = true;
   let now = 10;
   const requests = channelRequests(requestPort(() => now));
@@ -227,7 +227,7 @@ test("unexpected responder is refused with an authoritative route correction", a
   expect(commits).toEqual([]);
 });
 
-test("same-precedence ambiguity is denied before inbox commit", async () => {
+test("same-precedence ambiguity is denied before delivery commit", async () => {
   await runEffect(await openRequest("a"));
   await runEffect(await openRequest("b"));
   expect(await runEffect(kernelRouter().ingest(sender, facts("reply")))).toMatchObject({
@@ -280,7 +280,7 @@ test("missing decision-fact storage refuses a route correction", async () => {
 
 test("recorded rejection correction is idempotent", async () => {
   await runEffect(await openRequest("correction", {
-    expectedResponders: ["actor-external-worker", "b"],
+    expectedResponders: ["actor-external-child", "b"],
     resolution: "quorum",
     threshold: 2,
   }));

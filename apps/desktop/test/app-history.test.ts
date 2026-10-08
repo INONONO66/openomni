@@ -18,7 +18,7 @@ test("captured history jumps reject a changed active tab and changed history, bu
   const captured = activeTab(consoleStore.state);
   if (captured === null) throw new Error("Missing tab");
   const onJump = (cursor: string) => jumpFrom(captured, cursor);
-  openTab({ kind: "route", route: "inbox" });
+  openTab({ kind: "route", route: "sessions" });
   const other = consoleStore.state;
   onJump("0");
   expect(consoleStore.state).toBe(other);

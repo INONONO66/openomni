@@ -28,7 +28,7 @@ import {
 } from "./gateway";
 import { AppInvariantError } from "./invariant";
 import { AppScope, SessionEntityBinding, type AppRuntime } from "./runtime";
-import { type Inbox, Model, type SessionTransition } from "@openomni/protocol";
+import { type Delivery, Model, type SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { AppLedger, type AppLedgerPlane } from "./composition/cluster-runtime";
 import { ComposedGeneration } from "./composition/composed";
@@ -37,7 +37,7 @@ import { configureAuthority } from "./composition/generation-layers";
 import { GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { captureNow } from "./composition/platform";
 import { createResident } from "./resident";
-import { materializeInboxTarget, pendingInboxRow, prepareMessage } from "./composition/message-session";
+import { materializeDeliveryTarget, pendingDeliveryRow, prepareMessage } from "./composition/message-session";
 import { messageDecisionRules } from "./composition/message-decision";
 import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
@@ -84,13 +84,13 @@ export const PROCESS_SESSION_NO_REQUEST_EXIT = 78;
  * there is no redelivery to absorb that refusal — the row lands between the
  * turn's awaits and the turn's continuation drain consumes it.
  */
-export function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: () => number) {
-  return (input: Inbox.Commit): Effect.Effect<Inbox.Row, AgentFailure> =>
+export function localDeliveryCommit(plane: AppLedgerPlane, owner: string, clock: () => number) {
+  return (input: Delivery.Commit): Effect.Effect<Delivery.Row, AgentFailure> =>
     Effect.gen(function* () {
-      yield* materializeInboxTarget(plane, input, clock);
+      yield* materializeDeliveryTarget(plane, input, clock);
       const kernel = plane.openKernel(input.sessionId);
       const existing = kernel.actionById(input.id);
-      if (existing !== undefined) return pendingInboxRow(input, existing.ordinal);
+      if (existing !== undefined) return pendingDeliveryRow(input, existing.ordinal);
       const refuse = (error: { readonly _tag: string }) =>
         new AgentFailure({ operation: "message.commit", cause: error._tag });
       const live = kernel.row(input.sessionId);
@@ -119,7 +119,7 @@ export function localInboxCommit(plane: AppLedgerPlane, owner: string, clock: ()
       const receipt = committed.receipts[0];
       if (receipt === undefined)
         return yield* new AgentFailure({ operation: "message.commit", cause: "no receipt" });
-      return pendingInboxRow(input, receipt.action.ordinal);
+      return pendingDeliveryRow(input, receipt.action.ordinal);
     });
 }
 
@@ -149,7 +149,7 @@ export function serveProcessSession(
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,
     processId: owner,
-    onInboxCommitted: committed,
+    onDeliveryCommitted: committed,
     dispatchOutbound: dispatchOutboundMessage(
       (...args) => gateway.ingest(...args),
       now,
@@ -184,14 +184,14 @@ export function serveProcessSession(
   });
   yield* generations.initialize(resident.definitions);
   const requests = yield* createSessionRequests(runtime);
-  const commitInbox = localInboxCommit(plane, owner, now);
+  const commitDelivery = localDeliveryCommit(plane, owner, now);
   const gateway = createGatewayRouter({
     sink: observations.publish,
     now,
     id: entropy.id,
     stores: createChannelStores(channelStoreSource(plane, now)),
     transaction: channelTransaction(plane.sessionStore(GATEWAY_INGRESS_SESSION).transaction),
-    inbox: { commit: (input) => commitInbox(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
+    delivery: { commit: (input) => commitDelivery(input).pipe(Effect.mapError(decodeChannelFailure("message.commit"))) },
     prepare: prepareMessage(plane, resident.materialize),
     run: (sender, execution, body) => Effect.gen(function* () {
       const outbound = yield* outboundMessage;
