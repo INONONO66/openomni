@@ -18,18 +18,20 @@ export const prompt = declare(
 /**
  * The version-1 payload field names (#1315): rows written before the
  * `prompt`/`signal`/`turn` version-2 bump persist the delivered input under
- * the retired queue vocabulary. These constants and `foldDeliveryPayload`
+ * the retired queue vocabulary. This object and `foldDeliveryPayload`
  * are THE one place the previous names survive; every reader folds through
  * here and no alias is exported.
  */
-export const V1_DELIVERY_ID_FIELD = "inboxId";
-export const V1_DELIVERY_IDS_FIELD = "inboxIds";
-export const V1_DELIVERY_KIND_FIELD = "inboxKind";
+export const V1_DELIVERY_FIELDS = {
+  id: "inboxId",
+  ids: "inboxIds",
+  kind: "inboxKind",
+} as const;
 
 const V2_BY_V1: ReadonlyMap<string, string> = new Map([
-  [V1_DELIVERY_ID_FIELD, "deliveryId"],
-  [V1_DELIVERY_IDS_FIELD, "deliveryIds"],
-  [V1_DELIVERY_KIND_FIELD, "deliveryKind"],
+  [V1_DELIVERY_FIELDS.id, "deliveryId"],
+  [V1_DELIVERY_FIELDS.ids, "deliveryIds"],
+  [V1_DELIVERY_FIELDS.kind, "deliveryKind"],
 ]);
 
 /**

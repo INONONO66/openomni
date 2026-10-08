@@ -130,7 +130,7 @@ On `stab/11-retire-inbox-worker-vocabulary` (2026-10-08, base `4b36d0f73`).
   `LedgerSession.foldLegacyRole` folds the retired role byte at every reader
   (session decode, catalog index, gate `Match` role and message-rule
   sender/target roles); session-file pending/input SQL COALESCEs both JSON
-  field spellings via the `V1_DELIVERY_*` constants — the one sanctioned home
+  field spellings via the `V1_DELIVERY_FIELDS` object — the one sanctioned home
   for the legacy field spellings is `packages/protocol/src/journal/core/prompt.ts`.
 - Catalog v2 -> v3: the two CHECK-constrained tables rebuild byte-for-byte so
   `child` rows and `ingress` policy rows insert while legacy bytes stay valid
@@ -139,7 +139,7 @@ On `stab/11-retire-inbox-worker-vocabulary` (2026-10-08, base `4b36d0f73`).
   generations (`LEGACY_INGRESS_POLICY_KIND`).
 - Legacy bytes live as plain `as const` literals at exactly four sanctioned
   sites (`l0.ts` `LEGACY_CHILD_ROLE`, `migrate.ts` `LEGACY_INGRESS_POLICY_KIND`,
-  `prompt.ts` `V1_DELIVERY_*`, and the tests that prove each retired byte is
+  `prompt.ts` `V1_DELIVERY_FIELDS`, and the tests that prove each retired byte is
   refused); no string-assembly obfuscation anywhere (`rg '\["in", ?"box"\]'`
   and `rg '\["wor", ?"ker"\]'` are 0).
 - Deliberately kept wire-frozen vocabulary: `Actor.Kind internal_worker`,

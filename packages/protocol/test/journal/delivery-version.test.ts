@@ -1,18 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { canonicalDigest, SessionTurn, type PlainValue } from "../../src/index.js";
-import {
-  foldDeliveryPayload,
-  V1_DELIVERY_ID_FIELD,
-  V1_DELIVERY_IDS_FIELD,
-  V1_DELIVERY_KIND_FIELD,
-} from "../../src/journal/core/prompt.js";
+import { foldDeliveryPayload, V1_DELIVERY_FIELDS } from "../../src/journal/core/prompt.js";
 
 const origin = { encodingVersion: 1, value: { kind: "human" } } as const;
 
 /** A recorded version-1 prompt row payload, exactly as old files persist it. */
 function v1PromptIntent(): Record<string, PlainValue> {
   return {
-    [V1_DELIVERY_ID_FIELD]: "input-1",
+    [V1_DELIVERY_FIELDS.id]: "input-1",
     body: "hello",
     origin: origin.value,
     createdAt: 100,
@@ -45,7 +40,7 @@ describe("versioned delivery readers (#1315)", () => {
     const recorded: Record<string, PlainValue> = {
       phase: "intent",
       resultId: "result-1",
-      [V1_DELIVERY_IDS_FIELD]: ["input-2", "input-1", "input-3"],
+      [V1_DELIVERY_FIELDS.ids]: ["input-2", "input-1", "input-3"],
       resumeCount: 0,
       boundaryActionId: null,
       toolsGeneration: 1,
@@ -66,7 +61,7 @@ describe("versioned delivery readers (#1315)", () => {
     const recorded: Record<string, PlainValue> = {
       phase: "delivery",
       turnId: "turn-1",
-      [V1_DELIVERY_ID_FIELD]: "input-1",
+      [V1_DELIVERY_FIELDS.id]: "input-1",
       kind: "prompt",
       content: "hello",
       origin: { encodingVersion: 1, value: origin.value },
@@ -78,12 +73,12 @@ describe("versioned delivery readers (#1315)", () => {
 
   test("a version-1 input-row effect folds its kind marker", () => {
     const recorded: Record<string, PlainValue> = {
-      [V1_DELIVERY_KIND_FIELD]: "prompt",
+      [V1_DELIVERY_FIELDS.kind]: "prompt",
       content: "hello",
     };
     const folded = foldDeliveryPayload(recorded) as Record<string, PlainValue>;
     expect(folded.deliveryKind).toBe("prompt");
-    expect(V1_DELIVERY_KIND_FIELD in folded).toBe(false);
+    expect(V1_DELIVERY_FIELDS.kind in folded).toBe(false);
   });
 
   test("a version-2 payload keeps its names and identity through the fold", () => {

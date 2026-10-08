@@ -11,8 +11,7 @@ import {
   type ObservationSink,
   type Storage,
   type Storage as ProtocolStorage,
-  V1_DELIVERY_ID_FIELD,
-  V1_DELIVERY_KIND_FIELD,
+  V1_DELIVERY_FIELDS,
 } from "@openomni/protocol";
 
 /**
@@ -21,8 +20,8 @@ import {
  * coalesce both spellings; the legacy paths come from the protocol's
  * versioned reader so no retired token is spelled here.
  */
-const legacyIdPath = `'$.${V1_DELIVERY_ID_FIELD}'`;
-const legacyKindPath = `'$.${V1_DELIVERY_KIND_FIELD}'`;
+const legacyIdPath = `'$.${V1_DELIVERY_FIELDS.id}'`;
+const legacyKindPath = `'$.${V1_DELIVERY_FIELDS.kind}'`;
 import { z } from "zod";
 import { CorruptRecord, LedgerInvariant, MaterializeRefused, type LedgerError } from "../errors";
 import { computeActionHash, GENESIS_PREV_HASH } from "../action-hash.js";

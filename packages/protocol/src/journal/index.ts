@@ -16,7 +16,7 @@ import type { KindDeclaration } from "./declaration.js";
 
 export * as JournalKind from "./declaration.js";
 export { Control as SignalControl } from "./core/signal.js";
-export { foldDeliveryPayload, V1_DELIVERY_ID_FIELD, V1_DELIVERY_KIND_FIELD, V1_DELIVERY_IDS_FIELD } from "./core/prompt.js";
+export { foldDeliveryPayload, V1_DELIVERY_FIELDS } from "./core/prompt.js";
 export { Phase as RequestPhase } from "./core/request.js";
 export { Op as AlarmOp, FiredOutcome as AlarmFiredOutcome, RESERVED_PURPOSES as RESERVED_ALARM_PURPOSES, isReservedPurpose as isReservedAlarmPurpose, type ReservedPurpose as ReservedAlarmPurpose } from "./core/alarm.js";
 export { Settings as ConsumptionSettings, ConsumptionWidth, Disabled as ConfigureDisabled, DisabledEntry as ConfigureDisabledEntry } from "./core/session-configure.js";
