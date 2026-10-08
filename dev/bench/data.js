@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791464602470,
+  "lastUpdate": 1791466866810,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80573,6 +80573,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 135515,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "758e1fe38711982f7c7d217a913f8536e54a58c4",
+          "message": "refactor(openomni): one composition root — sealed boot options, single monitor declaration, entity-drained process child (#1308) (#1328)\n\n* test(openomni): move shipped-composition tests to the app; core fixtures keep a reply seam stub (#1308)\n\n* refactor(openomni): drop the legacy monitorSeedRows export; tests seed the composed wake-budget row (#1308)\n\n* refactor(openomni): declare the monitor tool once in the monitor bundle; duplicate declaration refuses typed (#1308)\n\nCatalog holds 11 factories and ToolPorts loses alarms; monitorBundle(deps, alarms) carries the live tool. A second bundle declaring monitor composes to ComposeRefused{duplicate}. Committed by the lead from lane 10b's finished step-3 tree (src tsc 0; manifest/monitor-dispatcher/catalog/alarm-bundles/hooks-json suites green).\n\n* refactor(openomni): seal boot options — test tools ride a declared manifest bundle, recompose edits only the off-list (#1308)\n\n* refactor(openomni): the process child rebuilds manifest+compose from its request (#1308)\n\n* refactor(openomni): the process child drains through the session entity — admission loop deleted (#1308)\n\n* refactor(openomni): delete emptyComposition — the composed holder is a required boot input (#1308)\n\n* docs: stamp #1308 — one composition root; AGENTS.md, implementation-status, SLOP §M rung 10 (#1308)\n\n* fix(openomni): type-only Bundle import in composed.ts after emptyComposition removal (#1308)\n\n* fix(openomni): the process child refuses a missing durable session before the entity wake (#1308)\n\n* fix(openomni): ProcessSessionRequest carries the #1306 `off` name after rebase onto main (#1308)\n\n* fix(openomni): monitor projects after the catalog; boot names no bundle (#1308)\n\nCI at bc8a9625a failed three deterministic checks that the lane's local\nruns did not cover:\n\n- lint:tools / tool-schema-snapshot: with `monitor` declared only by its\n  bundle, generation-layers' pool is catalog tools then bundle tools, so\n  `monitor` projects last. The snapshot is regenerated (--update, order\n  only: 12 specs, no schema change) and code-mode-e2e pins the new order.\n- check-deps retired surface \"bundle name 'monitor' in boot\": index.ts\n  carried the token in two comments and in the `monitorPortsSlot` import.\n  The slot holds the late-bound alarm ports, so it is `alarmPortsSlot` /\n  `AlarmPortsSlot` (src + test fixtures); comments say \"wake bundle\".\n\nlint:tools OK; check-deps retired-surface 1/1; code-mode-e2e catalog 1/1;\napp check-types clean; hooks-json 21, catalog 7, manifest 6, app-surface\n13, provision-execution-bundles 2, monitor-app 3, alarm-plane 8,\nprocess-session-e2e 10 all pass.\n\n* wip(openomni): hoist the child binding runTurn out of the bind literal (#1308)\n\n* docs: #1308 stamp first, base c11ae7148, off-name sync after rebase (#1308)\n\n* fix(openomni): bind the child entity ports as one attributable statement for patch coverage (#1308)",
+          "timestamp": "2026-10-08T22:38:00+09:00",
+          "tree_id": "bd52028c2cd530fad071332b054e8a0bd6355885",
+          "url": "https://github.com/INONONO66/openomni/commit/758e1fe38711982f7c7d217a913f8536e54a58c4"
+        },
+        "date": 1791466865993,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 658,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1126,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 859,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 936117,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 271023,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 4784181,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 84,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 644,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 454,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 94328,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 497225,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 297832,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2198,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 7024803,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 820638,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 12390,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 115917,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 541629,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 124605,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 10837347,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 63,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 94646,
             "unit": "ns/op"
           }
         ]
