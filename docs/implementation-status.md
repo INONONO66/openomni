@@ -1,5 +1,43 @@
 # Implementation Status
 
+## #1309 executable product policy moved into app bundles behind seams (epic #1303, rung 9)
+
+On `stab/9-core-policy-to-bundles` (2026-10-08, base `c11ae7148`).
+
+- Seam: `packages/agent/src/core/approval-policy.ts` declares `ApprovalPolicy`
+  (plain data: `responders`, `recentOpen{limit, windowMs}`, `defaultExpiryMs`,
+  `defaultBudget`) plus `ApprovalPolicySeam`, exported through `core/api.ts`
+  and `Core`. No callbacks, no defaults in core.
+- Core purge (measured): `rg -n '\["owner"\]|count >= 8|3_600_000|86_400_000|BUDGET_DEFAULTS'
+  packages/agent/src/core` → no output; `rg -c 'BUDGET_DEFAULTS' -g '*.ts'
+  packages apps` (7 before) → no output; `rg -n '86_400_000'
+  packages/agent/src/core` (1 before) → no output; `rg -n
+  'expectedResponders: \["owner"\]' packages/agent/src` (1 before) → no
+  output. `exceedsApprovalBudget`/`openApprovalCount` take `limit`/`windowMs`
+  as parameters from the command's resolved policy.
+- Threading: `createApprovalRequest` takes `responders`; the gate expiry chain
+  is `binding.timeoutMs ?? options.approvalTimeoutMs ?? policy.defaultExpiryMs`;
+  `budget.ts` lost `BUDGET_DEFAULTS` — the loop resolves
+  `resolveAgentBudget(policy.defaultBudget, budget)` once at entry and
+  `ChatAgentConfig.defaultBudget` is required. The policy rides required
+  ports: `SessionRuntime.approvalPolicy`, `SessionEntityPorts.approvalPolicy`,
+  `ExecutorOptions.approvalPolicy` (no optional fallbacks).
+- Product bundle: `apps/openomni/src/bundles/approval-policy/index.ts` owns the
+  shipped literals (`["owner"]`, 8 per 3,600,000 ms, 86,400,000 ms, 24 turns /
+  40 tool calls / 5 min wall / 2 min tool wall) and provides the seam;
+  `appManifest` lists it (six bundles). `send-message` requires the seam, so a
+  manifest without the provider refuses typed `seam_missing` at compose — no
+  silent in-core fallback.
+- Tests: `packages/agent/test/approval-policy.test.ts` (4 pass: quota
+  injection limit 2 vs 3, responders land verbatim with the injected expiry,
+  default-budget resolution with per-field explicit wins, `seam_missing`
+  compose refusal) and `apps/openomni/test/approval-policy.test.ts` (3 pass:
+  shipped values through the bundle's `index.ts`, default compose includes the
+  provider, stripped manifest refuses `seam_missing` naming `send-message`).
+  `delegation-policy.test.ts` unchanged and green; durable request bytes
+  unchanged (`packages/protocol/test/request-schema.test.ts` 2 pass, zero
+  snapshot churn).
+
 ## #1308 one composition root: sealed boot options, single monitor declaration, entity-drained process child (epic #1303, rung 10)
 
 On `stab/10-composition-root-dedupe` (2026-10-08, base `0373ed38c`). Boot
