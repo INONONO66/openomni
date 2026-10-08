@@ -19,6 +19,7 @@ import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from
 import { projectTools } from "../src/core/tool";
 import { createTurnDispatcher } from "../src/plugins/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 /** Chain oracle over the active isolation's kernel. */
 const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
@@ -124,7 +125,7 @@ test("dispatch table stays captured across configure even when the next generati
         ...options.identity, actionId: options.identity.turnId, ledger: options.ledger,
         tools: captured.snapshot.tools, toolsGeneration: captured.snapshot.generation,
         toolsHash: captured.snapshot.toolsHash, systemHash: captured.snapshot.systemHash,
-      }, {});
+      }, { approvalPolicy: TEST_APPROVAL_POLICY });
       return yield* dispatcher.execute({ id: `call-${captured.snapshot.generation}`, tool: "echo", input: {} },
         { sessionId: fiberSessionId, turnId: options.identity.turnId });
     }));
@@ -183,7 +184,7 @@ test("configure denied by the captured pre-policy never acquires or selects the 
   let candidateAcquisitions = 0;
   const candidate = bundle(2, "B", () => undefined);
   const result = yield* captured.provide(Effect.gen(function* () {
-    const executor = yield* createExecutor({ ledger: options.ledger, identity: options.identity });
+    const executor = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY, ledger: options.ledger, identity: options.identity });
     return yield* executor.runExisting({ kind: "session.configure", op: "system.blocks.set", intent: { generation: 2 }, effect: {} }, () =>
       generations.configure({ ...candidate, layer: Layer.merge(candidate.layer, Layer.effectDiscard(Effect.sync(() => { candidateAcquisitions += 1; }))) },
         options.ledger.commit(selectAction(candidate.snapshot)).pipe(Effect.mapError((error) => new CommitFailed({ error }))),

@@ -70,6 +70,7 @@ export function createSessionRecovery(
         const captured = yield* runtime.generations.capture({ sessionId, generation: kernel.latestGenerationFor(sessionId).generation });
         const executor = yield* captured.provide(createExecutor({
           ledger: createExecutionLedger(),
+          approvalPolicy: runtime.approvalPolicy,
           identity: { sessionId, role: current.role, parentActionId: compactionId },
         })).pipe(Effect.provide(runtime.services));
         return yield* captured.provide(executor.run(plan.request, () => Effect.succeed(plan.restored)));

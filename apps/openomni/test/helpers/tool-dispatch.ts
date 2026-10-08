@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../../src/bundles/approval-policy";
 import { testToolPorts } from "./tool-ports";
 import { Effect } from "effect";
 import { catalogLayer } from "../../../../packages/agent/test/helpers/service-layers";
@@ -23,7 +24,7 @@ export function dispatchModelTool(
   const definitions = now === undefined ? catalogDefinitions({ ...testToolPorts, clock: Date.now, ...ports }) : undefined;
   const acquire = (catalog: ReturnType<typeof catalogDefinitions>) => acquireSyncEffect(createTurnDispatcher({
     sessionId: origin.sessionId, role: origin.role, actionId: "fixture-turn", ledger: fixtureLedger,
-  }, {}).pipe(Effect.provide(catalogLayer(catalog)), Effect.provide(executorServices), Effect.provide(runnerTestLayer)));
+  }, { approvalPolicy: APPROVAL_POLICY }).pipe(Effect.provide(catalogLayer(catalog)), Effect.provide(executorServices), Effect.provide(runnerTestLayer)));
   const persistentDispatcher = definitions === undefined ? undefined : acquire(definitions);
   return async (input: PlainObject) => {
     const clock = now === undefined ? undefined : spyOn(Date, "now").mockImplementation(now);

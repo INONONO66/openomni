@@ -414,6 +414,8 @@ interface TurnDispatchRuntime {
   readonly closeGraceMs?: ExecutorOptions["closeGraceMs"];
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
+  /** The composed approval policy (#1309); required, the executor keeps no fallback. */
+  readonly approvalPolicy: ExecutorOptions["approvalPolicy"];
   readonly authorizeApproval?: ExecutorOptions["authorizeApproval"];
 }
 
@@ -444,6 +446,7 @@ export function createTurnDispatcher(
     retainEffect: input.retainEffect,
     authorizeApproval: runtime.authorizeApproval,
     approvalTimeoutMs: runtime.approvalTimeoutMs,
+    approvalPolicy: runtime.approvalPolicy,
     ledger: input.ledger,
     identity: {
       sessionId: input.sessionId,

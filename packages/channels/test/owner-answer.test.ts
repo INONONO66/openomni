@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Core } from "@openomni/agent";
+import { TEST_APPROVAL_POLICY } from "../../agent/test/helpers/approval-policy";
 const decideRequestTransition = Core.decideRequestTransition;
 const requestBindingDigest = Core.requestBindingDigest;
 import { Gateway, PlainValueSchema, canonicalDigest, type Channel, type SessionTransition, } from "@openomni/protocol";
@@ -77,6 +78,7 @@ async function approval() {
       payload: { kind: "request.open", request },
     },
     { row: ledger().kernel.row(row.id), invocation: ledger().kernel.actionById(request.requestId), inputRecord: ledger().kernel.requestInputById(row.id, "open") },
+    TEST_APPROVAL_POLICY.recentOpen,
   );
   expect(decision.resolution).toBe("opened");
   await runEffect(ledger().kernel.commit({

@@ -1,4 +1,5 @@
 import { sessionTree } from "../../../agent/test/store/helpers/session-tree";
+import { TEST_APPROVAL_POLICY } from "../../../agent/test/helpers/approval-policy";
 import { Clock, Effect } from "effect";
 import { Core } from "@openomni/agent";
 const Entropy = Core.Entropy;
@@ -43,6 +44,7 @@ export function requestPort(
       openKernel: () => ledger().kernel,
       listSessions: () => ledger().kernel.listRows(),
       ...runtime,
+      approvalPolicy: TEST_APPROVAL_POLICY,
       authorizeConfigure: allowConfigure,
       processId: "channels-test",
       onInboxCommitted,
@@ -159,6 +161,7 @@ export async function command(
       invocation: kernel.actionById(requestId),
       request,
     },
+    TEST_APPROVAL_POLICY.recentOpen,
   );
   await runEffect(kernel.commit({
     sessionId,

@@ -1,4 +1,5 @@
 import { composedHolder } from "./helpers/bundle-fixture";
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -107,6 +108,7 @@ test("AppLive hosts the session entity: prompts append through the fenced kernel
   const sessionId = "cluster-app-session";
   const decisions: SessionEntityTurnInput["decision"]["kind"][] = [];
   const ports: SessionEntityPorts = {
+    approvalPolicy: APPROVAL_POLICY,
     // Admission refuses a snapshot with no declared capability kinds and
     // deliver refuses an unbound inputRegistrations port (#1313); this
     // fixture states the composed tables like the booted app's port binding.
@@ -310,6 +312,7 @@ test("late-bound entity ports refuse early use and forward after one binding", a
     const keepAlive: boolean[] = [];
     const rung: string[] = [];
     const ports: SessionEntityPorts = {
+      approvalPolicy: APPROVAL_POLICY,
       runTurn: () => Effect.void,
       onRequestReady: (sessionId) => rung.push(sessionId),
       sendAlarm: (sessionId, fired) =>

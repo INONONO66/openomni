@@ -52,6 +52,7 @@ import type { SessionEntityPorts, SessionEntityTurnInput, } from "../../src/core
 import type { SessionError } from "../../src/core/failure";
 import { deliveryActions, turnIntentAction, turnResumeAction, turnTerminalAction, } from "../../src/core/commit";
 import { runAgent } from "./executor";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 export interface TestClusterOptions {
   readonly sessionsDir: string;
@@ -339,6 +340,7 @@ function entityPorts(
   forwardPersisted: NonNullable<SessionEntityPorts["sendAlarm"]>,
 ): SessionEntityEnv["ports"] {
   return {
+    approvalPolicy: TEST_APPROVAL_POLICY,
     runTurn:
       options.runTurnPort ??
       makeTurnPort(

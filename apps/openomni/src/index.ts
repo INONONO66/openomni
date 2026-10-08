@@ -16,6 +16,7 @@ import { timingSafeEqual } from "node:crypto";
 import { statSync } from "node:fs";
 import { configuredCompaction } from "./compaction/strategy";
 import { readHooksJson } from "./bundles/hooks-json";
+import { APPROVAL_POLICY } from "./bundles/approval-policy";
 import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { Core, Bundle } from "@openomni/agent";
@@ -418,6 +419,9 @@ export async function startOpenOmni(options: StartOptions = {}) {
     const compactionVerbs = Bundle.compactionCapability().verbs;
     const sessionRuntime: SessionRuntime = {
       ...options.sessionRuntime,
+      // #1309: the approval/budget product values come from the composed
+      // approval-policy bundle; the core keeps no literal fallback.
+      approvalPolicy: APPROVAL_POLICY,
       // #1307 (review M1): the kernel's commit pinning and restore paths get
       // the compaction verbs only while the CURRENT composed generation keeps
       // the capability on — off, the seam stays absent so a compaction append
@@ -935,6 +939,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       services: services.context,
     };
     services.entityPorts.bind({
+      approvalPolicy: sessionRuntime.approvalPolicy,
       runTurn: (input) =>
         sessionRunner(input.authority.sessionId) === "process"
           ? Effect.tryPromise({

@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { expect, test } from "bun:test";
 import { Core } from "@openomni/agent";
 const createExecutor = Core.createExecutor;
@@ -132,6 +133,7 @@ test("entity inbox refuses bytes that do not match the outbound letter", async (
   };
   const executor = await runEffect(
     createExecutor({
+      approvalPolicy: APPROVAL_POLICY,
       identity: { sessionId: "child", role: "worker", parentActionId: "terminal" },
       ledger: { commit: () => Effect.die(new Error("unused executor commit")) },
     }).pipe(Effect.provide(runnerTestLayer)),

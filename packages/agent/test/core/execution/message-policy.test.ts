@@ -12,6 +12,7 @@ import { runAgent } from "../../../src/core/turn";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { recordingLedger } from "../../helpers/g0-effect";
 import { runInput } from "../../helpers/run-input";
+import { TEST_BUDGET } from "../../helpers/approval-policy";
 
 // Message has no registered post point (#1251): a message post row cannot even
 // compile — the registry rejects the generation fail-closed at compose.
@@ -82,7 +83,7 @@ test("the canonical assistant text is never rewritten after the turn", async () 
             return { type: "stop" as const };
           }),
       },
-    }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(runInput([{ role: "user", content: "question" }]), acquiredConfig).pipe(Effect.provide(chatServices(fixture))); }),
+    }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(runInput([{ role: "user", content: "question" }]), { defaultBudget: TEST_BUDGET, ...acquiredConfig }).pipe(Effect.provide(chatServices(fixture))); }),
   );
   expect(result.text).toBe("raw text");
   expect(result.steps).toEqual([{ type: "text", content: "raw text" }]);

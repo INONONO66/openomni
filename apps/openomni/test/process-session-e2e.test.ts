@@ -191,12 +191,15 @@ test("process entry logs committed sessions and disposes its runtime", async () 
   const createRuntime = mock((options: Parameters<typeof gatewayRuntime>[0]) => {
     expect(options).toMatchObject({ catalogPath, sessionsDir, clusterStoragePath: ":memory:" });
     // #1308: the child rebuilds the composition root; its generation lists the shipped bundles.
+    // #1309: `send-message` requires the approval-policy seam, so compose orders
+    // the provider ahead of it — the shipped list is dependency-sorted, not literal.
     expect(options.composed?.current().generation.bundles).toEqual([
       "monitor",
       "cron",
       "hooks-json",
-      "send-message",
       "delegation-policy",
+      "approval-policy",
+      "send-message",
     ]);
     return runtime;
   });

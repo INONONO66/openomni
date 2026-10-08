@@ -122,6 +122,9 @@ export function createResident(options: ResidentOptions) {
         prepare: () => Effect.succeed({
           config: {
             executor: dispatcher.executor,
+            // #1309: a run with no explicit budget resolves against the
+            // composed approval policy's default budget.
+            defaultBudget: options.sessionRuntime.approvalPolicy.defaultBudget,
             systemPrompt: input.system,
             tools,
             toolChoice: tools.length === 0 ? "none" : "auto",

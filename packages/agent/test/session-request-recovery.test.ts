@@ -19,6 +19,7 @@ import { catalogLayer, executorLayer } from "./helpers/service-layers";
 import { openCrashStores } from "./helpers/crash-stores";
 import { fileRequest, planeAnswer, requestPlane } from "./helpers/session-request-plane";
 import type { RunnerServices } from "../src/core/ports";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 /**
  * File-backed isolation with a process-crash restart (W5.2): the Storage
@@ -96,6 +97,7 @@ function dispatcher(
     },
     {
       authorizeApproval: () => Effect.succeed(proof),
+      approvalPolicy: TEST_APPROVAL_POLICY,
     },
   ).pipe(Effect.provide(catalogLayer(definitions(bodies))), Effect.provide(executorLayer({
     clock: recording.clock, entropy: recording.entropy, observations: { publish: () => undefined }, policy: compiledPolicy(),

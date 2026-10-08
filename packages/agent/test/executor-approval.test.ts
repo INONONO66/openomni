@@ -15,6 +15,7 @@ import { z } from "zod";
 import { defineTool } from "../src/core/tool";
 import { createDispatcher } from "../src/plugins/tool";
 import { bounded } from "./helpers/bounded";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 const policy = compiledPolicy([approveWriteRow]);
 const evidence = { kind: "owner", principalId: "owner", evidenceId: "auth-1" } as const;
@@ -234,7 +235,7 @@ it("rejects invalid deadlines before admitting execution", () => isolated(Effect
   const recording = yield* requestLedger();
   for (const approvalTimeoutMs of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
     expect(yield* Effect.flip(
-      createExecutor({ ...recording, approvalTimeoutMs }).pipe(
+      createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY, ...recording, approvalTimeoutMs }).pipe(
         Effect.provide(executorLayer({
           ...recording,
           policy,

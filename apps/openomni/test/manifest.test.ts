@@ -18,7 +18,7 @@ async function alarmDefinition(): Promise<Bundle.CapabilityDefinition<"alarm">> 
   return capability.definition;
 }
 
-test("the manifest is THE product list: tool/action/hook/compaction/alarm capabilities, five bundles, empty off by default", async () => {
+test("the manifest is THE product list: tool/action/hook/compaction/alarm capabilities, six bundles, empty off by default", async () => {
   const manifest = appManifest({
     alarm: await alarmDefinition(),
     wake: { close: () => undefined },
@@ -37,6 +37,7 @@ test("the manifest is THE product list: tool/action/hook/compaction/alarm capabi
     "hooks-json",
     "send-message",
     "delegation-policy",
+    "approval-policy",
   ]);
   expect(manifest.off).toEqual([]);
 });

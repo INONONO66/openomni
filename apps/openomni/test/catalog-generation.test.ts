@@ -1,4 +1,5 @@
 import { composedHolder } from "./helpers/bundle-fixture";
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { expect, test } from "bun:test";
 import { Core, Testing } from "@openomni/agent";
 const GenerationLayers = Core.GenerationLayers;
@@ -25,6 +26,7 @@ test("two turns retain one catalog Layer; configure acquires a fresh generation 
   const resident = createResident({
     model: { provider: "test", id: "test" }, apiKey: "test", tools: testToolPorts,
     sessionRuntime: {
+      approvalPolicy: APPROVAL_POLICY,
       authorizeConfigure: allowConfigure,
       openKernel: plane.openKernel,
       listSessions: plane.listSessions,
@@ -53,6 +55,7 @@ test("two turns retain one catalog Layer; configure acquires a fresh generation 
           return { kind: "result" as const, text: "done" };
         }),
       }, {
+        approvalPolicy: APPROVAL_POLICY,
         authorizeConfigure: allowConfigure,
         openKernel: plane.openKernel,
         listSessions: plane.listSessions,

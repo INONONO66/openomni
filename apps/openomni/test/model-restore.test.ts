@@ -14,6 +14,7 @@ import { createAssistantMessage } from "../../../packages/agent/src/core/message
 import { compiledPolicy, opPhaseOf } from "../../../packages/agent/test/helpers/compiled-policy";
 import { createStopOutcome } from "../../../packages/agent/test/helpers/mock-llm";
 import { runInput } from "../../../packages/agent/test/helpers/run-input";
+import { TEST_BUDGET } from "../../../packages/agent/test/helpers/approval-policy";
 
 const primary = { provider: "anthropic", id: "primary-model" };
 const fallback = { provider: "openai", id: "fallback-model" };
@@ -79,7 +80,7 @@ async function turn(options: {
         },
       };
       const { events: _events, llm: _llm, ...acquiredConfig } = fixture;
-      return yield* runAgent(runInput([{ role: "user", content: "go" }]), acquiredConfig).pipe(
+      return yield* runAgent(runInput([{ role: "user", content: "go" }]), { defaultBudget: TEST_BUDGET, ...acquiredConfig }).pipe(
         Effect.provide(chatServices(fixture)),
       );
     }),

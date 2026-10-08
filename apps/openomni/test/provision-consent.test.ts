@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { dispatcherFixture } from "./helpers/dispatcher-fixture";
 import { Effect, Fiber } from "effect";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -234,6 +235,7 @@ function restartDispatcher(recording: RequestLedger, ready?: () => void) {
         },
       },
     }, {
+      approvalPolicy: APPROVAL_POLICY,
       authorizeApproval: () => Effect.succeed({ kind: "owner" as const, principalId: "owner", evidenceId: "authenticated" }),
     }).pipe(
       Effect.provide(catalogLayer([provision()])),

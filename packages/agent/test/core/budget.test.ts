@@ -11,6 +11,7 @@ import {
   publishBudgetTelemetry,
   recordTokenUsage,
 } from "../../src/core/budget";
+import { TEST_BUDGET, testBudget } from "../helpers/approval-policy";
 
 /** The run whose budget is being reported; the reporter never mints one. */
 const TEST_RUN = { traceId: "trace-budget-test", sessionId: "session-budget-test" };
@@ -81,72 +82,72 @@ describe("effectiveBudgetThresholds", () => {
 describe("budget telemetry 4-state", () => {
   it("returns ok when below reassurance threshold", () => {
     const s = { ...createBudgetState(now), turns: 12 };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe("ok");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: 24 }))).toBe("ok");
   });
 
   it("returns reassurance when between reassurance and warning thresholds", () => {
     const s = { ...createBudgetState(now), turns: 15 };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe("reassurance");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: 24 }))).toBe("reassurance");
   });
 
   it("returns warning when between warning and exceeded thresholds", () => {
     const s = { ...createBudgetState(now), turns: 20 };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe("warning");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: 24 }))).toBe("warning");
   });
 
   it("returns exceeded when at limit", () => {
     const s = { ...createBudgetState(now), turns: 24 };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 })).toBe("exceeded");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: 24 }))).toBe("exceeded");
   });
 
   it("returns exceeded when tool runtime reaches its limit", () => {
     const s = { ...createBudgetState(now), toolRuntimeMs: 500 };
     expect(
-      publishBudgetTelemetry(s, TEST_RUN, collector(), now, {
+      publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({
         maxTurns: -1,
         maxToolCalls: -1,
         maxWallTimeMs: -1,
         maxToolRuntimeMs: 500,
-      }),
+      })),
     ).toBe("exceeded");
   });
 
   it("maxTurns -1 allows unlimited turns", () => {
     const s = { ...createBudgetState(now), turns: 1000 };
-    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: -1 })).toBe("ok");
+    expect(publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: -1 }))).toBe("ok");
   });
 
   it("maxTurns -1 with maxToolCalls limit uses only toolCalls ratio", () => {
     const s = { ...createBudgetState(now), turns: 1000, toolCalls: 9 };
     expect(
-      publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: -1, maxToolCalls: 10 }),
+      publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: -1, maxToolCalls: 10 })),
     ).toBe("warning");
   });
 
   it("all limits -1 always returns ok", () => {
     const s = { ...createBudgetState(now), turns: 1000, toolCalls: 1000, toolRuntimeMs: 1000000 };
     expect(
-      publishBudgetTelemetry(s, TEST_RUN, collector(), now, {
+      publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({
         maxTurns: -1,
         maxToolCalls: -1,
         maxWallTimeMs: -1,
         maxToolRuntimeMs: -1,
-      }),
+      })),
     ).toBe("ok");
   });
 
-  it("backward compat: undefined budget uses defaults", () => {
-    expect(publishBudgetTelemetry(createBudgetState(now), TEST_RUN, collector(), now)).toBe("ok");
+  it("the resolved fixture defaults stay below every threshold at a fresh state", () => {
+    expect(publishBudgetTelemetry(createBudgetState(now), TEST_RUN, collector(), now, TEST_BUDGET)).toBe("ok");
   });
 
   it("custom thresholds override defaults", () => {
     const s = { ...createBudgetState(now), turns: 18 };
     expect(
-      publishBudgetTelemetry(s, TEST_RUN, collector(), now, {
+      publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({
         maxTurns: 24,
         warningThreshold: 0.9,
         reassuranceThreshold: 0.7,
-      }),
+      })),
     ).toBe("reassurance");
   });
 });
@@ -155,8 +156,8 @@ describe("budget telemetry does not publish outside its supplied sink", () => {
   it("emits no telemetry even called twice at the warning threshold", async () => {
     const s = { ...createBudgetState(now), turns: 20 };
     const emits = await countGlobalOperationalEmits(() => {
-      publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 });
-      publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 });
+      publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: 24 }));
+      publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: 24 }));
     });
     expect(emits).toBe(0);
   });
@@ -164,7 +165,7 @@ describe("budget telemetry does not publish outside its supplied sink", () => {
   it("emits no telemetry at the exceeded threshold", async () => {
     const s = { ...createBudgetState(now), turns: 24 };
     const emits = await countGlobalOperationalEmits(() => {
-      publishBudgetTelemetry(s, TEST_RUN, collector(), now, { maxTurns: 24 });
+      publishBudgetTelemetry(s, TEST_RUN, collector(), now, testBudget({ maxTurns: 24 }));
     });
     expect(emits).toBe(0);
   });
@@ -180,7 +181,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     const capture = captureBusEvents(event);
     try {
       expect(
-        publishBudgetTelemetry({ ...createBudgetState(now), turns }, TEST_RUN, Bus, now, { maxTurns: 24 }),
+        publishBudgetTelemetry({ ...createBudgetState(now), turns }, TEST_RUN, Bus, now, testBudget({ maxTurns: 24 })),
       ).toBe(status);
       const [seen] = await capture.done;
       expect(capture.events).toHaveLength(1);
@@ -194,7 +195,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     const s = { ...createBudgetState(now), turns: 20 };
     let status: string | undefined;
     const emits = countCollectedOperationalEmits((events) => {
-      status = publishBudgetTelemetry(s, TEST_RUN, events, now, { maxTurns: 24 });
+      status = publishBudgetTelemetry(s, TEST_RUN, events, now, testBudget({ maxTurns: 24 }));
     });
     expect(status).toBe("warning");
     expect(emits).toBe(1);
@@ -204,7 +205,7 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
     const s = { ...createBudgetState(now), turns: 5 };
     let status: string | undefined;
     const emits = countCollectedOperationalEmits((events) => {
-      status = publishBudgetTelemetry(s, TEST_RUN, events, now, { maxTurns: 24 });
+      status = publishBudgetTelemetry(s, TEST_RUN, events, now, testBudget({ maxTurns: 24 }));
     });
     expect(status).toBe("ok");
     expect(emits).toBe(0);
@@ -214,62 +215,62 @@ describe("publishBudgetTelemetry is the command (emits once, returns status)", (
 describe("describeBudgetRemaining", () => {
   it("includes turns remaining", () => {
     const s = { ...createBudgetState(now), turns: 5 };
-    const desc = describeBudgetRemaining(s, now, { maxTurns: 24 });
+    const desc = describeBudgetRemaining(s, now, testBudget({ maxTurns: 24 }));
     expect(desc).toContain("19 turns remaining");
   });
 
   it("displays unlimited when maxTurns is -1", () => {
     const s = { ...createBudgetState(now), turns: 5 };
-    const desc = describeBudgetRemaining(s, now, { maxTurns: -1 });
+    const desc = describeBudgetRemaining(s, now, testBudget({ maxTurns: -1 }));
     expect(desc).toContain("unlimited turns remaining");
   });
 
   it("singular turn when 1 remaining", () => {
     const s = { ...createBudgetState(now), turns: 23 };
-    const desc = describeBudgetRemaining(s, now, { maxTurns: 24 });
+    const desc = describeBudgetRemaining(s, now, testBudget({ maxTurns: 24 }));
     expect(desc).toContain("1 turn remaining");
     expect(desc).not.toContain("turns");
   });
 });
 
-describe("default budget ceilings", () => {
+describe("resolved default budget ceilings (#1309: values are policy-owned)", () => {
   it("enforces the default turn ceiling at 24", () => {
-    expect(evaluateBudget({ ...createBudgetState(now), turns: 24 }, now)).toMatchObject({
+    expect(evaluateBudget({ ...createBudgetState(now), turns: 24 }, now, TEST_BUDGET)).toMatchObject({
       status: "exceeded",
       exceededLimit: "turns",
     });
-    expect(evaluateBudget({ ...createBudgetState(now), turns: 23 }, now).status).toBe("warning");
+    expect(evaluateBudget({ ...createBudgetState(now), turns: 23 }, now, TEST_BUDGET).status).toBe("warning");
   });
 
   it("enforces the default tool-call ceiling at 40", () => {
-    expect(evaluateBudget({ ...createBudgetState(now), toolCalls: 40 }, now)).toMatchObject({
+    expect(evaluateBudget({ ...createBudgetState(now), toolCalls: 40 }, now, TEST_BUDGET)).toMatchObject({
       status: "exceeded",
       exceededLimit: "tool calls",
     });
-    expect(evaluateBudget({ ...createBudgetState(now), toolCalls: 39 }, now).status).toBe("warning");
+    expect(evaluateBudget({ ...createBudgetState(now), toolCalls: 39 }, now, TEST_BUDGET).status).toBe("warning");
   });
 
   it("enforces the default tool-runtime ceiling at two minutes", () => {
-    expect(evaluateBudget({ ...createBudgetState(now), toolRuntimeMs: 120_000 }, now)).toMatchObject({
+    expect(evaluateBudget({ ...createBudgetState(now), toolRuntimeMs: 120_000 }, now, TEST_BUDGET)).toMatchObject({
       status: "exceeded",
       exceededLimit: "tool wall time",
     });
-    expect(evaluateBudget({ ...createBudgetState(now), toolRuntimeMs: 119_999 }, now).status).toBe(
+    expect(evaluateBudget({ ...createBudgetState(now), toolRuntimeMs: 119_999 }, now, TEST_BUDGET).status).toBe(
       "warning",
     );
   });
 
   it("the default wall-time ceilings narrate from the same constants", () => {
-    const desc = describeBudgetRemaining(createBudgetState(now), now);
+    const desc = describeBudgetRemaining(createBudgetState(now), now, TEST_BUDGET);
     expect(desc).toContain("300s wall time");
     expect(desc).toContain("120s tool wall time");
   });
 
   it("selects the first exceeded ceiling before computing ratios", () => {
     const state = { ...createBudgetState(now), turns: 24, toolCalls: 40, toolRuntimeMs: 120_000 };
-    expect(evaluateBudget(state, now, { maxWallTimeMs: 0 }).exceededLimit).toBe("wall time");
-    expect(evaluateBudget(state, now, { maxWallTimeMs: -1 }).exceededLimit).toBe("turns");
-    expect(evaluateBudget(state, now, { maxWallTimeMs: -1, maxTurns: -1 }).exceededLimit).toBe(
+    expect(evaluateBudget(state, now, testBudget({ maxWallTimeMs: 0 })).exceededLimit).toBe("wall time");
+    expect(evaluateBudget(state, now, testBudget({ maxWallTimeMs: -1 })).exceededLimit).toBe("turns");
+    expect(evaluateBudget(state, now, testBudget({ maxWallTimeMs: -1, maxTurns: -1 })).exceededLimit).toBe(
       "tool calls",
     );
   });

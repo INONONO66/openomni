@@ -6,7 +6,7 @@ export { stopState } from "./stop";
 export type { StopObservation, StopVerdict } from "./stop";
 export { RunEvents } from "./run-events";
 import { accumulateUsage, type RunInput, type Sink, type LlmError, Llm, Retry as LlmRetry, LlmRunFailure, observeRetry, selectModel } from "../model";
-import { createBudgetState, recordTokenUsage, recordTurn, type BudgetState, effectiveMaxToolCalls, publishBudgetTelemetry, evaluateBudget } from "./budget";
+import { createBudgetState, recordTokenUsage, recordTurn, resolveAgentBudget, type BudgetState, effectiveMaxToolCalls, publishBudgetTelemetry, evaluateBudget } from "./budget";
 import { AgentStopError, AgentInvariantViolation, AgentFailure, type ExecutionError, Interrupted, ContextAdmissionError } from "./failure";
 import type { AgentResult, AgentStep, ChatAgentInput, TokenUsage, ChatAgentConfig, ObservedChatAgentConfig } from "./types";
 import { createUserMessage, createAssistantMessage, withMessageId, type MessageSource } from "./message-factory";
@@ -496,7 +496,7 @@ function createTrackingSink(
 }
 
 function recordAssistant(
-  config: ChatAgentConfig,
+  config: ObservedChatAgentConfig,
   message: Message.WithParts,
 ): Effect.Effect<Message.WithParts, ExecutionError> {
   return Effect.gen(function* () {
@@ -768,7 +768,13 @@ export function runAgent(
   const entropy = yield* Entropy;
   const now = (): number => clock.currentTimeMillisUnsafe();
   const source: MessageSource = { now, id: entropy.id };
-  const config = { ...options, events };
+  const config = {
+    ...options,
+    events,
+    // #1309: resolve the run budget once at entry — the explicit budget wins
+    // per field; the rest reads the injected policy's defaultBudget.
+    budget: resolveAgentBudget(options.defaultBudget, options.budget),
+  };
   return yield* Effect.scopedWith((scope) => Effect.suspend(() => {
   const trace = requireTrace("agent run", input.traceContext);
   assertToolExecutor(config);

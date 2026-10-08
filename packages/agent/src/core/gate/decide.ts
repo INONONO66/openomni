@@ -11,6 +11,7 @@ import type { WaveControl, Dispatcher } from "../tool";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { onAbort, type CapturedGeneration, BOUNDED_CONCURRENCY, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "../ports";
 import { createApprovalRequest } from "../request-binding";
+import type { ApprovalPolicy } from "../approval-policy";
 import { Retry } from "../../model";
 import { attachFailureFacts } from "../retry";
 import { judgeStop, type StopState, type StopObservation, type StopMetric } from "../stop";
@@ -247,6 +248,11 @@ export interface ExecutorOptions {
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly closeGraceMs?: number;
   readonly approvalTimeoutMs?: number;
+  /**
+   * The composed approval policy (#1309): responders, recent-open quota and
+   * the default expiry. Required — the core keeps no literal fallback.
+   */
+  readonly approvalPolicy: ApprovalPolicy;
   readonly ledger: ExecutionLedger;
   readonly identity: ExecutionIdentity;
   readonly extensionKinds?: readonly ExecutionKindRegistration[];
@@ -707,9 +713,9 @@ function createExecutionApprovals(options: ResolvedExecutorOptions) {
     },
   ): Effect.Effect<ApprovalDecision, ExecutionError> {
     return Effect.gen(function* () {
-      const timeout = binding.timeoutMs ?? options.approvalTimeoutMs ?? 86_400_000;
+      const timeout = binding.timeoutMs ?? options.approvalTimeoutMs ?? options.approvalPolicy.defaultExpiryMs;
       const durable = binding.original ??
-        createApprovalRequest(captured, binding, options.identity.systemHash, options.clock(), timeout);
+        createApprovalRequest(captured, binding, options.identity.systemHash, options.clock(), timeout, options.approvalPolicy.responders);
       const request: ExecutionApprovalRequest = { ...captured, expiresAt: durable.deadline, durable };
       const decision = yield* Deferred.make<ApprovalDecision>();
       pending.set(request.id, { request, signal, decision, revisions: binding.revisions });

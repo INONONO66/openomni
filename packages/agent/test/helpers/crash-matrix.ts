@@ -34,6 +34,7 @@ import { textMessage } from "./messages";
 import { seedPolicy } from "./seed-policy";
 import { uniqueEntropy } from "./time";
 import { CommitFailed, AgentFailure, type SessionError } from "../../src/core/failure";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 export const crashPoint = z.enum([
   configureCrashPoint,
@@ -226,7 +227,7 @@ function executePoint(point: CrashPoint, bodies: string[]) {
           actionId: recording.identity.turnId,
           ledger,
           policy: compiledPolicy(),
-        }; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = { observations, clock: recording.clock, entropy: recording.entropy }; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer(tools)), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
+        }; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = { approvalPolicy: TEST_APPROVAL_POLICY, observations, clock: recording.clock, entropy: recording.entropy }; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer(tools)), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
       return yield* dispatcher.executeWave(
         tools.map((tool: (typeof tools)[number]) => ({
           id: tool.name,

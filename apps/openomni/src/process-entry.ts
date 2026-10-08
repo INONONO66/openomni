@@ -43,6 +43,7 @@ import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
 import { dispatchOutboundMessage, outboundMessage } from "./composition/terminal-message";
 import { parentReply } from "./bundles/delegation-policy";
+import { APPROVAL_POLICY } from "./bundles/approval-policy";
 import { createProcessReplyChannel } from "./composition/process-replies";
 import { appManifest } from "./manifest";
 import { createWatchPlane } from "./composition/watch-plane";
@@ -143,6 +144,8 @@ export function serveProcessSession(
   plane.openKernel(request.sessionId).row(request.sessionId);
   seedKernelPolicyRows(plane.catalog.policies, gateRowPolicySeeds(composed.current().generation), yield* AppPointTable);
   const runtime: SessionRuntime = {
+    // #1309: approval/budget policy values from the product bundle.
+    approvalPolicy: APPROVAL_POLICY,
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,
     processId: owner,
@@ -244,7 +247,7 @@ export function serveProcessSession(
   const binding = yield* SessionEntityBinding;
   // Live reads: the bound ports reflect the composed generation at admission
   // time, not at bind time — a recompose between bind and wake must win.
-  const entityPorts: Core.SessionEntityPorts = { runTurn, get inputRegistrations(): readonly string[] { return ["prompt", "signal", ...composed.current().generation.inputs]; },
+  const entityPorts: Core.SessionEntityPorts = { runTurn, approvalPolicy: runtime.approvalPolicy, get inputRegistrations(): readonly string[] { return ["prompt", "signal", ...composed.current().generation.inputs]; },
     get capabilityKinds(): readonly string[] { return Object.keys(composed.current().generation.kinds); } };
   binding.bind(entityPorts);
   const entityClient = yield* SessionEntity.client;

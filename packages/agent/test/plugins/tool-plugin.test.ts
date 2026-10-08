@@ -11,6 +11,7 @@ import { catalogLayer } from "../helpers/service-layers";
 import { recordingExecutor } from "../helpers/effect-g2";
 import { valueTool } from "../helpers/query-tool";
 import { isolated } from "../helpers/isolated";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 const context = { sessionId: "session-1", turnId: "turn-1" };
 const call = { id: "call-1", tool: "echo", input: { value: "input" } };
@@ -120,7 +121,7 @@ describe("plugins/tool dispatcher export (#1316)", () => {
               },
             },
           },
-          {},
+          { approvalPolicy: TEST_APPROVAL_POLICY },
         ).pipe(Effect.provide(catalogLayer([
           valueTool({ name: "echo", description: "Echo a value", execute: async () => "ok" }),
         ])));

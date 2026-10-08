@@ -18,6 +18,7 @@ import { runAgent } from "./helpers/executor";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions, nativePolicy } from "./helpers/native-executor";
 import { sessionTree as kernelSessionTree } from "./helpers/session-tree";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 /** Chain oracle over the active isolation's kernel. */
 const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
@@ -59,7 +60,7 @@ function setup(definitions: readonly AnyToolDefinition[], signal?: AbortSignal) 
     const captured = yield* generations.capture().pipe(Effect.provideService(Scope.Scope, captureScope));
     const dispatcher = yield* captured.provide(createTurnDispatcher({ ...options.identity, actionId: context.turnId,
       ledger: options.ledger, tools: captured.snapshot.tools, toolsGeneration: 1, signal,
-      toolsHash: captured.snapshot.toolsHash, systemHash: captured.snapshot.systemHash }, { closeGraceMs: 0 }));
+      toolsHash: captured.snapshot.toolsHash, systemHash: captured.snapshot.systemHash }, { closeGraceMs: 0, approvalPolicy: TEST_APPROVAL_POLICY }));
     const slots = yield* captured.provide(GenerationRawSlots);
     return { options, bus, generations, captured, dispatcher, captureScope, slots,
       run: captured.provide(dispatcher.execute({ id: "outer", tool: "outer", input: {} }, context)) };

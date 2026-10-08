@@ -20,6 +20,15 @@ export type TokenUsage = Token.AgentUsage;
 
 export type AgentBudget = Actor.Profile.Budget;
 
+/**
+ * A run budget with all four enforcement ceilings present (#1309): the loop
+ * resolves the run's explicit `budget` against the injected approval policy's
+ * `defaultBudget` once at entry, so the enforcement helpers read values, never
+ * fall back to literals.
+ */
+export type ResolvedAgentBudget = AgentBudget &
+  Required<Pick<AgentBudget, "maxTurns" | "maxToolCalls" | "maxWallTimeMs" | "maxToolRuntimeMs">>;
+
 interface AgentExecutionLifecycle {
   judgeStop: import("./gate/decide").DurableExecutor["judgeStop"];
   runAttempts<T extends PlainValue>(
@@ -94,6 +103,12 @@ export interface ChatAgentConfig {
     chain: readonly Model.Ref[],
   ) => Effect.Effect<number, ExecutionError>;
   budget?: AgentBudget;
+  /**
+   * The composed approval policy's default run budget (#1309): the resolved
+   * values `budget` leaves unset. Required — the product bundle owns the
+   * numbers and composition threads them; the core keeps no literal.
+   */
+  defaultBudget: ResolvedAgentBudget;
   onStepFinish?: (step: AgentStep) => Effect.Effect<void, ExecutionError>;
   toolExecutor?: (call: Tool.Call, context?: Tool.ExecutionContext) => Effect.Effect<Tool.Result, ExecutionError>;
   signal?: AbortSignal;
@@ -128,8 +143,10 @@ export interface ChatAgentConfig {
 }
 
 /** Internal loop state captures observation delivery once at entry. */
-export interface ObservedChatAgentConfig extends ChatAgentConfig {
+export interface ObservedChatAgentConfig extends Omit<ChatAgentConfig, "budget" | "defaultBudget"> {
   readonly events: BusEvent.Sink;
+  /** The run budget, fully resolved at loop entry (#1309). */
+  readonly budget: ResolvedAgentBudget;
 }
 
 export interface ChatAgentInput {

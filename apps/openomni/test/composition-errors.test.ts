@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { testToolPorts } from "./helpers/tool-ports";
 import { Effect } from "effect";
 import { runEffect } from "./helpers/effect";
@@ -51,6 +52,7 @@ test("resident materialization refuses unregistered runners before storage", () 
     apiKey: "fixture",
     tools: { ...testToolPorts,},
     sessionRuntime: {
+      approvalPolicy: APPROVAL_POLICY,
       authorizeConfigure: allowConfigure,
       openKernel: plane.openKernel,
       listSessions: plane.listSessions,

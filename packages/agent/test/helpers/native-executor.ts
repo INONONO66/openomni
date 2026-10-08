@@ -8,6 +8,7 @@ import { type LedgerAction, PlainObjectSchema } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { SessionKernel } from "../../src/core/entity";
 import type { ExecutionLedger } from "../../src/core/gate/decide";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 export const fiberSessionId = "fiber-session";
 export const nativePolicy = compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY,
@@ -57,6 +58,7 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId, handle?: S
       policy: nativePolicy, ledger, observations: { publish: () => undefined },
       clock: () => now, entropy: () => `${id}:${now}:${++sequence}`, random: () => 0,
       identity: { sessionId: id, role: "resident", parentActionId: turnId, turnId },
-    } satisfies ResolvedExecutorOptions;
+      approvalPolicy: TEST_APPROVAL_POLICY,
+} satisfies ResolvedExecutorOptions;
   });
 }

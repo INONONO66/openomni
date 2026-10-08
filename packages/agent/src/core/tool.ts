@@ -71,7 +71,7 @@ interface PreparedTurnTools {
   readonly executor: NonNullable<ChatAgentConfig["toolExecutor"]> | undefined;
 }
 
-export function prepareTurnTools(state: RunState, config: ChatAgentConfig): PreparedTurnTools {
+export function prepareTurnTools(state: RunState, config: Pick<ChatAgentConfig, "tools" | "toolExecutor">): PreparedTurnTools {
   const allTools = config.tools ?? [];
   const configuredExecutor = config.toolExecutor;
   const executor = configuredExecutor
@@ -97,7 +97,7 @@ export interface WaveControl {
 /** Assemble tool results on the original assistant slots, never completion order. */
 export function settleModelTools(
   turn: TurnArtifacts,
-  config: ChatAgentConfig,
+  config: Omit<ChatAgentConfig, "budget" | "defaultBudget">,
   state: RunState,
 ): Effect.Effect<number, ExecutionError> {
   return Effect.gen(function* () {

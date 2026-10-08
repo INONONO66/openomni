@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { Operational } from "@openomni/protocol";
 import { collector } from "../helpers/observation-collector";
 import { createBudgetState, evaluateBudget, publishBudgetTelemetry } from "../../src/core/budget";
+import { testBudget } from "../helpers/approval-policy";
 
 /**
  * #1245: the wall-time budget reads only the injected clock. The ceiling is a
@@ -9,7 +10,7 @@ import { createBudgetState, evaluateBudget, publishBudgetTelemetry } from "../..
  * `maxWallTimeMs`, and not one millisecond before.
  */
 describe("wall-time budget ceiling on the injected clock", () => {
-  const budget = { maxWallTimeMs: 100 };
+  const budget = testBudget({ maxWallTimeMs: 100 });
 
   it("expires exactly when the injected clock crosses the ceiling, not one ms before", () => {
     let time = 0;

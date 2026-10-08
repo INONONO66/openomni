@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../../src/bundles/approval-policy";
 import { testToolPorts } from "./tool-ports";
 import { Context, Effect, Layer, Scope } from "effect";
 import { Bundle, Core, Model } from "@openomni/agent";
@@ -40,6 +41,7 @@ export function residentRunner(
   const ownsPlane = options.plane === undefined;
   const plane = options.plane ?? testPlane();
   const runtime: SessionRuntime = {
+    approvalPolicy: APPROVAL_POLICY,
     // Resolve on state, never a sleep: these tests exercise retries, not schedules.
     retryAlarm: nullRetryAlarm,
     authorizeConfigure: allowConfigure,

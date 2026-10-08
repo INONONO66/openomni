@@ -29,6 +29,7 @@ import { isolated, isolatedLedger } from "../../helpers/isolated";
 /** Chain oracle over the active isolation's kernel. */
 const sessionTree = (sessionId: string) => kernelSessionTree(isolatedLedger().kernel, sessionId);
 import { timedQueryTool, valueTool } from "../../helpers/query-tool";
+import { TEST_BUDGET } from "../../helpers/approval-policy";
 
 const request = { kind: "tool", op: "test", intent: {}, effect: {} };
 const call = { id: "timed-call", tool: "timed", input: {} };
@@ -416,7 +417,7 @@ it("settles a defective fallback slot without interrupting its sibling or losing
   const published: string[] = [];
   const config: ObservedChatAgentConfig = {
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
-    stopEvidence: fixtureStopEvidence,
+    stopEvidence: fixtureStopEvidence, budget: TEST_BUDGET,
     toolExecutor: (call) => call.id === "A"
       ? Deferred.await(siblingEntered).pipe(Effect.andThen(Effect.die(new Error("slot_defect"))), Effect.ensuring(Deferred.succeed(failed, undefined)))
       : Deferred.succeed(siblingEntered, undefined).pipe(Effect.andThen(Deferred.await(failed)), Effect.as({ id: call.id, toolCallId: call.id, output: "survived" })),
@@ -433,7 +434,7 @@ it("settles a defective fallback slot without interrupting its sibling or losing
 it("propagates a fallback body's interruption instead of settling the slot as an error", () => isolated(Effect.gen(function* () {
   const config: ObservedChatAgentConfig = {
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
-    stopEvidence: fixtureStopEvidence,
+    stopEvidence: fixtureStopEvidence, budget: TEST_BUDGET,
     toolExecutor: (call) => call.id === "A"
       ? Effect.interrupt
       : Effect.succeed({ id: call.id, toolCallId: call.id, output: "settled" }),

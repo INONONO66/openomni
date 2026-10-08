@@ -46,6 +46,7 @@ function fixtureParentReply(
   };
   return SessionTransition.OutboundMessage.parse({ ...message, digest: canonicalDigest(message) });
 }
+import { TEST_APPROVAL_POLICY } from "./approval-policy";
 
 /** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
 export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
@@ -57,15 +58,15 @@ export interface SessionFixture extends SessionRuntime {
 }
 
 /** The kernel plane every fixture rides inside `isolated()`: the isolation's shared kernel, resolved lazily. */
-export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply"> {
+export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply" | "approvalPolicy"> {
   return kernelRuntime(() => isolatedLedger().kernel);
 }
 
 /** A runtime kernel plane over one explicit kernel handle (crash children own their stores). */
-export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply" | "compaction"> {
+export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply" | "compaction" | "approvalPolicy"> {
   // #1308: parent replies are composition-injected; fixtures ride a seam stub.
-  // #1307: the compaction seam too.
-  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply: fixtureParentReply, compaction: fixtureCompactionSeam };
+  // #1307: the compaction seam too. #1309: and the approval policy.
+  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply: fixtureParentReply, compaction: fixtureCompactionSeam, approvalPolicy: TEST_APPROVAL_POLICY };
 }
 
 const fixtures = new WeakMap<Scope.Scope, WeakMap<SessionFixture, Context.Context<SessionEntryServices>>>();

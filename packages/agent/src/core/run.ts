@@ -17,6 +17,7 @@ import type { Generation } from "./compose";
 import { projectTools } from "./tool";
 import { Entropy, ObservationSink as ObservationService, GenerationLayers, type SessionEntryServices, type RunnerServices, GenerationOwnership, type CapturedGeneration, type GenerationServices, interruptOn, } from "./ports";
 import type { CompactionSeamService } from "./compaction-ports";
+import type { ApprovalPolicy } from "./approval-policy";
 import { commitFoldBatch, turnCheckpointAction, deliveryActions, turnTerminalAction, policyRefusalResult, sessionRunnerResultValue, sessionRunnerResultFromValue, boundaryConsumption, consumptionSettings, } from "./commit";
 import type { LedgerError } from "./store/errors";
 import { z } from "zod";
@@ -153,6 +154,12 @@ export interface SessionRuntime {
   }) => Effect.Effect<readonly { actionId: string; kind: "message" | "approval" }[], ExecutionError>;
   readonly retryAlarm?: ExecutorOptions["retryAlarm"];
   readonly approvalTimeoutMs?: ExecutorOptions["approvalTimeoutMs"];
+  /**
+   * The composed approval policy (#1309): the product bundle owns the values
+   * (responders, recent-open quota, default expiry, default run budget) and
+   * composition threads them here. Required — the core has no fallback.
+   */
+  readonly approvalPolicy: ApprovalPolicy;
   readonly processId?: string;
   /** Required pinned pre-policy authority for `session.configure`; there is no allow fallback. */
   readonly authorizeConfigure: (input: Parameters<SessionHandleStore.ConfigureAuthority>[0]) => Effect.Effect<boolean, SessionError>;
@@ -325,6 +332,11 @@ export interface SessionEntityTurnInput {
 }
 
 export interface SessionEntityPorts {
+  /**
+   * The composed approval policy (#1309): the pure request authority reads
+   * its recent-open quota from here. Required — no in-core quota literal.
+   */
+  readonly approvalPolicy: ApprovalPolicy;
   /**
    * Composition readiness: an activation awaits this before its first port
    * call. The cluster redelivers a crashed process's persisted messages (its
@@ -1006,7 +1018,7 @@ export function createSessionTurn(
       };
       const execution = yield* createExecutor({
         retryAlarm: runtime.retryAlarm, signal: controller.signal, retainEffect,
-        closeGraceMs: runtime.closeGraceMs, ledger,
+        closeGraceMs: runtime.closeGraceMs, ledger, approvalPolicy: runtime.approvalPolicy,
         identity: { sessionId, role: row.role, parentActionId: input.turnId },
       });
       const boundary = (kind: SessionTurn.Boundary): Effect.Effect<SessionBoundaryResult, ExecutionError> => Effect.gen(function* () {

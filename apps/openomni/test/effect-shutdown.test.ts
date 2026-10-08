@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { testToolPorts } from "./helpers/tool-ports";
 import { sessionTree } from "../../../packages/agent/test/store/helpers/session-tree";
 import { expect, spyOn, test } from "bun:test";
@@ -126,6 +127,7 @@ test(`zero-grace close retains a raw tool lease (settle after turn: ${settleAfte
   const plane = await planeOf(runtime);
   seedKernelPolicyRows(plane.catalog.policies);
   const sessionRuntime: SessionRuntime = {
+    approvalPolicy: APPROVAL_POLICY,
     authorizeConfigure: allowConfigure,
     openKernel: plane.openKernel,
     listSessions: plane.listSessions,

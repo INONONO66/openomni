@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../../src/bundles/approval-policy";
 import { Effect } from "effect";
 import { executorLayer } from "../../../../packages/agent/test/helpers/service-layers";
 import { runSyncEffect } from "./effect";
@@ -33,6 +34,7 @@ export const fixtureLedger = {
 
 export const executorServices = executorLayer({ policy: seededPolicy, clock: () => 1, entropy: () => `test-action-${ordinal + 1}`, observations: { publish: () => undefined } });
 export const executor = runSyncEffect(createExecutor({
+  approvalPolicy: APPROVAL_POLICY,
   ledger: fixtureLedger,
   identity: { sessionId: "test", role: "resident", parentActionId: null },
   // In-memory ledger: durable retry scheduling is covered by the agent package tests.

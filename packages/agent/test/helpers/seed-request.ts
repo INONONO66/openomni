@@ -6,6 +6,7 @@ import { decideRequestTransition } from "../../src/core/request";
 import { openRequest } from "./open-request";
 import { runAgent } from "./executor";
 import { sessionFileFor } from "./cluster-runtime";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 /** Pinned so the answer-side rebuild hashes to the identical binding digest. */
 const SEED_DEADLINE = 4_102_444_800_000;
@@ -101,6 +102,7 @@ export async function seedSessionWithOpenRequest(input: {
         payload: { kind: "request.open", request },
       },
       { row, requests: [], invocation: kernel.actionById(requestId) },
+      TEST_APPROVAL_POLICY.recentOpen,
     );
     if (decision.resolution !== "opened") {
       throw new Error(`request seed refused: ${decision.resolution}`);

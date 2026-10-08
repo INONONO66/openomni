@@ -1,5 +1,6 @@
 import { Context, Effect } from "effect";
 import { Core } from "@openomni/agent";
+import { APPROVAL_POLICY } from "../bundles/approval-policy";
 const createExecutor = Core.createExecutor;
 const AgentFailure = Core.AgentFailure;
 type SessionRuntime = Core.SessionRuntime;
@@ -26,6 +27,7 @@ export function dispatchOutboundMessage(
     const { message, authority } = input;
     const source = openKernel(message.sourceSessionId);
     const executor = yield* createExecutor({
+      approvalPolicy: APPROVAL_POLICY,
       identity: {
         sessionId: message.sourceSessionId,
         role: source.row(message.sourceSessionId).role,

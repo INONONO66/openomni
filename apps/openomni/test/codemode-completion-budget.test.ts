@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../src/bundles/approval-policy";
 import { expect, test } from "bun:test";
 import { Cause, Effect, Layer } from "effect";
 import { Bundle } from "@openomni/agent";
@@ -61,7 +62,7 @@ test("two cells in one turn each own a full completion budget", async () => {
       actions.push(action);
       return Effect.succeed({ action, revision: ordinal });
     } },
-  }, {}).pipe(
+  }, { approvalPolicy: APPROVAL_POLICY }).pipe(
     Effect.provide(catalogLayer(definitions)),
     Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `budget-${++sequence}` })),
     Effect.provide(runnerServices),
@@ -137,7 +138,7 @@ test("a non-ToolRefused defect inside the cell door dies instead of folding to a
     ledger: { commit: (append: LedgerAction.Append) => Effect.succeed({
       action: LedgerAction.Node.parse({ ...append, ordinal: sequence, ...fixtureHashes(sequence) }), revision: sequence,
     }) },
-  }, {}).pipe(
+  }, { approvalPolicy: APPROVAL_POLICY }).pipe(
     Effect.provide(catalogLayer(definitions)),
     Effect.provide(executorLayer({ policy: seededPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: () => `defect-${++sequence}` })),
     Effect.provide(runnerServices),

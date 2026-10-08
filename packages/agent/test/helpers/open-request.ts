@@ -2,6 +2,7 @@ import { canonicalDigest, type SessionTransition } from "@openomni/protocol";
 import { Effect } from "effect";
 import { requestLedger } from "./g0-request-ledger";
 import { requestBindingDigest } from "../../src/core/request";
+import { TEST_APPROVAL_POLICY } from "./approval-policy";
 
 type Overrides = Partial<Omit<SessionTransition.Request, "bindingDigest">> &
   Pick<SessionTransition.Request, "requestId" | "sessionId" | "turnId" | "callId">;
@@ -20,7 +21,7 @@ export function openRequest(overrides: Overrides): SessionTransition.Request {
     systemHash: "system",
     domainRevisions: {},
     deadline: 100,
-    expectedResponders: ["owner"],
+    expectedResponders: [...TEST_APPROVAL_POLICY.responders],
     correlation: {},
     allowedActions: ["report_result"],
     resolution: "first",

@@ -334,7 +334,10 @@ export function createSendMessageTool(
 export function sendMessageBundle(): Bundle.BundleContract<"send-message"> {
   return Bundle.define({
     name: "send-message",
-    requires: [ToolCapabilitySeam],
+    // #1309: approval answers ride the owner contact this tool reaches, so the
+    // send door requires the approval policy's seam — a manifest without the
+    // approval-policy provider refuses typed (`seam_missing`) at compose.
+    requires: [ToolCapabilitySeam, Core.ApprovalPolicySeam],
     tools: [Core.eraseTool(createSendMessageTool(undefined, () => 0))],
   });
 }

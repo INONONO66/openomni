@@ -24,6 +24,7 @@ import {
   hydrateSessionHistory,
 } from "../../src/inspect/history";
 import { reconstructionFixture, reconstructionSession } from "./reconstruction-fixture";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 export const reconstructionWitness = z.object({
   revision: z.number(),
@@ -102,7 +103,7 @@ export async function reconstructionMain(
         reconstructionSession,
         (input: SessionRunnerInput) => Effect.gen(function* () {
           const before = sessionTree(kernel, reconstructionSession);
-          const executor = yield* createExecutor({
+          const executor = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY,
             ledger: input.ledger,
             identity: {
               sessionId: input.sessionId,
