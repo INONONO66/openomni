@@ -29,10 +29,12 @@ export function createCodemode(options: {
   id?: () => string;
   machines?: Pick<MachineHost, "list" | "get">;
   completion?: (request: Machine.CompletionRequest) => Promise<string>;
+  toolOutput?: (tenant: string, outputId: string) => Promise<{ text: string; bytes: number; mediaType?: string } | undefined>;
   tools?: (tenant: string) => Caller;
   boundary?: (tenant: string) => Boundary;
 } = {}) {
   const completion = options.completion;
+  const toolOutput = options.toolOutput;
   const tools = options.tools;
   const boundary = options.boundary;
   const machines = options.machines;
@@ -40,6 +42,7 @@ export function createCodemode(options: {
     id: options.id ?? sequentialCellIds(),
     machines: machines ? { list: machines.list, get: (id) => machines.get(id).native } : undefined,
     completion: completion ? (request) => code(() => completion(request)) : undefined,
+    toolOutput: toolOutput ? (tenant, outputId) => code(() => toolOutput(tenant, outputId)) : undefined,
     tools: tools ? (tenant) => { const call = tools(tenant); return (request) => code(() => call(request)); } : undefined,
     boundary: boundary ? (tenant) => { const decide = boundary(tenant); return (call, body) => code(() => decide(call, () => run(body()))); } : undefined,
   }));

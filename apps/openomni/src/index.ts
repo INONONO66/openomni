@@ -19,7 +19,7 @@ import { readHooksJson } from "./bundles/hooks-json";
 import { APPROVAL_POLICY } from "./bundles/approval-policy";
 import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
-import { Core, Bundle } from "@openomni/agent";
+import { Core, Bundle, Inspect } from "@openomni/agent";
 const Entropy = Core.Entropy;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -627,7 +627,19 @@ export async function startOpenOmni(options: StartOptions = {}) {
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       { now: services.now, id: services.entropy.id },
     );
-    cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
+    cells = await acquireAppResource(
+      runtime,
+      // #1305: the prelude's tool_output resolves against the tenant session's own file.
+      composeCodemode(host, {
+        id: services.entropy.id,
+        outputs: (sessionId, outputId) => {
+          const inspected = Inspect.toolOutput(plane.openKernel(sessionId), outputId);
+          return inspected.kind === "output"
+            ? { text: inspected.text, bytes: inspected.bytes, ...(inspected.mediaType === undefined ? {} : { mediaType: inspected.mediaType }) }
+            : undefined;
+        },
+      }),
+    );
 
     // Boot order (#1271): the self machine must answer over its loopback
     // attachment BEFORE any tool port exists; a dead attachment fails boot.

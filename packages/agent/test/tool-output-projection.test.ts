@@ -114,9 +114,11 @@ describe("tool output projection through the durable gate (#1305)", () => {
         if (row === undefined) throw new Error("missing result row");
         const effect = plainObject(row.effect.value);
         // The committed row is bounded: well under the budget, never 1 MiB.
-        expect(Buffer.byteLength(canonicalJson(row.effect.value), "utf8")).toBeLessThan(
-          DEFAULT_TOOL_OUTPUT_BUDGET_BYTES,
-        );
+        const beforeBytes = Buffer.byteLength(canonicalJson(value), "utf8");
+        const afterBytes = Buffer.byteLength(canonicalJson(row.effect.value), "utf8");
+        // #1305 evidence: the measured row bytes before/after projection.
+        console.log(`row bytes before projection: ${beforeBytes}; after: ${afterBytes}`);
+        expect(afterBytes).toBeLessThan(DEFAULT_TOOL_OUTPUT_BUDGET_BYTES);
         // Replay identity: resultHash stays the digest of the FULL value.
         expect(effect.resultHash).toBe(canonicalDigest(value));
         const ref = plainObject(plainObject(effect.result).outputRef);

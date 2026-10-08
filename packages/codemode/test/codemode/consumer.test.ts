@@ -310,6 +310,30 @@ test("injected completion batches through parallel and tenant state never crosse
   );
 });
 
+test("the prelude's tool_output reads a stored 1 MiB output back whole through the host op (#1305)", async () => {
+  const outputId = `sha256:${"ab".repeat(32)}`;
+  const text = "m".repeat(1_048_576);
+  const reads: Array<{ tenant: string; outputId: string }> = [];
+  await pair(
+    async ({ mode }) => {
+      const result = await mode.cell.run(`len(tool_output("${outputId}"))`, "reader");
+      expect(result).toMatchObject({ status: "completed", value: "1048576" });
+      // The read-back crosses the host op whole; only the committed row was bounded.
+      console.log(`tool_output read-back bytes after projection: ${text.length}`);
+      expect(reads).toEqual([{ tenant: "reader", outputId }]);
+      // An unknown identifier is the typed unknown_output error, raised in the cell.
+      const unknown = await mode.cell.run(`tool_output("sha256:${"00".repeat(32)}")`, "reader");
+      expect(unknown.status).toBe("raised");
+    },
+    {
+      toolOutput: async (tenant, id) => {
+        reads.push({ tenant, outputId: id });
+        return id === outputId ? { text, bytes: text.length, mediaType: "text/plain" } : undefined;
+      },
+    },
+  );
+});
+
 test("run leaves a held cell in the background: peek shows its output so far, stop interrupts it once", async () => {
   let holds = 0;
   const gate = holdGate(() => {

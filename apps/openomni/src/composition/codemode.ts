@@ -73,9 +73,23 @@ function bindings(frame: InvocationFrame, id: () => string): NonNullable<RunOpti
   };
 }
 
-export function composeCodemode(machines: MachineHost, sources: { readonly id: () => string }): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
+export function composeCodemode(
+  machines: MachineHost,
+  sources: {
+    readonly id: () => string;
+    /** #1305: resolve a tenant's stored tool output for the prelude's `tool_output`. */
+    readonly outputs?: (sessionId: string, outputId: string) => { readonly text: string; readonly bytes: number; readonly mediaType?: string } | undefined;
+  },
+): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const mode = yield* createCodemode({ id: sources.id, machines });
+    const outputs = sources.outputs;
+    const mode = yield* createCodemode({
+      id: sources.id,
+      machines,
+      ...(outputs === undefined
+        ? {}
+        : { toolOutput: (tenant: string, outputId: string) => Effect.sync(() => outputs(tenant, outputId)) }),
+    });
     return {
       ...mode,
       cell: {
