@@ -14,6 +14,7 @@ import { bridgeDaemon, bridgeHost, bridgeOffer, bridgeProbe } from "./helpers/ma
 import { dispatchModelTool } from "./helpers/tool-dispatch";
 import { testMachinePorts } from "./helpers/native-tool-ports";
 import { testIds } from "./helpers/test-entropy";
+import { refusingToolPort } from "./helpers/tool-port";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -273,6 +274,7 @@ describe("code-mode tool bridge", () => {
     });
     let runCellRequests = 0;
     const daemon = await acquireEffect(connectIpcClient(path, {
+      dispatcherBound: 8,
       idSource: testIds("ipc"),
       onRequest: (method, params, respond) => Effect.promise(async () => {
         if (method !== Machine.WireMethod.RunCode) return;
@@ -325,7 +327,7 @@ describe("code-mode tool bridge", () => {
     const path = socketPath();
     const { host, reached } = await bridgeProbe(path);
     // A bare connection: no offer, no attach, straight to the tool channel.
-    const intruder = await acquireEffect(connectIpcClient(path, { idSource: testIds("ipc") }));
+    const intruder = await acquireEffect(connectIpcClient(path, { idSource: testIds("ipc"), dispatcherBound: 8 }));
     try {
       await expect(
         runEffect(typedCall(
@@ -345,7 +347,7 @@ describe("code-mode tool bridge", () => {
   test("an attached daemon cannot invoke tools outside a cell the host dispatched", async () => {
     const path = socketPath();
     const { host, reached } = await bridgeProbe(path);
-    const client = await acquireEffect(connectIpcClient(path, { idSource: testIds("ipc") }));
+    const client = await acquireEffect(connectIpcClient(path, { idSource: testIds("ipc"), dispatcherBound: 8 }));
     try {
       await attachAsBridgeMachine(client);
       // Attached, but this host never dispatched a cell called "ghost".
@@ -372,6 +374,7 @@ describe("code-mode tool bridge", () => {
     // from the very connection the cell ran on — the only way to prove the
     // cell is retired rather than merely unknown to some other connection.
     const daemon = await acquireEffect(connectIpcClient(path, {
+      dispatcherBound: 8,
       idSource: testIds("ipc"),
       onRequest: (method, _params, respond) => Effect.sync(() => {
         if (method === Machine.WireMethod.RunCode) {
@@ -437,6 +440,7 @@ describe("code-mode tool bridge", () => {
     });
     const offer = bridgeOffer();
     const first = await acquireEffect(attachMachineDaemon({
+      dispatcherBound: 8,
       id: testIds("bridge-first"),
       runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-first-cell") })).runner,
       socketPath: path,
@@ -460,6 +464,7 @@ describe("code-mode tool bridge", () => {
       // Take the machine over while the cell sits inside its first tool call.
       await firstCallEntered;
       second = await acquireEffect(attachMachineDaemon({
+        dispatcherBound: 8,
         id: testIds("bridge-second"),
         runner: acquireSyncEffect(createCodemode({ id: testIds("bridge-second-cell") })).runner,
         socketPath: path,
@@ -589,7 +594,7 @@ describe("code-mode tool bridge", () => {
       }));
 
       expect(result).toMatchObject({ status: "raised" });
-      expect(result.status === "raised" && result.error).toContain("this host exposes no tools");
+      expect(result.status === "raised" && result.error).toContain("host_tool_missing");
     } finally {
       await runEffect(daemon.close());
       await runEffect(host.close());
@@ -620,6 +625,8 @@ describe("bash session door", () => {
   ) {
     const path = socketPath();
     const host = await acquireEffect(createMachineHost({
+      dispatcherBound: 8,
+      callTool: refusingToolPort,
       listen: { unix: path },
       id: testIds("pty-bridge-host"),
       enrollment: () => ({
@@ -643,6 +650,7 @@ describe("bash session door", () => {
       return {
         socketPath: path,
         id: testIds(`pty-bridge-daemon-g${generation}`),
+        dispatcherBound: 8,
         offer,
         fsExports: new Map([["shell", "/"]]),
         pty: { socketName: TMUX_SOCKET },

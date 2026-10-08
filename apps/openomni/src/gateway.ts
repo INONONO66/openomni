@@ -9,7 +9,7 @@ import {
   type WebSocketHandler,
   type WsConnection,
 } from "@openomni/channels";
-import { type ChannelError, createChannelStores, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
+import { type ChannelError, decodeChannelFailure, type ChannelStoreSource } from "@openomni/channels";
 import { Core, type Bundle, Inspect } from "@openomni/agent";
 import type { ChannelGrantStore } from "@openomni/channels";
 import type { Actor, Gateway, LedgerAction } from "@openomni/protocol";
@@ -25,7 +25,6 @@ const scopeObservation = Core.scopeObservation;
 const attemptUsage = Inspect.attemptUsage;
 const toolWallMs = Inspect.toolWallMs;
 import { Gateway as GatewayProtocol, L0Observation, SessionGeneration, type SessionFork, SessionRead } from "@openomni/protocol";
-import { configureAuthority } from "./composition/generation-layers";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
@@ -602,13 +601,17 @@ export function channelRequests(
 }
 
 export function createResidentGateway(
+  // #1312: `requests`, `stores` and `messaging` are required composition
+  // ports — omitting one is a compile error, never a silently filled default.
+  // `messaging: undefined` stays expressible for gateways without outbound
+  // delivery, but the caller must write it.
   ports: Omit<
     Parameters<typeof createGatewayRouter>[0],
-    "sink" | "run" | "messaging" | "requests" | "transaction"
+    "sink" | "run" | "messaging" | "transaction" | "stores"
   > & {
-    readonly requests?: Parameters<typeof createGatewayRouter>[0]["requests"];
+    readonly stores: NonNullable<Parameters<typeof createGatewayRouter>[0]["stores"]>;
   },
-  messaging?: OutboundMessaging,
+  messaging: OutboundMessaging | undefined,
 ): Effect.Effect<GatewayRouter, Core.ExecutionError, SessionEntryServices | ComposedGeneration | AppLedger> {
   return Effect.gen(function* () {
     const plane = yield* AppLedger;
@@ -619,12 +622,9 @@ export function createResidentGateway(
       defaultTier: LOOPBACK_BOOTSTRAP_TIER,
     });
     const externalRun = yield* createIngressExecutor(plane);
-    const requests = ports.requests ?? channelRequests(yield* createSessionRequests({ authorizeConfigure: configureAuthority(yield* GenerationLayers, plane.openKernel), openKernel: plane.openKernel, listSessions: plane.listSessions }));
     return createGatewayRouter({
       ...ports,
-      stores: ports.stores ?? createChannelStores(channelStoreSource(plane, ports.now)),
       transaction: channelTransaction(plane.sessionStore(GATEWAY_INGRESS_SESSION).transaction),
-      requests,
       sink: scopeObservation(observations, { sessionId: "gateway-ingress" }, stamp).publish,
       run: (sender, request, body) =>
         Effect.gen(function* () {

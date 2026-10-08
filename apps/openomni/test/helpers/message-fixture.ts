@@ -11,8 +11,8 @@ type SessionRuntime = Core.SessionRuntime;
 import { Bus } from "./bus";
 import { createAppLedger } from "../../src/composition/cluster-runtime";
 import { Gateway, type LedgerSession, type Tool } from "@openomni/protocol";
-import { channelRequests, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
-import { decodeChannelFailure } from "@openomni/channels";
+import { channelRequests, channelStoreSource, createResidentGateway, type OutboundMessaging } from "../../src/gateway";
+import { createChannelStores, decodeChannelFailure } from "@openomni/channels";
 import {
   messageMaterialization,
   prepareMessage,
@@ -58,6 +58,7 @@ export function messageFixture(
     now: () => 100,
     id: testIds("message-fixture"),
     requests: channelRequests(requests),
+    stores: createChannelStores(channelStoreSource(plane, () => 100)),
     inbox: { commit: (input) => localInbox(plane, "message-fixture", () => 100)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
     prepare: prepareMessage(plane, (id, parentId, childRole, runner) =>
       messageMaterialization(() => plane.openKernel(id).currentPolicyGeneration(), testIds("materialize"))({

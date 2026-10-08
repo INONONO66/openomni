@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { statSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IpcRemoteError, connectIpcClient, createIpcServer } from "./ipc/helpers/native";
+import { IpcRemoteError, connectIpcClient, createIpcServer, typedCall } from "./ipc/helpers/native";
 import { captureError } from "./ipc/helpers/signal";
 import { Machine } from "@openomni/protocol";
 import { attachMachineDaemon, type CodeRunner } from "./helpers/native";
@@ -38,7 +38,7 @@ function attachKernel(path: string, runner: Pick<CodeRunner, "runCode"> & Partia
   return attachMachineDaemon({
     socketPath: path,
     offer: offer({ offeredCapabilities: ["kernel.py"] }),
-    runner: { peekCode: () => undefined, close: async () => undefined, ...runner },
+    runner: { peekCode: () => ({ stdout: "", stderr: "" }), close: async () => undefined, ...runner },
   });
 }
 
@@ -103,7 +103,7 @@ describe("machine attach handshake", () => {
     );
   });
 
-  test("returns no-tools failure for a real in-flight cell and refuses duplicate ids", async () => {
+  test("a host wired without a tool port refuses host_tool_missing and refuses duplicate ids", async () => {
     const entered = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
     await withHost(
@@ -111,8 +111,13 @@ describe("machine attach handshake", () => {
       async ({ host, path }) => {
         const daemon = await attachKernel(path, {
           runCode: async (request, call) => {
-            const answer = await call({ cellId: request.cellId, name: "missing", arguments: {} });
-            expect(answer).toMatchObject({ status: "failed" });
+            // #1312: the tool port is required; a host wired with the refusing
+            // port surfaces host_tool_missing, never a fabricated failed result.
+            const refusal = await call({ cellId: request.cellId, name: "missing", arguments: {} }).then(
+              () => undefined,
+              (error: Error) => error,
+            );
+            expect(String(refusal)).toContain("host_tool_missing");
             entered.resolve();
             await finish.promise;
             return {
@@ -229,7 +234,7 @@ describe("machine attach handshake", () => {
                   value: id,
                   output: { stdout: "", stderr: "" },
                 }),
-                peekCode: () => undefined,
+                peekCode: () => ({ stdout: "", stderr: "" }),
                 close: async () => undefined,
               },
             });
@@ -635,6 +640,58 @@ describe("machine attach handshake", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("daemon peek_code wire answers (#1312)", () => {
+  const attachedHost = (path: string) =>
+    createIpcServer(path, (_method, _params, respond) =>
+      respond({ status: "attached", effectiveCapabilities: ["kernel.py"], effectiveExports: [] }),
+    );
+
+  test("a daemon without a runner refuses kernel_not_available instead of fabricating empty output", async () => {
+    const path = socketPath();
+    const server = await attachedHost(path);
+    const daemon = await attachMachineDaemon({
+      socketPath: path,
+      offer: offer({ offeredCapabilities: ["kernel.py"] }),
+    });
+    try {
+      expect(await typedCall(server, "machine.peek_code", { cellId: "ghost" })).toEqual({
+        status: "refused",
+        reason: "kernel_not_available",
+      });
+    } finally {
+      await daemon.close();
+      server.close();
+    }
+  });
+
+  test("a daemon with a runner answers an unknown cell with the runner's own empty output", async () => {
+    const path = socketPath();
+    const server = await attachedHost(path);
+    const daemon = await attachMachineDaemon({
+      socketPath: path,
+      offer: offer({ offeredCapabilities: ["kernel.py"] }),
+      runner: {
+        runCode: async (request) => ({
+          status: "cancelled",
+          cellId: request.cellId,
+          output: { stdout: "", stderr: "" },
+        }),
+        peekCode: () => ({ stdout: "", stderr: "" }),
+        close: async () => undefined,
+      },
+    });
+    try {
+      expect(await typedCall(server, "machine.peek_code", { cellId: "ghost" })).toEqual({
+        running: false,
+        output: { stdout: "", stderr: "" },
+      });
+    } finally {
+      await daemon.close();
+      server.close();
     }
   });
 });

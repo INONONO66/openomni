@@ -239,6 +239,7 @@ export function createCodemode(options: CodemodeOptions) {
         const entry = yield* Effect.try({ try: () => tenantCell(cellId, tenant), catch: decodeCodeFailure("cell.peek") });
         if (entry.done) return yield* settle(cellId, entry);
         const view = yield* machines().get(entry.machineId).peekCode(cellId);
+        if ("status" in view) return view;
         if (!background.has(cellId)) return yield* new CodemodeError({ reason: "unknown_cell_id", message: "no such cell" });
         return view.running ? { status: "running", cellId, output: view.output } : yield* settle(cellId, entry);
       });
@@ -292,7 +293,7 @@ export function createCodemode(options: CodemodeOptions) {
       }).pipe(Effect.mapError((error) => new MachinesFailure({ operation: "code.run", cause: error.message || String(error) }))),
       peekCode(cellId) {
         for (const kernel of kernels.values()) { const output = kernel.peek(cellId); if (output !== undefined) return output; }
-        return undefined;
+        return { stdout: "", stderr: "" };
       },
       close: () => Effect.gen(function* () {
         closed = true; lifetime.abort();

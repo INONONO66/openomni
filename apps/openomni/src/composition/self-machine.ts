@@ -90,6 +90,8 @@ export function attachSelfMachine(
     const daemon = yield* attachMachineDaemon({
       socketPath: options.socketPath,
       id: options.id,
+      // #1312: injected IPC callback bound for the self machine daemon.
+      dispatcherBound: 256,
       offer: {
         machineId: plane.self.id,
         daemonVersion: "in-process",

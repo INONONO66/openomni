@@ -3,10 +3,11 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Effect, Semaphore } from "effect";
 import { decodeLlmFailure } from "../error";
-import type { LlmError } from "../errors";
+import { ModelCatalogError, type LlmError } from "../errors";
 import { Catalog, RemoteCatalog } from "./schema";
 
 const DEFAULT_CACHE_PATH = join(homedir(), ".openomni", "models.json");
+const REMOTE_TIMEOUT_MS = 10_000;
 
 /**
  * The llm package's one environment owner (#1245): the credential file
@@ -22,26 +23,57 @@ export function resolveAuthFilePath(
 async function snapshot(): Promise<Catalog> {
   return Catalog.parse((await import("./models-snapshot.json")).default);
 }
+function catalogError(source: "cache" | "remote" | "cache_write", path: string) {
+  return <E>(cause: E) => new ModelCatalogError({ source, path, message: String(cause) });
+}
+/** A missing cache file is `undefined`; a present file that cannot be read or decoded is a typed `cache` refusal (#1312). */
+function readCache(path: string): Effect.Effect<Catalog | undefined, LlmError> {
+  return Effect.gen(function* () {
+    const file = Bun.file(path);
+    if (!(yield* Effect.promise(() => file.exists()))) return undefined;
+    const raw = yield* Effect.tryPromise({ try: () => file.json(), catch: catalogError("cache", path) });
+    return yield* Effect.try({ try: () => RemoteCatalog.parse(raw), catch: catalogError("cache", path) });
+  });
+}
+/** Every remote failure — unreachable, timeout, non-OK status, bad body, bad decode — is a typed `remote` refusal. */
+function fetchRemote(): Effect.Effect<Catalog, LlmError> {
+  const url = `${process.env.OPENOMNI_MODELS_URL || "https://models.dev"}/api.json`;
+  return Effect.tryPromise({
+    try: (signal) => fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(REMOTE_TIMEOUT_MS)]) }),
+    catch: catalogError("remote", url),
+  }).pipe(
+    Effect.flatMap((response) => response.ok
+      ? Effect.tryPromise({ try: () => response.json(), catch: catalogError("remote", url) })
+      : Effect.fail(catalogError("remote", url)(`catalog endpoint answered ${response.status}`))),
+    Effect.flatMap((raw) => Effect.try({ try: () => RemoteCatalog.parse(raw), catch: catalogError("remote", url) })),
+  );
+}
+/** A cache write that fails is reported as a typed `cache_write` refusal, never dropped (#1312). */
+function writeCache(path: string, catalog: Catalog): Effect.Effect<void, LlmError> {
+  return Effect.tryPromise({ try: () => mkdir(dirname(path), { recursive: true }), catch: catalogError("cache_write", path) }).pipe(
+    Effect.andThen(Effect.tryPromise({ try: () => Bun.write(path, JSON.stringify(catalog)), catch: catalogError("cache_write", path) })),
+    Effect.asVoid,
+  );
+}
 function loadCatalog(loadSnapshot: () => Promise<Catalog>): Effect.Effect<Catalog, LlmError> {
   return Effect.gen(function* () {
     const path = process.env.OPENOMNI_MODELS_PATH ?? DEFAULT_CACHE_PATH;
-    const cached = yield* Effect.tryPromise({ try: () => Bun.file(path).json(), catch: decodeLlmFailure("catalog.cache.read") }).pipe(
-      Effect.map(RemoteCatalog.parse), Effect.catch(() => Effect.succeed({})),
-    );
-    if (Object.keys(cached).length > 0) return cached;
+    const cached = yield* readCache(path);
+    if (cached !== undefined && Object.keys(cached).length > 0) return cached;
     if (!process.env.OPENOMNI_DISABLE_MODELS_FETCH) {
-      const remote = yield* Effect.tryPromise({
-        try: (signal) => fetch(`${process.env.OPENOMNI_MODELS_URL || "https://models.dev"}/api.json`, { signal }),
-        catch: decodeLlmFailure("catalog.fetch"),
-      }).pipe(Effect.timeoutOption(10_000), Effect.flatMap((response) => {
-        if (response._tag === "None" || !response.value.ok) return Effect.succeed(undefined);
-        return Effect.tryPromise({ try: () => response.value.json(), catch: decodeLlmFailure("catalog.json") }).pipe(Effect.map(RemoteCatalog.parse));
-      }), Effect.catch(() => Effect.succeed(undefined)));
+      // The loader's one explicit source decision (#1312): a typed `remote`
+      // refusal continues to the bundled snapshot; `cache` and `cache_write`
+      // refusals propagate to the caller untouched.
+      const remote = yield* fetchRemote().pipe(
+        Effect.map((catalog): Catalog | undefined => catalog),
+        Effect.catchIf(
+          (error): error is ModelCatalogError =>
+            error instanceof ModelCatalogError && error.source === "remote",
+          () => Effect.succeed(undefined),
+        ),
+      );
       if (remote !== undefined) {
-        yield* Effect.tryPromise({ try: () => mkdir(dirname(path), { recursive: true }), catch: decodeLlmFailure("catalog.cache.mkdir") }).pipe(
-          Effect.andThen(Effect.tryPromise({ try: () => Bun.write(path, JSON.stringify(remote)), catch: decodeLlmFailure("catalog.cache.write") })),
-          Effect.catch(() => Effect.void),
-        );
+        yield* writeCache(path, remote);
         return remote;
       }
     }

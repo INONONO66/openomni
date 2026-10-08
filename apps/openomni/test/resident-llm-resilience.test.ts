@@ -14,6 +14,7 @@ import { prepareMessage } from "../src/composition/message-session";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { providerError, transientProvider, FIXTURE_AUTH_FILE } from "./helpers/sdk-provider";
 import { testIds } from "./helpers/test-entropy";
+import { residentGatewayPorts } from "./helpers/gateway-ports";
 
 afterEach(() => {
   mock.restore();
@@ -161,11 +162,14 @@ describe("Resident terminal LLM failure surfacing", () => {
     const resident = residentThatAlwaysFails(
       providerError({ message: "rate limited", isRetryable: true, statusCode: 429 }),
     );
-    const gateway = runSyncEffect(createResidentGateway({
-      now: Date.now,
-      id: testIds("resilience-gateway"),
-      inbox: { commit: (input) => localInbox(resident.plane, "resilience-gateway", Date.now)(input).pipe(Effect.mapError(decodeInboxFailure("inbox.commit"))) },
-      prepare: prepareMessage(resident.plane, resident.materialize),
+    const gateway = runSyncEffect(Effect.gen(function* () {
+      return yield* createResidentGateway({
+        now: Date.now,
+        id: testIds("resilience-gateway"),
+        inbox: { commit: (input) => localInbox(resident.plane, "resilience-gateway", Date.now)(input).pipe(Effect.mapError(decodeInboxFailure("inbox.commit"))) },
+        prepare: prepareMessage(resident.plane, resident.materialize),
+        ...(yield* residentGatewayPorts(resident.plane, Date.now)),
+      }, undefined);
     }).pipe(Effect.provide(resident.services)));
 
     const result = await runEffect(gateway.ingest(

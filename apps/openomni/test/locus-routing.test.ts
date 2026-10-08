@@ -17,6 +17,7 @@ import { socketPath } from "./helpers/socket-path";
 import { testMachinePorts } from "./helpers/native-tool-ports";
 import { executor } from "./helpers/executor";
 import { testIds } from "./helpers/test-entropy";
+import { refusingToolPort } from "./helpers/tool-port";
 
 const context = { sessionId: "locus", turnId: "turn" };
 
@@ -85,6 +86,8 @@ async function fixture(
   const machineId = explicit ? "c" : "self";
   const socket = socketPath();
   const host = await acquireEffect(createMachineHost({
+    dispatcherBound: 8,
+    callTool: refusingToolPort,
     listen: { unix: socket },
     id: testIds("locus-host"),
     enrollment: () => ({
@@ -99,6 +102,7 @@ async function fixture(
     now: () => 1,
   }));
   const daemon = await acquireEffect(attachMachineDaemon({
+    dispatcherBound: 8,
     socketPath: socket,
     id: testIds("locus-daemon"),
     offer: {

@@ -1,5 +1,6 @@
 import { realpathSync } from "node:fs";
 import { posix } from "node:path";
+import { isContained, normalizeExportRoot } from "./contained";
 import { type IpcClient, connectIpcClient, connectIpcTcpClient } from "./ipc";
 import { makeDispatcher } from "./ipc/callbacks";
 import { typedCall } from "./typed-call";
@@ -18,7 +19,8 @@ import { createPtyAdapter } from "./pty";
 /** Injected native interpreter port; the acquiring app scope owns its execution. */
 export interface CodeRunner {
   runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>, signal: AbortSignal): Effect.Effect<Machine.CellResult, MachineError>;
-  peekCode(cellId: string): Machine.CellOutput | undefined;
+  /** Total: an unknown cell answers with the runner's own empty output. */
+  peekCode(cellId: string): Machine.CellOutput;
   close(): Effect.Effect<void, MachineError>;
 }
 /**
@@ -44,6 +46,8 @@ type DaemonConnection =
 type MachineDaemonOptions = DaemonConnection & {
   /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
   readonly id: () => string;
+  /** Callback dispatcher bound (#1312): required, the composition chooses it. */
+  readonly dispatcherBound: number;
   readonly offer: Machine.Offer;
   readonly fsExports?: ReadonlyMap<string, string>;
   readonly runner?: CodeRunner;
@@ -61,7 +65,7 @@ type MachineDaemonOptions = DaemonConnection & {
 };
 type WireParse = <T>(schema: z.ZodType<T>) => T;
 type WireResult =
-  | Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekResult | Machine.CellResult | Machine.ScreenReadResult | Machine.InputWriteResult
+  | Machine.FsResult | Machine.ExecResult | Machine.CancelResult | Machine.PeekAnswer | Machine.CellResult | Machine.ScreenReadResult | Machine.InputWriteResult
   | Machine.PtyOpenResult | Machine.PtyWriteResult | Machine.PtyReadResult | Machine.PtyResizeResult | Machine.PtyCloseResult | Machine.PtyListResult;
 export interface MachineDaemon {
   /** The CURRENT attachment: reattach and refusal outcomes replace it. */
@@ -90,7 +94,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
     // pty.session needs tmux resolving on PATH (#1273).
     const offer: Machine.Offer = { ...configured, offeredCapabilities: yield* pty.offeredCapabilities(yield* computer.offeredCapabilities(configured.offeredCapabilities)) };
     const filesystem = yield* createFsDriver(options.fsExports ?? new Map());
-    const dispatch = yield* makeDispatcher;
+    const dispatch = yield* makeDispatcher({ bound: options.dispatcherBound });
     const lifetime = new AbortController();
     const cells = new Map<string, AbortController>();
     const pending = new Set<Deferred.Deferred<void>>();
@@ -109,7 +113,8 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       return scope === undefined ? Effect.void : Scope.close(scope, Exit.void);
     });
     function runAttempt(): void {
-      dispatch(attemptReattach);
+      // A full dispatcher must not eat the reattach trigger: back off and retry.
+      if (dispatch(attemptReattach) !== undefined) reconnector?.scheduleAttempt();
     }
     const reconnector = options.reconnect === undefined ? undefined : createReconnector(options.reconnect, runAttempt);
     const close: Effect.Effect<void, MachineError> = Effect.suspend(() => {
@@ -151,8 +156,8 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
         const offered = offer.exports?.find((entry) => entry.name === name);
         const configured = options.fsExports?.get(name);
         if (offered === undefined || configured !== offered.path) continue;
-        const root = posix.normalize(offered.path).replace(/\/+$/, "") || "/";
-        if (absolute !== root && !absolute.startsWith(`${root}/`)) continue;
+        const root = normalizeExportRoot(offered.path);
+        if (!isContained(root, absolute)) continue;
         if (escapesCanonicalRoot(absolute, root)) return { status: "refused", reason: "path_escapes_export" };
         return { cwd: absolute };
       }
@@ -214,8 +219,11 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
       cell?.abort();
       return { cancelled: cell !== undefined };
     }
-    function peekCode(request: z.infer<typeof Machine.PeekCode>): Machine.PeekResult {
-      return { running: cells.has(request.cellId), output: options.runner?.peekCode(request.cellId) ?? { stdout: "", stderr: "" } };
+    function peekCode(request: z.infer<typeof Machine.PeekCode>): Machine.PeekAnswer {
+      // #1312: no runner means no kernel to peek — a typed refusal, not
+      // fabricated empty output the caller could mistake for a real answer.
+      if (options.runner === undefined) return { status: "refused", reason: "kernel_not_available" };
+      return { running: cells.has(request.cellId), output: options.runner.peekCode(request.cellId) };
     }
     function callTool(call: Machine.ToolCall, timeoutMs: number): Effect.Effect<Machine.ToolCallResult, MachineError> {
       return Effect.suspend(() => {
@@ -261,7 +269,7 @@ export function attachMachineDaemon(options: MachineDaemonOptions): Effect.Effec
         respond(yield* body);
       })), Effect.mapError((error) => new MachinesFailure({ operation: "daemon.request", cause: error.message || String(error) })));
     function dialWith(scope: Scope.Closeable): Effect.Effect<IpcClient, import("./ipc").IpcError, Scope.Scope> {
-      const clientOptions = { idSource: options.id, onDisconnect: () => transportLoss(scope), onRequest };
+      const clientOptions = { idSource: options.id, dispatcherBound: options.dispatcherBound, onDisconnect: () => transportLoss(scope), onRequest };
       return options.tcp === undefined
         ? connectIpcClient(options.socketPath, clientOptions)
         : connectIpcTcpClient({ tcp: options.tcp, tls: { certificate: options.tlsCertificate, privateKey: options.tlsPrivateKey }, hostCertificate: options.hostCertificate }, clientOptions);

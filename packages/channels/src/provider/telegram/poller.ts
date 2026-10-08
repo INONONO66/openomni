@@ -1,6 +1,6 @@
 import { Deferred, Effect, Exit } from "effect";
 import { newTraceId } from "../../support/trace";
-import { Operational } from "@openomni/protocol";
+import { listenForAbort, Operational } from "@openomni/protocol";
 import { reconnectSchedule } from "../../support/schedule";
 import { ThrownError } from "../../support/thrown";
 import type { EffectRunner, PublishPort } from "../../types";
@@ -76,9 +76,13 @@ export class TelegramPoller {
   async pollOnce(pollTraceId: string, signal?: AbortSignal): Promise<void> {
     const controller = new AbortController();
     this.pollController = controller;
-    const abort = () => controller.abort();
-    signal?.addEventListener("abort", abort, { once: true });
+    // `listenForAbort` owns the abort subscription (#1312): an already-aborted
+    // caller signal aborts the controller at once, and the guard below then
+    // refuses the cycle before a single getUpdates call leaves the process.
+    const detach =
+      signal === undefined ? () => undefined : listenForAbort(signal, () => controller.abort());
     try {
+      if (controller.signal.aborted) return;
       const updates = await this.client.getUpdates(this.offset, pollTraceId, controller.signal);
 
       // Telegram returns updates in update_id order. Process the batch in that
@@ -96,7 +100,7 @@ export class TelegramPoller {
         this.offset = update.update_id + 1;
       }
     } finally {
-      signal?.removeEventListener("abort", abort);
+      detach();
     }
   }
 }

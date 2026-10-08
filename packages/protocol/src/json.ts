@@ -32,21 +32,32 @@ export type PlainValue = null | boolean | number | string | PlainValue[] | Plain
 // the guard and reported as an ordinary parse failure. A fully transparent
 // Proxy over plain data is indistinguishable by design — the contract here
 // is structural.
-type PlainKeyPolicy = (key: string) => boolean;
-
-const strictPlainKey: PlainKeyPolicy = (key) =>
-  key !== "__proto__" && key !== "constructor" && key !== "prototype";
-const persistedPlainKey: PlainKeyPolicy = () => true;
-
-function isPlainValueUnsafe<Input>(value: Input, keyPolicy: PlainKeyPolicy): value is Input & PlainValue {
-  if (value === null || typeof value === "boolean" || typeof value === "string") return true;
-  if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
-  if (Array.isArray(value)) return isPlainArray(value, keyPolicy);
-  if (typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return false;
-  return isPlainObject(value, keyPolicy);
+interface PlainValuePolicy {
+  readonly key: (key: string) => boolean;
+  /**
+   * Whether an explicit `undefined` record slot is accepted. JSON.stringify
+   * drops such slots on the wire without changing any value, so the
+   * JSON-shaped wire profile keeps them; the canonical plain profiles refuse
+   * them (a persisted fact must not carry an inexpressible slot).
+   */
+  readonly recordUndefined: boolean;
 }
 
-function isPlainArray<Entry>(value: readonly Entry[], keyPolicy: PlainKeyPolicy): value is Entry[] & PlainValue[] {
+const strictPlainKey = (key: string): boolean =>
+  key !== "__proto__" && key !== "constructor" && key !== "prototype";
+const strictPlain: PlainValuePolicy = { key: strictPlainKey, recordUndefined: false };
+const persistedPlain: PlainValuePolicy = { key: () => true, recordUndefined: false };
+const jsonShaped: PlainValuePolicy = { key: strictPlainKey, recordUndefined: true };
+
+function isPlainValueUnsafe<Input>(value: Input, policy: PlainValuePolicy): value is Input & PlainValue {
+  if (value === null || typeof value === "boolean" || typeof value === "string") return true;
+  if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
+  if (Array.isArray(value)) return isPlainArray(value, policy);
+  if (typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  return isPlainObject(value, policy);
+}
+
+function isPlainArray<Entry>(value: readonly Entry[], policy: PlainValuePolicy): value is Entry[] & PlainValue[] {
   if (Object.getOwnPropertySymbols(value).length > 0) return false;
   // Named own properties make key count exceed length; holes surface as
   // absent index descriptors below — together this refuses sparse arrays,
@@ -55,29 +66,33 @@ function isPlainArray<Entry>(value: readonly Entry[], keyPolicy: PlainKeyPolicy)
   for (let index = 0; index < value.length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, index);
     if (descriptor === undefined || !("value" in descriptor)) return false;
-    if (!isPlainValueUnsafe(descriptor.value, keyPolicy)) return false;
+    if (!isPlainValueUnsafe(descriptor.value, policy)) return false;
   }
   return true;
 }
 
-function isPlainObject(value: object, keyPolicy: PlainKeyPolicy): value is PlainObject {
+function isPlainObject(value: object, policy: PlainValuePolicy): value is PlainObject {
   if (Object.getOwnPropertySymbols(value).length > 0) return false;
   for (const key of Object.keys(value)) {
-    if (!keyPolicy(key)) return false;
+    if (!policy.key(key)) return false;
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor)) return false;
-    if (!isPlainValueUnsafe(descriptor.value, keyPolicy)) return false;
+    if (descriptor.value === undefined) {
+      if (!policy.recordUndefined) return false;
+      continue;
+    }
+    if (!isPlainValueUnsafe(descriptor.value, policy)) return false;
   }
   return true;
 }
 
 /**
  * A JSON-shaped tree whose optional slots may be explicit undefined
- * (JSON.stringify drops them on the wire) and whose numbers may be
- * non-finite (JSON.stringify normalizes them to null). This is the honest
- * static shape of values that ride a JSON wire before serialization;
- * schemas built on it deliberately keep historical accept-anything runtime
- * behavior, so consumers must not assume validation beyond this shape.
+ * (JSON.stringify drops them on the wire). This is the honest static shape
+ * of values that ride a JSON wire before serialization; the schema below is
+ * its runtime boundary (#1312): non-finite numbers, exotic objects, and
+ * undefined anywhere but a record slot are refused instead of silently
+ * normalized by the serializer.
  */
 export type JsonShapedValue =
   | undefined
@@ -88,11 +103,26 @@ export type JsonShapedValue =
   | readonly JsonShapedValue[]
   | { readonly [key: string]: JsonShapedValue };
 
-// Named generic acceptor (see isPersistedPlainValue on the callback typing):
-// runtime stays accept-anything, matching the z.unknown() it replaces.
-const acceptJsonShapedValue = <Input,>(_value: Input): boolean => true;
+/**
+ * Runtime JSON-shape boundary: functions, Dates and other exotic objects,
+ * non-finite numbers, and undefined inside an array are rejected; a record
+ * slot holding explicit undefined stays accepted because JSON.stringify
+ * drops it without changing any value. Top-level undefined remains the
+ * expressible "absent" of the static type; optional wrappers own absence.
+ */
 export const JsonShapedValueSchema: z.ZodType<JsonShapedValue, JsonShapedValue> =
-  z.custom<JsonShapedValue>(acceptJsonShapedValue);
+  z.custom<JsonShapedValue>(isJsonShapedValue, { message: "Expected a JSON-shaped value" });
+
+// Named generic guard: z.custom's inline callback parameter would be
+// contextually typed `unknown`; a generic parameter carries no top type.
+function isJsonShapedValue<Input>(value: Input): boolean {
+  if (value === undefined) return true;
+  try {
+    return isPlainValueUnsafe(value, jsonShaped);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Strict live-boundary profile (policy effects): own keys named __proto__,
@@ -101,7 +131,7 @@ export const JsonShapedValueSchema: z.ZodType<JsonShapedValue, JsonShapedValue> 
  */
 export function isPlainValue<Input>(value: Input): value is Input & PlainValue {
   try {
-    return isPlainValueUnsafe(value, strictPlainKey);
+    return isPlainValueUnsafe(value, strictPlain);
   } catch {
     return false;
   }
@@ -130,7 +160,7 @@ export const PlainValueSchema: z.ZodType<PlainValue, PlainValue> = z.custom<Plai
 // contextually typed `unknown`; a generic parameter carries no top type.
 function isPersistedPlainValue<Input>(value: Input): boolean {
   try {
-    return isPlainValueUnsafe(value, persistedPlainKey);
+    return isPlainValueUnsafe(value, persistedPlain);
   } catch {
     return false;
   }

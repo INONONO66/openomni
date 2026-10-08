@@ -1,5 +1,42 @@
 # Implementation Status
 
+## #1312 unused helpers and silent fallbacks replaced by typed outcomes (epic #1303, rung 5)
+
+On `stab/5-delete-fallbacks-dead-helpers` (2026-10-07, base `350612bff`, merged
+with main `c68c9de5a`). Three lane branches (bands A/B/C) merged into one PR.
+
+- Band A — protocol, machines, codemode, app tool bridge:
+  `JsonShapedValueSchema` validates values at runtime (the unconditional
+  `acceptJsonShapedValue` is gone) and the four `EvaluationRequest` record
+  fields are JSON-shaped; host and daemon share one `isContained` export
+  predicate (the trailing-slash disagreement is gone); a PTY command that times
+  out removes its FIFO entry on the injected clock, so a late reply is dropped
+  and the next command gets its own reply (TestClock test); `peekCode` with
+  no runner refuses `kernel_not_available` beside `runCode`; the IPC callback
+  dispatcher takes a required injected bound and refuses with a typed
+  `IpcQueueFullError` (test helper bound 256, matching the app composition);
+  host `callTool` is required and its absence is `host_tool_missing`;
+  computer-use failures carry `spawn_failed | read_failed | probe_timeout`
+  instead of `undefined`; the Python `_shutdown`/`_stop_chromium` paths
+  return failure lists that `kernel.ts` decodes to `browser_cleanup_failed`.
+- Band B — channels, desktop, ui: the telegram poller adopts
+  `listenForAbort` (a pre-aborted poll makes zero requests); an invalid
+  `OPENOMNI_WS_PORT` is a typed `DesktopConfigError` and main refuses to
+  boot (unset still means 3000; `OPENOMNI_WS_URL` wins); `TranscriptMarkdown`
+  is a required-payload paragraph union and the blank-element render branches
+  are deleted.
+- Band C — agent, app gateway: `replaceFileAtomically` and its test, eight
+  single-file exports and `Inspect.forkAsideTransformer` are deleted;
+  model-catalog source failures are typed
+  `ModelCatalogError{cache | remote | cache_write}` (no `{}` cache
+  fallback, remote not fetched on a corrupt cache); `createResidentGateway`
+  requires its `requests`/`stores`/`messaging` ports and the error-contract
+  fixture lists `ModelCatalogError`.
+
+Measured on the branch: `grep -rl` over `packages/*/src apps/*/src` returns
+no file for `replaceFileAtomically`, `forkAsideTransformer`,
+`acceptJsonShapedValue`; 92 files, +1267/-696 against main.
+
 ## #1310 mailbox admission split, typed admission/origin refusals, required stop evidence (epic #1303, rung 8)
 
 On `stab/8-mailbox-admission-split` (2026-10-07, base `03cd0c274`).

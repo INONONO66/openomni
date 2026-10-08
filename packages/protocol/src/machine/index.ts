@@ -30,6 +30,10 @@ export namespace Machine {
   export const PeekCode = Schema.PeekCode;
   export const PeekResult = Schema.PeekResult;
   export type PeekResult = import("zod").infer<typeof Schema.PeekResult>;
+  export const PeekRefused = Schema.PeekRefused;
+  export type PeekRefused = import("zod").infer<typeof Schema.PeekRefused>;
+  export const PeekAnswer = Schema.PeekAnswer;
+  export type PeekAnswer = import("zod").infer<typeof Schema.PeekAnswer>;
   export const FS_WRITE_MAX_BYTES = Schema.FS_WRITE_MAX_BYTES;
   export const EXEC_MAX_BYTES = Schema.EXEC_MAX_BYTES;
   export const EXEC_TIMEOUT_MS = Schema.EXEC_TIMEOUT_MS;

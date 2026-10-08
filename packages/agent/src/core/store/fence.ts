@@ -28,7 +28,7 @@ import { writeEffect } from "./storage/write-effect";
 export const RESUME_BUDGET = 10;
 
 /** The storage capabilities one kernel handle reads and writes. */
-export interface SessionKernelStores {
+interface SessionKernelStores {
   transaction<T>(operation: () => T): T;
   readonly sessions?: SessionWriteAdapter;
   readonly actions?: ProtocolStorage.ActionSubAdapter;
@@ -46,14 +46,14 @@ export interface SessionKernelStores {
  * process-global reads; write paths refuse with a typed `StorageUnavailable`
  * when a required store is absent.
  */
-export interface SessionKernelContext {
+interface SessionKernelContext {
   stores(): SessionKernelStores;
   readonly childSessionsPage: CatalogStore["childSessionsPage"];
   /** #1254 S3: the catalog `has_armed` flag write (ordering law in `commitIn`). */
   readonly markArmed?: (sessionId: string, armed: boolean) => void;
 }
 
-export interface MaterializeInput {
+interface MaterializeInput {
   readonly id: string;
   readonly parentId: string | null;
   readonly role: LedgerSession.Role;

@@ -83,26 +83,33 @@ export const startPtyControl: PtyControlFactory = (options) =>
     // The attach itself answers with one empty %begin/%end block; consume it
     // so later replies line up with their commands.
     const ready = yield* Deferred.make<string[], MachineError>();
-    pending.push({ done: ready, lines: [] });
-    const bounded = (reply: Deferred.Deferred<string[], MachineError>, operation: string) =>
-      Deferred.await(reply).pipe(
+    const first: PendingReply = { done: ready, lines: [] };
+    pending.push(first);
+    const bounded = (entry: PendingReply, operation: string) =>
+      Deferred.await(entry.done).pipe(
         Effect.timeoutOption(COMMAND_TIMEOUT_MS),
-        Effect.flatMap((result) =>
-          result._tag === "None"
-            ? Effect.fail(new MachinesFailure({ operation, cause: "tmux did not answer within the command deadline" }))
-            : Effect.succeed(result.value),
-        ),
+        Effect.flatMap((result) => {
+          if (result._tag !== "None") return Effect.succeed(result.value);
+          // #1312: the timed-out command surrenders its FIFO slot. A reply
+          // that never comes can no longer wedge correlation for every later
+          // command, and a reply arriving after the deadline finds no stale
+          // entry to settle — it is dropped by handleEnd.
+          const index = pending.indexOf(entry);
+          if (index !== -1) pending.splice(index, 1);
+          return Effect.fail(new MachinesFailure({ operation, cause: "tmux did not answer within the command deadline" }));
+        }),
       );
-    yield* bounded(ready, "pty.attach");
+    yield* bounded(first, "pty.attach");
     return {
       command: (line) =>
         Effect.suspend(() => {
           if (exited) return Effect.fail(lost("pty.command"));
           return Effect.gen(function* () {
             const done = yield* Deferred.make<string[], MachineError>();
-            pending.push({ done, lines: [] });
+            const entry: PendingReply = { done, lines: [] };
+            pending.push(entry);
             yield* Effect.try({ try: () => void child.stdin.write(`${line}\n`), catch: spawnFailure });
-            return yield* bounded(done, "pty.command");
+            return yield* bounded(entry, "pty.command");
           });
         }),
       close: () =>

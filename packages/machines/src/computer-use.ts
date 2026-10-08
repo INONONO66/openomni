@@ -180,13 +180,25 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
     latest: undefined as { captureId: string; display: number; bounds: DisplayBounds } | undefined,
   };
 
-  const run = (argv: readonly [string, ...string[]]) =>
-    options.runner.run(argv).pipe(
+  /** Raw run: a sips/osascript spawn failure keeps its typed `SpawnFailure`. */
+  const run = (argv: readonly [string, ...string[]]) => options.runner.run(argv);
+  /**
+   * #1312: where a refusal is the right answer, a spawn failure becomes
+   * `undefined` HERE and the caller names its own distinct reason — never a
+   * blanket swallow that makes a missing binary look like a failed command.
+   */
+  const spawned = (argv: readonly [string, ...string[]]) =>
+    run(argv).pipe(
       Effect.map((result): CommandResult | undefined => result),
       Effect.catchTag("SpawnFailure", () => Effect.succeed(undefined)),
     );
+  /** Raw read: an unreadable capture file keeps its typed failure. */
   const readBytes = (path: string) =>
-    Effect.try({ try: () => readFileSync(path), catch: decodeMachineFailure("computer.read") }).pipe(
+    Effect.try({ try: () => readFileSync(path), catch: decodeMachineFailure("computer.read") });
+  /** #1312: callers of this variant answer a read failure with `read_failed`. */
+  const readOrUndefined = (path: string) =>
+    readBytes(path).pipe(
+      Effect.map((bytes): Buffer | undefined => bytes),
       Effect.catch(() => Effect.succeed(undefined)),
     );
   const remove = (path: string) =>
@@ -198,7 +210,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
   const measure = (path: string) =>
     Effect.map(
       run([SIPS, "-g", "pixelWidth", "-g", "pixelHeight", "-g", "dpiWidth", path]),
-      (result) => (result === undefined || result.exitCode !== 0 ? undefined : parseBounds(result.stdout)),
+      (result) => (result.exitCode !== 0 ? undefined : parseBounds(result.stdout)),
     );
 
   const probeTimeout = options.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
@@ -210,36 +222,43 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
     );
 
   /** One full-screen probe capture proves both the binary and the TCC grant. */
-  const probeScreen = deadline(Effect.gen(function* () {
+  type ScreenProbe =
+    | { readonly refusal: "screen_not_available" | "permission_denied" | "read_failed" | "probe_timeout" }
+    | { readonly refusal: undefined; readonly bounds: DisplayBounds };
+  const probeScreen = deadline<ScreenProbe>(Effect.gen(function* () {
     const path = join(temp, `om-screen-probe-${options.id()}.png`);
     return yield* Effect.gen(function* () {
-      const captured = yield* run([SCREENCAPTURE, "-x", "-t", "png", path]);
+      const captured = yield* spawned([SCREENCAPTURE, "-x", "-t", "png", path]);
       if (captured === undefined) return { refusal: "screen_not_available" as const };
       if (captured.exitCode !== 0) return { refusal: "permission_denied" as const };
-      const bytes = yield* readBytes(path);
-      if (bytes === undefined || !hasPngMagic(bytes)) return { refusal: "permission_denied" as const };
+      const bytes = yield* readOrUndefined(path);
+      if (bytes === undefined) return { refusal: "read_failed" as const };
+      if (!hasPngMagic(bytes)) return { refusal: "permission_denied" as const };
       const bounds = yield* measure(path);
       if (bounds === undefined) return { refusal: "permission_denied" as const };
       return { refusal: undefined, bounds };
     }).pipe(Effect.ensuring(remove(path)));
-  }), { refusal: "screen_not_available" as const });
+  }), { refusal: "probe_timeout" as const });
 
   const probeAccessibility = deadline(
     Effect.map(
-      run([OSASCRIPT, "-e", ACCESSIBILITY_PROBE]),
+      spawned([OSASCRIPT, "-e", ACCESSIBILITY_PROBE]),
       (result) => result !== undefined && result.exitCode === 0,
     ),
     false,
   );
 
-  const probeInput = deadline(Effect.gen(function* () {
-    const located = yield* run([WHICH, CLICLICK]);
+  type InputProbe =
+    | { readonly refusal: "input_not_available" | "permission_denied" | "probe_timeout" }
+    | { readonly refusal: undefined; readonly cliclick: string };
+  const probeInput = deadline<InputProbe>(Effect.gen(function* () {
+    const located = yield* spawned([WHICH, CLICLICK]);
     if (located === undefined || located.exitCode !== 0 || located.stdout.trim() === "") {
       return { refusal: "input_not_available" as const };
     }
     if (!(yield* probeAccessibility)) return { refusal: "permission_denied" as const };
     return { refusal: undefined, cliclick: located.stdout.trim() };
-  }), { refusal: "input_not_available" as const });
+  }), { refusal: "probe_timeout" as const });
 
   const reprobeScreen = Effect.gen(function* () {
     const probe = yield* probeScreen;
@@ -278,10 +297,10 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
         display === undefined
           ? [SCREENCAPTURE, "-x", "-t", "png", path]
           : [SCREENCAPTURE, "-x", "-t", "png", "-D", String(display), path];
-      const result = yield* run(argv);
+      const result = yield* spawned(argv);
       if (result === undefined) {
         yield* reprobeScreen;
-        return "screen_not_available" as const;
+        return "spawn_failed" as const;
       }
       if (result.exitCode !== 0) {
         if (result.stderr.toLowerCase().includes("invalid display")) return "invalid_region" as const;
@@ -308,7 +327,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
         "-c", String(pixels.height), String(pixels.width),
         path,
       ]);
-      return result !== undefined && result.exitCode === 0 ? pixels : undefined;
+      return result.exitCode === 0 ? pixels : undefined;
     });
 
   const downscaleOnce = (path: string, length: number, longest: number) =>
@@ -319,9 +338,9 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
       const target = Math.min(longest - 1, estimate);
       if (target < 1) return undefined;
       const scaled = yield* run([SIPS, "-Z", String(target), path]);
-      if (scaled === undefined || scaled.exitCode !== 0) return undefined;
+      if (scaled.exitCode !== 0) return undefined;
       const reread = yield* readBytes(path);
-      return reread === undefined ? undefined : { bytes: reread, longest: target };
+      return { bytes: reread, longest: target };
     });
 
   /** Over-cap captures are downscaled and re-encoded with sips, never truncated. */
@@ -340,7 +359,7 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
   /** Absent permission simply omits the tree; it never fails the capture. */
   const accessibilityTree = Effect.gen(function* () {
     if (!state.accessibility) return undefined;
-    const result = yield* run([OSASCRIPT, "-l", "JavaScript", "-e", ACCESSIBILITY_TREE_SCRIPT]);
+    const result = yield* spawned([OSASCRIPT, "-l", "JavaScript", "-e", ACCESSIBILITY_TREE_SCRIPT]);
     if (result === undefined || result.exitCode !== 0) {
       state.accessibility = false;
       return undefined;
@@ -366,8 +385,8 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
         if (cropped === undefined) return refusedScreen("capture_failed");
         size = cropped;
       }
-      const bytes = yield* readBytes(path);
-      if (bytes === undefined) return refusedScreen("capture_failed");
+      const bytes = yield* readOrUndefined(path);
+      if (bytes === undefined) return refusedScreen("read_failed");
       const fitted = yield* fitToCap(path, bytes, size);
       if (fitted === undefined) return refusedScreen("capture_failed");
       const tree = yield* accessibilityTree;
@@ -406,10 +425,10 @@ export function createComputerUse(options: ComputerUseOptions): ComputerUse {
 
   const performInput = (cliclick: string, commands: readonly string[]) =>
     Effect.gen(function* () {
-      const result = yield* run([cliclick, ...commands]);
+      const result = yield* spawned([cliclick, ...commands]);
       if (result === undefined) {
         yield* reprobeInput;
-        return refusedInput("input_not_available");
+        return refusedInput("spawn_failed");
       }
       if (result.exitCode !== 0) {
         // Only a FAILED run maps stderr: a zero-exit run already executed, and

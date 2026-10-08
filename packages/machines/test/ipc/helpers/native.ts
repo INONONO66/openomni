@@ -17,13 +17,14 @@ function handlerEffect(body: () => void | Promise<void>) {
   return Effect.try({ try: body, catch: decodeIpcFailure("test.handler") }).pipe(Effect.flatMap((result) => result instanceof Promise ? Effect.tryPromise({ try: () => result, catch: decodeIpcFailure("test.handler") }) : Effect.void));
 }
 type ClientTestOptions = {
-  idSource?: IdSource; connectTimeoutMs?: number; onDisconnect?: () => void;
+  idSource?: IdSource; dispatcherBound?: number; connectTimeoutMs?: number; onDisconnect?: () => void;
   onRequest?: (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) => void | Promise<void>;
   onNotification?: (method: string, params: Ipc.Notification["params"]) => void | Promise<void>;
 };
 function nativeClientOptions(options: ClientTestOptions) {
   return {
     idSource: options.idSource ?? sequentialIds("client-req"),
+    dispatcherBound: options.dispatcherBound ?? 64,
     connectTimeoutMs: options.connectTimeoutMs,
     onDisconnect: options.onDisconnect ? () => handlerEffect(() => options.onDisconnect?.()) : undefined,
     onRequest: options.onRequest ? (method: string, params: Ipc.Request["params"], respond: (result: Ipc.Response["result"]) => void) => handlerEffect(() => options.onRequest?.(method, params, respond)) : undefined,
@@ -45,10 +46,11 @@ export async function connectIpcTcpClient(spec: IpcTcpConnectSpec, options: Clie
   return wrapClient(native, close);
 }
 export type IpcClient = Awaited<ReturnType<typeof connectIpcClient>>;
-type ServerTestOptions = { idSource?: IdSource; onDisconnect?: (id: string) => void };
+type ServerTestOptions = { idSource?: IdSource; dispatcherBound?: number; onDisconnect?: (id: string) => void };
 function nativeServerOptions(options: ServerTestOptions) {
   return {
     idSource: options.idSource ?? sequentialIds("server-req"),
+    dispatcherBound: options.dispatcherBound ?? 64,
     onDisconnect: options.onDisconnect ? (id: string) => handlerEffect(() => options.onDisconnect?.(id)) : undefined,
   };
 }

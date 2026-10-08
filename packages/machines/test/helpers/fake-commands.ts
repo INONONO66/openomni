@@ -20,6 +20,8 @@ export interface FakeMacBehavior {
   captureStderr: string;
   /** When true the screencapture binary itself spawn-fails (vanished). */
   captureMissing: boolean;
+  /** When true the capture exits 0 but never writes its file (unreadable). */
+  captureFileMissing: boolean;
   capturePng: Buffer;
   /** `which cliclick` answer; undefined reports "not installed". */
   cliclickPath: string | undefined;
@@ -55,6 +57,7 @@ export function fakeMac(overrides: Partial<FakeMacBehavior> = {}): FakeMac {
     captureExitCode: 0,
     captureStderr: "",
     captureMissing: false,
+    captureFileMissing: false,
     capturePng: png(4096),
     cliclickPath: "/opt/homebrew/bin/cliclick",
     cliclickMissing: false,
@@ -81,7 +84,7 @@ export function fakeMac(overrides: Partial<FakeMacBehavior> = {}): FakeMac {
     const flag = argv.indexOf("-D");
     lastDisplay = flag === -1 ? 1 : Number(argv[flag + 1]);
     const path = argv[argv.length - 1];
-    if (behavior.captureExitCode === 0 && path !== undefined) writeFileSync(path, behavior.capturePng);
+    if (behavior.captureExitCode === 0 && !behavior.captureFileMissing && path !== undefined) writeFileSync(path, behavior.capturePng);
     return completed({ exitCode: behavior.captureExitCode, stderr: behavior.captureStderr });
   }
   function serveSips(argv: readonly string[]): Effect.Effect<CommandResult, SpawnFailure> {

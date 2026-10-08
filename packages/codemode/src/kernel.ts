@@ -1,9 +1,9 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
-import { Machine } from "@openomni/protocol";
+import { parseJson, Machine } from "@openomni/protocol";
 import { onAbort, type MachineError } from "@openomni/machines";
 import { Cause, Deferred, Effect, Exit, Queue, type Scope, Semaphore } from "effect";
-import { DriverFailure, type CodeError } from "./errors";
+import { CodemodeError, DriverFailure, type CodeError } from "./errors";
 import { decodeCodeFailure } from "./failure";
 import { z } from "zod";
 
@@ -549,44 +549,53 @@ class BrowserClient:
 
     def _stop_chromium(self):
         """Builds that honor CDP Browser.close exit on it; this is the fallback
-        that stops the browser process directly so nothing lingers."""
+        that stops the browser process directly so nothing lingers. #1312: the
+        failed step is reported, never swallowed."""
         pid = self._chromium_pid()
         if pid is None:
-            return
+            return []
         try:
             os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+        except OSError as exc:
+            return [{"step": "kill_chromium", "error": repr(exc)}]
+        return []
 
     def _shutdown(self, kill):
+        """#1312: every cleanup step that fails is collected and returned as
+        {ok, failed: [{step, error}]} — a typed outcome, never a silent pass."""
+        failed = []
         browser = self._browser
         cdp = self._cdp
         self._browser = None
         self._cdp = None
         if kill and browser is not None:
             try:
-                # Best-effort graceful end first; the launch line then exits the
-                # shell and with it the owned tmux session.
+                # Graceful end first; the launch line then exits the shell and
+                # with it the owned tmux session.
                 (cdp or browser.new_browser_cdp_session()).send("Browser.close")
-            except Exception:
-                pass
+            except Exception as exc:
+                failed.append({"step": "browser_close_cdp", "error": repr(exc)})
         if browser is not None:
             try:
                 browser.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                failed.append({"step": "browser_close", "error": repr(exc)})
         if kill:
-            self._stop_chromium()
+            failed.extend(self._stop_chromium())
+        return {"ok": not failed, "failed": failed}
 
     def close(self):
-        """End Chromium and the owned tmux session; the profile dir is kept."""
+        """End Chromium and the owned tmux session; the profile dir is kept.
+        #1312: returns the typed cleanup outcome so a cell sees what failed."""
         _browser_clients.pop((self.machine_id, self.profile_dir), None)
-        self._shutdown(kill=True)
+        outcome = self._shutdown(kill=True)
         self._drain()
         try:
             self._pty().close()
-        except ToolError:
-            pass
+        except ToolError as exc:
+            outcome["failed"].append({"step": "pty_close", "error": repr(exc)})
+            outcome["ok"] = False
+        return outcome
 
 
 def browser(machine_id, *, headless=True, profile_dir=None, executable_path=None):
@@ -619,8 +628,9 @@ def _browser_close_all():
     cannot block) so the owned tmux sessions end within the driver's exit
     grace; graceful CDP close belongs to client.close(). Persistent profiles
     are never deleted."""
+    failed = []
     for _client in list(_browser_clients.values()):
-        _client._stop_chromium()
+        failed.extend(_client._stop_chromium())
         _client._browser = None
         _client._cdp = None
     _browser_clients.clear()
@@ -629,8 +639,9 @@ def _browser_close_all():
     if instance is not None:
         try:
             instance.stop()
-        except Exception:
-            pass
+        except Exception as exc:
+            failed.append({"step": "playwright_stop", "error": repr(exc)})
+    return failed
 
 tool = _Tools()
 _scope = {
@@ -689,8 +700,7 @@ while True:
         }
     _cell_context.cell_id = None
     _emit({"kind": "result", "result": _result})
-_browser_close_all()
-_emit({"kind": "lifecycle", "event": "browser-cleanup-complete"})
+_emit({"kind": "lifecycle", "event": "browser-cleanup-complete", "failed": _browser_close_all()})
 `;
 
 const ToolCallFrame = Machine.ToolCall.extend({
@@ -721,11 +731,19 @@ const Frame = z.discriminatedUnion("kind", [
  */
 const DRIVER_EXIT_GRACE_MS = 2_000;
 /**
- * Exact stdout line the driver emits once `_browser_close_all()` finished:
- * the machine-observable cleanup outcome close() waits on. Must match
- * `json.dumps({"kind": "lifecycle", "event": "browser-cleanup-complete"})`.
+ * The stdout frame the driver emits once `_browser_close_all()` finished:
+ * the machine-observable cleanup outcome close() waits on. #1312: the frame
+ * carries each failed cleanup step, decoded into a typed
+ * `browser_cleanup_failed` refusal instead of being dropped.
  */
-const CLEANUP_COMPLETE_FRAME = '{"kind": "lifecycle", "event": "browser-cleanup-complete"}';
+const CleanupCompleteFrame = z
+  .object({
+    kind: z.literal("lifecycle"),
+    event: z.literal("browser-cleanup-complete"),
+    failed: z.array(z.object({ step: z.string(), error: z.string() }).strict()),
+  })
+  .strict();
+type CleanupCompleteFrame = z.infer<typeof CleanupCompleteFrame>;
 
 /** Answers a call made from inside a cell. */
 type CellToolCaller = (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
@@ -746,7 +764,7 @@ export class PythonKernel {
   private readonly lifetime = new AbortController();
   private readonly exits = new Set<Deferred.Deferred<void>>();
   private readonly processExits = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
-  private readonly cleanups = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<void>>();
+  private readonly cleanups = new WeakMap<ChildProcessWithoutNullStreams, Deferred.Deferred<CleanupCompleteFrame["failed"]>>();
   /**
    * Drivers whose stdin was ended by close() (#1293 r3): the mark is set in
    * the same synchronous step as stdin.end(), and write() checks it in the
@@ -786,16 +804,24 @@ export class PythonKernel {
       // the idle path. stdin.end on a torn-down pipe is ignored because the
       // discard SIGKILL is the authoritative teardown.
       const process = this.process;
-      let unconfirmed: DriverFailure | undefined;
+      let unconfirmed: CodeError | undefined;
       if (process !== undefined) {
         yield* Effect.try({ try: () => { this.closing.add(process); process.stdin.end(); }, catch: decodeCodeFailure("driver.stdin") }).pipe(Effect.ignore);
         const cleanup = this.cleanups.get(process);
-        const acked =
-          cleanup !== undefined &&
-          (yield* Deferred.await(cleanup).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS)))._tag === "Some";
-        if (acked) {
+        const acked = cleanup === undefined
+          ? undefined
+          : yield* Deferred.await(cleanup).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS));
+        if (acked !== undefined && acked._tag === "Some") {
           const exited = this.processExits.get(process);
           if (exited !== undefined) yield* Deferred.await(exited).pipe(Effect.timeoutOption(DRIVER_EXIT_GRACE_MS));
+          if (acked.value.length > 0) {
+            // #1312: an acked cleanup that reports failed steps is a typed
+            // outcome naming each step, never a silently successful close.
+            unconfirmed = new CodemodeError({
+              reason: "browser_cleanup_failed",
+              message: `browser cleanup failed: ${acked.value.map((step) => `${step.step}: ${step.error}`).join("; ")}`,
+            });
+          }
         } else {
           // Grace expiry is an explicit outcome, not silent success (#1293
           // r1): the browser cleanup was never confirmed, so the SIGKILL
@@ -905,7 +931,7 @@ export class PythonKernel {
   private start(): Effect.Effect<ChildProcessWithoutNullStreams, CodeError> {
     return Effect.gen({ self: this }, function* () {
       const exited = yield* Deferred.make<void>();
-      const cleanup = yield* Deferred.make<void>();
+      const cleanup = yield* Deferred.make<CleanupCompleteFrame["failed"]>();
       const process = yield* Effect.try({ try: () => spawn("python3", ["-u", "-c", PYTHON_DRIVER]), catch: decodeCodeFailure("driver.spawn") });
       this.exits.add(exited);
       this.processExits.set(process, exited);
@@ -917,9 +943,12 @@ export class PythonKernel {
       lines.on("line", (line) => {
         // The cleanup ack is close()'s signal, never a cell frame: consume it
         // here so a pending cell's frame loop never sees an unknown kind.
-        if (line === CLEANUP_COMPLETE_FRAME) {
-          Deferred.doneUnsafe(cleanup, Exit.void);
-          return;
+        if (line.startsWith('{"kind": "lifecycle"')) {
+          const parsed = parseJson(CleanupCompleteFrame, line);
+          if (parsed !== undefined) {
+            Deferred.doneUnsafe(cleanup, Exit.succeed(parsed.failed));
+            return;
+          }
         }
         if (this.pending?.process === process) Queue.offerUnsafe(this.pending.frames, line);
       });

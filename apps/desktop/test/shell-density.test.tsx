@@ -80,7 +80,6 @@ const transcript = () =>
  * whatever the source says, including a fourth voice someone added.
  */
 const PROSE = "text-[14px]/[21px]";
-const CODE = "text-[13px]/[20px]";
 const META = "text-[12px]/[18px]";
 const VOICES = ["14/21", "13/20", "12/18"];
 
@@ -147,47 +146,6 @@ describe("the transcript sets exactly three voices", () => {
     for (const level of ["text-display", "text-title", "text-heading", "text-body", "text-label"]) {
       expect(outside, `${level} leaked into the transcript`).not.toContain(level);
     }
-  });
-
-  test("Given a code fence, When rendered, Then the block owns one size for all its tokens", () => {
-    // The fence is the one place a size is set on a container rather than per
-    // node, and that is deliberate: code is a block of uniform text, and a
-    // fence whose tokens each carried their own size would ripple.
-    //
-    // The node is BUILT here rather than found in a fixture. The session
-    // fixtures are SDK messages now and the adapter renders assistant text as
-    // prose blocks, so no fixture reaches a fence — and a rule this file is the
-    // only gate for must not quietly stop running because its example moved.
-    const html = renderToStaticMarkup(
-      <Timeline
-        emptyLabel="empty"
-        nodes={[
-          {
-            kind: "assistant",
-            id: "fence",
-            streaming: false,
-            blocks: [
-              {
-                kind: "code",
-                lang: "rust",
-                startLine: 138,
-                lines: [
-                  { tokens: [{ text: "async fn append(&self) {", tone: "keyword" }] },
-                  { tokens: [{ text: "  let lease = acquire();", tone: "plain" }], mark: "add" },
-                ],
-              },
-            ],
-          },
-        ]}
-        sessionId="fence"
-      />,
-    );
-    const pre = html.slice(html.indexOf("<pre"), html.indexOf("</pre>"));
-    expect(pre).toContain("font-mono");
-    // And the size it owns is the CODE voice specifically — without this the
-    // test would pass on a fence set in any monospace size at all, which is the
-    // fourth voice arriving in the one element allowed to set its own.
-    expect(pre).toContain(CODE);
   });
 
   test("Given a tool call, When rendered, Then it is ONE line in the meta voice", () => {

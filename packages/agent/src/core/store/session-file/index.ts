@@ -880,7 +880,7 @@ export class SessionStore extends StoreHandle {
 }
 
 /** The atomic child write `Session.fork` hands the child store (#1257). */
-export interface SessionForkWrite {
+interface SessionForkWrite {
   readonly materialize: LedgerSession.Materialize;
   /** Eligible pre-anchor parent rows, already remapped for the child chain. */
   readonly copies: readonly LedgerAction.Append[];
@@ -900,7 +900,7 @@ export interface SessionForkReceipt {
  */
 const DROP_OBSERVATION_FAILURES: ObservationFailurePort = () => undefined;
 
-export interface OpenSessionStoreOptions {
+interface OpenSessionStoreOptions {
   /** Injected wall clock (#1245): the store never reads ambient time. */
   readonly now: () => number;
   readonly observationSink?: ObservationSink;

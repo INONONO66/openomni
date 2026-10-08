@@ -8,6 +8,7 @@ export function cellDaemonOptions(
   return {
     socketPath,
     id: testIds(`cell-daemon-${machineId}`),
+    dispatcherBound: 8,
     offer: {
       machineId,
       offeredCapabilities: ["kernel.py"],

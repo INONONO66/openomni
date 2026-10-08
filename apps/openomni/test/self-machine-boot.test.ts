@@ -211,6 +211,7 @@ test("a second offer for machineId self on the real socket is refused already_at
       Machines.attachMachineDaemon({
         socketPath: socket,
         id: testIds("impostor"),
+        dispatcherBound: 8,
         offer: {
           machineId: "self",
           daemonVersion: "impostor",

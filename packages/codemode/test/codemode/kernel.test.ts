@@ -150,6 +150,34 @@ describe("code-mode kernel substrate", () => {
     await expect(kernel.close()).resolves.toBeUndefined();
   });
 
+  test("close() decodes a failed cleanup step into a typed browser_cleanup_failed outcome (#1312)", async () => {
+    const kernel = new PythonKernel();
+    // A registered browser client whose chromium pid is already gone: the
+    // cleanup's os.kill fails, the ack frame carries the failed step, and
+    // close() surfaces it typed instead of resolving as a silent success.
+    await expect(
+      kernel.run(
+        cell(
+          [
+            "import __main__",
+            "c = __main__.BrowserClient('m-1', '/tmp/openomni-cleanup-test', True)",
+            "c._transcript = __main__._BROWSER_MARK + ' chromium-pid 4194304'",
+            "__main__._browser_clients[('m-1', '/tmp/openomni-cleanup-test')] = c",
+          ].join("\n"),
+        ),
+        noTools,
+      ),
+    ).resolves.toMatchObject({ status: "completed" });
+    const closed = await kernel.close().then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    expect(closed).toMatchObject({ _tag: "CodemodeError", reason: "browser_cleanup_failed" });
+    expect(String(closed)).toContain("kill_chromium");
+    // The failed-cleanup close still tore the driver down; a second close is a no-op.
+    await expect(kernel.close()).resolves.toBeUndefined();
+  });
+
   test("close() during a wedged active cell fails typed instead of resolving without the cleanup ack (#1293 r2)", async () => {
     const kernel = new PythonKernel();
     // Mirrors the r2 review reproduction: the cell wedges the driver's EOF

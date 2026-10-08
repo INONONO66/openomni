@@ -141,9 +141,11 @@ describe("computer-use probe deadline", () => {
     );
     // Non-computer capabilities pass through; the timed-out probes withdraw.
     expect(offered).toEqual(["fs.read"]);
-    expect(await run(computer.screenRead({}))).toEqual({ status: "refused", reason: "screen_not_available" });
+    // #1312: an expired probe deadline is its own reason, never a lookalike
+    // of a missing binary.
+    expect(await run(computer.screenRead({}))).toEqual({ status: "refused", reason: "probe_timeout" });
     expect(await run(computer.inputWrite({ captureId: "x", actions: [{ click: { x: 1, y: 1 } }] })))
-      .toEqual({ status: "refused", reason: "input_not_available" });
+      .toEqual({ status: "refused", reason: "probe_timeout" });
   });
 });
 
@@ -248,12 +250,26 @@ describe("screen.read", () => {
 });
 
 describe("screen.read mid-session failures", () => {
-  test("a vanished screencapture binary refuses screen_not_available", async () => {
+  test("a vanished screencapture binary refuses spawn_failed and recovers", async () => {
     await fixture({}, async ({ handle, fake }) => {
       expect((await handle.screen({})).status).toBe("ok");
       fake.behavior.captureMissing = true;
-      expect(await handle.screen({})).toEqual({ status: "refused", reason: "screen_not_available" });
+      // #1312: a binary that would not start is spawn_failed, never a
+      // capability refusal that hides the cause.
+      expect(await handle.screen({})).toEqual({ status: "refused", reason: "spawn_failed" });
       fake.behavior.captureMissing = false;
+      expect((await handle.screen({})).status).toBe("ok");
+    });
+  });
+
+  test("an unreadable capture file refuses read_failed", async () => {
+    await fixture({}, async ({ handle, fake }) => {
+      expect((await handle.screen({})).status).toBe("ok");
+      fake.behavior.captureFileMissing = true;
+      // #1312: a capture that exits 0 but cannot be read back is read_failed,
+      // never the catch-all capture_failed.
+      expect(await handle.screen({})).toEqual({ status: "refused", reason: "read_failed" });
+      fake.behavior.captureFileMissing = false;
       expect((await handle.screen({})).status).toBe("ok");
     });
   });
@@ -358,8 +374,10 @@ describe("input.write", () => {
       const shot = await latestCapture(handle);
       fake.behavior.cliclickMissing = true;
       fake.behavior.cliclickPath = undefined;
+      // #1312: the vanished binary itself is spawn_failed; the withdrawn
+      // capability refuses input_not_available only until the probe passes.
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))
-        .toEqual({ status: "refused", reason: "input_not_available" });
+        .toEqual({ status: "refused", reason: "spawn_failed" });
       fake.behavior.cliclickMissing = false;
       fake.behavior.cliclickPath = "/opt/homebrew/bin/cliclick";
       expect(await handle.input({ captureId: shot.captureId, actions: [{ click: { x: 1, y: 1 } }] }))

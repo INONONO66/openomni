@@ -1,10 +1,5 @@
 import type { ConsoleShell, ConsoleStrip } from "../src/console";
-import type {
-  PendingApproval,
-  TranscriptCodeLine,
-  TranscriptNode,
-  TurnCost,
-} from "../src/timeline/model";
+import type { PendingApproval, TranscriptNode, TurnCost } from "../src/timeline/model";
 
 /**
  * The test transcript, as data.
@@ -23,83 +18,9 @@ import type {
  *   - one PENDING approval, whose transcript row prints only the word while the
  *     tray above the composer carries the decision;
  *   - a COMPACTION rule, so the reader is told the ledger is not from zero;
- *   - a diff FENCE with real `+`/`-` marks and a true starting line number.
+ *   - a multi-paragraph answer, so the paragraph step inside one turn is
+ *     visible against the block gap around it.
  */
-
-/** Hand-tokenized, because the fence takes tokens rather than a grammar. */
-const appendDiff: readonly TranscriptCodeLine[] = [
-  {
-    tokens: [
-      { text: "async fn", tone: "keyword" },
-      { text: " ", tone: "plain" },
-      { text: "append", tone: "fn" },
-      { text: "(", tone: "punct" },
-      { text: "&", tone: "punct" },
-      { text: "self", tone: "keyword" },
-      { text: ", e: Entry) -> ", tone: "plain" },
-      { text: "Result", tone: "fn" },
-      { text: "<Lsn> {", tone: "punct" },
-    ],
-  },
-  {
-    mark: "add",
-    tokens: [
-      { text: "  ", tone: "plain" },
-      { text: "let", tone: "keyword" },
-      { text: " lease = ", tone: "plain" },
-      { text: "self", tone: "keyword" },
-      { text: ".lease.", tone: "plain" },
-      { text: "acquire", tone: "fn" },
-      { text: "().await", tone: "plain" },
-      { text: "?;", tone: "punct" },
-    ],
-  },
-  {
-    tokens: [
-      { text: "  ", tone: "plain" },
-      { text: "// one writer per generation", tone: "comment" },
-    ],
-  },
-  {
-    mark: "remove",
-    tokens: [
-      { text: "  ", tone: "plain" },
-      { text: "if", tone: "keyword" },
-      { text: " lease.generation != ", tone: "plain" },
-      { text: "self", tone: "keyword" },
-      { text: ".generation {", tone: "punct" },
-    ],
-  },
-  {
-    tokens: [
-      { text: "    ", tone: "plain" },
-      { text: "return", tone: "keyword" },
-      { text: " ", tone: "plain" },
-      { text: "Err", tone: "fn" },
-      { text: "(Fenced { seen: ", tone: "punct" },
-      { text: "1487", tone: "number" },
-      { text: " });", tone: "punct" },
-    ],
-  },
-  { tokens: [{ text: "  }", tone: "punct" }] },
-  {
-    tokens: [
-      { text: "  ", tone: "plain" },
-      { text: "Ok", tone: "fn" },
-      { text: "(lease.", tone: "punct" },
-      { text: "commit", tone: "fn" },
-      { text: "(", tone: "punct" },
-      // Spelled `entry.append` rather than `ledger.append`: this is a
-      // hand-tokenized SPECIMEN of Rust, and the ledger-producer conformance
-      // scanner reads every `src/**/*.ts` for that exact identifier to find
-      // modules that write to the kernel ledger. A fixture that only draws the
-      // characters would be reported as a write surface it has no access to.
-      { text: '"entry.append"', tone: "string" },
-      { text: "))", tone: "punct" },
-    ],
-  },
-  { tokens: [{ text: "}", tone: "punct" }] },
-];
 
 export const transcript: readonly TranscriptNode[] = [
   // Everything above this was folded into a summary, so the transcript below is
@@ -192,14 +113,13 @@ export const transcript: readonly TranscriptNode[] = [
         kind: "p",
         text: "The retry branch re-entered `acquire` after the fence check, so a losing writer took the lease a second time before observing that its generation was stale.",
       },
-      { kind: "h2", text: "The guard" },
-      { kind: "code", lang: "rust", startLine: 138, lines: appendDiff },
       {
-        kind: "bullets",
-        items: [
-          "The lease is acquired once, above the retry, and held across it.",
-          "A stale generation now returns `Fenced` instead of retrying.",
-        ],
+        kind: "p",
+        text: "The lease is now acquired once, above the retry, and held across it.",
+      },
+      {
+        kind: "p",
+        text: "A stale generation returns `Fenced` instead of retrying.",
       },
     ],
   },

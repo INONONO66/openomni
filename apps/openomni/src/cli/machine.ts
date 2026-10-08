@@ -54,6 +54,8 @@ export function attachConfiguredMachine(configPath: string, id: () => string) {
     const mode = yield* createCodemode({ id });
     const common = {
       id,
+      // #1312: injected IPC callback bound for the remote machine daemon.
+      dispatcherBound: 256,
       offer: config.offer,
       fsExports: new Map((config.offer.exports ?? []).map((entry) => [entry.name, entry.path])),
       runner: mode.runner,

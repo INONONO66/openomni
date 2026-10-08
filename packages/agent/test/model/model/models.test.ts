@@ -102,14 +102,18 @@ describe("ModelsDev", () => {
     expect(network).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a fetched catalog usable when its cache cannot be written", async () => {
+  it("reports a cache that cannot be written as a typed cache_write refusal", async () => {
     delete process.env.OPENOMNI_DISABLE_MODELS_FETCH;
     process.env.OPENOMNI_MODELS_PATH = directory;
     const remote = {
       openai: { id: "openai", name: "OpenAI", env: [], npm: "@ai-sdk/openai", models: {} },
     };
     globalThis.fetch = mockFetch(() => jsonResponse(remote));
-    expect(await runEffect(ModelsDev.get())).toEqual(remote);
+    await expect(runEffect(ModelsDev.get())).rejects.toMatchObject({
+      _tag: "ModelCatalogError",
+      source: "cache_write",
+      path: directory,
+    });
   });
 
   it("propagates an unavailable snapshot instead of fabricating an empty catalog", async () => {

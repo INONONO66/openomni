@@ -74,7 +74,7 @@ const ArmDeltaEffect = z.object({ occurrenceId: z.string().min(1) });
 const FiredDeltaIntent = z.object({ op: z.literal("fired"), occurrenceId: z.string().min(1) });
 
 /** What one committed `alarm` row does to the session file's `armed_alarms` index. */
-export type ArmedAlarmDelta =
+type ArmedAlarmDelta =
   | { readonly op: "upsert"; readonly alarmId: string; readonly occurrenceId: string; readonly fireAt: number }
   | { readonly op: "retire"; readonly alarmId: string }
   | { readonly op: "fired"; readonly occurrenceId: string };

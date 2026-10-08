@@ -1,13 +1,13 @@
 import { APICallError } from "ai";
 import z from "zod";
-import { APIError, AuthInvalidFileError, AuthResolutionError, InvalidProviderData, AgentFailure, LlmRunFailure, ModelResolutionError, ProxyModelsError, TransportFailure, type LlmError } from "./errors";
+import { APIError, AuthInvalidFileError, AuthResolutionError, InvalidProviderData, AgentFailure, LlmRunFailure, ModelCatalogError, ModelResolutionError, ProxyModelsError, TransportFailure, type LlmError } from "./errors";
 
 export { APIError } from "./errors";
 const ErrorFacts = z.object({
   aborted: z.boolean().optional().catch(undefined),
   contextOverflow: z.boolean().optional().catch(undefined),
 });
-export type ErrorFacts = z.infer<typeof ErrorFacts>;
+type ErrorFacts = z.infer<typeof ErrorFacts>;
 export function errorFacts<E>(error: E): ErrorFacts {
   return ErrorFacts.catch({}).parse(error);
 }
@@ -24,7 +24,7 @@ export function coerceApiError<E>(error: E): ApiFailure | undefined {
 const KnownFailure = z.union([
   z.instanceof(APIError), z.instanceof(AuthInvalidFileError), z.instanceof(AuthResolutionError),
   z.instanceof(AgentFailure), z.instanceof(InvalidProviderData), z.instanceof(LlmRunFailure),
-  z.instanceof(ModelResolutionError), z.instanceof(ProxyModelsError), z.instanceof(TransportFailure),
+  z.instanceof(ModelCatalogError), z.instanceof(ModelResolutionError), z.instanceof(ProxyModelsError), z.instanceof(TransportFailure),
 ]);
 export function decodeLlmFailure(operation: string) {
   return z.union([

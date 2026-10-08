@@ -476,6 +476,13 @@ export const CancelResult = z.object({ cancelled: z.boolean() }).strict();
 /** Machine host → machine daemon: the output a live cell has produced so far. */
 export const PeekCode = z.object({ cellId: z.string().min(1) }).strict();
 export const PeekResult = z.object({ running: z.boolean(), output: CellOutput }).strict();
+/**
+ * `machine.peek_code` refusal when the daemon has no code runner at all
+ * (#1312) — never fabricated empty output. `PeekResult` keeps its shape; the
+ * wire answer is the union `PeekAnswer`.
+ */
+export const PeekRefused = z.object({ status: z.literal("refused"), reason: z.literal("kernel_not_available") }).strict();
+export const PeekAnswer = z.union([PeekResult, PeekRefused]);
 
 /**
  * Computer use (#1274): bounded screen captures and guarded input actions.
@@ -527,8 +534,11 @@ const BoundedAccessibilityTree = PlainValueSchema.superRefine((value, ctx) => {
 
 /**
  * `refused` is a typed outcome, not a transport error: `permission_denied`
- * reports a revoked TCC grant, `screen_not_available` a missing prerequisite
- * (binary or probe), `capture_failed` a command failure that is neither.
+ * reports a revoked TCC grant, `screen_not_available` a missing prerequisite,
+ * `capture_failed` a command failure that is neither, and (#1312) the causes
+ * formerly folded into those: `spawn_failed` a binary that would not start,
+ * `read_failed` a capture file that could not be read back, `probe_timeout`
+ * a prerequisite probe that outlived its deadline.
  * An over-cap PNG is downscaled and re-encoded, never truncated.
  */
 export const ScreenReadResult = z.discriminatedUnion("status", [
@@ -549,6 +559,9 @@ export const ScreenReadResult = z.discriminatedUnion("status", [
         "invalid_region",
         "permission_denied",
         "capture_failed",
+        "spawn_failed",
+        "read_failed",
+        "probe_timeout",
       ]),
     })
     .strict(),
@@ -614,6 +627,8 @@ export const InputWriteResult = z.discriminatedUnion("status", [
         "permission_denied",
         "unsupported_action",
         "input_failed",
+        "spawn_failed",
+        "probe_timeout",
       ]),
       /** Human-readable detail, e.g. which display a refused anchor captured. */
       message: z.string().min(1).max(256).optional(),

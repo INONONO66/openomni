@@ -1,5 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { Machine } from "@openomni/protocol";
 import { systemCommandRunner } from "../src/commands";
 import { MachinesFailure } from "../src/errors";
@@ -432,4 +436,64 @@ describe("pty.session control-stream faults (scripted server)", () => {
     faults().onExit();
     expect(await run(adapter.read({ name: "zeta" }))).toEqual({ status: "refused", reason: "pty_not_available" });
   });
+});
+
+describe("pty.control command-timeout FIFO cleanup (#1312)", () => {
+  // A scripted control server on a fifo side channel: the TestClock drives the
+  // 10s command deadline, the fifo injects a late reply while nothing is
+  // pending, and the %output marker proves the decoder consumed it in order.
+  test("a timed-out command surrenders its FIFO slot: the late reply is dropped and the next command gets its own reply", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "om-ptyctl-"));
+    const fifo = join(dir, "late.fifo");
+    expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0);
+    const script = join(dir, "fake-tmux.sh");
+    writeFileSync(
+      script,
+      [
+        "#!/bin/bash",
+        'printf "%%begin 0 0 0\n%%end 0 0 0\n"',
+        'cat "$1" &',
+        "while IFS= read -r line; do",
+        '  case "$line" in',
+        "    silent*) ;;",
+        '    *) printf "%%begin 1 1 0\nreply:%s\n%%end 1 1 0\n" "$line" ;;',
+        "  esac",
+        "done",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    try {
+      await run(
+        Effect.gen(function* () {
+          const sawLateMarker = yield* Deferred.make<void>();
+          const control = yield* startPtyControl({
+            argv: ["/bin/bash", script, fifo],
+            onOutput: (_paneId, data) => {
+              if (data.toString("utf8").includes("LATE-MARKER")) Deferred.doneUnsafe(sawLateMarker, Exit.void);
+            },
+            onMalformed: () => undefined,
+            onExit: () => undefined,
+          });
+          // The scripted server swallows this command: no reply ever arrives.
+          const silent = yield* Effect.forkScoped(Effect.exit(control.command("silent one")));
+          yield* Effect.yieldNow;
+          yield* TestClock.adjust(10_001);
+          const exit = yield* Fiber.join(silent);
+          if (Exit.isSuccess(exit)) throw new Error("expected the command to time out");
+          expect(Cause.pretty(exit.cause)).toContain("tmux did not answer within the command deadline");
+          // The late reply arrives while nothing is pending: it settles no
+          // stale entry, and the trailing %output record proves it was decoded.
+          yield* Effect.sync(() =>
+            writeFileSync(fifo, "%begin 9 9 0\nstale-late\n%end 9 9 0\n%output %7 LATE-MARKER\n"),
+          );
+          yield* Deferred.await(sawLateMarker);
+          // Correlation is intact: the next command settles with its OWN body.
+          expect(yield* control.command("probe")).toEqual(["reply:probe"]);
+          yield* control.close();
+        }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

@@ -22,6 +22,7 @@ const model = {
   ModelResolutionError: new Model.ModelResolutionError({ ...message, provider: "provider", model: "model", reason: "model_not_found" }),
   AuthInvalidFileError: new Model.AuthInvalidFileError({ ...message, path: "auth.json" }),
   AuthResolutionError: new Model.AuthResolutionError({ ...message, provider: "provider", reason: "missing_auth" }),
+  ModelCatalogError: new Model.ModelCatalogError({ ...message, source: "cache", path: "models.json" }),
   ProxyModelsError: new Model.ProxyModelsError({ ...message, url: "https://fixture.invalid" }),
   TransportFailure: new Model.TransportFailure({ ...diagnostic, ...message }),
   InvalidProviderData: new Model.InvalidProviderData({ ...diagnostic, ...message }),
@@ -34,6 +35,7 @@ const ipc = {
   IpcTimeoutError: new Ipc.IpcTimeoutError({ ...message, requestId: "request", method: "fixture" }),
   IpcRemoteError: new Ipc.IpcRemoteError({ ...message, requestId: "request", method: "fixture", code: 1000 }),
   IpcPeerKeyMismatchError: new Ipc.IpcPeerKeyMismatchError({ ...message, expected: "0".repeat(64), presented: "f".repeat(64) }),
+  IpcQueueFullError: new Ipc.IpcQueueFullError({ ...message, bound: 8 }),
 } satisfies { [K in Ipc.IpcError["_tag"]]: Extract<Ipc.IpcError, { _tag: K }> };
 const machines = {
   MachinesFailure: new Machines.MachinesFailure(diagnostic),

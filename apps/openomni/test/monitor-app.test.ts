@@ -243,6 +243,7 @@ test("a monitor watch observes a named tmux terminal and leaves it open", async 
   });
   // The machine body: a daemon offering pty.session over a private tmux socket.
   const daemon = await acquireEffect(attachMachineDaemon({
+    dispatcherBound: 8,
     socketPath: machinesSocket,
     id: testIds("monitor-pty-daemon"),
     offer: {

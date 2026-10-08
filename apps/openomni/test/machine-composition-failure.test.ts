@@ -11,7 +11,7 @@ import { testSelfMachine } from "./helpers/self-machine";
 test("the app machine host translates a codemode failure at its callback boundary", async () => {
   const createHost = Machines.createMachineHost;
   const compose = Codemode.composeCodemode;
-  let callTool: Parameters<typeof createHost>[0]["callTool"];
+  let callTool: Parameters<typeof createHost>[0]["callTool"] | undefined;
   const capture = spyOn(Machines, "createMachineHost").mockImplementation((options: Parameters<typeof createHost>[0]) => {
     callTool = options.callTool;
     return createHost(options);

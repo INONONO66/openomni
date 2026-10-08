@@ -9,11 +9,14 @@ import { createCliDeps } from "../src/cli/main";
 import { socketPath } from "./helpers/socket-path";
 import { bounded } from "./helpers/protected-dispatch";
 import { testIds } from "./helpers/test-entropy";
+import { refusingToolPort } from "./helpers/tool-port";
 
 test.each([false, true])("machine entry adapter handles enrollment %s", async (enrolled) => {
   const home = mkdtempSync(join(tmpdir(), "openomni-machine-entry-"));
   const path = socketPath();
   const host = await acquireEffect(createMachineHost({
+    dispatcherBound: 8,
+    callTool: refusingToolPort,
     listen: { unix: path },
     id: testIds("entry-host"),
     enrollment: () =>

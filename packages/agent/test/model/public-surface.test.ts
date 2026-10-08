@@ -65,6 +65,7 @@ describe("model barrel public surface", () => {
       "Llm",
       "LlmLive",
       "LlmRunFailure",
+      "ModelCatalogError",
       "ModelResolutionError",
       "ModelsDev",
       "Provider",

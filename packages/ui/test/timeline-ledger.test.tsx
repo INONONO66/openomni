@@ -233,37 +233,19 @@ describe("the transcript ledger", () => {
     // rules anywhere in the transcript: whitespace is the only grouping
     // mechanism, and every one of these was a mechanism for saying what the
     // column’s own order already says.
-    // Not every fixture has a fence, so the excision is proven across the set
-    // rather than per timeline: if the pattern ever stops matching anywhere,
-    // this assertion catches it, and a fixture with no fence stays legal.
-    let excised = 0;
-
+    // The code fence used to be excised here as the one element allowed a
+    // surface; `TranscriptMarkdown` is prose-only now (#1312), so no fence can
+    // appear in a transcript and the whole markup is held to the rule.
     for (const id of Object.keys(timelines)) {
       const html = render(id);
-      // The code fence is the one element allowed a surface, because a fence is
-      // quoted material from somewhere else and needs an edge to be quoted BY.
-      const outside = html.split(/<pre[\s\S]*?<\/pre>/).join("");
-      // Matched on the fence's NAME rather than on its classes. The old form
-      // keyed on `rounded-md border` running to the end of the tag, which broke
-      // the moment the element gained a `data-ui` attribute after its class —
-      // and broke SILENTLY, by leaking the fence's own legal fill into the
-      // region this assertion reads. The name is the stable handle: it is the
-      // element's declared address, and `names.test.tsx` fails if it moves.
-      const fences = outside.split(/<div [^>]*data-ui="CodeFence"[^>]*>/);
-      excised += fences.length - 1;
-
-      for (const region of fences.slice(0, 1)) {
-        expect(region, `${id} draws a fill`).not.toMatch(/bg-(raised|sunken|hover|active)/);
-      }
+      expect(html, `${id} draws a fill`).not.toMatch(/bg-(raised|sunken|hover|active)/);
       // A drawn hairline in the column is reserved for the epoch rule, which is
       // a ledger EVENT rather than a separator between turns.
-      const rules = [...outside.matchAll(/border-t\b/g)].length;
-      const epochs = [...outside.matchAll(/data-epoch-rule/g)].length;
+      const rules = [...html.matchAll(/border-t\b/g)].length;
+      const epochs = [...html.matchAll(/data-epoch-rule/g)].length;
       // Two hairlines per epoch rule: the lead-in and the run-out.
       expect(rules, `${id} draws a rule that is not an epoch`).toBe(epochs * 2);
     }
-
-    expect(excised, "the fence excision matched no fence in any timeline").toBeGreaterThan(0);
   });
 
   test("Given the spacing law, When rendered, Then every gap is one of the four steps", () => {

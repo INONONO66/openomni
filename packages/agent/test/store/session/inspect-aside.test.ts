@@ -3,7 +3,8 @@ import { useMemoryStores, testNow } from "../helpers/storage";
 import { CHILD, PARENT, forkFixture } from "../helpers/fork-fixture";
 import * as SessionHandleStore from "../../../src/core/store/fence";
 import { openSessionStore, type SessionStore } from "../../../src/core/store/session-file";
-import { FORK_ASIDE_REF, forkAncestryOf, forkAside, forkAsideTransformer } from "../../../src/inspect/tree";
+import { FORK_ASIDE_REF, forkAncestryOf, forkAside } from "../../../src/inspect/tree";
+import { forkAsideTransformer } from "../../helpers/fork-aside";
 import { foldSessionHistory } from "../../../src/inspect/history";
 import {
   compilePolicySnapshot,

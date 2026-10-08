@@ -1,5 +1,6 @@
 import { chmodSync } from "node:fs";
 import { posix } from "node:path";
+import { isContained, normalizeExportRoot } from "./contained";
 import { createIpcServer, createIpcTcpServer, type IpcServer, type IpcTlsIdentity } from "./ipc";
 import { typedCall } from "./typed-call";
 import { type BusEvent, type Ipc, Machine } from "@openomni/protocol";
@@ -22,10 +23,17 @@ interface MachineHostOptions {
   readonly tls?: IpcTlsIdentity;
   /** Injected request-id entropy (#1245): required, no ambient crypto fallback. */
   readonly id: () => string;
+  /** Callback dispatcher bound per listener (#1312): required, the composition chooses it. */
+  readonly dispatcherBound: number;
   readonly enrollment: (id: Machine.MachineId) => Machine.Enrollment | undefined;
   readonly events: BusEvent.Sink;
   readonly now: () => number;
-  readonly callTool?: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
+  /**
+   * Required tool port (#1312): a host wired without one must say so with an
+   * explicit implementation failing `host_tool_missing`, never a fabricated
+   * `{ status: "failed" }` tool result.
+   */
+  readonly callTool: (call: Machine.ToolCall) => Effect.Effect<Machine.ToolCallResult, MachineError>;
   /**
    * Machine ids whose live attachment is never superseded (#1271): while such
    * an id is attached, a second offer for it from another connection is
@@ -53,7 +61,7 @@ export interface MachineHandle {
   /** Persistent terminals (#1273): named tmux sessions behind one routed call seam. */
   readonly pty: PtyHandle;
   runCode(cell: Machine.CellRequest, signal?: AbortSignal): Effect.Effect<Machine.CellResult, MachineError>;
-  peekCode(cellId: string): Effect.Effect<Machine.PeekResult, MachineError>;
+  peekCode(cellId: string): Effect.Effect<Machine.PeekAnswer, MachineError>;
 }
 export interface MachineInfo extends Machine.Enrollment {
   readonly tags: string[];
@@ -121,7 +129,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
     function callTool(call: Machine.ToolCall, key: string): Effect.Effect<Machine.ToolCallResult, MachineError> {
       return Effect.suspend(() => {
         if (!attachments.has(key) || !inFlight.get(key)?.has(call.cellId)) return new MachineCellError({ code: "unknown_cell_id", cellId: call.cellId, message: `no cell in flight: ${call.cellId}` });
-        return options.callTool ? options.callTool(call) : Effect.succeed({ status: "failed", error: "this host exposes no tools" } as const);
+        return options.callTool(call);
       });
     }
     function attach(offer: Machine.Offer, respond: (result: Machine.AttachResult) => void, source: RequestSource): Effect.Effect<void, MachineError> {
@@ -185,13 +193,13 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
     const unixPath = options.listen.unix;
     if (unixPath !== undefined) {
       const listener = makeListener("unix");
-      servers.push(listener.bind(yield* createIpcServer(unixPath, listener.handler, { idSource: options.id, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure))));
+      servers.push(listener.bind(yield* createIpcServer(unixPath, listener.handler, { idSource: options.id, dispatcherBound: options.dispatcherBound, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure))));
       yield* Effect.try({ try: () => chmodSync(unixPath, 0o600), catch: decodeMachineFailure("host.chmod") });
     }
     let tcpBound: { readonly host: string; readonly port: number } | undefined;
     if (tcpSpec !== undefined) {
       const listener = makeListener("tcp");
-      const server = listener.bind(yield* createIpcTcpServer(tcpSpec, listener.handler, { idSource: options.id, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure)));
+      const server = listener.bind(yield* createIpcTcpServer(tcpSpec, listener.handler, { idSource: options.id, dispatcherBound: options.dispatcherBound, onDisconnect: listener.onDisconnect }).pipe(Effect.mapError(bindFailure)));
       servers.push(server);
       tcpBound = { host: server.host, port: server.port };
     }
@@ -209,8 +217,8 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
       const peer = connection(id);
       const absolute = posix.normalize(Machine.AbsolutePath.parse(path));
       const candidates = (peer.offer.exports ?? [])
-        .map((entry) => ({ ...entry, path: posix.normalize(entry.path).replace(/\/+$/, "") || "/" }))
-        .filter((entry) => absolute === entry.path || absolute.startsWith(entry.path === "/" ? "/" : `${entry.path}/`))
+        .map((entry) => ({ ...entry, path: normalizeExportRoot(entry.path) }))
+        .filter((entry) => isContained(entry.path, absolute))
         .sort((a, b) => b.path.length - a.path.length);
       const root = candidates[0];
       if (root === undefined) throw new MachineRefusalError({ reason: "export_not_available", message: "path is outside offered exports" });
@@ -304,7 +312,7 @@ export function createMachineHost(options: MachineHostOptions): Effect.Effect<Ma
           if (inFlight.get(peer.key)?.has(request.cellId) !== true) return { running: false, output: { stdout: "", stderr: "" } };
           peer.server.useConnection(peer.rawId);
           const raw = yield* typedCall(peer.server, Machine.WireMethod.PeekCode, request).pipe(Effect.mapError(transportFailure("cell.peek")));
-          return yield* Effect.try({ try: () => Machine.PeekResult.parse(raw), catch: decodeMachineFailure("cell.peek.response") });
+          return yield* Effect.try({ try: () => Machine.PeekAnswer.parse(raw), catch: decodeMachineFailure("cell.peek.response") });
         }),
       };
       handles.set(id, handle);

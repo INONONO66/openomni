@@ -34,6 +34,7 @@ import { canonicalJson, SessionGeneration, SessionTransition, type LedgerAction,
 import {
   type ChannelDeliveryRoute,
   type GatewayRouter,
+  createChannelStores,
   decodeChannelFailure,
   ChannelsFailure,
   WebSocketHandler,
@@ -102,6 +103,7 @@ import { appManifest } from "./manifest";
 import {
   acquireAppResource,
   channelRequests,
+  channelStoreSource,
   createMonitorPorts,
   createMountedChannelGrantRegistrar,
   createResidentGateway,
@@ -202,6 +204,9 @@ async function composeMachinePlane(
           : machines.enrolled.find((e) => e.machineId === machineId),
       events: deps.events,
       id: deps.id,
+      // #1312: injected IPC callback bound — queue depth and worker fan-out
+      // per listener; chosen here, the machines package carries no default.
+      dispatcherBound: 256,
       now: deps.now,
       callTool: deps.callTool,
       // r1 M3: the live self attachment is never superseded by a reattach.
@@ -864,6 +869,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
           },
           prepare: prepareMessage(plane, resident.materialize),
           requests: requestsWithDeadlines,
+          stores: createChannelStores(channelStoreSource(plane, services.now)),
           authenticateAnswer: (_sender, credential, requestId) =>
             Effect.try({
               try: () => authenticateOwner(credential, requestId),

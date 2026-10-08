@@ -13,10 +13,14 @@ function sequentialIds(prefix: string): () => string {
 export function foreign<A>(body: () => Promise<A>): Effect.Effect<A, Native.MachineError> {
   return Effect.tryPromise({ try: body, catch: decodeMachineFailure("test.machine") });
 }
+/** #1312: the explicit tool port for hosts wired without one in tests. */
+export function refusingToolPort(): Effect.Effect<never, Native.MachineError> {
+  return Effect.fail(new Native.MachineRefusalError({ reason: "host_tool_missing", message: "host_tool_missing: this host was wired without a tool port" }));
+}
 export interface CodeRunner {
   readonly native?: Native.CodeRunner;
   runCode(request: Machine.CellRequest, call: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult>, signal: AbortSignal): Promise<Machine.CellResult>;
-  peekCode(cellId: string): Machine.CellOutput | undefined;
+  peekCode(cellId: string): Machine.CellOutput;
   close(): Promise<void>;
 }
 function nativeRunner(runner: CodeRunner): Native.CodeRunner {
@@ -50,9 +54,9 @@ function machineHandle(native: Native.MachineHandle) {
   };
 }
 export type MachineHandle = ReturnType<typeof machineHandle>;
-export async function createMachineHost(options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool" | "id"> & { id?: () => string; callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> }) {
+export async function createMachineHost(options: Omit<Parameters<typeof Native.createMachineHost>[0], "callTool" | "id" | "dispatcherBound"> & { id?: () => string; dispatcherBound?: number; callTool?: (call: Machine.ToolCall) => Promise<Machine.ToolCallResult> }) {
   const callTool = options.callTool;
-  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), callTool: callTool ? (call) => foreign(() => callTool(call)) : undefined }));
+  const { value: native, close } = await acquire(Native.createMachineHost({ ...options, id: options.id ?? sequentialIds("host-req"), dispatcherBound: options.dispatcherBound ?? 256, callTool: callTool ? (call) => foreign(() => callTool(call)) : refusingToolPort }));
   const handles = new Map<string, MachineHandle>();
   return { native, list: native.list, endpoints: native.endpoints,
     get(id: string) { let handle = handles.get(id); if (!handle) { handle = machineHandle(native.get(id)); handles.set(id, handle); } return handle; },
@@ -62,10 +66,10 @@ export async function createMachineHost(options: Omit<Parameters<typeof Native.c
 export type MachineHost = Awaited<ReturnType<typeof createMachineHost>>;
 type NativeDaemonOptions = Parameters<typeof Native.attachMachineDaemon>[0];
 type DaemonConnection =
-  | Omit<Extract<NativeDaemonOptions, { socketPath: string }>, "runner" | "id">
-  | Omit<Extract<NativeDaemonOptions, { tcp: { host: string; port: number } }>, "runner" | "id">;
-export async function attachMachineDaemon(options: DaemonConnection & { id?: () => string; runner?: CodeRunner }) {
-  const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), runner: options.runner ? nativeRunner(options.runner) : undefined }));
+  | Omit<Extract<NativeDaemonOptions, { socketPath: string }>, "runner" | "id" | "dispatcherBound">
+  | Omit<Extract<NativeDaemonOptions, { tcp: { host: string; port: number } }>, "runner" | "id" | "dispatcherBound">;
+export async function attachMachineDaemon(options: DaemonConnection & { id?: () => string; dispatcherBound?: number; runner?: CodeRunner }) {
+  const { value: native, close } = await acquire(Native.attachMachineDaemon({ ...options, id: options.id ?? sequentialIds("daemon-req"), dispatcherBound: options.dispatcherBound ?? 256, runner: options.runner ? nativeRunner(options.runner) : undefined }));
   return { native, get attachment() { return native.attachment; }, get closed() { return run(native.closed); }, close: async () => { await run(native.close()); await close(); } };
 }
 export function createFsDriver(...args: Parameters<typeof fsDriver>) {

@@ -66,14 +66,31 @@ describe("the gateway endpoint is resolved from the environment", () => {
     });
   });
 
-  test("Given an unusable port, When resolved, Then the default is used instead of a broken url", () => {
-    // The daemon throws on these; the console cannot, because refusing to open
-    // a window over a bad env var would leave the Owner with no surface at all.
-    for (const port of ["-1", "70000", "8080abc", "80.5"]) {
+  test("Given an unusable port, When resolved, Then a typed error names the variable (#1312)", () => {
+    // A present-but-invalid value is a typed refusal, never a silent 3000: a
+    // typo in OPENOMNI_WS_PORT must fail at the variable, not connect the
+    // console to a port nobody asked for. Only unset (or blank) means default.
+    for (const port of ["-1", "70000", "8080abc", "80.5", "abc"]) {
       expect(resolveGatewayEndpoint({ OPENOMNI_WS_PORT: port })).toEqual({
-        url: "ws://127.0.0.1:3000/ws",
+        kind: "desktop_config_error",
+        variable: "OPENOMNI_WS_PORT",
+        value: port,
+        message: `OPENOMNI_WS_PORT is not a port: "${port}" (expected an integer in 0..65535; unset means 3000)`,
       });
     }
+  });
+
+  test("Given an explicit URL and an invalid port, When resolved, Then the URL wins and the port is never read", () => {
+    expect(
+      resolveGatewayEndpoint({ OPENOMNI_WS_URL: "ws://host:9/ws", OPENOMNI_WS_PORT: "abc" }),
+    ).toEqual({ url: "ws://host:9/ws" });
+  });
+
+  test("Given an invalid port, When the whole config resolves, Then the error propagates (#1312)", () => {
+    expect(resolveDesktopConfig({ OPENOMNI_WS_PORT: "70000" })).toMatchObject({
+      kind: "desktop_config_error",
+      variable: "OPENOMNI_WS_PORT",
+    });
   });
 });
 
