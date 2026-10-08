@@ -23,6 +23,13 @@ export const Settings = z
      * default. The composition root writes its resolved startup value here.
      */
     forkCopyByteCap: z.number().int().positive().optional(),
+    /**
+     * Byte budget for one tool result's model-facing projection (#1305):
+     * generation configuration folded like the widths; absent falls back to
+     * the core default. The composition root writes its resolved startup
+     * value here.
+     */
+    toolOutputBudgetBytes: z.number().int().positive().optional(),
   })
   .strict();
 export type Settings = z.infer<typeof Settings>;

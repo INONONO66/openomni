@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { ZodError } from "zod";
-import { Tool, toolResultText } from "../src/tool/index.js";
+import { Tool, toolResultText, toolOutputRefSchema, TOOL_OUTPUT_PREVIEW_MAX_BYTES } from "../src/tool/index.js";
 import type { PlainValue } from "../src/json.js";
 
 function expectInvalidState<State>(state: State): void {
@@ -409,5 +409,38 @@ describe("Tool.Spec", () => {
     for (const inputSchema of values) {
       expect(Tool.Spec.safeParse({ name: "x", inputSchema }).success).toBe(false);
     }
+  });
+});
+
+describe("toolOutputRefSchema (#1305)", () => {
+  const schema = toolOutputRefSchema();
+  const outputId = `sha256:${"ab".repeat(32)}`;
+
+  test("a ref whose preview sits exactly at the byte bound parses", () => {
+    const ref = schema.parse({
+      outputId,
+      bytes: TOOL_OUTPUT_PREVIEW_MAX_BYTES + 1,
+      mediaType: "text/plain",
+      preview: "a".repeat(TOOL_OUTPUT_PREVIEW_MAX_BYTES),
+    });
+    expect(ref.outputId).toBe(outputId);
+    expect(ref.preview).toHaveLength(TOOL_OUTPUT_PREVIEW_MAX_BYTES);
+  });
+
+  test("a ref under the bound parses and keeps the optional media hint absent", () => {
+    const ref = schema.parse({ outputId, bytes: 1, preview: "" });
+    expect(ref.mediaType).toBeUndefined();
+    expect(ref.bytes).toBe(1);
+  });
+
+  test("a preview one MULTIBYTE code point over the bound is refused at parse", () => {
+    // 262_143 ASCII bytes plus one 3-byte code point = 262_146 bytes.
+    const oversize = `${"a".repeat(TOOL_OUTPUT_PREVIEW_MAX_BYTES - 1)}\u4e2d`;
+    expect(() => schema.parse({ outputId, bytes: 1, preview: oversize })).toThrow(ZodError);
+  });
+
+  test("a malformed output id is refused — only canonicalDigest hex names an output", () => {
+    expect(() => schema.parse({ outputId: "sha256:XYZ", bytes: 1, preview: "" })).toThrow(ZodError);
+    expect(() => schema.parse({ outputId: "ab".repeat(32), bytes: 1, preview: "" })).toThrow(ZodError);
   });
 });
