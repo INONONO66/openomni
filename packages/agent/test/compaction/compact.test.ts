@@ -301,6 +301,19 @@ describe("Compaction", () => {
       expect(result.messages).toEqual([...expected]);
     });
 
+    it("matches the quadratic reference when the kept suffix lands exactly on the budget", () => {
+      // Review r1 L2: the `>` stop edge. Four 400-char user messages are 100
+      // tokens each (400/4, no rounding); at a 400-token window the budget is
+      // 200, so the drop stops when the suffix estimate EQUALS the budget.
+      const messages = Array.from({ length: 4 }, (_: undefined, i: number) =>
+        makeUserMessage(`${i}`.padEnd(400, "x")),
+      );
+      const result = prepareSummarizerInput(messages, 400);
+      expect(result.messages).toEqual([...quadraticReference(messages, 400)]);
+      expect(result.messages).toHaveLength(2);
+      expect(estimateMessagesTokens(result.messages)).toBe(200);
+    });
+
     it("returns no messages and an intact budget for zero inputs", () => {
       const result = prepareSummarizerInput([], 2000);
       expect(result.messages).toEqual([]);
