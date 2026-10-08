@@ -62,12 +62,12 @@ export namespace Storage {
     range(sessionId: string, afterRevision: number, limit: number): LedgerAction.Node[];
     /**
      * Chain-fold pending projection (W5.2): `prompt`/`signal` actions with an
-     * inbox payload that no later delivery row references, in chain order.
+     * delivered-input payload that no later delivery row references, in chain order.
      */
     pendingMessages(sessionId: string): LedgerAction.Node[];
     /** The latest EXECUTED `compaction` row — the staleness horizon for deferred `action` inputs (#1256 H-3). */
     latestCompaction(sessionId: string): LedgerAction.Node | undefined;
-    /** Every input action (rows carrying an inboxKind effect), consumed or not (#1257). */
+    /** Every input action (rows carrying a deliveryKind effect), consumed or not (#1257). */
     inputMessages(sessionId: string): LedgerAction.Node[];
   }
 

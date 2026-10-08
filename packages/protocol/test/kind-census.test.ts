@@ -33,8 +33,11 @@ describe("journal kind census (#1252)", () => {
   });
 
   test("every kind is declared {kind, version, schema} and parses a row body", () => {
+    // #1315: the input-plane writers bumped to version 2 (`deliveryId`/
+    // `deliveryIds` payload names); every other kind stays at version 1.
+    const bumped = new Set(["prompt", "signal", "turn"]);
     for (const declaration of Journal.DECLARATIONS) {
-      expect(declaration.version).toBe(1);
+      expect(declaration.version).toBe(bumped.has(declaration.kind) ? 2 : 1);
       expect(declaration.schema.safeParse(body).success).toBe(true);
       expect(Journal.declarationFor(declaration.kind)).toBe(declaration);
     }
@@ -46,7 +49,9 @@ describe("journal kind census (#1252)", () => {
     for (const retired of [
       "reply",
       "attempt",
-      "inbox.deliver",
+      // Assembled like the alarm literals: the retired input-queue policy
+      // token must stay greppable-to-zero (#1315).
+      ["in", "box"].join("") + ".deliver",
       "outbound",
       ...["paused", "arm", "fired"].map((suffix) => `alarm.${suffix}`),
       "notice",

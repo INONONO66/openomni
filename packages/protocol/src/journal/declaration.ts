@@ -18,7 +18,7 @@ export type EncodedPayload = z.infer<typeof EncodedPayload>;
  */
 export interface KindDeclaration<Kind extends string = string> {
   readonly kind: Kind;
-  readonly version: 1;
+  readonly version: number;
   readonly schema: z.ZodType;
 }
 
@@ -66,6 +66,7 @@ export function refineField(
 export function declare<Kind extends string>(
   kind: Kind,
   schema: z.ZodType,
+  version: number = 1,
 ): KindDeclaration<Kind> {
-  return { kind, version: 1, schema };
+  return { kind, version, schema };
 }

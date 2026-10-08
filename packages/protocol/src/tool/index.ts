@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LedgerSession } from "../ledger/l0.js";
 import { Events as EventDescriptors } from "../event/tool.js";
 import type { TraceContext } from "../trace/index.js";
 import { PlainObjectSchema, PlainValueSchema } from "../json.js";
@@ -7,7 +8,8 @@ import { toolResultSchema } from "./result.js";
 export { toolResultText, toolResultJsonSchema, toolOutputRefSchema, type ToolOutputRef } from "./result.js";
 
 export type ToolCategory = "query" | "mutation" | "authority" | "execution";
-export type ToolRole = "resident" | "worker";
+/** Derived from the one session-role vocabulary (#1315): no second copy. */
+export type ToolRole = LedgerSession.Role;
 
 export interface ToolExecutionContext {
   readonly sessionId: string;

@@ -49,7 +49,7 @@ export namespace BusEvent {
     runId: z.string().min(1).optional(),
     turnId: z.string().min(1).optional(),
     callId: z.string().min(1).optional(),
-    role: z.enum(["resident", "worker"]).optional(),
+    role: z.enum(["resident", "child"]).optional(),
     actorId: z.string().min(1).optional(),
     agentName: z.string().min(1).optional(),
     componentId: z.string().min(1).optional(),
