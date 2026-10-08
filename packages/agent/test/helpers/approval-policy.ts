@@ -2,8 +2,8 @@ import type { ApprovalPolicy } from "../../src/core/approval-policy";
 import type { AgentBudget, ResolvedAgentBudget } from "../../src/core/types";
 
 /**
- * The fixture run budget (#1309): the values `BUDGET_DEFAULTS` used to
- * hard-code in core, now stated explicitly where tests need a resolved budget.
+ * The fixture run budget (#1309): the values the core used to
+ * hard-code as its default budget, now stated explicitly where tests need a resolved budget.
  */
 export const TEST_BUDGET: ResolvedAgentBudget = {
   maxTurns: 24,
