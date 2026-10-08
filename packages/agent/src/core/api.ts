@@ -36,8 +36,7 @@ export {
 } from "./gate/decide";
 export { GenerationOwnership, SessionLayer, ToolCatalog, type ProcessServices } from "./ports";
 export {
-  DEFAULT_TOOL_OUTPUT_BUDGET_BYTES, projectResultValue, projectToolOutput,
-  type ToolOutputPorts,
+  DEFAULT_TOOL_OUTPUT_BUDGET_BYTES, projectToolOutput, type ToolOutputPorts,
 } from "./tool-output";
 export {
   executeToolBody, projectTools, ToolBodyOutcome, ToolRefused,
