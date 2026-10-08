@@ -232,9 +232,16 @@ test("process entry logs committed sessions and disposes its runtime", async () 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(stdin.isPaused()).toBe(true);
     expect(stdin.listenerCount("data")).toBe(0);
-    expect(receivedMessages(fixture.plane, "sender").some(
-      (row) => row.content === "PROCESS_SENTINEL",
-    )).toBe(true);
+    // #1311: the settlement is the bounded DelegationResult envelope, not the raw reply.
+    const settled = receivedMessages(fixture.plane, "sender").filter(
+      (row) => SessionTransition.OutboundMessage.safeParse(row.origin.value).success,
+    );
+    expect(settled).toHaveLength(1);
+    expect(Gateway.DelegationResult.parse(JSON.parse(settled[0]?.content ?? ""))).toMatchObject({
+      status: "completed",
+      preview: "PROCESS_SENTINEL",
+      pointer: { session: child.id },
+    });
   } finally {
     dispose.mockRestore();
     stdin.destroy();
