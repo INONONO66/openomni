@@ -2,7 +2,7 @@
 
 ## #1311 delegation lifecycle contract — typed cap refusals + once-only child settlement (epic #1303, rung 14)
 
-On `stab/14-delegation-lifecycle-contract` (2026-10-08, base `0373ed38c`).
+On `stab/14-delegation-lifecycle-contract` (2026-10-08, base `2dc31be78`).
 
 - Envelope: `Gateway.DelegationResult` in `packages/protocol/src/gateway/message.ts`
   (strict: `status: completed|failed`, `preview` max 4096, `pointer: {session, action}`),
