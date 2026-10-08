@@ -1,6 +1,7 @@
 import { Bundle, type Core } from "@openomni/agent";
 import {
   canonicalDigest,
+  Gateway,
   Inbox,
   SessionTransition,
   type LedgerAction,
@@ -14,9 +15,10 @@ import { ToolCapabilitySeam } from "../seams";
 /**
  * The `delegation-policy` bundle (#1258): the caps on child-session creation
  * as consulted guard rows at `tool.pre`, the `delegation.deadline` alarm
- * purpose, and the parentReply fold (every child terminal becomes one
- * outbound message to its parent). It requires the action capability, so
- * turning `action` off cascades delegation policy off with it.
+ * purpose, and the settleChild fold (#1311: a child settles exactly once,
+ * only on `result` or `failed`, through the bounded `DelegationResult`
+ * envelope). It requires the action capability, so turning `action` off
+ * cascades delegation policy off with it.
  */
 
 /** The default caps; the rows carry them as `how.params`, so policy data stays in rows. */
@@ -53,15 +55,52 @@ const skipped = (cap: string): GuardResult => ({
   payload: { cap, skipped: true },
 });
 
+/**
+ * The typed cap refusal (#1311): `send_message` surfaces a cap-denied child
+ * creation as `ToolRefused` whose reason is this envelope's canonical JSON,
+ * so the model sees the cap, the limit and the observed count — never a
+ * generic denial.
+ */
+export const DelegationRefusal = z
+  .object({
+    code: z.literal("delegation_refused"),
+    cap: z.string(),
+    limit: z.number(),
+    observed: z.number().optional(),
+    reason: z.string().optional(),
+  })
+  .strict();
+export type DelegationRefusal = z.infer<typeof DelegationRefusal>;
+
 function capVerdict(
   cap: string,
   limit: number,
   observed: number | undefined,
 ): GuardResult {
-  if (observed === undefined)
-    return { verdict: "deny", payload: { cap, limit, reason: "catalog read unavailable" } };
-  const verdict = observed < limit ? "allow" : "deny";
-  return { verdict, payload: { cap, limit, observed } };
+  if (observed === undefined) {
+    const refusal = DelegationRefusal.parse({
+      code: "delegation_refused",
+      cap,
+      limit,
+      reason: "catalog read unavailable",
+    });
+    return {
+      verdict: "deny",
+      payload: { cap, limit, reason: "catalog read unavailable", refusal },
+    };
+  }
+  if (observed < limit) return { verdict: "allow", payload: { cap, limit, observed } };
+  const refusal = DelegationRefusal.parse({
+    code: "delegation_refused",
+    cap,
+    limit,
+    observed,
+  });
+  // `reason` rides the consulted-guard seam into the caller's ToolRefused.
+  return {
+    verdict: "deny",
+    payload: { cap, limit, observed, refusal, reason: JSON.stringify(refusal) },
+  };
 }
 
 /** Caps how deep the delegation tree may grow: a session at depth >= limit spawns nothing. */
@@ -206,25 +245,34 @@ export function delegationPurposes(deps: DelegationDeadlineDeps): Bundle.AlarmBu
   };
 }
 
-// ─── parent reply ───
+// ─── child settlement ───
 
 /**
  * A child seals its own obligation; only the receiving executor changes the
- * parent. Moved verbatim from the former composition module (#1258): the reply
- * fold is delegation policy, so the bundle owns it.
+ * parent. #1311: the settlement fold — a child settles toward its parent
+ * exactly once, only when its turn result is `result` or `error` (a `waiting`
+ * or `interrupted` seal writes nothing), through the bounded
+ * `Gateway.DelegationResult` envelope. The row rides `delivery: "followUp"`
+ * explicitly, so the parent folds it only at `turn_end`.
  */
-export function parentReply(
+export function settleChild(
   kernel: Core.SessionKernel,
   row: LedgerSession.Row,
   terminal: LedgerAction.Append,
   result: Core.SessionRunnerResult,
 ): SessionTransition.OutboundMessage | undefined {
-  if (row.parentId === null || result.kind === "waiting") return undefined;
+  if (row.parentId === null) return undefined;
+  if (result.kind !== "result" && result.kind !== "error") return undefined;
   const original = kernel
     .inputMessages(row.id)
     .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
     .find((origin) => origin.success && origin.data.senderSessionId === row.parentId);
   if (original === undefined || !original.success) return undefined;
+  const settlement = Gateway.DelegationResult.parse({
+    status: result.kind === "result" ? "completed" : "failed",
+    preview: (result.text ?? "").slice(0, 4096),
+    pointer: { session: row.id, action: terminal.id },
+  });
   const message = {
     messageId: `${terminal.id}:reply`,
     sourceSessionId: row.id,
@@ -232,8 +280,9 @@ export function parentReply(
     destinationSessionId: row.parentId,
     requestId: original.data.sourceActionId,
     replyTo: original.data.replyTo ?? original.data.messageId,
-    terminal: result.kind === "result" ? ("completed" as const) : result.kind,
-    content: result.text ?? "",
+    terminal: result.kind === "result" ? ("completed" as const) : ("error" as const),
+    content: JSON.stringify(settlement),
+    delivery: "followUp" as const,
   };
   return SessionTransition.OutboundMessage.parse({ ...message, digest: canonicalDigest(message) });
 }

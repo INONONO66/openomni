@@ -16,13 +16,13 @@ import { entropySource, fixedClock } from "./time";
 import type { SessionRunnerResult } from "../../src/core/run";
 
 /**
- * Seam stub for `SessionRuntime.parentReply` (#1308): core fixtures exercise
- * the reply SEAM only. The shipped delegation-policy fold lives in
- * apps/openomni/src/bundles/delegation-policy and is tested from
+ * Seam stub for `SessionRuntime.settleChild` (#1308/#1311): core fixtures
+ * exercise the settlement SEAM only. The shipped delegation-policy fold lives
+ * in apps/openomni/src/bundles/delegation-policy and is tested from
  * apps/openomni/test; this stub answers the last parent-origin input with a
  * minimal settled reply and never claims to mirror the shipped policy.
  */
-function fixtureParentReply(
+function fixtureSettleChild(
   kernel: SessionKernel,
   row: LedgerSession.Row,
   terminal: LedgerAction.Append,
@@ -58,15 +58,15 @@ export interface SessionFixture extends SessionRuntime {
 }
 
 /** The kernel plane every fixture rides inside `isolated()`: the isolation's shared kernel, resolved lazily. */
-export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply" | "approvalPolicy"> {
+export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSessions" | "settleChild" | "approvalPolicy"> {
   return kernelRuntime(() => isolatedLedger().kernel);
 }
 
 /** A runtime kernel plane over one explicit kernel handle (crash children own their stores). */
-export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply" | "compaction" | "approvalPolicy"> {
-  // #1308: parent replies are composition-injected; fixtures ride a seam stub.
+export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "settleChild" | "compaction" | "approvalPolicy"> {
+  // #1308: child settlements are composition-injected; fixtures ride a seam stub.
   // #1307: the compaction seam too. #1309: and the approval policy.
-  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply: fixtureParentReply, compaction: fixtureCompactionSeam, approvalPolicy: TEST_APPROVAL_POLICY };
+  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), settleChild: fixtureSettleChild, compaction: fixtureCompactionSeam, approvalPolicy: TEST_APPROVAL_POLICY };
 }
 
 const fixtures = new WeakMap<Scope.Scope, WeakMap<SessionFixture, Context.Context<SessionEntryServices>>>();

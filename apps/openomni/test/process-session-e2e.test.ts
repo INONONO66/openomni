@@ -564,13 +564,13 @@ test.each([
 });
 
 test("startOpenOmni runs a process session and drains its atomic parent reply without ACK settlement", async () => {
-  const parentReply = Promise.withResolvers<void>();
+  const settlementDrained = Promise.withResolvers<void>();
   const timer = setTimeout(
-    () => parentReply.reject(new Error("process reply was not drained")),
+    () => settlementDrained.reject(new Error("process reply was not drained")),
     // Bounded, not timed: the child kernel boots ~10x slower under coverage instrumentation.
     60_000,
   );
-  const received = parentReply.promise.then(
+  const received = settlementDrained.promise.then(
     () => ({ ok: true }),
     (error: Error) => ({ ok: false, error }),
   );
@@ -578,7 +578,7 @@ test("startOpenOmni runs a process session and drains its atomic parent reply wi
   suite.defer(
     Bus.subscribe(Gateway.MessageObserved, (event) => {
       if (event.kind === "message.drained" && event.messageId.endsWith(":reply"))
-        parentReply.resolve();
+        settlementDrained.resolve();
     }),
   );
   let requests = 0;
