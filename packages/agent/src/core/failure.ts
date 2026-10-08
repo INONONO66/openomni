@@ -121,12 +121,14 @@ export class ExecutionApprovalError extends Data.TaggedError("ExecutionApprovalE
 /**
  * Perimeter mail whose provenance the turn could not authenticate: the turn
  * runs with `evidence_only` authority and this fact is recorded as a
- * violation observation (issue #1245). A recorded fact, never a failure-channel
- * value: tagged like `SessionPolicyRefusal`, not an `Error`.
+ * violation observation (issue #1245). A `missing_origin` prompt — one whose
+ * action row records no origin at all — fails its turn instead (#1310): no
+ * authority is granted without a recorded provenance. A recorded fact, never
+ * a failure-channel value: tagged like `SessionPolicyRefusal`, not an `Error`.
  */
 export class InboundAuthorityViolation {
   readonly _tag = "InboundAuthorityViolation";
-  constructor(readonly reason: "unknown_origin" | "undeclared_treatment") {}
+  constructor(readonly reason: "unknown_origin" | "undeclared_treatment" | "missing_origin") {}
   get message(): string { return `inbound authority violation: ${this.reason}`; }
 }
 

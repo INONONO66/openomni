@@ -6,7 +6,8 @@ import { z } from "zod";
 import { Cause, Context, Effect, Exit, Option, Queue, Schema, type Scope, Semaphore } from "effect";
 import { Entity, type Envelope, type Sharding } from "effect/cluster";
 import { LeaseLost, SessionAdmissionRefused, type SessionError } from "./failure";
-import { createSessionAdmission, decideSessionAdmission } from "./mailbox";
+import { createSessionAdmission, decideSessionAdmission } from "./admission";
+import { createSessionRecovery } from "./recovery";
 import { type SessionAdmissionSnapshot, type SessionEntityAuthority, type SessionEntityPorts, type SessionControllerState, type ResolvedSessionRuntime, type SessionRunner, type SessionRunnerResult, createSessionTurn } from "./run";
 import { deliveryActions, receivedMessageAction } from "./commit";
 import { createRawSlots } from "./gate/decide";
@@ -1215,10 +1216,14 @@ export function createSessionEntityRunTurn(
         Effect.as<SessionRunnerResult>({ kind: "waiting", reason: "live_wait", alarmIds: [], text: "" }),
       );
     const admission = createSessionAdmission(kernel, authority.sessionId, runtime, state, authority.owner, runtime.clock, runtime.entropy, { awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal });
+    const recovery = createSessionRecovery(kernel, authority.sessionId, runtime, runtime.clock, runtime.entropy, {
+      awaitRetainedRunner: () => Effect.void, runTurn: detachedRunTurn, seal,
+      commitSession: admission.commitSession, createExecutionLedger: admission.createExecutionLedger, consumeNoopInbox: admission.consumeNoopInbox,
+    });
     switch (decision.kind) {
       case "start": return void (yield* admission.startTurn());
-      case "recover": return void (yield* admission.resumeTurn(decision.open));
-      case "resume": return void (yield* admission.resumeInterrupted(decision.item));
+      case "recover": return void (yield* recovery.resumeTurn(decision.open));
+      case "resume": return void (yield* recovery.resumeInterrupted(decision.item));
     }
   });
 }

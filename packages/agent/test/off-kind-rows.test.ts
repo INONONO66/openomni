@@ -6,7 +6,7 @@ import { Inbox, Journal, type LedgerSession, type PlainValue } from "@openomni/p
 import { Capability, Manifest, type SeamTag } from "../src/core/capability";
 import { runTestPromise } from "./helpers/isolated";
 import { compose } from "../src/core/compose";
-import { decideSessionAdmission } from "../src/core/mailbox";
+import { decideSessionAdmission } from "../src/core/admission";
 import type { DeliverRefused } from "../src/core/messages";
 import {
   clusterTempDir,

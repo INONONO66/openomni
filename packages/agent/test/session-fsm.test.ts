@@ -3,7 +3,7 @@ import { Deferred, Effect, Fiber } from "effect";
 import * as SessionHandleStore from "../src/core/store/fence";
 import { canonicalDigest, PlainObjectSchema, type Inbox, type LedgerAction, type LedgerSession, type SessionTransition, } from "@openomni/protocol";
 import { sessionTree } from "./helpers/session-tree";
-import { decideSessionAdmission } from "../src/core/mailbox";
+import { decideSessionAdmission } from "../src/core/admission";
 import { decideRequestTransition } from "../src/core/request";
 import { session } from "../src/testing/registry";
 import { resolveSessionRuntime } from "../src/core/run";
@@ -183,6 +183,7 @@ describe("T02/T05/T07/T08/T10 admission Cartesian product", () => {
             const snapshot = {
               row: { ...row, state },
               pending: [inbox(event)],
+              capabilityKinds: ["tool", "compaction"] as const,
               open: hasOpen ? open : undefined,
               terminal: prior,
             };
@@ -194,7 +195,9 @@ describe("T02/T05/T07/T08/T10 admission Cartesian product", () => {
         });
       }
   test("empty inbox and control prefix have explicit decisions without consuming a following prompt", () => {
-    expect(decideSessionAdmission({ row: { ...row, state: "idle" }, pending: [] })).toEqual({
+    expect(
+      decideSessionAdmission({ row: { ...row, state: "idle" }, pending: [], capabilityKinds: ["tool", "compaction"] }),
+    ).toEqual({
       kind: "stop",
     });
     const control = inbox("resume");
@@ -202,9 +205,10 @@ describe("T02/T05/T07/T08/T10 admission Cartesian product", () => {
       decideSessionAdmission({
         row: { ...row, state: "idle" },
         pending: [control, inbox("prompt", 2)],
+        capabilityKinds: ["tool", "compaction"],
       }),
     ).toEqual({ kind: "consume", items: [control] });
-    expect(decideSessionAdmission({ row, pending: [] }).kind).toBe("refused");
+    expect(decideSessionAdmission({ row, pending: [], capabilityKinds: ["tool", "compaction"] }).kind).toBe("refused");
   });
 });
 

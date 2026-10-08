@@ -4,7 +4,9 @@ import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { CommitFailed, ExecutionApprovalError, AgentFailure, type SessionError } from "../core/failure";
 import { toolSnapshot, internalOrigin, turnTerminalAction, receivedMessageAction } from "../core/commit";
 import { createSessionTurn } from "../core/run";
-import { createSessionAdmission, commitSessionRequest, decideSessionAdmission } from "../core/mailbox";
+import { createSessionAdmission, decideSessionAdmission } from "../core/admission";
+import { createSessionRecovery } from "../core/recovery";
+import { commitSessionRequest } from "../core/request";
 import { adoptSessionAuthority, createSessionConfiguration } from "../core/run";
 import { dispatchSessionOutbound } from "../core/run";
 import { inspectSession } from "../inspect";
@@ -50,6 +52,10 @@ export function createController(
     });
     const admission = createSessionAdmission(kernel, sessionId, runtime, state, owner, clock, entropy, {
       awaitRetainedRunner, runTurn, seal,
+    });
+    const recovery = createSessionRecovery(kernel, sessionId, runtime, clock, entropy, {
+      awaitRetainedRunner, runTurn, seal,
+      commitSession: admission.commitSession, createExecutionLedger: admission.createExecutionLedger, consumeNoopInbox: admission.consumeNoopInbox,
     });
     function replacement(): Effect.Effect<SessionHandle | undefined, SessionError> {
       return Effect.gen(function* () {
@@ -134,7 +140,7 @@ export function createController(
       }),
       restoreContext: (id) => Effect.gen(function* () {
         const next = yield* replacement();
-        return yield* (next === undefined ? admission.restoreContextProjection(id) : next.restoreContext(id));
+        return yield* (next === undefined ? recovery.restoreContextProjection(id) : next.restoreContext(id));
       }),
       get: (options = {}) => kernel.getSnapshot(sessionId, options.turns ?? 1),
       watch: (options = {}) => kernel.watchSnapshot(sessionId, options.turns ?? 1, runtime.observations),
@@ -209,13 +215,16 @@ export function createController(
           pending: kernel.pendingMessages(sessionId),
           open: kernel.latestOpenTurn(sessionId),
           terminal: kernel.latestTurnTerminal(sessionId),
+          // #1310: the testing controller composes exactly the built-in
+          // capabilities; admission refuses a snapshot that declares none.
+          capabilityKinds: ["tool", "compaction"],
         });
         switch (decision.kind) {
           case "stop": return { stop: true };
           case "refused": return yield* new AgentFailure({ operation: "session.admission", cause: "invalid_state" });
           case "start": return { stop: false, result: yield* admission.startTurn() };
-          case "recover": return { stop: false, result: yield* admission.resumeTurn(decision.open) };
-          case "resume": return { stop: false, result: yield* admission.resumeInterrupted(decision.item) };
+          case "recover": return { stop: false, result: yield* recovery.resumeTurn(decision.open) };
+          case "resume": return { stop: false, result: yield* recovery.resumeInterrupted(decision.item) };
           case "consume":
             yield* admission.consumeNoopInbox(decision.items);
             return { stop: false };

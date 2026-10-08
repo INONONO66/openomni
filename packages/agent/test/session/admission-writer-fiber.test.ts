@@ -168,6 +168,8 @@ function makeWriterWorld(
         openSession: () => store,
         ports: {
           runTurn: options?.runTurn ?? makeTurnPort(resolvedRunner("ok"), false, () => 1_000),
+          // #1310: admission refuses a snapshot with no declared kinds.
+          capabilityKinds: ["tool", "compaction"],
           ...(options?.alarmCapability === undefined ? {} : { alarmCapability: options.alarmCapability }),
         },
       },

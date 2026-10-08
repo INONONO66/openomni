@@ -13,7 +13,8 @@ import {
   receivedMessageAction,
   turnTerminalAction,
 } from "../../src/core/commit";
-import { createSessionAdmission } from "../../src/core/mailbox";
+import { createSessionAdmission } from "../../src/core/admission";
+import { createSessionRecovery } from "../../src/core/recovery";
 import type { ResolvedSessionRuntime, SessionControllerState } from "../../src/core/run";
 import { openCrashStores } from "../helpers/crash-stores";
 import { runAgent } from "../helpers/isolated";
@@ -93,7 +94,15 @@ test("a resume admitted against a settled turn is consumed as a no-op delivery",
           runTurn: () => Effect.die(new Error("resume guard must not reopen a settled turn")),
           seal: () => Effect.die(new Error("resume guard must not seal")),
         });
-        const result = yield* admission.resumeInterrupted(item);
+        const recovery = createSessionRecovery(kernel, "race", runtime, clock, entropy, {
+          awaitRetainedRunner: () => Effect.void,
+          runTurn: () => Effect.die(new Error("resume guard must not reopen a settled turn")),
+          seal: () => Effect.die(new Error("resume guard must not seal")),
+          commitSession: admission.commitSession,
+          createExecutionLedger: admission.createExecutionLedger,
+          consumeNoopInbox: admission.consumeNoopInbox,
+        });
+        const result = yield* recovery.resumeInterrupted(item);
         expect(result).toBeUndefined();
       }),
     );

@@ -8,7 +8,7 @@ import { Effect, Result } from "effect";
 import type { LedgerError } from "../../src/core/store/errors";
 import type { SessionKernel } from "../../src/core/entity";
 import type { ExecutionLedger } from "../../src/core/gate/decide";
-import { commitSessionRequest } from "../../src/core/mailbox";
+import { commitSessionRequest } from "../../src/core/request";
 import { commitFoldBatch } from "../../src/core/commit";
 import type { LedgerAction, LedgerSession, SessionTransition } from "@openomni/protocol";
 import { collector } from "./observation-collector";

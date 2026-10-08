@@ -18,6 +18,7 @@ import {
   type AppLedgerPlane,
   type SessionKernel,
 } from "../../src/composition/cluster-runtime";
+import { ComposedGeneration } from "../../src/composition/composed";
 import { localInboxCommit } from "../../src/process-entry";
 import type { AppRuntime } from "../../src/runtime";
 import { runRuntimeEffect } from "./effect";
@@ -85,11 +86,14 @@ export function drainSession(deps: {
   readonly runtime: ResolvedTestRuntime;
   readonly scope: Scope.Scope;
   readonly owner?: string;
-}): Effect.Effect<SessionTurn.Terminal | undefined, SessionError | LedgerError> {
+}): Effect.Effect<SessionTurn.Terminal | undefined, SessionError | LedgerError, ComposedGeneration> {
   const owner = deps.owner ?? "test-drain";
   const kernel = deps.plane.openKernel(deps.sessionId);
   const runTurn = createSessionEntityRunTurn(deps.runner, deps.runtime, deps.scope);
   return Effect.gen(function* () {
+    // Admission refuses a snapshot with no declared kinds; the drain states
+    // the composed generation's kinds like the process child does.
+    const composed = yield* ComposedGeneration;
     const fence = yield* adoptTestFence(kernel, deps.sessionId, owner);
     const authority = { sessionId: deps.sessionId, owner, fence };
     for (;;) {
@@ -101,6 +105,7 @@ export function drainSession(deps: {
         pending: kernel.pendingMessages(deps.sessionId),
         ...(open === undefined ? {} : { open }),
         ...(terminal === undefined ? {} : { terminal }),
+        capabilityKinds: Object.keys(composed.current().generation.kinds),
       };
       const decision = decideSessionAdmission(snapshot);
       switch (decision.kind) {

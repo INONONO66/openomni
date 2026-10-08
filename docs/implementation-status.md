@@ -1,5 +1,36 @@
 # Implementation Status
 
+## #1310 mailbox admission split, typed admission/origin refusals, required stop evidence (epic #1303, rung 8)
+
+On `stab/8-mailbox-admission-split` (2026-10-07, base `03cd0c274`).
+`packages/agent/src/core/mailbox.ts` is deleted and its five jobs now have one
+owner each: `core/admission.ts` (entity admission over the composed
+generation's registered capability kinds), `core/recovery.ts` (restoration)
+and `core/request.ts` (request authority); `rg 'core/mailbox' packages apps`
+prints nothing. Two permissive defaults closed with typed refusals: an
+admission snapshot that registers no capability kinds is refused
+`missing_capability_kinds` (the `BUILTIN_CAPABILITY_KINDS` fallback is
+deleted, grep 0 → was 2), and a prompt whose action row records no origin
+fails its turn typed via `InboundAuthorityViolation("missing_origin")`
+instead of running with `act` authority (`origin === undefined` grep 0 → was
+1). Deviation from the issue plan: the refusal reason unions live in
+`packages/agent/src/core/failure.ts` (`unknown_origin | undeclared_treatment
+| missing_origin`) and `core/admission.ts` (`unknown_kind |
+missing_capability_kinds`) with a zod enum in `core/run.ts` — not in
+`packages/protocol`, which has no such enum today. `stopEvidence` is now
+REQUIRED on `ChatAgentConfig` (`core/types.ts`) and on the durable runner
+input: `turn.ts` reads `config.stopEvidence()` with no empty-evidence
+fallback, the prepared loop config is `Omit<ChatAgentConfig, "stopEvidence">`
+and the durable runner always injects `input.stopEvidence`
+(`rg 'stopEvidence\?' packages apps` prints nothing → was 3; test fixtures
+pass an explicit `fixtureStopEvidence`). Tests:
+`packages/agent/test/admission-kinds-refusal.test.ts`,
+`packages/agent/test/stop-evidence-required.test.ts` (a config without the
+port is a `// @ts-expect-error` compile probe; a wired port is consulted),
+`inbound-authority`/`session-turn-authority`/`session-chat-runner`/
+`request-authority` updated. `bun test packages/agent/test` 1740 pass /
+0 fail. No new journal kind, tool or gate point; durable bytes unchanged.
+
 ## #1306 full-app boot tests for every capability off (epic #1303, rung 7)
 
 On `stab/7-capability-off-boot-tests` (2026-10-07, base `03cd0c274` = rung 2

@@ -23,7 +23,7 @@ import type { ExecutionApprovalRequest, ExecutionApprovals, ExecutionBatchResult
 import { closeSessions, type SessionRunner, type SessionRunnerInput, type SessionRunnerResult } from "../src/core/run";
 import { session } from "../src/testing/registry";
 import { createSessionRequests } from "../src/core/request";
-import { commitSessionRequest } from "../src/core/mailbox";
+import { commitSessionRequest } from "../src/core/request";
 import { z } from "zod";
 // ---------------------------------------------------------------------------
 // HARNESS (docs/session-lifecycle-contract.md section 6): real ledger, session

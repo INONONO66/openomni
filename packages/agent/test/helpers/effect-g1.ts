@@ -8,7 +8,7 @@ import type { LedgerAction, SessionTransition } from "@openomni/protocol";
 import type { SessionKernel } from "../../src/core/entity";
 import type { ExecutorOptions, ExecutionLedger } from "../../src/core/gate/decide";
 import type {} from "../../src/core/run";
-import { commitSessionRequest } from "../../src/core/mailbox";
+import { commitSessionRequest } from "../../src/core/request";
 import { AgentFailure } from "../../src/core/failure";
 import { allowAllPolicy, fixtureHashes } from "./compiled-policy";
 import { fencedTurnFixture, fencedTurnIdentity } from "./fenced-writer";

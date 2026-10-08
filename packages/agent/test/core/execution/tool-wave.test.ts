@@ -9,6 +9,7 @@ import { sessionTree as kernelSessionTree } from "../../helpers/session-tree";
 import { requestLedger } from "../../helpers/effect-g1";
 import { createTestAgent } from "../../helpers/effect-g2";
 import { runInput } from "../../helpers/run-input";
+import { fixtureStopEvidence } from "../../helpers/chat-services";
 import { createAssistantMessage } from "../../../src/core/message-factory";
 import { createRunState } from "../../../src/core/turn";
 import { buildTurn } from "../../../src/core/turn";
@@ -415,6 +416,7 @@ it("settles a defective fallback slot without interrupting its sibling or losing
   const published: string[] = [];
   const config: ObservedChatAgentConfig = {
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
+    stopEvidence: fixtureStopEvidence,
     toolExecutor: (call) => call.id === "A"
       ? Deferred.await(siblingEntered).pipe(Effect.andThen(Effect.die(new Error("slot_defect"))), Effect.ensuring(Deferred.succeed(failed, undefined)))
       : Deferred.succeed(siblingEntered, undefined).pipe(Effect.andThen(Deferred.await(failed)), Effect.as({ id: call.id, toolCallId: call.id, output: "survived" })),
@@ -431,6 +433,7 @@ it("settles a defective fallback slot without interrupting its sibling or losing
 it("propagates a fallback body's interruption instead of settling the slot as an error", () => isolated(Effect.gen(function* () {
   const config: ObservedChatAgentConfig = {
     events: { publish: () => undefined }, model: { provider: "test", id: "test" },
+    stopEvidence: fixtureStopEvidence,
     toolExecutor: (call) => call.id === "A"
       ? Effect.interrupt
       : Effect.succeed({ id: call.id, toolCallId: call.id, output: "settled" }),

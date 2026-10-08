@@ -691,12 +691,7 @@ function handleStop(
   );
   if (yielded === "window" && (compacted === "none" || state.lastCompactionIneffective))
     disarmWindowYield(state);
-  const evidence = yield* (config.stopEvidence?.() ?? Effect.succeed({
-    progress: false,
-    blocked: false,
-    openIntent: [],
-    alarmIds: [],
-  }));
+  const evidence = yield* config.stopEvidence();
   const judgment = yield* execution.judgeStop(state.stop, {
     ...evidence,
     text: turnText,

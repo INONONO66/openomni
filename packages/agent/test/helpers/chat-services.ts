@@ -8,7 +8,22 @@ import { observationService } from "./service-layers";
 
 export { fixtureCompactionSeam } from "./fixture-compaction";
 
-export interface ChatFixture extends ObservedChatAgentConfig {
+/**
+ * Fixture stop evidence (#1310): the port is required on `ChatAgentConfig`,
+ * so fixtures state the former implicit answer — no progress, not blocked,
+ * nothing open — explicitly instead of relying on a deleted core default.
+ */
+export const fixtureStopEvidence: ChatAgentConfig["stopEvidence"] = () =>
+  Effect.succeed({ progress: false, blocked: false, openIntent: [], alarmIds: [] });
+
+/**
+ * `stopEvidence` is overridable ONLY on the fixture: `ChatAgentConfig`
+ * requires the port; test helpers inject `fixtureStopEvidence` when a case
+ * omits it.
+ */
+export interface ChatFixture
+  extends Omit<ObservedChatAgentConfig, "stopEvidence">,
+    Partial<Pick<ObservedChatAgentConfig, "stopEvidence">> {
   readonly llm?: Partial<Context.Service.Shape<typeof Llm>>;
 }
 
@@ -49,7 +64,8 @@ export function prepareChatFixture(
   },
 ): Prepared {
   const { events: _events, llm: _llm, ...rest } = prepared.config;
-  const config = "compactionSeam" in rest ? rest : { ...rest, compactionSeam: fixtureCompactionSeam };
+  const seamed = "compactionSeam" in rest ? rest : { ...rest, compactionSeam: fixtureCompactionSeam };
+  const config = { stopEvidence: fixtureStopEvidence, ...seamed };
   return {
     ...prepared,
     config: config satisfies ChatAgentConfig & Pick<Prepared["config"], "executor">,

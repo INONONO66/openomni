@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Inbox, Journal, type LedgerSession } from "@openomni/protocol";
 import { deliveryActions, inputRowKind, receivedMessageAction } from "../src/core/commit";
-import { decideSessionAdmission } from "../src/core/mailbox";
+import { decideSessionAdmission } from "../src/core/admission";
 
 /**
  * #1252 input admission: delivered inputs are journal rows of the closed set —
@@ -89,7 +89,7 @@ test("an input of a capability kind whose capability is off is rejected with unk
   };
   const pending = [row("action", "in-action")];
   // The composed generation registers only the built-ins: the action input is refused.
-  const refused = decideSessionAdmission({ row: sessionRow, pending });
+  const refused = decideSessionAdmission({ row: sessionRow, pending, capabilityKinds: ["tool", "compaction"] });
   expect(refused).toEqual({ kind: "refused", reason: "unknown_kind" });
   // The same input with the action capability composed is admitted and heads
   // a turn like a prompt (#1256 r5 H-3): boundary consumption — not an idle
