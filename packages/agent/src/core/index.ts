@@ -2,6 +2,11 @@
 // barrels merged — turn/gate/tool/ports/failure contracts, entity, admission,
 // requests, run, bus, and the append-only store.
 export type { ChatAgentConfig } from "./types";
+export type { AgentBudget, ResolvedAgentBudget } from "./types";
+// #1309: the approval-policy seam — product values behind one injected shape.
+export { ApprovalPolicySeam, type ApprovalPolicy, type ApprovalRecentOpen } from "./approval-policy";
+export { resolveAgentBudget } from "./budget";
+export { createApprovalRequest } from "./request-binding";
 export { failureFacts } from "./retry";
 export * from "./failure";
 export * from "./ports";

@@ -8,6 +8,7 @@ import { createTurnDispatcher } from "../src/plugins/tool";
 import { defineTool, projectTools } from "../src/core/tool";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { isolated } from "./helpers/isolated";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 function definition(input = z.object({ value: z.string() })) {
   return defineTool({
@@ -37,7 +38,7 @@ test("recovery refuses a missing or changed captured definition instead of execu
     tools: projectTools([original]).session,
   };
   for (const definitions of [[], [definition(z.object({ value: z.string().min(2) }))]]) {
-    const refused = yield* Effect.flip(createTurnDispatcher(input, {}).pipe(Effect.provide(catalogLayer(definitions))));
+    const refused = yield* Effect.flip(createTurnDispatcher(input, { approvalPolicy: TEST_APPROVAL_POLICY }).pipe(Effect.provide(catalogLayer(definitions))));
     expect(refused).toMatchObject({ _tag: "AgentFailure", operation: "dispatcher.acquire" });
   }
   expect(record.committed).toEqual([]);
@@ -56,7 +57,7 @@ test("a recovered tool and its policy decisions remain children of the captured 
           tools: projectTools([tool]).session,
           policy: compiledPolicy(),
           ledger: record.ledger,
-        }; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = { observations: { publish: () => undefined }, entropy: record.entropy }; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([tool])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
+        }; const turnRuntime: Parameters<typeof createTurnDispatcher>[1] & Partial<Pick<ResolvedExecutorOptions, "clock" | "entropy" | "observations">> = { approvalPolicy: TEST_APPROVAL_POLICY, observations: { publish: () => undefined }, entropy: record.entropy }; return yield* createTurnDispatcher(turnInput, turnRuntime).pipe(Effect.provide(catalogLayer([tool])), Effect.provide(turnTestLayer(turnInput, turnRuntime))); }));
       const result = yield* dispatcher.execute(
         { id: "call", tool: "captured", input: { value: "ok" } },
         { sessionId: "session", turnId: "original-turn" },

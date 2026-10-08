@@ -19,6 +19,9 @@ export {
 // alone (`Bundle.define` / `Manifest.define` are product-side, surfaced by the
 // root `Bundle` barrel); the alarm seam is what the alarm plugin publishes.
 export { Capability, seam, type CapabilityDefinition, type SeamTag } from "./capability";
+// #1309 approval-policy seam: the product-owned approval/budget values the
+// composition threads into the core; a bundle `provides` the tag.
+export { ApprovalPolicySeam, type ApprovalPolicy, type ApprovalRecentOpen } from "./approval-policy";
 export { AlarmSeam } from "./alarm";
 // #1256 consulted-gate seam: the types a hook-style capability needs to
 // register an asynchronous gate consultant without touching core internals.

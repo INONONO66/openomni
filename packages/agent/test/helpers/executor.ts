@@ -3,13 +3,21 @@ import { createExecutor } from "../../src/core/gate/decide";
 import type { ResolvedExecutorOptions } from "../../src/core/gate/decide";
 import { runTestSync } from "./isolated";
 import { executorLayer } from "./service-layers";
+import { TEST_APPROVAL_POLICY } from "./approval-policy";
 export { runAgent, runAgentSync } from "./isolated";
 
-/** Acquire an executor with the fixture's services supplied through their Layer. */
-export function testExecutor(options: ResolvedExecutorOptions) {
+/**
+ * Acquire an executor with the fixture's services supplied through their
+ * Layer. #1309: the approval policy is composition-owned; fixtures default to
+ * the shipped values unless a case states its own.
+ */
+export function testExecutor(
+  options: Omit<ResolvedExecutorOptions, "approvalPolicy"> &
+    Partial<Pick<ResolvedExecutorOptions, "approvalPolicy">>,
+) {
   const { policy, observations, clock, entropy, ...executorOptions } = options;
   return runTestSync(
-    createExecutor(executorOptions).pipe(
+    createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY, ...executorOptions }).pipe(
       Effect.provide(executorLayer({ policy, observations, clock, entropy })),
     ),
   );

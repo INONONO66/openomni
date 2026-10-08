@@ -16,6 +16,7 @@ import {
 } from "../helpers/open-turn-fixture";
 import { openRequest } from "../helpers/open-request";
 import { approvalAnswer, invocationNode } from "../helpers/request-fixtures";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 import {
   clusterTempDir,
   readChain,
@@ -340,6 +341,7 @@ function foldRequestItems(
         payload: entry.payload,
       },
       { row: requestRow, invocation, ...(current === undefined ? {} : { request: current }) },
+      TEST_APPROVAL_POLICY.recentOpen,
     );
     resolutions.push(decision.resolution);
     if (decision.request !== undefined) current = decision.request;
@@ -429,6 +431,7 @@ describe("Table B: request commands in FIFO order keep the W1 resolutions", () =
         payload: { kind: "request.answer", answer: approvalAnswer(sealed, "b8-b", 20) },
       },
       { row: requestRow, invocation, request: first.request },
+      TEST_APPROVAL_POLICY.recentOpen,
     );
     expect(decision.resolution).not.toBe("resolved");
     expect(decision.resolution).not.toBe("attached");

@@ -17,6 +17,7 @@ import { GenerationOwnership, SessionLayer } from "../src/core/ports";
 import { z } from "zod";
 import { recordingExecutor, recordingLedger } from "./helpers/effect-g3";
 import { allowAllPolicy, opPhaseOf } from "./helpers/compiled-policy";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 function tool(
   name: string,
@@ -53,7 +54,7 @@ describe("createTurnDispatcher", () => {
         role: "resident",
         actionId: context.turnId,
         ledger: recording.ledger,
-      }, {}).pipe(Effect.provide(catalogLayer([
+      }, { approvalPolicy: TEST_APPROVAL_POLICY }).pipe(Effect.provide(catalogLayer([
         tool("invocation", async () => {
           const frame = requireOpenInvocation();
           expect(frame).toBe(currentInvocation());
@@ -80,7 +81,7 @@ describe("createTurnDispatcher", () => {
         actionId: "turn-1",
         ledger: recording.ledger,
       },
-      {},
+      { approvalPolicy: TEST_APPROVAL_POLICY },
     ).pipe(Effect.provide(catalogLayer([tool("echo", async () => "ok")])),
       Effect.provide(executorLayer({ policy: allowAllPolicy, observations: { publish: () => undefined }, clock: () => 1, entropy: recording.entropy })));
 

@@ -29,6 +29,7 @@ import type { SessionEntityPorts } from "../../src/core/run";
 import { clusterTempDir, makeTurnPort, resolvedRunner, sessionFileFor } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
 import type { Inbox } from "@openomni/protocol";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 const { dir, sessionsDir, catalogFile } = clusterTempDir("w52-writer-fiber-");
 
@@ -167,6 +168,7 @@ function makeWriterWorld(
         catalog,
         openSession: () => store,
         ports: {
+          approvalPolicy: TEST_APPROVAL_POLICY,
           runTurn: options?.runTurn ?? makeTurnPort(resolvedRunner("ok"), false, () => 1_000),
           // #1310: admission refuses a snapshot with no declared kinds.
           capabilityKinds: ["tool", "compaction"],

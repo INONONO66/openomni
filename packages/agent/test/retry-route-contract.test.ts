@@ -13,6 +13,7 @@ import { testExecutor } from "./helpers/executor";
 import { compiledPolicy } from "./helpers/compiled-policy";
 import { chatServices, fixtureStopEvidence, type ChatFixture } from "./helpers/chat-services";
 import { runInput } from "./helpers/run-input";
+import { TEST_BUDGET } from "./helpers/approval-policy";
 
 const primary = { provider: "route-a", id: "model-a" };
 const fallback = { provider: "route-b", id: "model-b" };
@@ -77,7 +78,7 @@ function scenario(prefix: Prefix, floor = 0, veto = false) {
       },
     };
     const { events: _events, llm: _llm, ...config } = fixture;
-    const result = yield* Effect.result(runAgent(runInput([{ role: "user", content: "go" }]), { ...config, stopEvidence: config.stopEvidence ?? fixtureStopEvidence })
+    const result = yield* Effect.result(runAgent(runInput([{ role: "user", content: "go" }]), { defaultBudget: TEST_BUDGET, ...config, stopEvidence: config.stopEvidence ?? fixtureStopEvidence })
       .pipe(Effect.provide(chatServices(fixture))));
     return { result, committed, providers, resolved, arms };
   });

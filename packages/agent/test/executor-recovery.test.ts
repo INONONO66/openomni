@@ -16,6 +16,7 @@ import { isolated, isolatedLedger } from "./helpers/isolated";
 import { requestLedger } from "./helpers/request-ledger";
 
 import { compiledPolicy } from "./helpers/compiled-policy";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 function runBatch(
   executor: DurableExecutor,
@@ -71,6 +72,7 @@ function harness() {
   const actions: LedgerAction.Node[] = [];
   let sequence = 0;
   const options: ResolvedExecutorOptions = {
+    approvalPolicy: TEST_APPROVAL_POLICY,
     identity: { sessionId: "session", role: "resident", parentActionId: "turn", turnId: "turn" },
     policy: compiledPolicy(),
     clock: () => 100,
@@ -908,7 +910,7 @@ describe("turn dispatcher recovery", () => {
         turnId: "turn",
         ledger: options.ledger,
       },
-      {},
+      { approvalPolicy: TEST_APPROVAL_POLICY },
     ).pipe(
       Effect.provide(
         catalogLayer([

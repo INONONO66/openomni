@@ -944,6 +944,7 @@ function requestCommand(
         payload,
       },
       requestSnapshot(handle, requestId, inputId, row),
+      env.ports.approvalPolicy.recentOpen,
     );
     const intake =
       decision.receive === undefined

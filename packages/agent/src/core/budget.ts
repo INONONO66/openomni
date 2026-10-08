@@ -1,6 +1,6 @@
 import type { BusEvent } from "@openomni/protocol";
 import { Actor, Operational } from "@openomni/protocol";
-import type { AgentBudget } from "./types";
+import type { AgentBudget, ResolvedAgentBudget } from "./types";
 
 export interface BudgetState {
   startTime: number;
@@ -35,13 +35,23 @@ export function effectiveBudgetThresholds(budget?: Actor.Profile.BudgetThreshold
 
 type BudgetStatus = "ok" | "reassurance" | "warning" | "exceeded";
 
-// Enforcement and narration share the same ceilings.
-const BUDGET_DEFAULTS = {
-  maxTurns: 24,
-  maxToolCalls: 40,
-  maxWallTimeMs: 5 * 60 * 1000,
-  maxToolRuntimeMs: 2 * 60 * 1000,
-} as const;
+/**
+ * The one budget resolution (#1309): the run's explicit budget wins per field;
+ * anything it leaves unset reads from the injected approval policy's
+ * `defaultBudget`. The core keeps no ceiling literal of its own.
+ */
+export function resolveAgentBudget(
+  defaults: ResolvedAgentBudget,
+  explicit?: AgentBudget,
+): ResolvedAgentBudget {
+  return {
+    ...explicit,
+    maxTurns: explicit?.maxTurns ?? defaults.maxTurns,
+    maxToolCalls: explicit?.maxToolCalls ?? defaults.maxToolCalls,
+    maxWallTimeMs: explicit?.maxWallTimeMs ?? defaults.maxWallTimeMs,
+    maxToolRuntimeMs: explicit?.maxToolRuntimeMs ?? defaults.maxToolRuntimeMs,
+  };
+}
 
 type ExceededLimit = "wall time" | "turns" | "tool calls" | "tool wall time";
 
@@ -57,13 +67,13 @@ interface BudgetEvaluation {
  * because the turn's step cap subtracts from this exact pool — a cap computed
  * against any other number starves or overshoots the real enforcement.
  */
-export function effectiveMaxToolCalls(budget?: AgentBudget): number {
-  return budget?.maxToolCalls ?? BUDGET_DEFAULTS.maxToolCalls;
+export function effectiveMaxToolCalls(budget: ResolvedAgentBudget): number {
+  return budget.maxToolCalls;
 }
 
 /** The tool wall-time ceiling the budget enforces (-1 = unlimited); shared with the wave-level enforcement in tool-wave.ts. */
-function effectiveMaxToolRuntimeMs(budget?: AgentBudget): number {
-  return budget?.maxToolRuntimeMs ?? BUDGET_DEFAULTS.maxToolRuntimeMs;
+function effectiveMaxToolRuntimeMs(budget: ResolvedAgentBudget): number {
+  return budget.maxToolRuntimeMs;
 }
 
 /**
@@ -71,13 +81,13 @@ function effectiveMaxToolRuntimeMs(budget?: AgentBudget): number {
  * needs (reads the clock, mutates nothing, emits nothing) — see
  * {@link publishBudgetTelemetry}, the single production consumer.
  */
-export function evaluateBudget(state: BudgetState, now: () => number, budget?: AgentBudget): BudgetEvaluation {
+export function evaluateBudget(state: BudgetState, now: () => number, budget: ResolvedAgentBudget): BudgetEvaluation {
   const { warningThreshold: warningRatio, reassuranceThreshold: reassuranceRatio } =
     effectiveBudgetThresholds(budget);
   const elapsedMs = now() - state.startTime;
   const limits: readonly [ExceededLimit, number, number][] = [
-    ["wall time", elapsedMs, budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs],
-    ["turns", state.turns, budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns],
+    ["wall time", elapsedMs, budget.maxWallTimeMs],
+    ["turns", state.turns, budget.maxTurns],
     ["tool calls", state.toolCalls, effectiveMaxToolCalls(budget)],
     ["tool wall time", state.toolRuntimeMs, effectiveMaxToolRuntimeMs(budget)],
   ];
@@ -109,7 +119,7 @@ export function publishBudgetTelemetry(
   run: { readonly traceId: string; readonly sessionId: string },
   events: BusEvent.Sink,
   now: () => number,
-  budget?: AgentBudget,
+  budget: ResolvedAgentBudget,
 ): BudgetStatus {
   const evaluation = evaluateBudget(state, now, budget);
 
@@ -164,10 +174,10 @@ export function publishBudgetTelemetry(
   return evaluation.status;
 }
 
-export function describeBudgetRemaining(state: BudgetState, now: () => number, budget?: AgentBudget): string {
+export function describeBudgetRemaining(state: BudgetState, now: () => number, budget: ResolvedAgentBudget): string {
   const parts: string[] = [];
 
-  const maxTurns = budget?.maxTurns ?? BUDGET_DEFAULTS.maxTurns;
+  const maxTurns = budget.maxTurns;
   if (maxTurns === -1) {
     parts.push("unlimited turns remaining");
   } else {
@@ -181,7 +191,7 @@ export function describeBudgetRemaining(state: BudgetState, now: () => number, b
     parts.push(`${remaining} tool call${remaining !== 1 ? "s" : ""} remaining`);
   }
 
-  const maxWallTimeMs = budget?.maxWallTimeMs ?? BUDGET_DEFAULTS.maxWallTimeMs;
+  const maxWallTimeMs = budget.maxWallTimeMs;
   if (maxWallTimeMs !== -1) {
     const elapsed = now() - state.startTime;
     const remaining = Math.max(0, maxWallTimeMs - elapsed);

@@ -4,6 +4,7 @@ import { staleActionBacklog, turnIntentAction } from "../../../packages/agent/sr
 import type * as SessionHandleStore from "../../../packages/agent/src/core/store/fence";
 import { materializeSession } from "../../../packages/agent/test/store/helpers/session";
 import { useMemoryStores } from "../../../packages/agent/test/store/helpers/storage";
+import { TEST_APPROVAL_POLICY } from "../../../packages/agent/test/helpers/approval-policy";
 
 /**
  * #1256 H-3: a deferred `action` input carries the journal ordinal (`after`)
@@ -434,6 +435,7 @@ test("H-3(a): a stale late-hook action through the REAL entity deliver door clos
         return kernel;
       };
       const runtime: SessionRuntime = {
+        approvalPolicy: TEST_APPROVAL_POLICY,
         authorizeConfigure: allowConfigure,
         openKernel,
         listSessions: () => [],

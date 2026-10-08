@@ -274,6 +274,7 @@ export function createSessionAdmission(
         const recorded: PlainValue = { inboxId: item.id, status: "recorded" };
         const executor = yield* createExecutor({
           ledger,
+          approvalPolicy: runtime.approvalPolicy,
           identity: { sessionId, role: kernel.row(sessionId).role, parentActionId: item.id },
         });
         const outcome = yield* executor.runExisting({

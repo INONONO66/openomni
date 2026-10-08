@@ -13,6 +13,7 @@ import { createTurnDispatcher } from "../src/plugins/tool";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { effectValue, fiberSessionId, nativeExecutorOptions } from "./helpers/native-executor";
 import { sessionTree } from "./helpers/session-tree";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 type SeedRow = Omit<PolicyRow.Row, "generation">;
 
@@ -72,7 +73,7 @@ function dispatch(rows: readonly SeedRow[], bodies: PlainValue[]) {
         ...options.identity, actionId: options.identity.turnId, ledger: options.ledger,
         tools: captured.snapshot.tools, toolsGeneration: captured.snapshot.generation,
         toolsHash: captured.snapshot.toolsHash,
-      }, {});
+      }, { approvalPolicy: TEST_APPROVAL_POLICY });
       const result = yield* dispatcher.execute({ id: "call", tool: "demo__echo", input: { value: "original", secret: "secret" } },
         { sessionId: fiberSessionId, turnId: options.identity.turnId });
       return { result, policy };

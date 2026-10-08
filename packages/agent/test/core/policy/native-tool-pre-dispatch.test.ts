@@ -13,6 +13,7 @@ import { createExecutor } from "../../../src/core/gate/decide";
 import { defineTool } from "../../../src/core/tool";
 import { createDispatcher } from "../../../src/plugins/tool";
 import { isolated, isolatedLedger } from "../../helpers/isolated";
+import { TEST_APPROVAL_POLICY } from "../../helpers/approval-policy";
 
 test("approval recovery executes recorded admitted bytes without transforming again", () => isolated(Effect.scoped(Effect.gen(function* () {
   const recorded = yield* requestLedger();
@@ -33,7 +34,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
     execute: async ({ text }) => { executed.push(text); return text; }, render: (_input, output) => output,
   }, () => ({ required: true, domainRevisions: {} }));
   const providers = executorLayer({ ...recorded, policy, observations: { publish: () => undefined } });
-  const crashed = yield* createExecutor({ ...crashAfterRequestOpen(recorded, "crash"), identity: recorded.identity }).pipe(Effect.provide(providers));
+  const crashed = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY, ...crashAfterRequestOpen(recorded, "crash"), identity: recorded.identity }).pipe(Effect.provide(providers));
   const initial = yield* createDispatcher({ executor: crashed }).pipe(Effect.provide(catalogLayer([definition])));
   const context = { sessionId: recorded.identity.sessionId, turnId: recorded.identity.turnId };
   expect(yield* failure(initial.execute({ id: "write-call", tool: "write", input: { text: "original" } }, context)))
@@ -55,7 +56,7 @@ test("approval recovery executes recorded admitted bytes without transforming ag
     ] });
   const recoveredProviders = executorLayer({ ...recorded, policy: recoveredPolicy, observations: { publish: () => undefined } });
   const ready = Promise.withResolvers<void>();
-  const recovered = yield* createExecutor({ ...recorded, ledger: { ...recorded.ledger, requestById: (id) => {
+  const recovered = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY, ...recorded, ledger: { ...recorded.ledger, requestById: (id) => {
     if ((recovered.approvals?.pending().length ?? 0) > 0) ready.resolve();
     return recorded.ledger.requestById?.(id);
   } }, authorizeApproval: () => Effect.succeed({ kind: "owner", principalId: "owner", evidenceId: "proof" }) }).pipe(Effect.provide(recoveredProviders));

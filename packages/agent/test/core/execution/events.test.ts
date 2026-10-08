@@ -3,6 +3,7 @@ import { RunEvents } from "../../../src/core/turn";
 import { Operational, type PlainObject } from "@openomni/protocol";
 import { createBudgetState, publishBudgetTelemetry } from "../../../src/core/budget";
 import { collector } from "../../helpers/observation-collector";
+import { TEST_BUDGET } from "../../helpers/approval-policy";
 describe("RunEvents BusEvents", () => {
   const base = { traceId: "test-trace-id", sessionId: "s1", time: 1 };
   const now = () => 1;
@@ -58,7 +59,7 @@ describe("RunEvents BusEvents", () => {
     { turns: 15, event: Operational.Events.Info, status: "reassurance" },
   ])("budget $status uses the operational event contract", ({ turns, event, status }) => {
     const events = collector();
-    publishBudgetTelemetry({ ...createBudgetState(now), turns }, base, events, now);
+    publishBudgetTelemetry({ ...createBudgetState(now), turns }, base, events, now, TEST_BUDGET);
     expect(events.events).toHaveLength(1);
     const parsed = event.schema.parse(events.named(event.name)[0]);
     expect(parsed).toMatchObject({

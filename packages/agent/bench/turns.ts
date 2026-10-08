@@ -24,6 +24,7 @@ import { completeModel, mockLlm, mockProviderModel } from "../test/helpers/mock-
 import { valueTool } from "../test/helpers/query-tool";
 import { runInput } from "../test/helpers/run-input";
 import { seedPolicy } from "../test/helpers/seed-policy";
+import { TEST_APPROVAL_POLICY, TEST_BUDGET } from "../test/helpers/approval-policy";
 
 // Keep the reference benchmark's no-op observation port; fixture helpers otherwise
 // add a bus and event stamping to every dispatch, changing what this metric measures.
@@ -91,7 +92,7 @@ export async function firstDelta(now: () => number) {
   // Drain persistence before another sample starts, but time only the first snapshot.
   await runBenchEffect(
     Effect.gen(function* () {
-      const executor = yield* createExecutor({
+      const executor = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY,
         ledger: record.ledger,
         retryAlarm: nullRetryAlarm,
         identity: {
@@ -100,7 +101,7 @@ export async function firstDelta(now: () => number) {
           parentActionId: null,
         },
       });
-      return yield* runAgent(input, { model, executor, execution: executor, stopEvidence: fixtureStopEvidence }, sink);
+      return yield* runAgent(input, { model, executor, execution: executor, stopEvidence: fixtureStopEvidence, defaultBudget: TEST_BUDGET }, sink);
     }).pipe(Effect.provide(services)),
   );
   return { overriddenDuration: await first.promise };
@@ -110,7 +111,7 @@ export function toolDispatch() {
   const record = recordingLedger();
   const dispatcher = runAgentSync(
     Effect.gen(function* () {
-      const executor = yield* createExecutor({
+      const executor = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY,
         ledger: record.ledger,
         retryAlarm: nullRetryAlarm,
         identity: { sessionId: "session-1", role: "resident", parentActionId: null },
@@ -159,7 +160,7 @@ export async function roundTrip(): Promise<{
         // on every turn; do not rebuild or override the generation's service Layers.
         const dispatcher = yield* createTurnDispatcher(input, runtime);
         return {
-          config: { model, executor: dispatcher.executor },
+          config: { model, executor: dispatcher.executor, defaultBudget: TEST_BUDGET },
           traceContext: {
             traceId: "trace-agent-bench",
             sessionId: input.sessionId,

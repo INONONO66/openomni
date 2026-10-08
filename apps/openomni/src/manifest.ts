@@ -1,4 +1,5 @@
 import { Bundle } from "@openomni/agent";
+import { approvalPolicyBundle } from "./bundles/approval-policy";
 import { cronBundle } from "./bundles/cron";
 import { delegationPolicyBundle } from "./bundles/delegation-policy";
 import { hooksJsonBundle, type HooksJsonInput } from "./bundles/hooks-json";
@@ -69,6 +70,8 @@ export function appManifest(input: AppManifestInput): Bundle.ManifestDefinition 
       hooksJsonBundle(input.hooks),
       sendMessageBundle(),
       delegationPolicyBundle(),
+      // #1309: the approval/budget product values; `send-message` requires its seam.
+      approvalPolicyBundle(),
     ],
     off: input.off ?? [],
   });

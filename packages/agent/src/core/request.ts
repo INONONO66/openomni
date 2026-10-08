@@ -9,6 +9,7 @@ import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./entity";
 import { type SessionRuntime, getSessionHandle, adoptSessionAuthority } from "./run";
 import { Entropy } from "./ports";
+import type { ApprovalRecentOpen } from "./approval-policy";
 
 // ─── from session-request.ts (#1247) ───
 export interface RequestDecision {
@@ -39,6 +40,7 @@ function all(...checks: readonly boolean[]): boolean {
 export function decideRequestTransition(
   command: SessionTransition.Command,
   snapshot: RequestSnapshot,
+  recentOpen: ApprovalRecentOpen,
 ): RequestDecision {
   if (
     !SessionTransition.Command.safeParse(command).success ||
@@ -46,7 +48,10 @@ export function decideRequestTransition(
   )
     return rejected;
   const inputDigest = requestInputDigest(command.payload);
-  return repeatedInput(command, snapshot, inputDigest) ?? transition(command, snapshot, inputDigest);
+  return (
+    repeatedInput(command, snapshot, inputDigest) ??
+    transition(command, snapshot, inputDigest, recentOpen)
+  );
 }
 
 type ExistingPayload = Exclude<SessionTransition.Payload, { kind: "request.open" }>;
@@ -60,10 +65,11 @@ function transition(
   command: SessionTransition.Command,
   snapshot: RequestSnapshot,
   inputDigest: string,
+  recentOpen: ApprovalRecentOpen,
 ): RequestDecision {
   const { payload } = command;
   if (payload.kind === "request.open") {
-    return openRequest(command, snapshot, payload.request, inputDigest);
+    return openRequest(command, snapshot, payload.request, inputDigest, recentOpen);
   }
   const request = snapshot.request;
   if (request === undefined || !targets(request, payload, snapshot.row.id)) return rejected;
@@ -328,8 +334,11 @@ function openApprovalCount(
   return { since, count: open.length };
 }
 
-function exceedsApprovalBudget(requestCount: ApprovalCount | undefined): boolean {
-  return requestCount !== undefined && requestCount.count >= 8;
+function exceedsApprovalBudget(
+  requestCount: ApprovalCount | undefined,
+  limit: number,
+): boolean {
+  return requestCount !== undefined && requestCount.count >= limit;
 }
 
 function freshRequestShape(next: SessionTransition.Request): boolean {
@@ -357,9 +366,10 @@ function openRequest(
   snapshot: RequestSnapshot,
   next: SessionTransition.Request,
   inputDigest: string,
+  recentOpen: ApprovalRecentOpen,
 ): RequestDecision {
-  const requestCount = openApprovalCount(snapshot, next, command.at - 3_600_000);
-  if (exceedsApprovalBudget(requestCount) || !admitsOpen(next, snapshot)) return rejected;
+  const requestCount = openApprovalCount(snapshot, next, command.at - recentOpen.windowMs);
+  if (exceedsApprovalBudget(requestCount, recentOpen.limit) || !admitsOpen(next, snapshot)) return rejected;
   return {
     ...recordRequest(command, next, inputDigest, "opened"),
     ...(requestCount === undefined ? {} : { requestCount }),
@@ -879,7 +889,7 @@ export function commitSessionRequest(
       request,
       requests: kernel.requestRows(),
       domainRevisions: request === undefined ? undefined : runtime.requestDomainRevisions?.(request),
-    });
+    }, runtime.approvalPolicy.recentOpen);
     if (decision.actions.length > 0) {
       // Reply intakes and gateway admissions are received-message chain
       // actions in the same fenced batch (the inbox table is gone). A

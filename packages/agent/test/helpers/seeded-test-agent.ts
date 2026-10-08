@@ -7,6 +7,7 @@ import type { ChatAgentInput } from "../../src/core/types";
 import type { ExecutorOptions } from "../../src/core/gate/decide";
 import { runAgent } from "../../src/core/turn";
 import { recordingLedger } from "./recording-ledger";
+import { TEST_BUDGET } from "../helpers/approval-policy";
 
 /** Seeded-policy chat agent over the production executor; the retry alarm is the only fixture choice. */
 export function seededTestAgent(retryAlarm: NonNullable<ExecutorOptions["retryAlarm"]>) {
@@ -36,7 +37,7 @@ export function seededTestAgent(retryAlarm: NonNullable<ExecutorOptions["retryAl
         },
       });
       return Effect.gen(function* () {
-        const fixture = { executor, execution: executor, compactionSeam: fixtureCompactionSeam, ...config, stopEvidence: config.stopEvidence ?? fixtureStopEvidence };
+        const fixture = { executor, execution: executor, compactionSeam: fixtureCompactionSeam, defaultBudget: TEST_BUDGET, ...config, stopEvidence: config.stopEvidence ?? fixtureStopEvidence };
         const { events: _events, llm: _llm, ...acquiredConfig } = fixture;
         return yield* runAgent(input, acquiredConfig, sink).pipe(
           Effect.provide(chatServices(fixture)),

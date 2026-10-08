@@ -8,6 +8,7 @@ import type { Sink } from "../../src/model";
 import { compilePolicySnapshot, SEEDED_POLICY_ROWS } from "../../src/core/gate/compile";
 import type { PolicyRow } from "@openomni/protocol";
 import { recordingExecutor } from "./effect-g3-recording";
+import { TEST_BUDGET } from "../helpers/approval-policy";
 export { recordingExecutor, recordingLedger } from "./effect-g3-recording";
 
 export function createTestAgent(config: ChatAgentConfig) {
@@ -15,7 +16,7 @@ export function createTestAgent(config: ChatAgentConfig) {
     const { executor } = recordingExecutor({
       policy: compilePolicySnapshot({ registry: KERNEL_POLICY_REGISTRY, generation: 1, rows: SEEDED_POLICY_ROWS.map((row: Omit<PolicyRow.Row, "generation">) => ({ ...row, generation: 1 })) }),
     });
-    return Effect.gen(function* () { const fixture = { executor, execution: executor, compactionSeam: fixtureCompactionSeam, ...config, stopEvidence: config.stopEvidence ?? fixtureStopEvidence }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(input, acquiredConfig, sink).pipe(Effect.provide(chatServices(fixture))); });
+    return Effect.gen(function* () { const fixture = { executor, execution: executor, compactionSeam: fixtureCompactionSeam, defaultBudget: TEST_BUDGET, ...config, stopEvidence: config.stopEvidence ?? fixtureStopEvidence }; const { events: _events, llm: _llm, ...acquiredConfig } = fixture; return yield* runAgent(input, acquiredConfig, sink).pipe(Effect.provide(chatServices(fixture))); });
   } };
 }
 export function runTestAgent(input: ChatAgentInput, config: ChatAgentConfig, sink?: Sink) {

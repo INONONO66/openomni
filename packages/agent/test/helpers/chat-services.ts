@@ -5,6 +5,7 @@ import type { createSessionChatRunner } from "../../src/core/run";
 import { ObservationSink } from "../../src/core/ports";
 import { fixtureCompactionSeam } from "./fixture-compaction";
 import { observationService } from "./service-layers";
+import { TEST_BUDGET } from "./approval-policy";
 
 export { fixtureCompactionSeam } from "./fixture-compaction";
 
@@ -22,8 +23,9 @@ export const fixtureStopEvidence: ChatAgentConfig["stopEvidence"] = () =>
  * omits it.
  */
 export interface ChatFixture
-  extends Omit<ObservedChatAgentConfig, "stopEvidence">,
-    Partial<Pick<ObservedChatAgentConfig, "stopEvidence">> {
+  extends Omit<ObservedChatAgentConfig, "stopEvidence" | "budget">,
+    Partial<Pick<ObservedChatAgentConfig, "stopEvidence">>,
+    Partial<Pick<ChatAgentConfig, "budget" | "defaultBudget">> {
   readonly llm?: Partial<Context.Service.Shape<typeof Llm>>;
 }
 
@@ -65,7 +67,8 @@ export function prepareChatFixture(
 ): Prepared {
   const { events: _events, llm: _llm, ...rest } = prepared.config;
   const seamed = "compactionSeam" in rest ? rest : { ...rest, compactionSeam: fixtureCompactionSeam };
-  const config = { stopEvidence: fixtureStopEvidence, ...seamed };
+  // #1309: the budget defaults are composition-owned; fixtures state them.
+  const config = { stopEvidence: fixtureStopEvidence, defaultBudget: TEST_BUDGET, ...seamed };
   return {
     ...prepared,
     config: config satisfies ChatAgentConfig & Pick<Prepared["config"], "executor">,

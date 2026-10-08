@@ -11,6 +11,7 @@ import { createRunState } from "../../../src/core/turn";
 import { buildTurn } from "../../../src/core/turn";
 import { settleModelTools } from "../../../src/core/tool";
 import type { ObservedChatAgentConfig } from "../../../src/core/types";
+import { TEST_BUDGET } from "../../helpers/approval-policy";
 
 const sessionId = "session-wave-timing";
 
@@ -60,7 +61,7 @@ it("records the exact injected-clock duration and bills the wave union once", ()
       const config: ObservedChatAgentConfig = {
         events: { publish: () => undefined },
         model: { provider: "test", id: "test" },
-        stopEvidence: fixtureStopEvidence,
+        stopEvidence: fixtureStopEvidence, budget: TEST_BUDGET,
         toolWave: (calls: readonly Tool.Call[]) =>
           Effect.gen(function* () {
             waveEntered.resolve();

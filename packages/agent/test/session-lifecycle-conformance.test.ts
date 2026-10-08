@@ -25,6 +25,7 @@ import { session } from "../src/testing/registry";
 import { createSessionRequests } from "../src/core/request";
 import { commitSessionRequest } from "../src/core/request";
 import { z } from "zod";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 // ---------------------------------------------------------------------------
 // HARNESS (docs/session-lifecycle-contract.md section 6): real ledger, session
 // controller, executor waves, request transitions and outbound obligations on
@@ -416,7 +417,7 @@ function waveSession(id: string, overrides: Partial<SessionRuntime> = {}) {
     });
 }
 function waveExecutor(input: SessionRunnerInput, runtime: SessionRuntime) {
-    return createExecutor({
+    return createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY,
         signal: input.signal,
         ledger: input.ledger,
         authorizeApproval: runtime.authorizeApproval,

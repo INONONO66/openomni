@@ -9,6 +9,7 @@ import { fixtureCompactionSeam } from "./fixture-compaction";
 import { fixtureStopEvidence } from "./chat-services";
 import { runInput } from "./run-input";
 import { testMessageSource } from "./message-source";
+import { testBudget } from "../helpers/approval-policy";
 
 export function stateAtGrace(window: number, offset: number) {
   const state = createRunState(runInput([{ role: "user", content: "hi" }]), testMessageSource());
@@ -17,6 +18,6 @@ export function stateAtGrace(window: number, offset: number) {
 }
 
 export function applyThreshold(state: RunState, config: ChatAgentConfig, session: CompactionSession) {
-  return applyCompaction(state, { compactionSeam: fixtureCompactionSeam, stopEvidence: fixtureStopEvidence, ...config },
+  return applyCompaction(state, { compactionSeam: fixtureCompactionSeam, stopEvidence: fixtureStopEvidence, ...config, budget: testBudget(config.budget) },
     { traceId: "trace", sessionId: state.sessionId, runId: "run", actorId: "actor" }, session, "threshold");
 }

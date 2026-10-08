@@ -26,6 +26,7 @@ import {
   type ChainRow,
 } from "../helpers/cluster-runtime";
 import { runAgent } from "../helpers/executor";
+import { TEST_APPROVAL_POLICY } from "../helpers/approval-policy";
 
 const worlds = [clusterTempDir("w52-cap-off-a-"), clusterTempDir("w52-cap-off-b-")];
 
@@ -149,6 +150,7 @@ function seedWorld(world: (typeof worlds)[number]): Effect.Effect<void> {
         payload: { kind: "request.open", request },
       },
       { row, requests: [], invocation: kernel.actionById(requestId) },
+      TEST_APPROVAL_POLICY.recentOpen,
     );
     if (decision.resolution !== "opened") throw new Error(`seed refused: ${decision.resolution}`);
     yield* commit([...decision.actions]);

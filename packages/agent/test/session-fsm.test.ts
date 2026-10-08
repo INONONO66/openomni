@@ -24,6 +24,7 @@ import { openRequest } from "./helpers/open-request";
 import { seedPolicy } from "./helpers/seed-policy";
 import { fixtureGeneration, fixtureNode, fixtureTerminal, fixtureOpenTurn, fixtureTurn, } from "./helpers/open-turn-fixture";
 import { answerThenCompact } from "./helpers/effect-g2";
+import { TEST_APPROVAL_POLICY } from "./helpers/approval-policy";
 
 const row: LedgerSession.Row = {
   id: "S",
@@ -317,10 +318,10 @@ describe("T12/T13 request source x event x authority product", () => {
             state === undefined ? undefined : { ...request, state, outcome: outcomes[state] },
         };
         const valid = command(payload);
-        const result = decideRequestTransition(valid, snapshot);
+        const result = decideRequestTransition(valid, snapshot, TEST_APPROVAL_POLICY.recentOpen);
         expect(result.resolution).toBe(expectedResolution(state, payload));
         for (const contender of invalidCommands(valid)) {
-          expect(decideRequestTransition(contender, snapshot)).toEqual({
+          expect(decideRequestTransition(contender, snapshot, TEST_APPROVAL_POLICY.recentOpen)).toEqual({
             resolution: "rejected",
             actions: [],
           });
@@ -332,17 +333,17 @@ describe("T12/T13 request source x event x authority product", () => {
       decideRequestTransition(command(nth(payloads, 0)), {
         row,
         invocation: { ...invocation, id: "other" },
-      }),
+      }, TEST_APPROVAL_POLICY.recentOpen),
     ).toEqual({ resolution: "rejected", actions: [] });
     const delivery = nth(payloads, 4);
     expect(
-      decideRequestTransition({ ...command(delivery), inputId: "other" }, { row, request }),
+      decideRequestTransition({ ...command(delivery), inputId: "other" }, { row, request }, TEST_APPROVAL_POLICY.recentOpen),
     ).toEqual({ resolution: "rejected", actions: [] });
     const input = command({ kind: "request.answer", answer: answer() });
-    const resolved = decideRequestTransition(input, { row, request });
+    const resolved = decideRequestTransition(input, { row, request }, TEST_APPROVAL_POLICY.recentOpen);
     const recorded = node(nth(resolved.actions, 0));
     const snapshot = { row, request: resolved.request, inputRecord: recorded };
-    expect(decideRequestTransition(input, snapshot)).toMatchObject({
+    expect(decideRequestTransition(input, snapshot, TEST_APPROVAL_POLICY.recentOpen)).toMatchObject({
       resolution: "resolved",
       actions: [],
     });
@@ -358,7 +359,7 @@ describe("T12/T13 request source x event x authority product", () => {
         },
       },
     ])
-      expect(decideRequestTransition(input, { ...snapshot, inputRecord: altered })).toEqual({
+      expect(decideRequestTransition(input, { ...snapshot, inputRecord: altered }, TEST_APPROVAL_POLICY.recentOpen)).toEqual({
         resolution: "rejected",
         actions: [],
       });
@@ -367,6 +368,7 @@ describe("T12/T13 request source x event x authority product", () => {
     const result = decideRequestTransition(
       { ...command({ kind: "request.answer", answer: answer() }), at: request.deadline },
       { row, request },
+      TEST_APPROVAL_POLICY.recentOpen,
     );
     expect(result.resolution).toBe("late_unknown");
     expect(result.receive).toBeUndefined();
@@ -610,7 +612,7 @@ describe("T01-T15 real controller transition witnesses", () => {
                   yield* input.ledger
                     .commit(alarmAction("fired", "alarm:fired", "alarm"))
                     .pipe(Effect.mapError((error) => new CommitFailed({ error })));
-                const executor = yield* createExecutor({
+                const executor = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY,
                   ledger: input.ledger,
                   identity: { sessionId: "S", role: "resident", parentActionId: input.turnId },
                 });
@@ -754,7 +756,7 @@ describe("T01-T15 real controller transition witnesses", () => {
         const runtime = fixture();
         const handle = yield* declare(runtime, (input) =>
           Effect.gen(function* () {
-            const executor = yield* createExecutor({
+            const executor = yield* createExecutor({ approvalPolicy: TEST_APPROVAL_POLICY,
               ledger: input.ledger,
               identity: { sessionId: "S", role: "resident", parentActionId: input.turnId },
             });

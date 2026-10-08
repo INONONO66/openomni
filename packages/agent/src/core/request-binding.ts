@@ -18,6 +18,7 @@ export function createApprovalRequest(
   systemHash: string | undefined,
   createdAt: number,
   timeout: number,
+  responders: readonly string[],
 ): SessionTransition.Request {
   const request = SessionTransition.Request.parse({
     requestId: captured.id,
@@ -33,7 +34,7 @@ export function createApprovalRequest(
     systemHash: systemHash ?? canonicalDigest([]),
     domainRevisions: binding.domainRevisions ?? {},
     deadline: createdAt + timeout,
-    expectedResponders: ["owner"],
+    expectedResponders: [...responders],
     correlation: {},
     allowedActions: ["report_result"],
     bindingDigest: "pending",

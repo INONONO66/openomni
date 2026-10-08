@@ -19,6 +19,7 @@ import { isolated, runTestPromise } from "../helpers/isolated";
 import { testMessageSource } from "../helpers/message-source";
 import { runInput } from "../helpers/run-input";
 import { fixtureStopEvidence } from "../helpers/chat-services";
+import { TEST_BUDGET } from "../helpers/approval-policy";
 
 const history = { fold: foldSessionHistory, hydrate: hydrateSessionHistory };
 
@@ -59,6 +60,7 @@ describe("compaction disabled: the kernel skips and records nothing new (#1307)"
           events,
           model: { provider: "p", id: "m" },
           stopEvidence: fixtureStopEvidence,
+          budget: TEST_BUDGET,
           compaction: { contextWindowTokens: 100, onSummarize: () => Effect.succeed("s") },
         },
         { traceId: "t", sessionId: state.sessionId, runId: "r", actorId: "a" },
