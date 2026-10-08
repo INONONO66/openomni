@@ -90,6 +90,18 @@ async function runSessionHydration(): Promise<void> {
 // substitute. Each subscription is acquired deterministically (`yield*`
 // registers interest before any publish), and each iteration awaits a
 // deferred settled by the N-th delivery: an exact signal, never a timer.
+
+/** Typed fanout failure (review r1 M1): a short fanout throws, never hangs. */
+class FanoutShortfall extends Error {
+  constructor(expected: number, live: number, delivered: number, target: number) {
+    super(
+      `benchmark fanout shortfall: ${live}/${expected} live subscriptions, ` +
+        `${delivered}/${target} deliveries`,
+    );
+    this.name = "FanoutShortfall";
+  }
+}
+
 async function runBusFanout(): Promise<void> {
   for (const count of [10, 50, 100]) {
     await Effect.runPromise(
@@ -103,6 +115,7 @@ async function runBusFanout(): Promise<void> {
           let handled = 0;
           let target = 0;
           let settle: (() => void) | undefined;
+          let abort: ((error: Error) => void) | undefined;
           for (let index = 0; index < count; index += 1) {
             const deliveries = yield* bus.stream(L0Observation.ActionCommittedEvent);
             yield* Effect.forkScoped(
@@ -114,11 +127,24 @@ async function runBusFanout(): Promise<void> {
               ),
             );
           }
+          // Review r1 M1: the subscription count is ASSERTED, not assumed —
+          // `yield*` acquired each subscription above, so the live count must
+          // equal N before a single publish is measured.
+          if (bus.subscriberCount() !== count) {
+            throw new FanoutShortfall(count, bus.subscriberCount(), handled, target);
+          }
           const bench = new Bench(measurement);
           bench.add(`${count}-subscribers`, async () => {
             const deferred = Promise.withResolvers<void>();
             target = handled + count;
-            settle = deferred.resolve;
+            settle = () => {
+              abort = undefined;
+              deferred.resolve();
+            };
+            abort = (error) => {
+              abort = undefined;
+              deferred.reject(error);
+            };
             bus.sink.publish(L0Observation.ActionCommittedEvent, {
               id: "fanout-configure",
               sessionId: "fanout",
@@ -127,7 +153,28 @@ async function runBusFanout(): Promise<void> {
             });
             await deferred.promise;
           });
-          yield* Effect.promise(() => bench.run());
+          // Review r1 M1: bound the N-th-delivery wait OUTSIDE the measured
+          // body — a wait that makes no delivery progress between two watchdog
+          // ticks rejects with the typed error (recordResults then fails the
+          // run). The happy path still settles on the exact N-th delivery and
+          // never touches a timer.
+          let lastHandled = -1;
+          const watchdog = setInterval(() => {
+            if (abort === undefined) {
+              lastHandled = -1;
+              return;
+            }
+            if (handled === lastHandled) {
+              abort(new FanoutShortfall(count, bus.subscriberCount(), handled, target));
+              return;
+            }
+            lastHandled = handled;
+          }, 2_000);
+          try {
+            yield* Effect.promise(() => bench.run());
+          } finally {
+            clearInterval(watchdog);
+          }
           recordResults("bus-fanout", bench);
         }),
       ),
