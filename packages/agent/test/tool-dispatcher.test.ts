@@ -1,3 +1,4 @@
+import { toolOutputRefSchema } from "@openomni/protocol";
 import { runAgentSync } from "./helpers/executor";
 import { catalogLayer } from "./helpers/service-layers";
 import { Effect, Fiber } from "effect";
@@ -36,12 +37,7 @@ function projectingDispatcher(
 
 const OUTPUT_MARKER = /\n\[output (sha256:[0-9a-f]{64}): (\d+) bytes; read with tool_output\("(sha256:[0-9a-f]{64})"\)\]$/;
 
-const OutputRef = z.object({
-  outputId: z.string().regex(/^sha256:[0-9a-f]{64}$/),
-  bytes: z.number().int().positive(),
-  mediaType: z.string(),
-  preview: z.string(),
-});
+const OutputRef = toolOutputRefSchema();
 
 function parsedRef(details: import("@openomni/protocol").PlainValue | undefined) {
   return OutputRef.parse(z.object({ outputRef: OutputRef }).parse(details).outputRef);
