@@ -15,6 +15,7 @@ import { bounded } from "./helpers/protected-dispatch";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { assistantMessage } from "./helpers/assistant-message";
+import { sessionOutputsSource } from "../src/composition/codemode";
 
 const suite = residentSuite();
 
@@ -71,4 +72,13 @@ test("a configured budget reaches the session's genesis settings through the shi
 test("an unconfigured boot writes no budget setting; the core default governs", async () => {
   const { plane, sessionId } = await bootAndCommitOneTurn("tool-output-default-", {});
   expect(configuredBudgets(plane, sessionId)).toEqual([]);
+
+  // #1305: the composed `tool_output` source reads the session's own stored
+  // bytes back whole and answers undefined for an unknown identifier.
+  const kernel = plane.openKernel(sessionId);
+  const outputId = `sha256:${"ab".repeat(32)}`;
+  kernel.putToolOutput({ outputId, bytes: new TextEncoder().encode("stored text"), mediaType: "text/plain" });
+  const outputs = sessionOutputsSource(plane.openKernel);
+  expect(outputs(sessionId, outputId)).toEqual({ text: "stored text", bytes: 11, mediaType: "text/plain" });
+  expect(outputs(sessionId, `sha256:${"00".repeat(32)}`)).toBeUndefined();
 });

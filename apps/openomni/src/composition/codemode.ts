@@ -1,4 +1,5 @@
 import { createCodemode, type RunOptions } from "@openomni/codemode";
+import { Inspect } from "@openomni/agent";
 import { MachinesFailure } from "@openomni/machines";
 import { Core } from "@openomni/agent";
 const forkInvocation = Core.forkInvocation;
@@ -70,6 +71,26 @@ function bindings(frame: InvocationFrame, id: () => string): NonNullable<RunOpti
         Effect.mapError((error) => new MachinesFailure({ operation: call.name, cause: String(error) })),
       );
     },
+  };
+}
+
+/**
+ * #1305: the app's `tool_output` read source — a tenant's stored output
+ * resolved from its own session file; unknown identifiers answer undefined
+ * (codemode maps that to the typed `unknown_output`).
+ */
+export function sessionOutputsSource(
+  openKernel: (sessionId: string) => Core.SessionHandleStore.SessionKernel,
+): (sessionId: string, outputId: string) => { readonly text: string; readonly bytes: number; readonly mediaType?: string } | undefined {
+  return (sessionId, outputId) => {
+    const inspected = Inspect.toolOutput(openKernel(sessionId), outputId);
+    return inspected.kind === "output"
+      ? {
+          text: inspected.text,
+          bytes: inspected.bytes,
+          ...(inspected.mediaType === undefined ? {} : { mediaType: inspected.mediaType }),
+        }
+      : undefined;
   };
 }
 

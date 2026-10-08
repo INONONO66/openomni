@@ -19,7 +19,7 @@ import { readHooksJson } from "./bundles/hooks-json";
 import { APPROVAL_POLICY } from "./bundles/approval-policy";
 import { gateRowPolicySeeds, seedKernelPolicyRows } from "./policy-seed";
 import { AppPointTable } from "./composition/point-table";
-import { Core, Bundle, Inspect } from "@openomni/agent";
+import { Core, Bundle } from "@openomni/agent";
 const Entropy = Core.Entropy;
 const GenerationLayers = Core.GenerationLayers;
 const ObservationSink = Core.ObservationSink;
@@ -117,7 +117,7 @@ import {
 } from "./gateway";
 import { configureAuthority, type GenerationDefinitions } from "./composition/generation-layers";
 import { createResident } from "./resident";
-import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
+import { composeCodemode, sessionOutputsSource, type ComposedCodemode } from "./composition/codemode";
 import { createRequestDomainRevisions } from "./tools/core/request-domain-revisions";
 
 /** A channel message the gateway refused pre-admission: the driver reports it to the sender. */
@@ -633,12 +633,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // #1305: the prelude's tool_output resolves against the tenant session's own file.
       composeCodemode(host, {
         id: services.entropy.id,
-        outputs: (sessionId, outputId) => {
-          const inspected = Inspect.toolOutput(plane.openKernel(sessionId), outputId);
-          return inspected.kind === "output"
-            ? { text: inspected.text, bytes: inspected.bytes, ...(inspected.mediaType === undefined ? {} : { mediaType: inspected.mediaType }) }
-            : undefined;
-        },
+        outputs: sessionOutputsSource(plane.openKernel),
       }),
     );
 
