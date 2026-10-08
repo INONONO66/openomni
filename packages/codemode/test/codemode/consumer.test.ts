@@ -319,7 +319,6 @@ test("the prelude's tool_output reads a stored 1 MiB output back whole through t
       const result = await mode.cell.run(`len(tool_output("${outputId}"))`, "reader");
       expect(result).toMatchObject({ status: "completed", value: "1048576" });
       // The read-back crosses the host op whole; only the committed row was bounded.
-      console.log(`tool_output read-back bytes after projection: ${text.length}`);
       expect(reads).toEqual([{ tenant: "reader", outputId }]);
       // An unknown identifier is the typed unknown_output error, raised in the cell.
       const unknown = await mode.cell.run(`tool_output("sha256:${"00".repeat(32)}")`, "reader");
