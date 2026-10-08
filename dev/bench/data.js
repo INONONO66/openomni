@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791461859640,
+  "lastUpdate": 1791464602470,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80439,6 +80439,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 223972,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0373ed38c9db48728cf64ff7c1c9f6a94897a914",
+          "message": "Make idempotency payload conflicts and missing seams typed fail-closed refusals (#1313) (#1329)\n\n* feat(agent): type replayed-payload conflicts and the unbound inputRegistrations seam as deliver refusals (#1313)\n\n* test(agent): cover idempotency_conflict and seam_missing through the deliver door (#1313)\n\n* test(agent,openomni): entity fixtures state the composed inputRegistrations explicitly (#1313)\n\n* docs(agents,status,slop): stamp #1313 typed deliver refusals (#1313)",
+          "timestamp": "2026-10-08T22:00:42+09:00",
+          "tree_id": "bae09ab6890c05e1d375ee34200e99c20bf9652d",
+          "url": "https://github.com/INONONO66/openomni/commit/0373ed38c9db48728cf64ff7c1c9f6a94897a914"
+        },
+        "date": 1791464601379,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 704,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1396,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1040,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1198601,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 339679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5533257,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 117,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 888,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 521,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 130457,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 602383,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 358933,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2421,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9605343,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1238118,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 14690,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 136841,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 689389,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 220885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14079113,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 76,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 135515,
             "unit": "ns/op"
           }
         ]
