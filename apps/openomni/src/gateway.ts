@@ -24,7 +24,7 @@ const AgentFailure = Core.AgentFailure;
 const scopeObservation = Core.scopeObservation;
 const attemptUsage = Inspect.attemptUsage;
 const toolWallMs = Inspect.toolWallMs;
-import { Gateway as GatewayProtocol, L0Observation, SessionGeneration, type SessionFork, SessionRead } from "@openomni/protocol";
+import { Gateway as GatewayProtocol, L0Observation, SessionGeneration, type PlainValue, type SessionFork, SessionRead, toolOutputRefSchema } from "@openomni/protocol";
 import { messageDecisionRules } from "./composition/message-decision";
 import { createIngressExecutor, GATEWAY_INGRESS_SESSION } from "./composition/ingress-executor";
 import { outboundMessage } from "./composition/terminal-message";
@@ -208,6 +208,26 @@ function phaseFacts(
   return { phase: "idle", phaseSince: sources.genesis?.ts ?? 0 };
 }
 
+/** #1305: the one place a page row's stored-output ref is read off the chain. */
+const PAGE_OUTPUT_REF = toolOutputRefSchema();
+function outputRefOf(action: {
+  readonly effect: { readonly value: PlainValue };
+}): { outputRef: ReturnType<typeof PAGE_OUTPUT_REF.parse> } | undefined {
+  const effect = action.effect.value;
+  if (effect === null || typeof effect !== "object" || Array.isArray(effect)) return undefined;
+  const toolResult = effect.toolResult;
+  const details =
+    toolResult !== null && typeof toolResult === "object" && !Array.isArray(toolResult)
+      ? toolResult.details
+      : undefined;
+  for (const carrier of [effect.result, details]) {
+    if (carrier === null || carrier === undefined || typeof carrier !== "object" || Array.isArray(carrier)) continue;
+    const parsed = PAGE_OUTPUT_REF.safeParse(carrier.outputRef);
+    if (parsed.success) return { outputRef: parsed.data };
+  }
+  return undefined;
+}
+
 /**
  * The history page is one transactional revision snapshot. Session action rows
  * are retained from genesis, so a valid old cursor is always repairable by
@@ -271,6 +291,8 @@ export function readSessionCursor(
       at: action.ts,
       // Fork boundary anchors (#1257): the hashes a session_fork.at may cite.
       ...(Core.isForkBoundary(action) ? { forkAnchor: action.actionHash } : {}),
+      // #1305: surface a projected row's stored-output reference to readers.
+      ...(outputRefOf(action) ?? {}),
     })),
     usage: attemptUsage(page.actions),
     // Fork ancestry projection (#1257): read off the genesis configure this

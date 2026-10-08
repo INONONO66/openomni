@@ -465,6 +465,40 @@ function text(value: PlainValue | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+// ─── #1305: stored tool output read-back ───
+
+/** One stored tool output resolved for a reader, or the typed unknown. */
+export type ToolOutputInspection =
+  | {
+      readonly kind: "output";
+      readonly outputId: string;
+      readonly bytes: number;
+      readonly mediaType?: string;
+      /** UTF-8 decode of the stored bytes — both stored media types are text. */
+      readonly text: string;
+    }
+  | { readonly kind: "unknown_output"; readonly outputId: string };
+
+/**
+ * Resolves a projected row's `outputRef` back to the full stored output
+ * (#1305). Pure read over the session file's `tool_outputs` table; an
+ * unknown identifier answers typed instead of throwing.
+ */
+export function toolOutput(
+  kernel: SessionHandleStore.SessionKernel,
+  outputId: string,
+): ToolOutputInspection {
+  const stored = kernel.toolOutput(outputId);
+  if (stored === undefined) return { kind: "unknown_output", outputId };
+  return {
+    kind: "output",
+    outputId,
+    bytes: stored.bytes.byteLength,
+    ...(stored.mediaType === undefined ? {} : { mediaType: stored.mediaType }),
+    text: new TextDecoder().decode(stored.bytes),
+  };
+}
+
 // Inspect metrics surface (#1247).
 export { attemptUsage, toolWallMs } from "../core/metrics";
 

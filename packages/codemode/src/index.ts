@@ -32,6 +32,13 @@ interface CodemodeOptions {
   readonly id: () => string;
   readonly machines?: Pick<MachineHost, "list" | "get">;
   readonly completion?: (request: Machine.CompletionRequest) => Effect.Effect<string, Failure>;
+  /**
+   * #1305: resolves a projected tool result's stored output for the owning
+   * tenant; `undefined` answers as the typed `unknown_output` error. The
+   * prelude's `tool_output(output_id)` rides this host op — never a catalog
+   * tool, the model-door surface stays sealed.
+   */
+  readonly toolOutput?: (tenant: string, outputId: string) => Effect.Effect<{ readonly text: string; readonly bytes: number; readonly mediaType?: string } | undefined, Failure>;
   readonly tools?: (tenant: string) => Caller;
   readonly boundary?: (tenant: string) => (call: Machine.ToolCall, body: () => Effect.Effect<Machine.ToolCallResult, Failure>) => Effect.Effect<Machine.ToolCallResult, Failure>;
 }
@@ -39,6 +46,7 @@ const PathInput = z.object({ machineId: Machine.MachineId, path: Machine.Absolut
 const WriteInput = PathInput.extend({ data: z.string() });
 const ShellInput = Machine.ExecRequest.extend({ machineId: Machine.MachineId });
 const RunInput = z.object({ machineId: Machine.MachineId, code: z.string() }).strict();
+const ToolOutputInput = z.object({ outputId: z.string().regex(/^sha256:[0-9a-f]{64}$/) }).strict();
 const ScreenInput = Machine.ScreenReadRequest.extend({ machineId: Machine.MachineId });
 const InputInput = Machine.InputWriteRequest.extend({ machineId: Machine.MachineId });
 const FindInput = z.object({ tag: z.string().min(1) }).strict();
@@ -195,6 +203,16 @@ export function createCodemode(options: CodemodeOptions) {
         return undefined;
       });
     }
+    /** #1305: the prelude's `tool_output` host op — full stored bytes, typed unknown. */
+    function readStoredOutput(call: Machine.ToolCall, tenant: string, read: NonNullable<CodemodeOptions["toolOutput"]>): Effect.Effect<Machine.ToolCallResult, Failure> {
+      return Effect.gen(function* () {
+        const input = yield* Effect.try({ try: () => ToolOutputInput.parse(call.arguments), catch: decodeCodeFailure("toolOutput.arguments") });
+        const stored = yield* read(tenant, input.outputId);
+        if (stored === undefined)
+          return yield* new CodemodeError({ reason: "unknown_output", message: `no stored output ${input.outputId}` });
+        return { status: "completed", value: { text: stored.text, bytes: stored.bytes, ...(stored.mediaType === undefined ? {} : { mediaType: stored.mediaType }) } };
+      });
+    }
     function dispatchHostOp(call: Machine.ToolCall, binding: NonNullable<ReturnType<typeof live.get>>): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
       return Effect.gen(function* () {
         if (call.name === "codemode.eval") {
@@ -206,6 +224,8 @@ export function createCodemode(options: CodemodeOptions) {
           const input = yield* Effect.try({ try: () => Machine.CompletionRequest.parse(call.arguments), catch: decodeCodeFailure("completion.arguments") });
           return { status: "completed", value: yield* options.completion(input) };
         }
+        if (call.name === "tool_output" && options.toolOutput)
+          return yield* readStoredOutput(call, binding.tenant, options.toolOutput);
         return undefined;
       });
     }

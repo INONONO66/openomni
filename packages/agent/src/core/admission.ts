@@ -5,6 +5,7 @@ import type { CommitReceipt } from "./store/services";
 import { ObservationSink, type RunnerServices } from "./ports";
 import { canonicalDigest, Journal, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
 import { createExecutor } from "./gate/decide";
+import { DEFAULT_TOOL_OUTPUT_BUDGET_BYTES } from "./tool-output";
 import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./failure";
 import { SessionPolicyRefusal } from "./messages";
 import type { ResolvedSessionRuntime, SessionRunnerResult } from "./run";
@@ -317,6 +318,12 @@ export function createSessionAdmission(
   function createExecutionLedger(turnId?: string): ExecutionLedger {
     const executionFence = state.fence;
     return {
+      // #1305: the generation's tool output budget and the session file's
+      // content-addressed output store, threaded to the executor/dispatcher.
+      toolOutputBudgetBytes: () =>
+        consumptionSettings(kernel, sessionId).toolOutputBudgetBytes ?? DEFAULT_TOOL_OUTPUT_BUDGET_BYTES,
+      putToolOutput: (write) => kernel.putToolOutput(write),
+      toolOutput: (outputId) => kernel.toolOutput(outputId),
       actionById: kernel.actionById,
       requestById: kernel.requestById,
       resultFor: (id) => kernel.resultFor(sessionId, id),

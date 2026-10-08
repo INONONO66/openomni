@@ -7,6 +7,7 @@ import type { CompiledPolicySnapshot, PolicyEvaluationInput, PolicyEvaluation } 
 import type { RetryAlarmPort, RetryAlarmDeps } from "../alarm-ports";
 import { createRetryAlarmPort } from "../alarm";
 import { turnStopAction } from "../commit";
+import { DEFAULT_TOOL_OUTPUT_BUDGET_BYTES, projectResultValue } from "../tool-output";
 import type { WaveControl, Dispatcher } from "../tool";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { onAbort, type CapturedGeneration, BOUNDED_CONCURRENCY, Entropy, ObservationSink, SessionLayer, type ProcessServices } from "../ports";
@@ -28,6 +29,12 @@ interface ExecutionKindRegistration {
 
 export interface ExecutionLedger {
   commit(action: LedgerAction.Append): Effect.Effect<LedgerAction.Receipt, LedgerError>;
+  /** #1305: resolved per-generation tool output budget; absent falls back to the core default. */
+  toolOutputBudgetBytes?(): number;
+  /** #1305: content-addressed tool output store write (idempotent on the digest key). */
+  putToolOutput?(write: { readonly outputId: string; readonly bytes: Uint8Array; readonly mediaType?: string }): void;
+  /** #1305: read one stored output back by its identifier. */
+  toolOutput?(outputId: string): { readonly outputId: string; readonly bytes: Uint8Array; readonly mediaType?: string } | undefined;
   actionById?(id: string): LedgerAction.Node | undefined;
   requestById?(id: string): SessionTransition.Request | undefined;
   resultFor?(id: string): LedgerAction.Node | undefined;
@@ -1198,8 +1205,10 @@ function combinedSignal(controller: AbortSignal, control: AbortSignal, caller: A
   return AbortSignal.any(caller === undefined ? [controller, control] : [controller, control, caller]);
 }
 
-function outcomeFields(outcome: ExecutionResult): PlainObject {
-  if (outcome.terminal === "executed") return { result: outcome.value, resultHash: canonicalDigest(outcome.value) };
+function outcomeFields(outcome: ExecutionResult, project: (value: PlainValue) => PlainValue): PlainObject {
+  // #1305: the row carries the projected value; resultHash stays the digest
+  // of the FULL value, so replay identity survives the projection.
+  if (outcome.terminal === "executed") return { result: project(outcome.value), resultHash: canonicalDigest(outcome.value) };
   return outcome.terminal === "blocked_post" ? { reason: outcome.reason, disposition: outcome.disposition } : { reason: outcome.reason };
 }
 function failedOutcome(cause: Cause.Cause<ExecutionError>, failure: ExecutionError): ExecutionResult {
@@ -1223,6 +1232,15 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
   const recovery = createExecutionRecovery(options, record);
   const kinds = new Set([...CORE_KINDS, ...(options.extensionKinds ?? []).map((item) => item.kind)]);
   const turnId = options.identity.turnId ?? options.identity.parentActionId;
+  /** #1305: tool rows commit a bounded projection; every other kind commits verbatim. */
+  const projectValue = (kind: LedgerAction.Kind, value: PlainValue): PlainValue => {
+    const put = options.ledger.putToolOutput;
+    if (kind !== "tool" || put === undefined) return value;
+    return projectResultValue(value, {
+      budgetBytes: options.ledger.toolOutputBudgetBytes?.() ?? DEFAULT_TOOL_OUTPUT_BUDGET_BYTES,
+      put,
+    });
+  };
 
   /** Registry lookup (#1251): a kind consults `<kind>.<phase>` only when that point is registered in the snapshot's composed table; there is no bypass — an extension kind without a point record fails closed. */
   function consulted(kind: string, phase: "pre" | "post"): boolean {
@@ -1431,7 +1449,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
         return record.appendResult({ kind: stage.kind, op: stage.request.op }, stage.intent.action.id, {
           phase: "result", terminal: outcome.terminal, effect: stage.request.effect,
           ...evidence,
-          ...outcomeFields(outcome),
+          ...outcomeFields(outcome, (value) => projectValue(stage.kind, value)),
           ...(stage.request.toolObservation === undefined ? {} : { callId: stage.request.toolObservation.callId }),
           ...(!project || stage.request.toolResult === undefined ? {} : { toolResult: stage.request.toolResult(outcome) }),
         }, outcome.terminal === "executed" && outcome.failure === undefined ? stage.request.revertData?.() : undefined).pipe(Effect.as(outcome));
@@ -1486,7 +1504,7 @@ export function createExecutor(input: ExecutorOptions): Effect.Effect<DurableExe
           id: `${stage.intent.action.id}:boundary`, parentId: stage.intent.action.id,
           sessionId: options.identity.sessionId, kind: stage.kind,
           intent: { encodingVersion: 1, value: { phase: "boundary", op: stage.request.op } },
-          effect: { encodingVersion: 1, value: { phase: "boundary", result: outcome.value, resultHash: canonicalDigest(outcome.value) } },
+          effect: { encodingVersion: 1, value: { phase: "boundary", result: projectValue(stage.kind, outcome.value), resultHash: canonicalDigest(outcome.value) } },
           ts: options.clock(), irreversible: true,
         });
       }

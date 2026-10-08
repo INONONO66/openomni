@@ -10,7 +10,7 @@ import {
   loadConfig,
   parseWsPort,
   resolveAlarmSweep,
-  resolveSessionFork,
+  resolveSessionFork, resolveToolOutput,
   resolveClusterStorage,
   validateMachinePlane,
 } from "../src/config";
@@ -27,6 +27,7 @@ const ENV_KEYS = [
   "OPENOMNI_ALARM_SWEEP_FULL",
   "OPENOMNI_ALARM_SWEEP_IDLE_DAYS",
   "OPENOMNI_FORK_COPY_BYTE_CAP",
+  "OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES",
   "OPENOMNI_WS_HOST",
   "OPENOMNI_WS_PORT",
   "OPENOMNI_WS_TOKEN",
@@ -292,6 +293,30 @@ describe("cluster storage config", () => {
         expect.objectContaining({
           name: "OpenOmniConfigurationError",
           data: containing({ code: "invalid_fork_copy_byte_cap" }),
+        }),
+      );
+    },
+  );
+
+  // #1305: the tool output budget is generation configuration, not a core constant.
+  it("reads the tool output budget from the environment and leaves the core default when unset", () => {
+    expect(loadConfig(home).toolOutputBudgetBytes).toBeUndefined();
+    expect(resolveToolOutput(loadConfig(home))).toEqual({});
+
+    process.env.OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES = "200";
+    const config = loadConfig(home);
+    expect(config.toolOutputBudgetBytes).toBe(200);
+    expect(resolveToolOutput(config)).toEqual({ budgetBytes: 200 });
+  });
+
+  it.each([["0"], ["-1"], ["1.5"], ["lots"]])(
+    "refuses OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES=%s with the typed code",
+    (raw) => {
+      process.env.OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES = raw;
+      expect(() => loadConfig(home)).toThrow(
+        expect.objectContaining({
+          name: "OpenOmniConfigurationError",
+          data: containing({ code: "invalid_tool_output_budget_bytes" }),
         }),
       );
     },

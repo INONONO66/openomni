@@ -42,7 +42,7 @@ describe("pty session registry", () => {
     expect(registry.read(record, view.cursor).data.length).toBe(0);
   });
 
-  test("bytes dropped by the retention bound surface as truncation, never a loop", () => {
+  test("bytes beyond the retention bound surface as truncation, never a loop", () => {
     const { registry, record } = opened();
     const consumed = registry.read(record, undefined);
     registry.append(record, Buffer.alloc(PTY_LIVE_RETAIN_MAX_BYTES, 0x62));

@@ -19,6 +19,7 @@ export const ConfigurationError = NamedError.create(
       "invalid_machines_self",
       "invalid_machines_tcp",
       "invalid_model_fallbacks",
+      "invalid_tool_output_budget_bytes",
       "invalid_ws_port",
       // #1271 r1 M4: the machine plane is not optional — a boot without a
       // `machines` block refuses before any listener exists.
@@ -47,6 +48,8 @@ export interface OpenOmniConfig {
   readonly alarmSweep?: { readonly full: boolean; readonly idleDays: number };
   /** Fork copy cap in bytes (#1257): refuse forks copying more than this. */
   readonly forkCopyByteCap?: number;
+  /** Tool output budget in bytes (#1305): project larger results to stored refs. */
+  readonly toolOutputBudgetBytes?: number;
   readonly host: string;
   readonly wsPort: number;
   /** Enabled unless explicitly disabled with OPENOMNI_COMPACTION_SUMMARIZER=off. */
@@ -263,6 +266,24 @@ export function resolveSessionFork(
   return { copyByteCap: config.forkCopyByteCap ?? DEFAULT_FORK_COPY.byteCap };
 }
 
+/**
+ * Tool output budget (#1305), mirroring `resolveSessionFork`: the budget is
+ * generation configuration — `session.configure{settings.toolOutputBudgetBytes}`
+ * — and this resolved value (or absent, meaning the core default) is what the
+ * composition writes into each new session's genesis settings.
+ */
+export interface ToolOutputSettings {
+  readonly budgetBytes?: number;
+}
+
+export function resolveToolOutput(
+  config: Pick<OpenOmniConfig, "toolOutputBudgetBytes">,
+): ToolOutputSettings {
+  return config.toolOutputBudgetBytes === undefined
+    ? {}
+    : { budgetBytes: config.toolOutputBudgetBytes };
+}
+
 /** The one owner of the D3 drain values, mirroring `resolveClusterStorage`. */
 export function resolveAlarmDrain(
   config: Pick<OpenOmniConfig, "alarmSweep" | "entityIdleMs">,
@@ -330,6 +351,19 @@ function forkCopyByteCapFromEnv(env: Record<string, string | undefined>): number
     });
   }
   return cap;
+}
+
+function toolOutputBudgetBytesFromEnv(env: Record<string, string | undefined>): number | undefined {
+  const raw = env.OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES?.trim();
+  if (raw === undefined || raw.length === 0) return undefined;
+  const budget = Number(raw);
+  if (!Number.isInteger(budget) || budget <= 0) {
+    throw new ConfigurationError({
+      code: "invalid_tool_output_budget_bytes",
+      message: "OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES must be a positive integer of bytes",
+    });
+  }
+  return budget;
 }
 
 function compactionSummarizerFromEnv(env: Record<string, string | undefined>): boolean {
@@ -686,6 +720,7 @@ export function loadConfig(
   const socialBudgets = socialBudgetsFromEnv(env);
   const alarmSweep = alarmSweepFromEnv(env);
   const forkCopyByteCap = forkCopyByteCapFromEnv(env);
+  const toolOutputBudgetBytes = toolOutputBudgetBytesFromEnv(env);
   const channelAllowedSenders = channelAllowedSendersFromEnv(env);
   const off = offFromEnv(env);
   const hooksPath = env.OPENOMNI_HOOKS_PATH?.trim() || undefined;
@@ -703,6 +738,7 @@ export function loadConfig(
     compactionSummarizer: compactionSummarizerFromEnv(env),
     ...(alarmSweep === undefined ? {} : { alarmSweep }),
     ...(forkCopyByteCap === undefined ? {} : { forkCopyByteCap }),
+    ...(toolOutputBudgetBytes === undefined ? {} : { toolOutputBudgetBytes }),
     ...(wsToken === undefined || wsToken.length === 0 ? {} : { wsToken }),
     kek: resolveKek(env, home),
     model: modelFromEnv(env),

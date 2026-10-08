@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LedgerAction, LedgerSession, SessionGeneration } from "../ledger/l0.js";
+import { toolOutputRefSchema } from "../tool/result.js";
 import { Gateway } from "./schema.js";
 
 const Id = z.string().min(1);
@@ -43,6 +44,12 @@ export namespace SessionRead {
        * pre-#1257 frame.
        */
       forkAnchor: z.string().min(1).optional(),
+      /**
+       * Stored tool output reference (#1305): present only on rows whose
+       * committed result was projected to a bounded preview; readers resolve
+       * the full bytes through `Inspect.toolOutput`/`tool_output`.
+       */
+      outputRef: toolOutputRefSchema().optional(),
     }).strict()).max(256),
     usage: z.array(z.object({
       attemptId: Id,

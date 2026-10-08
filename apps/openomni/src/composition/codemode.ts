@@ -1,4 +1,5 @@
 import { createCodemode, type RunOptions } from "@openomni/codemode";
+import { Inspect } from "@openomni/agent";
 import { MachinesFailure } from "@openomni/machines";
 import { Core } from "@openomni/agent";
 const forkInvocation = Core.forkInvocation;
@@ -73,9 +74,43 @@ function bindings(frame: InvocationFrame, id: () => string): NonNullable<RunOpti
   };
 }
 
-export function composeCodemode(machines: MachineHost, sources: { readonly id: () => string }): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
+/**
+ * #1305: the app's `tool_output` read source — a tenant's stored output
+ * resolved from its own session file; unknown identifiers answer undefined
+ * (codemode maps that to the typed `unknown_output`).
+ */
+export function sessionOutputsSource(
+  openKernel: (sessionId: string) => Core.SessionHandleStore.SessionKernel,
+): (sessionId: string, outputId: string) => { readonly text: string; readonly bytes: number; readonly mediaType?: string } | undefined {
+  return (sessionId, outputId) => {
+    const inspected = Inspect.toolOutput(openKernel(sessionId), outputId);
+    return inspected.kind === "output"
+      ? {
+          text: inspected.text,
+          bytes: inspected.bytes,
+          ...(inspected.mediaType === undefined ? {} : { mediaType: inspected.mediaType }),
+        }
+      : undefined;
+  };
+}
+
+export function composeCodemode(
+  machines: MachineHost,
+  sources: {
+    readonly id: () => string;
+    /** #1305: resolve a tenant's stored tool output for the prelude's `tool_output`. */
+    readonly outputs?: (sessionId: string, outputId: string) => { readonly text: string; readonly bytes: number; readonly mediaType?: string } | undefined;
+  },
+): Effect.Effect<ComposedCodemode, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const mode = yield* createCodemode({ id: sources.id, machines });
+    const outputs = sources.outputs;
+    const mode = yield* createCodemode({
+      id: sources.id,
+      machines,
+      ...(outputs === undefined
+        ? {}
+        : { toolOutput: (tenant: string, outputId: string) => Effect.sync(() => outputs(tenant, outputId)) }),
+    });
     return {
       ...mode,
       cell: {

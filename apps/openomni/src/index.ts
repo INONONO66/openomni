@@ -73,6 +73,7 @@ import {
   resolveAlarmSweep,
   resolveClusterStorage,
   resolveSessionFork,
+  resolveToolOutput,
   validateMachinePlane,
   type OpenOmniConfig,
   type RegisteredActor,
@@ -116,7 +117,7 @@ import {
 } from "./gateway";
 import { configureAuthority, type GenerationDefinitions } from "./composition/generation-layers";
 import { createResident } from "./resident";
-import { composeCodemode, type ComposedCodemode } from "./composition/codemode";
+import { composeCodemode, sessionOutputsSource, type ComposedCodemode } from "./composition/codemode";
 import { createRequestDomainRevisions } from "./tools/core/request-domain-revisions";
 
 /** A channel message the gateway refused pre-admission: the driver reports it to the sender. */
@@ -627,7 +628,14 @@ export async function startOpenOmni(options: StartOptions = {}) {
       { ...config.model, ...(transport === undefined ? {} : { transport }) },
       { now: services.now, id: services.entropy.id },
     );
-    cells = await acquireAppResource(runtime, composeCodemode(host, { id: services.entropy.id }));
+    cells = await acquireAppResource(
+      runtime,
+      // #1305: the prelude's tool_output resolves against the tenant session's own file.
+      composeCodemode(host, {
+        id: services.entropy.id,
+        outputs: sessionOutputsSource(plane.openKernel),
+      }),
+    );
 
     // Boot order (#1271): the self machine must answer over its loopback
     // attachment BEFORE any tool port exists; a dead attachment fails boot.
@@ -687,6 +695,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // #1257: the app's resolved cap is the input the composition writes
       // into every new session's genesis generation settings.
       forkCopyByteCap: resolveSessionFork(config).copyByteCap,
+      // #1305: an env-resolved budget rides genesis settings; unset leaves
+      // the core default so sessions fold it without a settings row.
+      ...(resolveToolOutput(config).budgetBytes === undefined
+        ? {}
+        : { toolOutputBudgetBytes: resolveToolOutput(config).budgetBytes }),
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, { now: services.now, id: services.entropy.id }),
       composed: { current: services.composed.current },

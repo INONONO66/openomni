@@ -149,6 +149,11 @@ class _Output(io.TextIOBase):
         return self._buffer.getvalue()
 
 
+def tool_output(output_id):
+    """Read a stored tool output back in full by the identifier a projected result cited (#1305)."""
+    return tool["tool_output"](outputId=output_id)["text"]
+
+
 def completion(prompt, model=None, system=None, schema=None):
     """One stateless sub-model call; with a JSON Schema the answer is decoded JSON."""
     _arguments = {"prompt": prompt}
@@ -650,6 +655,7 @@ _scope = {
     "ToolError": ToolError,
     "parallel": parallel,
     "completion": completion,
+    "tool_output": tool_output,
     "codemode": _Codemode(),
     "browser": browser,
     "BrowserLost": BrowserLost,

@@ -7,6 +7,7 @@ import { type Tool, type Message, type PlainValue, PlainValueSchema, type ToolDe
 import { BOUNDED_CONCURRENCY } from "./ports";
 import { z } from "zod";
 import { RawToolSlots, openInvocation, withExecutor, withInvocation, type InvocationFrame, type Executor, type ExecutionRequest } from "./gate/decide";
+import type { ToolOutputPorts } from "./tool-output";
 
 // ─── from core/execution/tools.ts (#1247) ───
 export function buildSystemPrompt(
@@ -301,6 +302,13 @@ export interface DispatcherOptions {
   readonly timeoutMs?: number;
   readonly retainEffect?: (effect: Promise<void>) => void;
   readonly trackWave?: (wave: Promise<void>) => void;
+  /**
+   * #1305: budget + store for bounded model-facing output projection. A
+   * dispatcher composed without it (the render-free cell door, bare test
+   * dispatchers) performs no projection; the per-turn dispatcher always
+   * carries the ledger-backed ports.
+   */
+  readonly toolOutput?: ToolOutputPorts;
 }
 
 export interface DispatchContext {

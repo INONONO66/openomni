@@ -70,6 +70,7 @@ async function fixture(
     machine: MachineHandle;
     rawExec: MachineHandle["exec"];
     endpointCalls: () => { get: number; exec: number };
+    stored: Map<string, Uint8Array>;
     path: (name: string) => string;
     cell: (
       tool: string,
@@ -139,6 +140,7 @@ async function fixture(
     grep: ["stat", "read"],
     bash: ["exec"],
   };
+  const stored = new Map<string, Uint8Array>();
   async function observe<T extends { isError?: boolean }>(
     tool: string,
     invoke: () => Promise<T>,
@@ -159,7 +161,11 @@ async function fixture(
     return result;
   }
   try {
-    const dispatcher = dispatcherFixture(catalogDefinitions({ ...testToolPorts, machines: testMachinePorts(host, "self") }), { executor });
+    // #1305: real catalog + in-memory output store, the app composition's shape.
+    const dispatcher = dispatcherFixture(catalogDefinitions({ ...testToolPorts, machines: testMachinePorts(host, "self") }), {
+      executor,
+      toolOutput: { budgetBytes: 32_768, put: (write) => { stored.set(write.outputId, write.bytes); } },
+    });
     let call = 0;
     await run({
       root,
@@ -169,6 +175,7 @@ async function fixture(
         get: spies.get.mock.calls.length,
         exec: spies.exec.mock.calls.length,
       }),
+      stored,
       path: (name) => `${explicit ? "c:" : ""}${join(root, name)}`,
       cell: (tool, input) =>
         observe(tool, () => runEffect(dispatcher.executeCell({ id: `cell-${++call}`, tool, input }, context))),
@@ -295,9 +302,10 @@ for (const explicit of [false, true]) {
           bytes: content.length,
         });
         const rendered = await model("read", { path: path("large") });
-        expect(rendered.content).toHaveLength(32_000);
-        expect(rendered.content).toContain("truncated:");
-        expect(rendered.content).toContain("1100000 bytes original");
+        // #1305: a 1.1 MB read projects — bounded preview, identifier, stored bytes.
+        expect(Buffer.byteLength(rendered.content, "utf8")).toBeLessThanOrEqual(32_768);
+        expect(rendered.content).toContain("[output sha256:");
+        expect(rendered.content).toContain("1100000 bytes");
       });
     });
     test("bash returns stdout, stderr, exit status and has no persistent cwd", async () => {
@@ -375,8 +383,8 @@ test.each([
   });
 });
 
-test("R3 real daemon Unicode read preserves cells and reports exact dropped bytes to the model", async () => {
-  await fixture(true, async ({ root, path, cell, model }) => {
+test("R3 real daemon Unicode read preserves cells and projects the model text to a stored ref", async () => {
+  await fixture(true, async ({ root, path, cell, model, stored }) => {
     const content = `a${"\u{1F600}".repeat(25_000)}`;
     await writeFile(join(root, "unicode"), content);
     expect((await cell("read", { path: path("unicode") })).structuredContent).toEqual({
@@ -385,10 +393,17 @@ test("R3 real daemon Unicode read preserves cells and reports exact dropped byte
     });
     const result = await model("read", { path: path("unicode") });
     expect(result.isError).toBeUndefined();
-    expect(result.content).toBe(
-      `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
-    );
+    // #1305: over-budget model output projects to preview + stored ref.
+    const marker = /\n\[output (sha256:[0-9a-f]{64}): (\d+) bytes; read with tool_output\("sha256:[0-9a-f]{64}"\)\]$/.exec(result.content);
+    if (marker === null) throw new Error("missing output marker");
+    expect(Number(marker[2])).toBe(100_001);
+    expect(Buffer.byteLength(result.content, "utf8")).toBeLessThanOrEqual(32_768);
+    const preview = result.content.slice(0, marker.index);
+    expect(content.startsWith(preview)).toBe(true);
     expect(Buffer.from(result.content, "utf8").toString("utf8")).toBe(result.content);
+    const full = stored.get(marker[1] ?? "");
+    if (full === undefined) throw new Error("output bytes not stored");
+    expect(new TextDecoder().decode(full)).toBe(content);
   });
 });
 

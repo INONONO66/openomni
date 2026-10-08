@@ -55,6 +55,12 @@ export interface ResidentOptions {
    * leaves the core default.
    */
   readonly forkCopyByteCap?: number;
+  /**
+   * Tool output budget written into each new session's genesis
+   * `session.configure{settings.toolOutputBudgetBytes}` (#1305); absent
+   * (tests, unset env) leaves the core default.
+   */
+  readonly toolOutputBudgetBytes?: number;
 }
 
 /** Resident and worker use the same session-owned runner and dispatcher. */
@@ -185,15 +191,19 @@ export function createResident(options: ResidentOptions) {
         ...(composed === undefined || composed.generation.disabled.length > 0
           ? {}
           : { manifestHash: composed.generation.hash }),
-        ...(options.forkCopyByteCap === undefined
+        ...(options.forkCopyByteCap === undefined && options.toolOutputBudgetBytes === undefined
           ? {}
           : {
-              // Default widths plus the app-resolved fork copy cap: the cap is
-              // generation configuration from genesis on (#1257).
+              // Default widths plus the app-resolved caps: fork copy (#1257)
+              // and tool output budget (#1305) are generation configuration
+              // from genesis on.
               settings: {
                 steering: "all" as const,
                 followUp: "all" as const,
-                forkCopyByteCap: options.forkCopyByteCap,
+                ...(options.forkCopyByteCap === undefined ? {} : { forkCopyByteCap: options.forkCopyByteCap }),
+                ...(options.toolOutputBudgetBytes === undefined
+                  ? {}
+                  : { toolOutputBudgetBytes: options.toolOutputBudgetBytes }),
               },
             }),
       });

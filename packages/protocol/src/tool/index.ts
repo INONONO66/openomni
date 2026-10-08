@@ -4,7 +4,7 @@ import type { TraceContext } from "../trace/index.js";
 import { PlainObjectSchema, PlainValueSchema } from "../json.js";
 import { EpochMs } from "../time.js";
 import { toolResultSchema } from "./result.js";
-export { toolResultText, toolResultJsonSchema } from "./result.js";
+export { toolResultText, toolResultJsonSchema, toolOutputRefSchema, type ToolOutputRef } from "./result.js";
 
 export type ToolCategory = "query" | "mutation" | "authority" | "execution";
 export type ToolRole = "resident" | "worker";

@@ -21,7 +21,7 @@ import { z } from "zod";
 import { LedgerInvariant, SessionNotFound, StorageUnavailable, type LedgerError } from "./errors";
 import type { AdoptReceipt, CommitReceipt, SessionWriteAdapter } from "./services";
 import type { CatalogStore } from "./catalog.js";
-import type { ArmedAlarmRow, SessionStore } from "./session-file/index.js";
+import type { ArmedAlarmRow, SessionStore, ToolOutputRow, ToolOutputWrite, ToolOutputsAdapter } from "./session-file/index.js";
 import { armedAlarmDelta } from "./storage/sqlite-l0-write.js";
 import { writeEffect } from "./storage/write-effect";
 
@@ -38,6 +38,8 @@ interface SessionKernelStores {
     armedAlarms(): readonly ArmedAlarmRow[];
     armedCount(): number;
   };
+  /** #1305: content-addressed tool output bytes of the session file. */
+  readonly toolOutputs: ToolOutputsAdapter;
 }
 
 /**
@@ -985,6 +987,10 @@ function makeSessionKernel(context: SessionKernelContext) {
     /** #1254 S3: armed occurrences restored from the session file's durable index. */
     armedAlarms: (): readonly ArmedAlarmRow[] => requiredArmedIn(context).armedAlarms(),
     armedCount: (): number => requiredArmedIn(context).armedCount(),
+    /** #1305: content-addressed tool output bytes — dedupe lives in the store's digest key. */
+    putToolOutput: (write: ToolOutputWrite): void => context.stores().toolOutputs.put(write),
+    toolOutput: (outputId: string): ToolOutputRow | undefined =>
+      context.stores().toolOutputs.get(outputId),
     getSnapshot: (sessionId: string, turns = 1): SessionTurn.Snapshot =>
       getSnapshotIn(context, sessionId, turns),
     watchSnapshot: (
@@ -1012,6 +1018,7 @@ export function createSessionKernel(session: SessionStore, catalog: CatalogStore
       actions: session.actions,
       policies: catalog.policies,
       armed: { armedAlarms: session.armedAlarms, armedCount: session.armedCount },
+      toolOutputs: session.toolOutputs,
     }),
     childSessionsPage: (parentId, afterId, limit) =>
       catalog.childSessionsPage(parentId, afterId, limit),
