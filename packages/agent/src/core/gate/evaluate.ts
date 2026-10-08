@@ -13,7 +13,7 @@ import { clonePlain, type MessagePolicyContext } from "./match";
 import type { GatePointTable } from "../points";
 import type { GateHandler, PendingConsult, PreparedResults } from "./compose";
 import { legacyPointOf } from "./migrate";
-import type { CompileErrorData, CompiledRow, PolicyCompileError } from "./legacy-rows";
+import type { CompileErrorData, CompiledRow, PolicyCompileError } from "./row-parse";
 import type { ProjectedGeneration } from "./project";
 
 /**

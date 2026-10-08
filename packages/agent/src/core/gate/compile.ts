@@ -9,19 +9,19 @@ import {
   parseRow,
   PolicyCompileError,
   type RuleName,
-} from "./legacy-rows";
+} from "./row-parse";
 import { createHandlerTable, wrapTransformer, type HandlerTable } from "./registry";
 import { projectGeneration, type ProjectedGeneration } from "./project";
 import { evaluateProjected, failedSnapshot, nextProjectedConsult, type CompiledPolicySnapshot, type PolicyEvaluationInput } from "./evaluate";
 import type { GateHandlerResult } from "./compose";
 
 export { createHandlerTable, HandlerTableError, KERNEL_POLICY_REGISTRY, type HandlerTable, type NamedTransformer, type NamedConsultant, type ConsultInput, type NamedGuard } from "./registry";
-export { PolicyCompileError } from "./legacy-rows";
+export { PolicyCompileError } from "./row-parse";
 export type { CompiledPolicySnapshot, PolicyEvaluation, PolicyEvaluationInput } from "./evaluate";
 
 /**
  * Policy snapshot compiler (#1251): validates one generation's historical
- * rows (`legacy-rows.ts`), projects them onto the fourteen-point gate
+ * rows (`row-parse.ts`), projects them onto the fourteen-point gate
  * (`project.ts`), and exposes the compatibility evaluator (`evaluate.ts`).
  * The compiled gate is the single production evaluator.
  */

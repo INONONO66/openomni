@@ -276,6 +276,12 @@ export namespace SessionGeneration {
       systemValue: z.string(),
       systemHash: z.string().min(1),
       policyGeneration: z.number().int().nonnegative(),
+      /**
+       * The gate-row writer version that minted this generation's row ids
+       * (#1319); absent on snapshots written before the versioned writer.
+       * Readers report the field as recorded — never default it.
+       */
+      rowsVersion: z.number().int().positive().optional(),
       /** The composed manifest's `Generation.hash` this snapshot adopted (#1255). */
       manifestHash: z.string().min(1).optional(),
     })
