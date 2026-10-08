@@ -1,19 +1,26 @@
 /**
- * #1253 — `deliver` idempotency: the required caller key is the durable row
- * id. A missing key is a typed `missing_key` rejection with zero new journal
- * facts; a replayed key returns the original seq as success
- * (`{seq, existed: true}`) with zero new facts and no duplicate-rejection
- * code anywhere on the path.
+ * #1253/#1313 — `deliver` idempotency: the required caller key is the durable
+ * row id. A missing key is a typed `missing_key` rejection with zero new
+ * journal facts; a replayed key whose payload matches the stored row returns
+ * the original seq as success (`{seq, existed: true}`) with zero new facts; a
+ * replayed key whose payload differs is the typed `idempotency_conflict`; an
+ * unbound `inputRegistrations` port is the typed `seam_missing` — none of the
+ * refusals appends a row.
  */
 import { afterAll, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { Effect } from "effect";
+import { L0Observation } from "@openomni/protocol";
 import {
+  boundedAwait,
   clusterTempDir,
+  completionSignal,
   readChain,
   runCluster,
   sendDeliver,
+  sendRead,
   sessionFileFor,
+  type TestClusterOptions,
 } from "./helpers/cluster-runtime";
 import { openCatalogStore } from "../src/core/store/catalog";
 import { openSessionStore } from "../src/core/store/session-file";
@@ -82,10 +89,11 @@ test("a replayed key resolves to the original seq with zero new facts", async ()
   expect(after).toBe(between);
 });
 
-test("a key already accepted on the journal returns {seq, existed: true} as success", async () => {
-  const sessionId = "idem-journal-replay";
-  // Seed the input row straight onto the chain: the handler-level dedup (not
-  // the cluster envelope store) must resolve the replayed key.
+/**
+ * Seed one prompt input row straight onto the chain: the handler-level dedup
+ * (not the cluster envelope store) must resolve or refuse the replayed key.
+ */
+async function seedPromptRow(sessionId: string, key: string, content: string): Promise<void> {
   const catalog = openCatalogStore(catalogFile, { now: () => 1 });
   const store = openSessionStore(sessionFileFor(sessionsDir, sessionId), { now: () => 1 });
   const kernel = SessionHandleStore.createSessionKernel(store, catalog);
@@ -115,17 +123,17 @@ test("a key already accepted on the journal returns {seq, existed: true} as succ
         expectedRevision: row.revision,
         actions: [
           receivedMessageAction({
-            id: "seeded-key",
+            id: key,
             sessionId,
             kind: "prompt",
-            content: "seeded",
+            content,
             origin: {
               encodingVersion: 1,
               value: {
                 kind: "message",
-                messageId: "seeded-key",
+                messageId: key,
                 senderSessionId: sessionId,
-                sourceActionId: "seeded-key",
+                sourceActionId: key,
               },
             },
             parentActionId: null,
@@ -139,6 +147,11 @@ test("a key already accepted on the journal returns {seq, existed: true} as succ
     store.close();
     catalog.close();
   }
+}
+
+test("a key already accepted on the journal returns {seq, existed: true} as success", async () => {
+  const sessionId = "idem-journal-replay";
+  await seedPromptRow(sessionId, "seeded-key", "seeded");
   const seeded = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
   const seq = seeded.find((chainRow) => chainRow.id === "seeded-key")?.ordinal;
   const receipt = await runCluster(
@@ -153,4 +166,66 @@ test("a key already accepted on the journal returns {seq, existed: true} as succ
   expect(
     chain.filter((chainRow) => chainRow.kind === "prompt" && !chainRow.id.endsWith(":delivery")),
   ).toHaveLength(1);
+});
+
+test("a replayed key with a different payload is idempotency_conflict and appends nothing", async () => {
+  const sessionId = "idem-conflict";
+  await seedPromptRow(sessionId, "conflict-key", "original");
+  // Settle the seeded prompt's turn first (the activation drain runs it), so
+  // the row count the refusal must leave unchanged is a quiescent chain.
+  const turnSealed = completionSignal();
+  const settleOptions: TestClusterOptions = {
+    sessionsDir,
+    catalogFile,
+    observationSink: {
+      publish: (event, data) => {
+        if (event.name !== L0Observation.ActionCommittedEvent.name) return;
+        if (L0Observation.ActionCommitted.parse(data).id.endsWith(":result")) turnSealed.fire();
+      },
+    },
+  };
+  await runCluster(
+    settleOptions,
+    Effect.gen(function* () {
+      yield* sendRead(sessionId, { model: "history", cursor: 0 });
+      yield* Effect.promise(() => boundedAwait("seeded turn sealed", turnSealed.done));
+    }),
+  );
+  const before = readChain(sessionFileFor(sessionsDir, sessionId), sessionId).length;
+  const refusal = await runCluster(
+    options,
+    sendDeliver(sessionId, {
+      kind: "prompt",
+      idempotencyKey: "conflict-key",
+      content: "something else entirely",
+    }).pipe(Effect.flip),
+  );
+  expect((refusal as DeliverRefused).code).toBe("idempotency_conflict");
+  const chain = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
+  expect(chain.length).toBe(before);
+  expect(chain.filter((chainRow) => chainRow.id === "conflict-key")).toHaveLength(1);
+});
+
+test("an unbound inputRegistrations port is seam_missing and appends nothing", async () => {
+  const sessionId = "idem-seam";
+  const unbound = { sessionsDir, catalogFile, inputRegistrations: "unbound" as const };
+  const first = await runCluster(
+    unbound,
+    sendDeliver(sessionId, { kind: "prompt", idempotencyKey: "s1", content: "x" }).pipe(
+      Effect.flip,
+    ),
+  );
+  expect((first as DeliverRefused).code).toBe("seam_missing");
+  const afterFirst = readChain(sessionFileFor(sessionsDir, sessionId), sessionId);
+  expect(afterFirst.some((chainRow) => chainRow.kind === "prompt")).toBe(false);
+  const second = await runCluster(
+    unbound,
+    sendDeliver(sessionId, { kind: "prompt", idempotencyKey: "s2", content: "y" }).pipe(
+      Effect.flip,
+    ),
+  );
+  expect((second as DeliverRefused).code).toBe("seam_missing");
+  expect(readChain(sessionFileFor(sessionsDir, sessionId), sessionId).length).toBe(
+    afterFirst.length,
+  );
 });

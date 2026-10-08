@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Database } from "bun:sqlite";
 import { Journal, LedgerAction, type LedgerSession } from "@openomni/protocol";
-import { computeActionHash, GENESIS_PREV_HASH } from "../action-hash.js";
+import { computeActionHash, GENESIS_PREV_HASH, storedActionRow } from "../action-hash.js";
 import { SessionSqlRow, decodeSession } from "./sqlite-l0-rows";
 import { CorruptRecord, SchemaRefused } from "../errors";
 import type { RefuseWrite } from "./write-effect";
@@ -139,27 +139,13 @@ export function appendAction(
     )
     .run(revision, action.sessionId, expectedRevision);
   if (updated.changes !== 1) return undefined;
-  const revert = "revert" in action ? action.revert : undefined;
   const head = db
     .query<{ action_hash: string }, [string]>(
       "SELECT action_hash FROM action WHERE session_id = ? ORDER BY ordinal DESC LIMIT 1",
     )
     .get(action.sessionId);
   const prevHash = head === null ? GENESIS_PREV_HASH : z.string().parse(head.action_hash);
-  const stored = {
-    prev_hash: prevHash,
-    id: action.id,
-    parent_id: action.parentId,
-    session_id: action.sessionId,
-    kind: action.kind,
-    intent: JSON.stringify(action.intent.value),
-    effect: JSON.stringify(action.effect.value),
-    revert: revert === undefined ? null : JSON.stringify(revert.value),
-    irreversible: "irreversible" in action ? (1 as const) : (0 as const),
-    encoding_version: action.intent.encodingVersion,
-    ts: action.ts,
-    ordinal: revision,
-  };
+  const stored = storedActionRow(action, prevHash, revision);
   const actionHash = computeActionHash(stored);
   db.query(
     `INSERT INTO action (

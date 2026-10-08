@@ -44,14 +44,24 @@ export class AdmissionFailure extends Schema.TaggedError<AdmissionFailure>(
 }) {}
 
 /**
- * Typed `deliver` rejection (#1253): the closed code set is exactly
- * `unknown_kind | missing_key | closed | denied`. A rejection appends
- * nothing — zero new journal facts ride a refused delivery.
+ * Typed `deliver` rejection (#1253, #1313): the closed code set is exactly
+ * `unknown_kind | missing_key | closed | denied | idempotency_conflict |
+ * seam_missing`. A rejection appends nothing — zero new journal facts ride a
+ * refused delivery: a replayed key whose payload differs is
+ * `idempotency_conflict`, an unbound `inputRegistrations` port is
+ * `seam_missing`.
  */
 export class DeliverRefused extends Schema.TaggedError<DeliverRefused>(
   "@openomni/agent/cluster/DeliverRefused",
 )("DeliverRefused", {
-  code: Schema.Literals(["unknown_kind", "missing_key", "closed", "denied"]),
+  code: Schema.Literals([
+    "unknown_kind",
+    "missing_key",
+    "closed",
+    "denied",
+    "idempotency_conflict",
+    "seam_missing",
+  ]),
 }) {}
 
 /**

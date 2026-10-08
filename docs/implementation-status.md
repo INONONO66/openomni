@@ -1,5 +1,34 @@
 # Implementation Status
 
+## #1313 typed idempotency_conflict and seam_missing deliver refusals (epic #1303, rung 13)
+
+On `stab/13-typed-admission-idempotency` (2026-10-08, base `c11ae7148`).
+The session entity's `deliver` door no longer reports success for a replayed
+idempotency key whose payload differs and no longer falls back to the core
+input table when the composed `inputRegistrations` port is unbound. A replayed
+key's candidate is hashed with the same canonical digest the journal writer
+uses (`packages/agent/src/core/store/action-hash.ts`) and compared against the
+stored row's `actionHash`: equal returns `{seq, existed: true}` with zero new
+facts; different fails typed `DeliverRefused{code: "idempotency_conflict"}`
+before `decideSessionAdmission`, so nothing is appended and the loop is not
+woken. The inner `appendReceived` dedupe branch applies the same comparison,
+so any caller reaching the writer gets the same answer. An unbound
+`inputRegistrations` port fails typed `DeliverRefused{code: "seam_missing"}`;
+the `?? CORE_INPUT_REGISTRATIONS` fallback is deleted together with the const
+(no remaining reader). `DeliverRefused.code` is exactly `unknown_kind |
+missing_key | closed | denied | idempotency_conflict | seam_missing`.
+
+Measured greps at head: `rg -c '\?\? CORE_INPUT_REGISTRATIONS' packages apps`
+0 (was 1); `rg -c 'CORE_INPUT_REGISTRATIONS' packages apps` 0; `existed: true`
+in production exactly 1 (`entity.ts`, identical-replay path; was 1) plus test
+hits only; `setTimeout` in `deliver-idempotency.test.ts` 0; `Bun.spawn|
+node:child_process` in `packages/agent/src/core` 0. Test helpers and app
+fixtures bind `inputRegistrations` explicitly, so no production default
+remains. `bun test packages/agent/test/deliver-idempotency.test.ts` 5 pass /
+0 fail; `rpc-surface.test.ts` + `session/entity-admission-refusal.test.ts`
+11 pass / 0 fail. No new journal kind, tool, gate point or wire method;
+durable bytes of existing rows unchanged.
+
 ## #1312 unused helpers and silent fallbacks replaced by typed outcomes (epic #1303, rung 5)
 
 On `stab/5-delete-fallbacks-dead-helpers` (2026-10-07, base `350612bff`, merged
