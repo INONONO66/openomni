@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   GateDecision,
   GateRowId,
+  Gateway,
   SessionGeneration,
   SessionHistory,
   type PolicyRow,
@@ -40,6 +41,40 @@ function projected(rows: readonly PolicyRow.Row[]) {
   const table = composePointTable({ capabilities: KERNEL_CAPABILITY_POINTS });
   return projectGeneration(parsed, GENERATION, table, registry);
 }
+
+/** A production-shaped message row whose rule table compiles to a per-row matcher. */
+const MATCHER_ROW: Omit<PolicyRow.Row, "generation"> = {
+  name: "message.qa.interrupt",
+  kind: "message",
+  phase: "pre",
+  priority: 1_000,
+  match: {
+    encodingVersion: 1,
+    value: {
+      message: Gateway.RuleTableB.parse({
+        id: "message.qa.interrupt",
+        table: "B",
+        sender: "session",
+        senderRole: "worker",
+        type: "interrupt",
+        check: { kind: "type" },
+        effect: "deny",
+      }),
+    },
+  },
+  verdict: { encodingVersion: 1, value: { type: "deny", reason: "message.qa.interrupt" } },
+};
+
+const MATCHING_MESSAGE_CONTEXT = {
+  sender: "session",
+  senderRole: "worker",
+  targetKind: "session",
+  type: "interrupt",
+  parentChild: true,
+  fanout: 0,
+  depth: 0,
+  withinParentDeadline: true,
+} as const;
 
 test("a compiled generation mints only schema-valid current identities; same-name rows on one point stay distinct", () => {
   const duplicate = (priority: number): Omit<PolicyRow.Row, "generation"> => ({
@@ -116,7 +151,7 @@ test("a decision fact recorded under pre-cutover ids decodes and replays without
   const snapshot = compilePolicySnapshot({
     registry: createHandlerTable(KERNEL_POLICY_REGISTRY),
     generation: GENERATION,
-    rows: seededRows(),
+    rows: seededRows([MATCHER_ROW]),
   });
   const input = { kind: "tool", phase: "pre" as const, op: "qa__noop", value: { bytes: "untouched" } };
   const fresh = snapshot.evaluate(input);
@@ -146,6 +181,30 @@ test("a decision fact recorded under pre-cutover ids decodes and replays without
   expect(replayed.gate?.rowIds).toEqual([preCutoverId("tool.pre", 0)]);
   expect(replayed.value).toEqual(recorded.output);
 
+  // A pre-cutover record that applied a CONTEXT-MATCHER row does NOT replay:
+  // the live matcher entry's current id is absent from the recorded legacy
+  // rowIds, so `replays()` declines and the gate decides fresh under current
+  // identities. In recoverAdmission that same non-replay surfaces as the
+  // documented fail-closed `stale_approval` for approvals pending across the
+  // cutover upgrade (#1319 review M1 — accepted, recorded deviation).
+  const matcherInput = {
+    kind: "message",
+    phase: "pre" as const,
+    op: "send_message",
+    message: MATCHING_MESSAGE_CONTEXT,
+    value: { body: "qa" },
+  };
+  const freshMatcher = snapshot.evaluate(matcherInput);
+  if (freshMatcher.gate === undefined) throw new Error("matcher evaluation carries no gate decision");
+  expect(freshMatcher.gate.rowIds.some((id) => id.startsWith("message-qa-interrupt/"))).toBe(true);
+  const recordedMatcher = GateDecision.parse({
+    ...freshMatcher.gate,
+    rowIds: [preCutoverId("message.pre", 0)],
+  });
+  const replayedMatcher = snapshot.evaluate({ ...matcherInput, recorded: recordedMatcher });
+  expect(replayedMatcher.replayed).not.toBe(true);
+  expect(replayedMatcher.gate?.rowIds.some((id) => id.startsWith("message-qa-interrupt/"))).toBe(true);
+  expect(replayedMatcher.gate?.rowIds.includes(preCutoverId("message.pre", 0))).toBe(false);
 });
 
 test("a pre-cutover snapshot parses without rowsVersion; a new materialization records version 1", () => {
