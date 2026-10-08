@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { L0Observation } from "@openomni/protocol";
 import { Effect, Stream } from "effect";
 import { makeObservationBus } from "../../../src/core/bus";
+import { runTestPromise } from "../../helpers/isolated";
 import { materializeSession } from "../helpers/session";
 import { useMemoryStores } from "../helpers/storage";
 
@@ -21,7 +22,7 @@ function busOptions() {
 
 describe("session memory regression", () => {
   test("canonical watch subscribe/unsubscribe releases listeners without deleting history", async () => {
-    await Effect.runPromise(
+    await runTestPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const bus = yield* makeObservationBus(busOptions());
@@ -48,7 +49,7 @@ describe("session memory regression", () => {
   }, 30_000);
 
   test("bus subscribe/publish/unsubscribe does not leak", async () => {
-    await Effect.runPromise(
+    await runTestPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const bus = yield* makeObservationBus(busOptions());
