@@ -1,3 +1,4 @@
+import { APPROVAL_POLICY } from "../../src/bundles/approval-policy";
 import { type PlainValue, SessionTransition } from "@openomni/protocol";
 
 /** Invariant open-approval facts; the per-call Request.parse validates the whole. */
@@ -10,7 +11,7 @@ const OPEN_APPROVAL = {
   resolution: "first",
   allowedActions: ["report_result"],
   correlation: {},
-  expectedResponders: ["owner"],
+  expectedResponders: [...APPROVAL_POLICY.responders],
   deadline: 1000,
   createdAt: 1,
   mode: "approval",
