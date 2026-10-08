@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791482044251,
+  "lastUpdate": 1791483428383,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80841,6 +80841,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 145939,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56e592e9bd5cacc9b2839dd472a0c6a063ac6fc9",
+          "message": "Bound delegation depth and children and settle child results at turn boundaries (#1333)\n\n* feat(protocol): DelegationResult settlement envelope with 4 KiB preview bound (#1311)\n\n* feat(openomni,agent,protocol): typed delegation_refused cap refusal and once-only settleChild settlement through the followUp door (#1311)\n\n* test(openomni): delegation lifecycle contract — typed refusal payloads, settleChild unit arms, exact-event settlement turn, interrupt-resume single settlement (#1311)\n\n* docs: stamp #1311 delegation lifecycle contract (AGENTS.md, implementation-status, SLOP §M)\n\n* fix(agent,openomni): lint repairs — unused CompactionYield import (pre-existing on base), type-only LedgerAction import (#1311)\n\n* test(openomni): process-session settlements assert the DelegationResult envelope and followUp delivery (#1311)\n\n* docs: drop the duplicated #1309 stamp left by the rebase; pin base 2dc31be78 (#1311)\n\n* test(openomni): process-session settlement asserts the DelegationResult envelope after the rebase onto main (#1311)\n\n* test(openomni): composed cap-denial asserts DelegationRefusal.parse on the model-facing ToolRefused content (#1311 review M1)\n\n* refactor(openomni): deny payload carries the refusal once — reason is the sole DelegationRefusal carrier, no self-validating parse of local literals (#1311 review L3)\n\n* docs: 4096 bound is characters not bytes; stamp sync — send-message-e2e 6 pass, reason is the single refusal carrier (#1311 review L2)",
+          "timestamp": "2026-10-09T03:14:05+09:00",
+          "tree_id": "d80188c09cc639e0645f156dc01ee1ff434ce745",
+          "url": "https://github.com/INONONO66/openomni/commit/56e592e9bd5cacc9b2839dd472a0c6a063ac6fc9"
+        },
+        "date": 1791483427620,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1116,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1979,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1485,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1608715,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 428211,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 7271628,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 166,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1159,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 212001,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 864777,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 524005,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3541,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 13995733,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1532499,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 20617,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 185719,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 996030,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 297011,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 18507820,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 94,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 212221,
             "unit": "ns/op"
           }
         ]
