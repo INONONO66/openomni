@@ -1,7 +1,8 @@
 /**
- * #1305 bus interest gate: with zero live subscribers a publish enqueues
- * nothing — the payload never reaches the PubSub — and the decision is
- * observable through the `onPublish` seam rung 16 measures with.
+ * #1305 bus interest gate: a publish with zero matching subscriber interest
+ * for that event name enqueues nothing — the payload never reaches the
+ * PubSub — and the decision is observable through the `onPublish` seam
+ * rung 16 measures with. Wildcard `observations` counts for every name.
  */
 import { describe, expect, it } from "bun:test";
 import { BusEvent } from "@openomni/protocol";
@@ -12,6 +13,10 @@ import { runTestPromise } from "../helpers/isolated";
 
 const TestEvent = BusEvent.define(
   "test.bus.interest",
+  z.object({ sessionId: z.string(), value: z.number() }),
+);
+const OtherEvent = BusEvent.define(
+  "test.bus.other",
   z.object({ sessionId: z.string(), value: z.number() }),
 );
 
@@ -75,6 +80,40 @@ describe("observation bus interest (#1305)", () => {
           yield* Scope.close(scope, Exit.void);
           bus.sink.publish(TestEvent, { sessionId: "session-1", value: 2 });
           expect(published.at(-1)).toEqual({ name: TestEvent.name, delivered: false });
+        }),
+      ),
+    ));
+
+  it("interest is per event name: a subscriber for A alone drops a publish of B", () =>
+    runTestPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const published: Array<{ name: string; delivered: boolean }> = [];
+          const bus = yield* makeObservationBus(sources(published));
+          yield* bus.stream(TestEvent);
+          bus.sink.publish(OtherEvent, { sessionId: "session-1", value: 1 });
+          bus.sink.publish(TestEvent, { sessionId: "session-1", value: 2 });
+          expect(published).toEqual([
+            { name: OtherEvent.name, delivered: false },
+            { name: TestEvent.name, delivered: true },
+          ]);
+        }),
+      ),
+    ));
+
+  it("wildcard observations registers interest for every event name", () =>
+    runTestPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const published: Array<{ name: string; delivered: boolean }> = [];
+          const bus = yield* makeObservationBus(sources(published));
+          yield* bus.observations;
+          bus.sink.publish(OtherEvent, { sessionId: "session-1", value: 1 });
+          bus.sink.publish(TestEvent, { sessionId: "session-1", value: 2 });
+          expect(published).toEqual([
+            { name: OtherEvent.name, delivered: true },
+            { name: TestEvent.name, delivered: true },
+          ]);
         }),
       ),
     ));

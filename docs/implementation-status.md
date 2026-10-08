@@ -23,9 +23,14 @@ On `stab/15-bounded-tool-output-projection` (2026-10-08, base `2dc31be78`).
   on `session_read` page action rows, and the codemode prelude
   `tool_output(output_id)` over a host op (`CodemodeOptions.toolOutput`) - the
   12-factory catalog stays sealed, no new journal kind.
-- Bus: `publish` skips `publishUnsafe` when no subscriber holds interest;
+- Bus: `publish` skips `publishUnsafe` when no subscriber holds matching
+  interest for the event name (interest counted per event name; the wildcard
+  `observations` surface counts for every name; publish-time `match`
+  predicate evaluation is deliberately omitted - the stream still filters by
+  `match` on the consumer side, recorded deviation from #1305 solution 6);
   `onPublish(eventName, delivered)` seam for rung 16 measurement
-  (`packages/agent/test/core/bus.test.ts` zero-publication case).
+  (`packages/agent/test/core/bus.test.ts` zero-publication and
+  non-matching-name cases).
 - Config: `OPENOMNI_TOOL_OUTPUT_BUDGET_BYTES` -> `resolveToolOutput` ->
   genesis `session.configure{settings.toolOutputBudgetBytes}`
   (`apps/openomni/test/tool-output-budget.test.ts` through the shipped

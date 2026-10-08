@@ -96,43 +96,66 @@ export const makeObservationBus = (
       PubSub.shutdown,
     );
     const forkDrain = yield* FiberSet.makeRuntime<never, void, never>();
-    // #1305: live-subscription interest. Every consumer — `observations`,
-    // `stream`, callback `subscribe` — acquires through this one gate, so the
-    // count is exact: incremented when a subscription is acquired, decremented
-    // by its finalizer in the consumer's own Scope.
-    let interest = 0;
-    const observations = Effect.map(
-      Effect.acquireRelease(
-        Effect.tap(PubSub.subscribe(pubsub), () =>
-          Effect.sync(() => {
-            interest += 1;
-          })),
-        () =>
-          Effect.sync(() => {
-            interest -= 1;
-          }),
-      ),
-      Stream.fromSubscription,
+    // #1305: per-event-name subscriber interest. `observations` subscribes to
+    // every event, so it holds one all-events count; `stream` (and the
+    // callback `subscribe` built on it) knows its event name at subscribe
+    // time, so it registers interest keyed by that name. Each count is exact:
+    // incremented when a subscription is acquired, decremented by its
+    // finalizer in the consumer's own Scope. `match` predicates are
+    // deliberately NOT consulted at publish time (recorded deviation from
+    // #1305 solution 6): the stream still filters by `match` on the consumer
+    // side, so correctness is unchanged and the lossy-synchronous publish
+    // never pays for predicate evaluation.
+    let allEventsInterest = 0;
+    const namedInterest = new Map<string, number>();
+    const subscription = (register: () => void, deregister: () => void) =>
+      Effect.map(
+        Effect.acquireRelease(
+          Effect.tap(PubSub.subscribe(pubsub), () => Effect.sync(register)),
+          () => Effect.sync(deregister),
+        ),
+        Stream.fromSubscription,
+      );
+    const observations = subscription(
+      () => {
+        allEventsInterest += 1;
+      },
+      () => {
+        allEventsInterest -= 1;
+      },
     );
     const stream = <T>(
       event: BusEvent.Descriptor<T>,
       streamOptions?: { readonly match?: Partial<T> },
     ) =>
-      Effect.map(observations, (all) =>
-        all.pipe(
-          Stream.filter((published) => published.name === event.name),
-          Stream.map((published) => published.data as T),
-          Stream.filter(
-            (data) => streamOptions?.match === undefined || matches(data, streamOptions.match),
+      Effect.map(
+        subscription(
+          () => {
+            namedInterest.set(event.name, (namedInterest.get(event.name) ?? 0) + 1);
+          },
+          () => {
+            const remaining = (namedInterest.get(event.name) ?? 0) - 1;
+            if (remaining <= 0) namedInterest.delete(event.name);
+            else namedInterest.set(event.name, remaining);
+          },
+        ),
+        (all) =>
+          all.pipe(
+            Stream.filter((published) => published.name === event.name),
+            Stream.map((published) => published.data as T),
+            Stream.filter(
+              (data) => streamOptions?.match === undefined || matches(data, streamOptions.match),
+            ),
           ),
-        ));
+      );
     const sink: SinkService = {
       publish<T>(event: BusEvent.Descriptor<T>, data: T): void {
-        // #1305: no subscriber, no publication. A PubSub without
-        // subscriptions drops the value anyway, so skipping is semantically
-        // free — and a large payload is never copied onto a plane nobody
-        // drains. The lossy-synchronous contract is unchanged.
-        const delivered = interest > 0;
+        // #1305: no matching subscriber, no publication. A PubSub whose
+        // subscribers all filter this name out drops the value after the
+        // copy; skipping here is semantically identical — and a large
+        // payload is never serialized onto a plane nobody drains. The
+        // lossy-synchronous contract is unchanged.
+        const delivered = allEventsInterest > 0 || namedInterest.has(event.name);
         options.onPublish?.(event.name, delivered);
         if (!delivered) return;
         PubSub.publishUnsafe(pubsub, {
