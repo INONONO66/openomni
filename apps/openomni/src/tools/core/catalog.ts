@@ -9,8 +9,6 @@ import { createEvalTool, type Cell } from "../eval";
 import { createFindTool } from "../find";
 import { createGrepTool } from "../grep";
 import { createLsTool } from "../ls";
-import { createMonitorTool } from "../../bundles/monitor";
-import type { MonitorPorts } from "./watch";
 import { createProvisionTool } from "../provision";
 import type { ProvisionPort } from "../../provisioning/channels";
 import { createReadTool } from "../read";
@@ -24,7 +22,6 @@ export interface CatalogOrigin {
 
 /** Every dependency is declared; unavailable capabilities are explicitly undefined. */
 export interface ToolPorts {
-  readonly alarms: MonitorPorts | undefined;
   readonly messages: MessagePort | undefined;
   /** Contact connectors (#1258); absent means connector kinds report not_sent. */
   readonly contacts?: ContactPorts;
@@ -48,7 +45,6 @@ export function catalogDefinitions(ports: ToolPorts): readonly AnyToolDefinition
     eraseTool(createGrepTool(ports)),
     eraseTool(createBashTool(ports)),
     eraseTool(createEvalTool(ports.cells?.cell)),
-    eraseTool(createMonitorTool(ports.alarms)),
     eraseTool(createSendMessageTool(ports.messages, ports.clock, ports.contacts)),
     eraseTool(createProvisionTool(ports.provisioning, ports.clock)),
     eraseTool(createCompletionTool(ports.llm)),

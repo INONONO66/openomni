@@ -12,7 +12,7 @@ import { FIXTURE_BASE, awaitScheduled, scheduledAt, withEntityAlarmPorts } from 
 import { activeInvocation } from "../../../packages/agent/src/core/gate/decide";
 
 test("monitor schema and dispatcher keep one strict create/rearm/cancel surface", async () => {
-  const monitorTool = createMonitorTool(undefined);
+  const monitorTool = createMonitorTool(() => undefined);
   for (const input of [
     {
       op: "create",
@@ -127,7 +127,7 @@ test("monitor controls fold create/rearm/cancel as chain facts through the real 
         state: row.state,
       }),
     );
-    const monitorTool = createMonitorTool(fx.ports);
+    const monitorTool = createMonitorTool(() => fx.ports);
     const armed = await fx.ports.create(
       {
         id: "control",
@@ -258,7 +258,7 @@ function monitorPolicy(extraRows: readonly PolicyRow[] = []) {
 
 test("cron create validates the grid and consults the gate before arming the chain", async () => {
   await withEntityAlarmPorts(SESSION, async (fx) => {
-    const monitorTool = createMonitorTool(fx.ports);
+    const monitorTool = createMonitorTool(() => fx.ports);
     const context = {
       sessionId: fx.sessionId,
       turnId: fx.turnId,

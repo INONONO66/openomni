@@ -1,6 +1,6 @@
 import { LlmLive } from "../../src/model";
 import { createPolicyCompiler, KERNEL_POLICY_REGISTRY } from "../../src/core/gate/compile";
-import { LedgerAction, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
+import { canonicalDigest, Inbox, LedgerAction, SessionTransition, type LedgerSession, type ObservationSink as ObservationPort, type SessionGeneration } from "@openomni/protocol";
 import { Clock, type Context, Effect, Layer, Scope, Semaphore } from "effect";
 import { GenerationHandlers } from "../../src/core/compose";
 import type { SessionKernel } from "../../src/core/entity";
@@ -13,7 +13,39 @@ import { isolatedLedger } from "./isolated";
 import { fixtureCompactionSeam } from "./fixture-compaction";
 import { observationService } from "./service-layers";
 import { entropySource, fixedClock } from "./time";
-import { parentReply } from "./composition-fixtures";
+import type { SessionRunnerResult } from "../../src/core/run";
+
+/**
+ * Seam stub for `SessionRuntime.parentReply` (#1308): core fixtures exercise
+ * the reply SEAM only. The shipped delegation-policy fold lives in
+ * apps/openomni/src/bundles/delegation-policy and is tested from
+ * apps/openomni/test; this stub answers the last parent-origin input with a
+ * minimal settled reply and never claims to mirror the shipped policy.
+ */
+function fixtureParentReply(
+  kernel: SessionKernel,
+  row: LedgerSession.Row,
+  terminal: LedgerAction.Append,
+  result: SessionRunnerResult,
+): SessionTransition.OutboundMessage | undefined {
+  if (row.parentId === null || result.kind === "waiting") return undefined;
+  const origin = kernel.inputMessages(row.id)
+    .map((item) => Inbox.MessageOrigin.safeParse(item.origin.value))
+    .flatMap((parsed) => parsed.success && parsed.data.senderSessionId === row.parentId ? [parsed.data] : [])
+    .at(-1);
+  if (origin === undefined) return undefined;
+  const message = {
+    messageId: `${terminal.id}:reply`,
+    sourceSessionId: row.id,
+    sourceActionId: terminal.id,
+    destinationSessionId: row.parentId,
+    requestId: origin.sourceActionId,
+    replyTo: origin.replyTo ?? origin.messageId,
+    terminal: result.kind === "result" ? ("completed" as const) : result.kind,
+    content: result.text ?? "",
+  };
+  return SessionTransition.OutboundMessage.parse({ ...message, digest: canonicalDigest(message) });
+}
 
 /** Tests grant configure EXPLICITLY; production composition wires the real pinned pre-policy. */
 export const allowConfigure: SessionRuntime["authorizeConfigure"] = () => Effect.succeed(true);
@@ -31,9 +63,9 @@ export function isolatedRuntime(): Pick<SessionRuntime, "openKernel" | "listSess
 
 /** A runtime kernel plane over one explicit kernel handle (crash children own their stores). */
 export function kernelRuntime(kernel: () => SessionKernel): Pick<SessionRuntime, "openKernel" | "listSessions" | "parentReply" | "compaction"> {
-  // #1276: parent replies are composition-injected; fixtures keep the shipped behavior.
-  // #1307: so is the compaction seam.
-  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply, compaction: fixtureCompactionSeam };
+  // #1308: parent replies are composition-injected; fixtures ride a seam stub.
+  // #1307: the compaction seam too.
+  return { openKernel: () => kernel(), listSessions: () => kernel().listRows(), parentReply: fixtureParentReply, compaction: fixtureCompactionSeam };
 }
 
 const fixtures = new WeakMap<Scope.Scope, WeakMap<SessionFixture, Context.Context<SessionEntryServices>>>();

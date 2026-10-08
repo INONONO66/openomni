@@ -1,5 +1,50 @@
 # Implementation Status
 
+## #1308 one composition root: sealed boot options, single monitor declaration, entity-drained process child (epic #1303, rung 10)
+
+On `stab/10-composition-root-dedupe` (2026-10-08, base `0373ed38c`). Boot
+options carry no tool list: `StartOptions`/`ResidentOptions` lost
+`toolDefinitions` (`rg -c 'toolDefinitions' -g '*.ts' apps/openomni` prints
+nothing) and app tests that need an extra tool declare it through a test
+manifest bundle (`appFixture`'s `bundles` option / `testToolsBundle`), so the
+12-factory catalog is the manifest's tool projection and nothing else.
+`monitor` is declared once, by `monitorBundle`: `createMonitorTool` appears
+under `apps/openomni/src` only in `bundles/monitor/index.ts`,
+`catalogDefinitions` returns 11 factories, and the generation-construction
+name-collision keep rule is replaced by the typed `duplicate` compose refusal
+(`manifest.test.ts` pins a two-`monitor` manifest refusing closed). The dead
+`monitorSeedRows` export is deleted (`rg -c 'monitorSeedRows' -g '*.ts'
+packages apps` prints nothing); tests seed the composed wake-budget row via
+`gateRowPolicySeeds` over the monitor bundle's rows.
+
+The process child is a transport into the same root: `ProcessSessionRequest`
+grew `hooksPath`/`off` (the #1306 name), the child rebuilds `config -> manifest ->
+compose` and boots `gatewayRuntime` with the composed holder (its generation
+lists the five shipped bundles), and `process-entry.ts` holds no admission
+loop — it binds `SessionEntityBinding` (inline detach: the child owns the
+whole turn's lifetime, a typed turn failure is recorded and surfaced as the
+child's non-zero exit, and a failure that left the journal unmoved dies as a
+wiring defect) and wakes the session entity once through the entity client's
+entity-internal `rescan` Alarm, so fence rotation, consume folds and
+passivation arming belong to the entity alone (`rg -c
+'decideSessionAdmission' apps/openomni/src/process-entry.ts` prints nothing).
+`emptyComposition` is deleted and `AppRuntimeOptions.composed` is required;
+`cli/main.ts` hands `startOpenOmni` the config only, and
+`test/helpers/generation-services.ts` composes its own empty manifest.
+`packages/agent/test/helpers/composition-fixtures.ts` and
+`apps/openomni/test/composition-drift.test.ts` are deleted; the five
+shipped-behavior suites moved to `apps/openomni/test`.
+
+Ruled deviations: the send-message bundle also declares its tool on the base
+catalog, so the duplicate-name compose refusal exempts `send_message`
+(folding it is its own issue); `app-surface.test.ts` was a seventh
+`toolDefinitions` site; `packages/agent/test/helpers/session-services.ts` was
+the seventh composition-fixtures consumer and now rides a reply-seam stub.
+Implementation deviation: the child surfaces the first typed turn failure
+after the entity wake instead of deferring consume decisions to the parent
+(the old `process drain deferred consume` path is gone — the entity fold owns
+them), pinned by `process-session-e2e.test.ts`.
+
 ## #1313 typed idempotency_conflict and seam_missing deliver refusals (epic #1303, rung 13)
 
 On `stab/13-typed-admission-idempotency` (2026-10-08, base `c11ae7148`).

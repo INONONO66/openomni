@@ -1,5 +1,5 @@
 import { Bundle, Core } from "@openomni/agent";
-import { Alarm, type PolicyRow } from "@openomni/protocol";
+import { Alarm } from "@openomni/protocol";
 import { z } from "zod";
 import { ToolCapabilitySeam } from "../seams";
 import { armCron, armWatch, type MonitorPorts, WatchState } from "../../tools/core/watch";
@@ -79,7 +79,7 @@ const operation = z.discriminatedUnion("op", [
 // Like provision: an object root preserves the framework's model ABI.
 const input = z.object({ operation }).strict();
 
-export function createMonitorTool(ports: MonitorPorts | undefined) {
+export function createMonitorTool(alarms: () => MonitorPorts | undefined) {
   return defineTool({
     name: "monitor",
     category: "mutation",
@@ -91,6 +91,7 @@ export function createMonitorTool(ports: MonitorPorts | undefined) {
     sequential: true,
     async execute(request, context) {
       const args = request.operation;
+      const ports = alarms();
       if (ports === undefined) throw new ToolRefused("monitor", "alarm port unavailable");
       context.signal.throwIfAborted();
       if (args.op !== "create") {
@@ -114,29 +115,10 @@ export function createMonitorTool(ports: MonitorPorts | undefined) {
 }
 
 /**
- * The monitor wake budget, moved here from `policy-seed.ts` (#1255 P2): the
- * bundle owns its policy rows. This is the legacy row shape the live policy
- * plane seeds today; `MONITOR_WAKE_BUDGET_ROW` below is the same obligation
- * in the frozen #1251 `GateRow` shape the bundle contract carries for
- * `compose` (#1255 S2).
+ * The monitor wake budget (#1255 P2, #1308): the bundle's one gate row in the
+ * frozen #1251 `GateRow` shape `compose` (#1255 S2) carries; the live policy
+ * plane seeds it through `gateRowPolicySeeds` over the composed generation.
  */
-const MONITOR_WAKE_BUDGET: Omit<PolicyRow.Row, "generation"> = {
-  name: "monitor-wake-budget",
-  kind: "tool",
-  phase: "pre",
-  priority: 900,
-  match: { encodingVersion: 1, value: { op: "monitor" } },
-  verdict: {
-    encodingVersion: 1,
-    value: { type: "obligation", ref: "kernel/budget-clamp", metric: "notifications", limit: 8 },
-  },
-};
-
-/** Seed rows the boot passes to the kernel policy seed until compose owns row tables. */
-export const monitorSeedRows: readonly Omit<PolicyRow.Row, "generation">[] = [
-  MONITOR_WAKE_BUDGET,
-];
-
 const MONITOR_WAKE_BUDGET_ROW: Bundle.BundleGateRow = {
   id: "monitor/tool.pre#1",
   on: "tool.pre",
@@ -158,6 +140,8 @@ export function monitorPurposes(deps: Bundle.WatchWakeDeps): Bundle.AlarmBundleP
 /** The `monitor` bundle contract (#1255 `Bundle.define`): tool face, wake budget row, purposes. */
 export function monitorBundle(
   deps: Bundle.WatchWakeDeps,
+  /** The live alarm ports, late-bound: boot binds them after the runtime exists (#1308). */
+  alarms: () => MonitorPorts | undefined,
 ): Bundle.BundleContract<"monitor", object, Bundle.AlarmPurposeHandler> {
   return Bundle.define({
     name: "monitor",
@@ -165,9 +149,9 @@ export function monitorBundle(
     // requires the tool capability's seam — `off: ["tool"]` cascades monitor
     // off instead of rejecting the row as `unknown_point`.
     requires: [Bundle.AlarmSeam, ToolCapabilitySeam],
-    // The declaration face; execution ports stay composition-wired until
-    // compose (#1255 S2) derives the generation tool table from the manifest.
-    tools: [Core.eraseTool(createMonitorTool(undefined))],
+    // #1308: the bundle is the ONE `monitor` declaration and it is live —
+    // the catalog no longer builds a competing copy.
+    tools: [Core.eraseTool(createMonitorTool(alarms))],
     rows: [MONITOR_WAKE_BUDGET_ROW],
     purposes: Object.fromEntries(
       Bundle.watchPurposes(deps).map((purpose) => [purpose.name, purpose.handler]),

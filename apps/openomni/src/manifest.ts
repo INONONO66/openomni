@@ -4,6 +4,7 @@ import { delegationPolicyBundle } from "./bundles/delegation-policy";
 import { hooksJsonBundle, type HooksJsonInput } from "./bundles/hooks-json";
 import { monitorBundle } from "./bundles/monitor";
 import { ToolCapabilitySeam } from "./bundles/seams";
+import type { MonitorPorts } from "./tools/core/watch";
 import { sendMessageBundle } from "./bundles/send-message";
 
 /**
@@ -42,6 +43,8 @@ export interface AppManifestInput {
   readonly alarm: Bundle.CapabilityDefinition<"alarm">;
   /** The watch wake dependencies the monitor bundle's purposes close over. */
   readonly wake: Bundle.WatchWakeDeps;
+  /** The live alarm ports the monitor tool executes against, late-bound (#1308). */
+  readonly alarms: () => MonitorPorts | undefined;
   /** The parsed hooks JSON config (#1256); absent composes zero hook rows. */
   readonly hooks?: HooksJsonInput;
   /** Owner-configured off names (capabilities and bundles); absent means everything declared is on. */
@@ -61,7 +64,7 @@ export function appManifest(input: AppManifestInput): Bundle.ManifestDefinition 
       input.alarm,
     ],
     bundles: [
-      monitorBundle(input.wake),
+      monitorBundle(input.wake, input.alarms),
       cronBundle(),
       hooksJsonBundle(input.hooks),
       sendMessageBundle(),

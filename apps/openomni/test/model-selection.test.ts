@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { LedgerAction, type PlainObject } from "@openomni/protocol";
 import { Effect } from "effect";
-import { pinnedModelSelection } from "./helpers/composition-fixtures";
-import { isolated } from "./helpers/isolated";
+import { pinnedModelSelection } from "../src/composition/model-selection";
+import { isolated } from "../../../packages/agent/test/helpers/isolated";
 
 function selection(actions: readonly LedgerAction.Node[], turnId: string) {
   return isolated((ledger) => Effect.gen(function* () {

@@ -2,7 +2,7 @@ import { Model, Bundle } from "@openomni/agent";
 const Llm = Model.Llm;
 const LlmLive = Model.LlmLive;
 import { type Clock, Context, Effect, Layer } from "effect";
-import { composedHolderOf, type ComposedHolder } from "../../src/composition/composed";
+import { composedHolderOf, alarmPortsSlot, type ComposedHolder } from "../../src/composition/composed";
 import { createWatchPlane } from "../../src/composition/watch-plane";
 import { gatewayRuntime } from "../../src/gateway";
 import { readHooksJson } from "../../src/bundles/hooks-json";
@@ -22,22 +22,38 @@ import { Bus } from "./bus";
 async function productComposedHolder(
   off?: readonly string[],
   hooksPath?: string,
+  bundles?: readonly Bundle.BundleContract[],
 ): Promise<ComposedHolder> {
   const plane = createWatchPlane();
-  const manifest = appManifest({
+  // #1308: the boot binds the live monitor ports into this slot.
+  const alarms = alarmPortsSlot();
+  const product = appManifest({
     alarm: plane.contract,
     wake: plane.wake,
+    alarms: alarms.current,
     ...(hooksPath === undefined ? {} : { hooks: readHooksJson(hooksPath) }),
     ...(off === undefined ? {} : { off }),
   });
+  // #1308: boot options carry no tool list; a test tool joins the composition
+  // the one sanctioned way — as a declared manifest bundle.
+  const manifest =
+    bundles === undefined || bundles.length === 0
+      ? product
+      : Bundle.Manifest.define({
+          capabilities: [...product.capabilities],
+          bundles: [...product.bundles, ...bundles],
+          off: [...product.off],
+        });
   const generation = Bundle.composeSync(manifest);
-  return composedHolderOf({ manifest, generation });
+  return composedHolderOf({ manifest, generation }, alarms);
 }
 
 export type FixtureLlm = Context.Service.Shape<typeof Llm>;
 type Start = NonNullable<Parameters<typeof startOpenOmni>[0]>;
 export type AppFixtureOptions = Omit<Start, "sessionRuntime"> & {
   readonly llm?: Partial<FixtureLlm>;
+  /** Test manifest bundles composed after the product bundles (#1308): the one way a fixture declares extra tools. */
+  readonly bundles?: readonly Bundle.BundleContract[];
   readonly sessionRuntime?: Start["sessionRuntime"] & {
     readonly clock?: () => number;
     readonly entropy?: () => string;
@@ -51,13 +67,13 @@ export type AppFixtureOptions = Omit<Start, "sessionRuntime"> & {
 /** Test composition supplies services through the actual AppLive runtime. */
 export async function appFixture(options: AppFixtureOptions) {
   if (options.config === undefined) throw new Error("fixture config required");
-  const { llm, sessionRuntime, clusterClock, hookClock, ...app } = options;
+  const { llm, sessionRuntime, clusterClock, hookClock, bundles, ...app } = options;
   const { clock, entropy, ...session } = sessionRuntime ?? {};
   const runtime =
     options.runtime ??
     gatewayRuntime({
       observations: Bus,
-      composed: await productComposedHolder(options.config.off, options.config.hooksPath),
+      composed: await productComposedHolder(options.config.off, options.config.hooksPath, bundles),
       ...(options.config.catalogPath === undefined
         ? {}
         : { catalogPath: options.config.catalogPath }),
@@ -97,4 +113,9 @@ export async function composeRowOf(app: Awaited<ReturnType<typeof startOpenOmni>
   );
   if (action === undefined) throw new Error(`no compose configure row in session ${sessionId}`);
   return action;
+}
+
+/** The test manifest bundle (#1308): fixture tools ride a declared bundle, never a boot option. */
+export function testToolsBundle(tools: readonly Bundle.BundleTool[]) {
+  return Bundle.define({ name: "test-tools", requires: [], tools });
 }

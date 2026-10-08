@@ -18,7 +18,7 @@ import { AppLedger } from "../src/composition/cluster-runtime";
 import { Bus } from "./helpers/bus";
 
 test("AppLive retains distinct same-number session generations", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   try {
     const values = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -44,7 +44,7 @@ test("AppLive retains distinct same-number session generations", async () => {
 });
 
 test("generation composition rejects use before initialization and duplicate initialization", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   try {
     await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -134,7 +134,7 @@ test("a capability omitted from the composition removes its points: tool rows fa
     },
     denyWrites,
   ];
-  const withoutTool = gatewayRuntime({ observations: Bus, capabilities: reduced });
+  const withoutTool = gatewayRuntime({ composed: composedHolder(), observations: Bus, capabilities: reduced });
   try {
     await runAppEffect(withoutTool, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -166,7 +166,7 @@ test("a capability omitted from the composition removes its points: tool rows fa
   } finally { await withoutTool.dispose(); }
 
   // The same rows govern once the tool capability is composed.
-  const composed = gatewayRuntime({ observations: Bus });
+  const composed = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   try {
     await runAppEffect(composed, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -190,7 +190,7 @@ test("a capability omitted from the composition removes its points: tool rows fa
 });
 
 test("a generation carrying a row outside the composition's point table fails closed at capture (#1251 r2)", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   try {
     await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
       const generations = yield* GenerationLayers;
@@ -226,7 +226,7 @@ test("a generation carrying a row outside the composition's point table fails cl
 
 for (const verdict of ["require_approval", "deny"] as const) {
   test(`configureAuthority refuses session.configure when the pinned pre-policy yields ${verdict}`, async () => {
-    const runtime = gatewayRuntime({ observations: Bus });
+    const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
     try {
       const decisions = await runAppEffect(runtime, Effect.scoped(Effect.gen(function* () {
         const generations = yield* GenerationLayers;

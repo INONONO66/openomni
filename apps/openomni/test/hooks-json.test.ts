@@ -13,7 +13,7 @@ import {
   SECRETS_GUARD_REF,
   secretsGuard,
 } from "../src/bundles/hooks-json";
-import { composedHolderOf } from "../src/composition/composed";
+import { composedHolderOf, alarmPortsSlot } from "../src/composition/composed";
 import { createWatchPlane } from "../src/composition/watch-plane";
 import { gatewayRuntime, runAppEffect } from "../src/gateway";
 import { appManifest } from "../src/manifest";
@@ -24,6 +24,7 @@ import { planeOf } from "./helpers/ledger";
 import { fakeProviderModel, residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { Bus } from "./helpers/bus";
+import { testToolsBundle } from "./helpers/app-fixture";
 import { nextFrame } from "./helpers/ws";
 import { z } from "zod";
 import { executionReads } from "../../../packages/agent/test/helpers/execution-reads";
@@ -64,6 +65,7 @@ function composed(input?: {
       appManifest({
         alarm,
         wake: { close: () => undefined },
+        alarms: () => undefined,
         ...(input?.hooks === undefined ? {} : { hooks: input.hooks }),
         ...(input?.off === undefined ? {} : { off: input.off }),
       }),
@@ -427,12 +429,12 @@ async function offCascadeConfigureRows(prefix: string) {
   let counter = 0;
   const config = suite.config(prefix);
   const watch = createWatchPlane();
-  const onManifest = appManifest({ alarm: watch.contract, wake: watch.wake });
-  const offManifest = appManifest({ alarm: watch.contract, wake: watch.wake, off: ["hook"] });
+  const onManifest = appManifest({ alarm: watch.contract, wake: watch.wake, alarms: () => undefined });
+  const offManifest = appManifest({ alarm: watch.contract, wake: watch.wake, alarms: () => undefined, off: ["hook"] });
   const holder = composedHolderOf({
     manifest: onManifest,
     generation: Bundle.composeSync(onManifest),
-  });
+  }, alarmPortsSlot());
   let calls = 0;
   const runtime = gatewayRuntime({
     observations: Bus,
@@ -1329,7 +1331,7 @@ test("H-2 e2e: an external PreToolUse rewrite reaches the REAL dispatched execut
   let residentSessionId: string | undefined;
   const app = await suite.boot({
     config,
-    toolDefinitions: [bashTool],
+    bundles: [testToolsBundle([bashTool])],
     llm: {
       resolveModel: fakeProviderModel,
       run: (input: RunInput, sink: Sink) =>
@@ -1495,7 +1497,7 @@ test("H-3(b) e2e: a real generation rotation mid-turn — the old turn keeps its
   });
   const app = await suite.boot({
     config,
-    toolDefinitions: [probeTool],
+    bundles: [testToolsBundle([probeTool])],
     llm: {
       resolveModel: fakeProviderModel,
       run: (input: RunInput, sink: Sink) =>

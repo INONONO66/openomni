@@ -98,7 +98,7 @@ import { captureNow } from "./composition/platform";
 import { createWatchSources } from "./composition/watch-sources";
 import { createSessionForkExecutor } from "./composition/session-fork";
 import { alarmCapabilityView, createWatchPlane } from "./composition/watch-plane";
-import { ComposedGeneration, composedHolderOf } from "./composition/composed";
+import { ComposedGeneration, composedHolderOf, alarmPortsSlot } from "./composition/composed";
 import { appManifest } from "./manifest";
 import {
   acquireAppResource,
@@ -133,7 +133,6 @@ interface StartOptions {
     "closeGraceMs" | "approvalTimeoutMs" | "retryAlarm" | "openIntent" | "onHibernate"
   >;
   readonly config?: OpenOmniConfig;
-  readonly toolDefinitions?: readonly import("@openomni/protocol").AnyToolDefinition[];
 }
 
 /**
@@ -323,14 +322,18 @@ export async function startOpenOmni(options: StartOptions = {}) {
   // here is the typed boot failure, thrown before any listener exists. An
   // injected runtime carries its own composed holder (tests).
   const composedRuntime = async (): Promise<AppRuntime> => {
+    // #1308: the wake bundle's ONE live tool executes against this slot;
+    // boot binds it after the runtime exists, unbound calls refuse typed.
+    const alarmsSlot = alarmPortsSlot();
     const manifest = appManifest({
       alarm: watchPlane.contract,
       wake: watchPlane.wake,
+      alarms: alarmsSlot.current,
       ...(hooks === undefined ? {} : { hooks }),
       ...(config.off === undefined ? {} : { off: config.off }),
     });
     const generation = Bundle.composeSync(manifest);
-    const holder = composedHolderOf({ manifest, generation });
+    const holder = composedHolderOf({ manifest, generation }, alarmsSlot);
     return gatewayRuntime({
       // Cluster storage rides only on configs that resolved it (loadConfig
       // always does); injected literal test configs stay on the in-memory
@@ -567,10 +570,13 @@ export async function startOpenOmni(options: StartOptions = {}) {
         names: () => services.composed.current().manifest.bundles.map((bundle) => bundle.name),
         off: () => services.composed.current().manifest.off,
         set: async (off) => {
-          const manifest = appManifest({
-            alarm: watchPlane.contract,
-            wake: watchPlane.wake,
-            ...(hooks === undefined ? {} : { hooks }),
+          // #1308: recompose edits ONLY the off-list of the manifest the boot
+          // composed — the one root; a rebuilt declaration would silently drop
+          // bundles an injected holder (tests) declared beyond the product set.
+          const current = services.composed.current().manifest;
+          const manifest = Bundle.Manifest.define({
+            capabilities: [...current.capabilities],
+            bundles: [...current.bundles],
             off,
           });
           const generation = await runAppEffect(runtime, Bundle.compose(manifest));
@@ -670,8 +676,10 @@ export async function startOpenOmni(options: StartOptions = {}) {
       }),
     );
     watchPlane.bind(watchSources);
+    // #1308: bind the live alarm ports the wake bundle's ONE tool
+    // declaration executes against — injected holders (tests) bind here too.
+    services.composed.alarms.bind(await createMonitorPorts(runtime, alarmPlane));
     const resident = createResident({
-      toolDefinitions: options.toolDefinitions,
       // #1257: the app's resolved cap is the input the composition writes
       // into every new session's genesis generation settings.
       forkCopyByteCap: resolveSessionFork(config).copyByteCap,
@@ -680,7 +688,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
       composed: { current: services.composed.current },
       tools: {
         ...tools,
-        alarms: await createMonitorPorts(runtime, alarmPlane),
         provisioning: provisioningPort,
         // #1258: a `to.new` send carrying `deadline_ms` arms the
         // delegation.deadline purpose through the live activation's arm verb.
@@ -783,6 +790,8 @@ export async function startOpenOmni(options: StartOptions = {}) {
         model: config.model,
         apiKey: config.model.apiKey,
         ...(transport === undefined ? {} : { transport }),
+        ...(config.hooksPath === undefined ? {} : { hooksPath: config.hooksPath }),
+        ...(config.off === undefined ? {} : { off: [...config.off] }),
       },
       committed: (ids) => {
         for (const id of ids) void wake(id);

@@ -24,6 +24,7 @@ import { planeOf } from "./helpers/ledger";
 import { residentSuite } from "./helpers/resident-suite";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { runEffect } from "./helpers/effect";
+import { testToolsBundle } from "./helpers/app-fixture";
 import type { AppSessionHandle } from "../src";
 import { contentBlocks, messageStart, messageEnd, sseResponse } from "./helpers/anthropic-sse";
 import {
@@ -214,7 +215,7 @@ async function waveApp(
   const config = waveConfig("openomni-937-wave-", provider.port);
   const app = await suite.boot({
     config,
-    toolDefinitions: definitions,
+    bundles: [testToolsBundle(definitions)],
     sessionRuntime: { closeGraceMs: 0, ...sessionRuntime },
     llm: waveLlm(),
   });

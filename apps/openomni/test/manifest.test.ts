@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { Bundle, Core } from "@openomni/agent";
 import { Effect } from "effect";
 import { appManifest } from "../src/manifest";
+import { createMonitorTool } from "../src/bundles/monitor";
+import { ToolCapabilitySeam } from "../src/bundles/seams";
 import { runEffect } from "./helpers/effect";
 
 async function alarmDefinition(): Promise<Bundle.CapabilityDefinition<"alarm">> {
@@ -20,6 +22,7 @@ test("the manifest is THE product list: tool/action/hook/compaction/alarm capabi
   const manifest = appManifest({
     alarm: await alarmDefinition(),
     wake: { close: () => undefined },
+    alarms: () => undefined,
   });
   expect(manifest.capabilities.map((capability) => capability.name)).toEqual([
     "tool",
@@ -42,6 +45,7 @@ test("the Owner's bundles-off tuple flows through as the manifest off list", asy
   const manifest = appManifest({
     alarm: await alarmDefinition(),
     wake: { close: () => undefined },
+    alarms: () => undefined,
     off: ["monitor"],
   });
   expect(manifest.off).toEqual(["monitor"]);
@@ -50,7 +54,8 @@ test("the Owner's bundles-off tuple flows through as the manifest off list", asy
 test("a duplicate off name is refused as typed manifest data, not silently deduped", async () => {
   const alarm = await alarmDefinition();
   expect(() =>
-    appManifest({ alarm, wake: { close: () => undefined }, off: ["cron", "cron"] }),
+    appManifest({ alarm, wake: { close: () => undefined },
+    alarms: () => undefined, off: ["cron", "cron"] }),
   ).toThrow(Bundle.DefineRefused);
 });
 
@@ -58,6 +63,7 @@ test('off: ["tool"] composes with a typed cascade: monitor, send-message and del
   const manifest = appManifest({
     alarm: await alarmDefinition(),
     wake: { close: () => undefined },
+    alarms: () => undefined,
     off: ["tool"],
   });
   const generation = Bundle.composeSync(manifest);
@@ -73,9 +79,36 @@ test("off: [\"compaction\"] composes with the typed disabled record, not a build
   const manifest = appManifest({
     alarm: await alarmDefinition(),
     wake: { close: () => undefined },
+    alarms: () => undefined,
     off: ["compaction"],
   });
   const generation = await runEffect(Bundle.compose(manifest));
   expect(generation.disabled).toContainEqual({ name: "compaction", because: "compaction" });
   expect(generation.capabilities).not.toContain("compaction");
+});
+
+test("a second bundle declaring the `monitor` tool is the typed duplicate compose refusal (#1308)", async () => {
+  const product = appManifest({
+    alarm: await alarmDefinition(),
+    wake: { close: () => undefined },
+    alarms: () => undefined,
+  });
+  const copy = Bundle.define({
+    name: "monitor-copy",
+    requires: [ToolCapabilitySeam],
+    tools: [Core.eraseTool(createMonitorTool(() => undefined))],
+  });
+  const manifest = Bundle.Manifest.define({
+    capabilities: [...product.capabilities],
+    bundles: [...product.bundles, copy],
+    off: [],
+  });
+  try {
+    Bundle.composeSync(manifest);
+    throw new Error("expected ComposeRefused");
+  } catch (error) {
+    if (!(error instanceof Bundle.ComposeRefused)) throw error;
+    expect(error.code).toBe("duplicate");
+    expect(error.detail).toContain("tool monitor");
+  }
 });

@@ -1,3 +1,4 @@
+import { composedHolder } from "./helpers/bundle-fixture";
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { Bus } from "./helpers/bus";
@@ -117,7 +118,7 @@ test("session pages report tool wall time from committed intent/result pairs", (
 // publishes the committed hint and the gateway re-sends the authoritative
 // page; the committed row arrives on the reader's cursor, no polling.
 test("a subscribed reader is re-sent the page when a newer revision commits", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   const sessionId = "ws-follow";
   const { plane, kernel, commit } = readFixture(sessionId);
   try {
@@ -165,7 +166,7 @@ test("a subscribed reader is re-sent the page when a newer revision commits", as
 // A kernel read that throws mid-send must answer the reader with the typed
 // session_read_failed error frame instead of tearing down the socket loop.
 test("a reader whose kernel read throws receives a session_read_failed error frame", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   const sessionId = "ws-throw";
   const { plane, kernel } = readFixture(sessionId);
   try {

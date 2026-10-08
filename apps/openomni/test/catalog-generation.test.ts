@@ -1,3 +1,4 @@
+import { composedHolder } from "./helpers/bundle-fixture";
 import { expect, test } from "bun:test";
 import { Core, Testing } from "@openomni/agent";
 const GenerationLayers = Core.GenerationLayers;
@@ -19,7 +20,7 @@ import { Bus } from "./helpers/bus";
 test("two turns retain one catalog Layer; configure acquires a fresh generation catalog", async () => {
   const layers: Layer.Layer<ToolCatalog>[] = [];
   const turns: (readonly AnyToolDefinition[])[] = [];
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   const plane = await planeOf(runtime);
   const resident = createResident({
     model: { provider: "test", id: "test" }, apiKey: "test", tools: testToolPorts,

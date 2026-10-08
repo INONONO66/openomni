@@ -12,7 +12,7 @@ import { Bus, newTraceId } from "./bus";
 const run = Model.run;
 import { LlmCall, type Message, type Tool } from "@openomni/protocol";
 import { z } from "zod";
-import { appFixture } from "./app-fixture";
+import { appFixture, testToolsBundle } from "./app-fixture";
 import { closeSocket, openSocket } from "./ws";
 import { sessionFilePath } from "../../src/composition/cluster-runtime";
 import { planeOf } from "./ledger";
@@ -122,7 +122,7 @@ try {
         baseUrl: model.api?.url,
       },
     },
-    toolDefinitions: [
+    bundles: [testToolsBundle([
       eraseTool(
         defineTool({
           name: "lookup",
@@ -135,7 +135,7 @@ try {
           render: (_input, value) => value,
         }),
       ),
-    ],
+    ])],
     llm: {
       resolveModel: () => Effect.succeed(model),
       run: (input, sink) =>

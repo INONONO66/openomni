@@ -1,3 +1,4 @@
+import { composedHolder } from "./helpers/bundle-fixture";
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -177,7 +178,7 @@ test("a self daemon closing after boot detaches the handle and surfaces the type
   );
   const root = testSelfMachine();
   const app = await startOpenOmni({
-    runtime: Gateway.gatewayRuntime({ observations: bus }),
+    runtime: Gateway.gatewayRuntime({ composed: composedHolder(), observations: bus }),
     config: fixtureConfig({ self: root, listen: { unix: socketPath() }, enrolled: [] }),
   });
   try {

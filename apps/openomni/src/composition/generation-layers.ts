@@ -164,12 +164,19 @@ export const GenerationLayersLive = Layer.effect(GenerationLayers, Effect.gen(fu
       const generation = composed.current().generation;
       const role = plane.openKernel(sessionId).row(sessionId).role;
       const offered = new Set(snapshot.tools.map((tool) => tool.name));
-      // Bundle tools join the pool AFTER the composition-wired catalog: a
-      // bundle face sharing a catalog tool's name (the monitor tool) defers to
-      // the ported catalog definition; bundle-only tools ride in as declared.
+      // Bundle tools join the pool AFTER the composition-wired catalog. A
+      // bundle face sharing a catalog tool's name is the typed `duplicate`
+      // compose refusal (#1308) — never a silent merge. One documented
+      // exception: `send_message`, whose bundle face is still a declaration
+      // while the live port stays composition-wired through the catalog;
+      // folding it into the bundle is its own issue.
       const select = (tools: readonly AnyToolDefinition[]) => {
         const pool = [...tools];
-        for (const tool of generation.tools) if (!pool.some((existing) => existing.name === tool.name)) pool.push(tool);
+        for (const tool of generation.tools) {
+          if (!pool.some((existing) => existing.name === tool.name)) pool.push(tool);
+          else if (tool.name !== "send_message")
+            throw new Bundle.ComposeRefused({ code: "duplicate", name: tool.name, detail: "catalog tool" });
+        }
         return pool.filter(
           (tool) => offered.has(tool.name) && (tool.visibility.model.includes(role) || tool.visibility.cell.includes(role)),
         );

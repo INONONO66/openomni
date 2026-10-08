@@ -1,3 +1,4 @@
+import { composedHolder } from "./helpers/bundle-fixture";
 import { expect, spyOn, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
 import { bootResource } from "../src/composition/boot";
@@ -56,11 +57,11 @@ test("tool ports bridge machine filesystem and exec effects through the app runt
 });
 
 test("the server edge consumes the shared gateway runtime and its injected services", async () => {
-  const runtime = gatewayRuntime({ observations: Bus, now: () => 123, entropy: testEntropy(() => "fixed") });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus, now: () => 123, entropy: testEntropy(() => "fixed") });
   const first = await startOpenOmni({ config, runtime });
   try {
     expect(first.runtime).toBe(runtime);
-    expect(gatewayRuntime({ observations: Bus })).toBe(runtime);
+    expect(gatewayRuntime({ composed: composedHolder(), observations: Bus })).toBe(runtime);
     expect(
       await runRuntimeEffect(runtime,
         Effect.gen(function* () {
@@ -78,7 +79,7 @@ test("the server edge consumes the shared gateway runtime and its injected servi
 });
 
 test("failed boot releases acquired resources in reverse and rethrows the typed cause", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   const order: string[] = [];
   const failure = new AppLifecycleFailure({ operation: "fixture.acquire", cause: "refused" });
   const message = Object.getOwnPropertyDescriptor(
@@ -116,7 +117,7 @@ test("failed boot releases acquired resources in reverse and rethrows the typed 
 });
 
 test("double stop observes one pending disposal and releases exactly once", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let calls = 0;
@@ -142,7 +143,7 @@ test("double stop observes one pending disposal and releases exactly once", asyn
 });
 
 test("scope finalizers all run and aggregate failures in reverse release order", async () => {
-  const runtime = gatewayRuntime({ observations: Bus });
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus });
   const order: string[] = [];
   const first = new AppLifecycleFailure({ operation: "first.close", cause: "first" });
   const second = new AppLifecycleFailure({ operation: "second.close", cause: "second" });
@@ -168,8 +169,8 @@ test("scope finalizers all run and aggregate failures in reverse release order",
 
 test("a runtime with fixed entity ports refuses late rebinding", async () => {
   const ports = createSessionEntityPortsSlot().ports;
-  await gatewayRuntime({ observations: Bus }).dispose();
-  const runtime = gatewayRuntime({ observations: Bus,
+  await gatewayRuntime({ composed: composedHolder(), observations: Bus }).dispose();
+  const runtime = gatewayRuntime({ composed: composedHolder(), observations: Bus,
     entity: { owner: "fixed-entity", ports },
   });
   try {

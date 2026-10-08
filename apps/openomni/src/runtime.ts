@@ -22,7 +22,7 @@ import {
   type ClusterServices,
 } from "./composition/cluster-runtime";
 import { resolveAlarmDrain } from "./config";
-import { ComposedGeneration, composedHolderOf, emptyComposition } from "./composition/composed";
+import { ComposedGeneration } from "./composition/composed";
 import { GenerationLayersLive, HookConsultClock } from "./composition/generation-layers";
 import { AppPointTable, composedPointTable } from "./composition/point-table";
 import { captureNow, platformEntropy, wallClockLayer } from "./composition/platform";
@@ -95,16 +95,15 @@ export interface AppRuntimeOptions {
   readonly hookClock?: Clock.Clock;
   readonly observations?: Context.Service.Shape<typeof ObservationSink>;
   readonly llm?: Layer.Layer<Llm>;
-  /** The composed-generation holder (#1255 P3): boot composes the manifest and injects it; absent = the empty composition. */
-  readonly composed?: Context.Service.Shape<typeof ComposedGeneration>;
+  /** The composed-generation holder (#1255 P3): boot composes the manifest and injects it — THE one composition root. */
+  readonly composed: Context.Service.Shape<typeof ComposedGeneration>;
   /** The capability registrations this composition selects (#1251); absent = every built-in this app ships. */
   readonly capabilities?: readonly Core.CapabilityPointRegistration[];
 }
 
 export function AppLive(options: AppRuntimeOptions) {
   const now = options.now === undefined ? captureNow : Effect.succeed(options.now);
-  const composed = options.composed ?? composedHolderOf(emptyComposition());
-  return Layer.unwrap(Effect.map(now, (captured) => appLayer(options, Layer.succeed(ComposedGeneration, composed), captured)));
+  return Layer.unwrap(Effect.map(now, (captured) => appLayer(options, Layer.succeed(ComposedGeneration, options.composed), captured)));
 }
 
 function appLayer(options: AppRuntimeOptions, composed: Layer.Layer<ComposedGeneration>, now: () => number) {

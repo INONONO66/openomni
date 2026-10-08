@@ -1,9 +1,9 @@
 import { beforeEach, expect, test } from "bun:test";
 import { Inbox, type LedgerAction, type PlainValue, SessionGeneration } from "@openomni/protocol";
-import { staleActionBacklog, turnIntentAction } from "../src/core/commit";
-import type * as SessionHandleStore from "../src/core/store/fence";
-import { materializeSession } from "./store/helpers/session";
-import { useMemoryStores } from "./store/helpers/storage";
+import { staleActionBacklog, turnIntentAction } from "../../../packages/agent/src/core/commit";
+import type * as SessionHandleStore from "../../../packages/agent/src/core/store/fence";
+import { materializeSession } from "../../../packages/agent/test/store/helpers/session";
+import { useMemoryStores } from "../../../packages/agent/test/store/helpers/storage";
 
 /**
  * #1256 H-3: a deferred `action` input carries the journal ordinal (`after`)
@@ -138,19 +138,19 @@ test("the chain fold: after rides the pending row, compactionHead is the execute
 // ---------------------------------------------------------------------------
 
 import { Deferred, Effect, Fiber } from "effect";
-import { boundaryConsumption, DEFAULT_CONSUMPTION } from "../src/core/commit";
-import type { SessionRunner } from "../src/core/run";
-import { session } from "../src/testing/registry";
-import { isolated, isolatedLedger } from "./helpers/isolated";
-import { commitReceivedMessage } from "./helpers/ingress";
-import { seedPolicy } from "./helpers/seed-policy";
-import { sessionTree } from "./helpers/session-tree";
+import { boundaryConsumption, DEFAULT_CONSUMPTION } from "../../../packages/agent/src/core/commit";
+import type { SessionRunner } from "../../../packages/agent/src/core/run";
+import { session } from "../../../packages/agent/src/testing/registry";
+import { isolated, isolatedLedger } from "../../../packages/agent/test/helpers/isolated";
+import { commitReceivedMessage } from "../../../packages/agent/test/helpers/ingress";
+import { seedPolicy } from "../../../packages/agent/test/helpers/seed-policy";
+import { sessionTree } from "../../../packages/agent/test/helpers/session-tree";
 import {
   allowConfigure,
   isolatedRuntime,
   withSessionServices,
   type SessionFixture,
-} from "./helpers/session-services";
+} from "../../../packages/agent/test/helpers/session-services";
 
 test("boundaryConsumption applies the stale split at every boundary", () => {
   const staleSteer = { ...row("a1", "action", 3), delivery: "steer" as const };
@@ -278,21 +278,21 @@ test("a stale action delivered DURING a turn closes via turn.consumed.stale at t
 import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { afterAll } from "bun:test";
-import { createSessionEntityRunTurn, type SessionKernel } from "../src/core/entity";
-import { resolveSessionRuntime, type SessionRuntime } from "../src/core/run";
-import type { SessionEntityPorts } from "../src/core/run";
-import { openCatalogStore } from "../src/core/store/catalog";
-import { openSessionStore } from "../src/core/store/session-file";
-import * as FenceStore from "../src/core/store/fence";
+import { createSessionEntityRunTurn, type SessionKernel } from "../../../packages/agent/src/core/entity";
+import { resolveSessionRuntime, type SessionRuntime } from "../../../packages/agent/src/core/run";
+import type { SessionEntityPorts } from "../../../packages/agent/src/core/run";
+import { openCatalogStore } from "../../../packages/agent/src/core/store/catalog";
+import { openSessionStore } from "../../../packages/agent/src/core/store/session-file";
+import * as FenceStore from "../../../packages/agent/src/core/store/fence";
 import {
   clusterTempDir,
   runCluster,
   sendDeliver,
   sendPrompt,
   sessionFileFor,
-} from "./helpers/cluster-runtime";
-import { runAgent } from "./helpers/executor";
-import { parentReply } from "./helpers/composition-fixtures";
+} from "../../../packages/agent/test/helpers/cluster-runtime";
+import { runAgent } from "../../../packages/agent/test/helpers/executor";
+import { parentReply } from "../src/bundles/delegation-policy";
 
 const cluster = clusterTempDir("stale-entity-deliver-");
 afterAll(() => rmSync(cluster.dir, { recursive: true, force: true }));

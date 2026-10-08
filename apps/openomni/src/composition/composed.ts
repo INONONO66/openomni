@@ -1,5 +1,27 @@
-import { Bundle } from "@openomni/agent";
+import type { Bundle } from "@openomni/agent";
 import { Context } from "effect";
+import type { MonitorPorts } from "../tools/core/watch";
+
+/**
+ * The late-bound live alarm ports the monitor bundle's ONE tool declaration
+ * executes against (#1308): the manifest closes over `current` at compose
+ * time; boot calls `bind` once the runtime exists. Unbound calls are the
+ * monitor tool's typed refusal, never a silent fallback.
+ */
+export interface AlarmPortsSlot {
+  readonly current: () => MonitorPorts | undefined;
+  readonly bind: (ports: MonitorPorts) => void;
+}
+
+export function alarmPortsSlot(): AlarmPortsSlot {
+  let ports: MonitorPorts | undefined;
+  return {
+    current: () => ports,
+    bind: (next) => {
+      ports = next;
+    },
+  };
+}
 
 /**
  * The composed-generation seam (#1255 P3): boot runs `config → manifest →
@@ -21,15 +43,18 @@ export interface ComposedContext {
 export interface ComposedHolder {
   readonly current: () => ComposedContext;
   readonly swap: (next: ComposedContext) => void;
+  /** The monitor ports door (#1308): the slot the manifest's monitor bundle closed over. */
+  readonly alarms: AlarmPortsSlot;
 }
 
-export function composedHolderOf(initial: ComposedContext): ComposedHolder {
+export function composedHolderOf(initial: ComposedContext, alarms: AlarmPortsSlot): ComposedHolder {
   let current = initial;
   return {
     current: () => current,
     swap: (next) => {
       current = next;
     },
+    alarms,
   };
 }
 
@@ -37,14 +62,3 @@ export class ComposedGeneration extends Context.Service<
   ComposedGeneration,
   ComposedHolder
 >()("@openomni/openomni/ComposedGeneration") {}
-
-const EMPTY_MANIFEST = Bundle.Manifest.define({ capabilities: [], bundles: [], off: [] });
-
-/**
- * The empty composition an injected runtime starts from: no capabilities, no
- * bundles. Its generation is valid (core points only) so every consumer reads
- * one honest table set instead of special-casing "not composed yet".
- */
-export function emptyComposition(): ComposedContext {
-  return { manifest: EMPTY_MANIFEST, generation: Bundle.composeSync(EMPTY_MANIFEST) };
-}
