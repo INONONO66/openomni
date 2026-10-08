@@ -57,6 +57,11 @@ export interface ObservationBus {
     event: BusEvent.Descriptor<T>,
     options?: { readonly match?: Partial<T> },
   ) => Effect.Effect<Stream.Stream<T>, never, Scope.Scope>;
+  /**
+   * #1314: read-only count of live PubSub subscriptions (streams and callback
+   * drains). Purely observational — never consulted by `publish`.
+   */
+  readonly subscriberCount: () => number;
 }
 
 export interface ObservationBusOptions {
@@ -108,11 +113,23 @@ export const makeObservationBus = (
     // never pays for predicate evaluation.
     let allEventsInterest = 0;
     const namedInterest = new Map<string, number>();
+    // #1314: one exact live-subscription count for the memory guard; moved by
+    // the same acquire/release pair as the interest counts, read-only outside.
+    let liveSubscriptions = 0;
     const subscription = (register: () => void, deregister: () => void) =>
       Effect.map(
         Effect.acquireRelease(
-          Effect.tap(PubSub.subscribe(pubsub), () => Effect.sync(register)),
-          () => Effect.sync(deregister),
+          Effect.tap(PubSub.subscribe(pubsub), () =>
+            Effect.sync(() => {
+              liveSubscriptions += 1;
+              register();
+            }),
+          ),
+          () =>
+            Effect.sync(() => {
+              liveSubscriptions -= 1;
+              deregister();
+            }),
         ),
         Stream.fromSubscription,
       );
@@ -195,7 +212,7 @@ export const makeObservationBus = (
       },
       scope: (identity) => scopeObservation(sink, identity, options),
     };
-    return { sink, observations, stream };
+    return { sink, observations, stream, subscriberCount: () => liveSubscriptions };
   });
 
 /** The bus as a Layer over the kernel `ObservationSink` service: app-lifetime root or per-generation. */
