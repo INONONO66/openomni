@@ -15,6 +15,7 @@ import { nextFrame } from "./helpers/ws";
 import { nextResidentTurn } from "./helpers/resident-turn";
 import { eventSignal } from "./helpers/event-signal";
 import { runEffect } from "./helpers/effect";
+import { DelegationRefusal } from "../src/bundles/delegation-policy";
 import type { Message } from "@openomni/protocol";
 
 /** The text a model-transcript message carries (fake models read, never guess shapes). */
@@ -403,4 +404,54 @@ test("an interrupt-then-resume child settles exactly once and a later seal write
   await secondSeal.promise;
   expect(plane.openKernel(childId).outboundRows(childId)).toHaveLength(1);
   expect(settlementRows(plane, child.parentId)).toHaveLength(1);
+});
+
+test("a cap-denied spawn surfaces the typed DelegationRefusal on the model-facing ToolRefused", async () => {
+  const refusalText: { current: string | undefined } = { current: undefined };
+  const app = await suite.boot({
+    config: suite.config("message-cap-denied-", { wsToken: "token" }),
+    llm: {
+      resolveModel: fakeProviderModel,
+      run: (input, sink) => Effect.sync(() => {
+        const output = requestToolStep(input, sink, {
+          id: "denied-commission",
+          tool: "send_message",
+          input: commissionInput({ message: "child request", reply_to: "denied-binding" }),
+        });
+        if (output === undefined) return { type: "stop" };
+        expect(output.isError).toBe(true);
+        refusalText.current = String(output.content);
+        sink.onMessage(assistantMessage(input, { text: "REFUSED_SENTINEL" }));
+        return { type: "stop" };
+      }),
+    },
+  });
+  const plane = await planeOf(app.runtime);
+  // Re-seed the spawn_children row at limit 0 BEFORE the resident session
+  // opens: the session snapshot compiles the latest policy generation, so
+  // the parent's very first spawn attempt hits the cap.
+  plane.catalog.policies.appendGeneration((current) =>
+    current.map(({ generation: _generation, ...row }) =>
+      row.name === "delegation-policy/tool.pre#2"
+        ? {
+            ...row,
+            verdict: {
+              encodingVersion: 1 as const,
+              value: { type: "consult", ref: "delegation-policy/spawn-children", config: { limit: 0 } },
+            },
+          }
+        : row,
+    ),
+  );
+  const terminal = nextResidentTurn(plane);
+  await ownerStart(app, "cap-denied");
+  expect((await terminal).text).toBe("REFUSED_SENTINEL");
+  // #1311 merge condition: the ToolRefused content the caller's model reads
+  // IS the typed refusal — cap, limit and observed count as parseable JSON.
+  const text = refusalText.current ?? "";
+  expect(text.startsWith("send_message refused: ")).toBe(true);
+  const refusal = DelegationRefusal.parse(JSON.parse(text.slice("send_message refused: ".length)));
+  expect(refusal).toEqual({ code: "delegation_refused", cap: "spawn_children", limit: 0, observed: 0 });
+  // The refused send created no child row.
+  expect(plane.listSessions().filter((row) => row.role === "worker")).toEqual([]);
 });
