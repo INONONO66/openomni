@@ -43,7 +43,7 @@ const OutputRef = z.object({
   preview: z.string(),
 });
 
-function parsedRef(details: unknown) {
+function parsedRef(details: import("@openomni/protocol").PlainValue | undefined) {
   return OutputRef.parse(z.object({ outputRef: OutputRef }).parse(details).outputRef);
 }
 

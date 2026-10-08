@@ -20,7 +20,7 @@ const suite = residentSuite();
 
 const ConfigureSettings = z.object({ settings: z.object({ toolOutputBudgetBytes: z.number() }).loose() }).loose();
 
-async function bootAndCommitOneTurn(prefix: string, config: Record<string, unknown>) {
+async function bootAndCommitOneTurn(prefix: string, config: { toolOutputBudgetBytes?: number }) {
   const committed = Promise.withResolvers<string>();
   const app = await suite.boot({
     config: suite.config(prefix, { wsToken: "budget-token", ...config }),
