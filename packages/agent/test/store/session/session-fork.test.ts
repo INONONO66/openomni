@@ -46,7 +46,7 @@ const ForkGenesisIntent = z.looseObject({
   operation: z.literal("fork"),
   forkedFrom: SessionGeneration.ForkAncestry,
 });
-const DeliveryIntent = z.looseObject({ inboxId: z.string() });
+const DeliveryIntent = z.looseObject({ deliveryId: z.string() });
 
 describe("Session.fork", () => {
   test("forks at a turn terminal into an independently verifiable child chain", () => {
@@ -91,7 +91,7 @@ describe("Session.fork", () => {
     // (consumption re-mints `msg-1:delivery`, so the copy must free the slot),
     // and its references were remapped alongside.
     const delivery = nodes.find((node) => node.id === `fork:${PARENT}:msg-1:delivery`);
-    expect(DeliveryIntent.parse(delivery?.intent.value).inboxId).toBe(`fork:${PARENT}:msg-1`);
+    expect(DeliveryIntent.parse(delivery?.intent.value).deliveryId).toBe(`fork:${PARENT}:msg-1`);
     // Consumption still folds: the copied, delivered input is not pending again.
     expect(childKernel.pendingMessages(CHILD)).toEqual([]);
 

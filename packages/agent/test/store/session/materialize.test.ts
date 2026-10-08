@@ -33,16 +33,16 @@ describe("L0 session materialization", () => {
     expect(sessionTree(first.id, stores.session.actions)).toEqual(tree);
   });
 
-  test("reopens a parent-linked worker with identical generations, revision and tree", () => {
+  test("reopens a parent-linked child with identical generations, revision and tree", () => {
     materializeSession(stores.kernel, "resident-parent");
-    const row = materializeSession(stores.kernel, "worker-child", "resident-parent");
+    const row = materializeSession(stores.kernel, "child-session", "resident-parent");
     const tree = sessionTree(row.id, stores.session.actions);
     stores.reopen();
     expect(stores.kernel.row(row.id)).toEqual(row);
     expect(sessionTree(row.id, stores.session.actions)).toEqual(tree);
     expect(stores.kernel.getSnapshot(row.id)).toMatchObject({
       parentId: "resident-parent",
-      role: "worker",
+      role: "child",
       revision: 1,
       toolsGeneration: 1,
     });

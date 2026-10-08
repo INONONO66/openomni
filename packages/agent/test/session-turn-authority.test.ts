@@ -135,7 +135,7 @@ test("a prompt with no recorded origin fails the turn typed and never runs the r
     });
     expect(runnerCalls).toBe(1);
 
-    // A delivered prompt whose inbox id matches NO action row: hydration
+    // A delivered prompt whose delivery id matches NO action row: hydration
     // surfaces the user message but its origin cannot be recovered.
     const ledger = isolatedLedger();
     ledger.session.actions.append(
@@ -150,7 +150,7 @@ test("a prompt with no recorded origin fails the turn typed and never runs the r
           value: {
             phase: "delivery",
             turnId: "ghost-turn",
-            inboxId: "ghost-message",
+            deliveryId: "ghost-message",
             kind: "prompt",
             content: "who am I from?",
             origin: { encodingVersion: 1, value: {} },

@@ -65,7 +65,7 @@ function applyHistoryAction(
     state.messages.push(prompt);
     const delivery = SessionHandleStore.delivery(action);
     if (delivery !== undefined)
-      state.compatibility.push({ id: delivery.inboxId, role: "user", text: delivery.content });
+      state.compatibility.push({ id: delivery.deliveryId, role: "user", text: delivery.content });
   }
   const snapshot = assistantSnapshot(action);
   if (snapshot !== undefined) {
@@ -256,7 +256,7 @@ function opensTurn(action: LedgerAction.Node): boolean {
   return action.kind === "turn" && (intent.phase === "intent" || intent.phase === "resume");
 }
 
-/** A delivered prompt enters model context as the user message keyed by its inbox id. */
+/** A delivered prompt enters model context as the user message keyed by its delivery id. */
 function deliveredPrompt(
   action: LedgerAction.Node,
   sessionId: string,
@@ -265,7 +265,7 @@ function deliveredPrompt(
   if (delivery?.kind !== "prompt") return undefined;
   return durableText(
     {
-      id: delivery.inboxId,
+      id: delivery.deliveryId,
       sessionID: sessionId,
       role: "user",
       time: { created: action.ts },

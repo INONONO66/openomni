@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, readFileSync, writeSync } from "node:fs";
 import { Clock, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import type { LedgerError } from "../../src/core/store/errors";
-import { Inbox, LedgerAction, SessionTransition } from "@openomni/protocol";
+import { Delivery, LedgerAction, SessionTransition } from "@openomni/protocol";
 import { z } from "zod";
 import { sessionTree } from "./session-tree";
 import type { SessionKernel } from "../../src/core/entity";
@@ -31,7 +31,7 @@ export const messagePlanePoint = z.enum([
 export const messagePlaneProof = z.object({
   before: z.array(LedgerAction.Node), after: z.array(LedgerAction.Node), repeated: z.array(LedgerAction.Node),
   outboundBefore: z.array(SessionTransition.Outbound), outboundAfter: z.array(SessionTransition.Outbound),
-  inboxBefore: z.array(Inbox.Row), inboxAfter: z.array(Inbox.Row),
+  deliveriesBefore: z.array(Delivery.Row), deliveriesAfter: z.array(Delivery.Row),
   dispatches: z.number(), sourceRuns: z.number(), destinationRuns: z.number(),
   externalBefore: z.array(z.string()), externalAfter: z.array(z.string()),
   watch: z.object({ occurrenceId: z.string(), redelivery: z.string(), fired: z.number() }).nullable(),
@@ -113,7 +113,7 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
     const before = sessionTree(kernel, sessionId);
     const outboundBefore = kernel.outboundRows(sessionId);
     const watch = point === "watch_fired_committed_before_entity_wake";
-    const inboxBefore = kernel.inputMessages(watch ? sessionId : "parent");
+    const deliveriesBefore = kernel.inputMessages(watch ? sessionId : "parent");
     const externalBefore = platformEntries(dbPath);
     let dispatches = 0;
     let sourceRuns = 0;
@@ -148,8 +148,8 @@ function recover(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
     if (!watch) yield* withSessionServices(reactivateSession("parent", receiver, runtime), runtime);
     const proof = messagePlaneProof.parse({
       before, after, repeated: sessionTree(kernel, sessionId), outboundBefore,
-      outboundAfter: kernel.outboundRows(sessionId), inboxBefore,
-      inboxAfter: kernel.inputMessages(watch ? sessionId : "parent"),
+      outboundAfter: kernel.outboundRows(sessionId), deliveriesBefore,
+      deliveriesAfter: kernel.inputMessages(watch ? sessionId : "parent"),
       dispatches, sourceRuns, destinationRuns, externalBefore, externalAfter: platformEntries(dbPath),
       watch: watch
         ? {

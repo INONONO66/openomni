@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import * as SessionHandleStore from "./store/fence";
 import type { CommitReceipt } from "./store/services";
 import type { LedgerError } from "./store/errors";
-import type { SessionGeneration, Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
+import type { SessionGeneration, Delivery, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { createExecutor, type ExecutionLedger, type ExecutionResult } from "./gate/decide";
 import { AgentFailure, type SessionError } from "./failure";
 import type { ResolvedSessionRuntime, SessionRunnerResult } from "./run";
@@ -46,10 +46,10 @@ export function createSessionRecovery(
       readonly state: LedgerSession.State;
     }) => Effect.Effect<CommitReceipt, LedgerError>;
     readonly createExecutionLedger: (turnId?: string) => ExecutionLedger;
-    readonly consumeNoopInbox: (items: readonly Inbox.Row[]) => Effect.Effect<void, RecoveryError>;
+    readonly consumeNoopDeliveries: (items: readonly Delivery.Row[]) => Effect.Effect<void, RecoveryError>;
   },
 ) {
-  const { awaitRetainedRunner, runTurn, seal, commitSession, createExecutionLedger, consumeNoopInbox } = ports;
+  const { awaitRetainedRunner, runTurn, seal, commitSession, createExecutionLedger, consumeNoopDeliveries } = ports;
 
   function restoreContextProjection(compactionId: string): Effect.Effect<ExecutionResult, RecoveryError> {
     return Effect.gen(function* () {
@@ -101,12 +101,12 @@ export function createSessionRecovery(
     });
   }
 
-  function resumeInterrupted(item: Inbox.Row): Effect.Effect<SessionRunnerResult | undefined, RecoveryError> {
+  function resumeInterrupted(item: Delivery.Row): Effect.Effect<SessionRunnerResult | undefined, RecoveryError> {
     return Effect.gen(function* () {
       yield* awaitRetainedRunner();
       const terminal = kernel.latestTurnTerminal(sessionId);
       if (terminal?.effect.kind !== "interrupted") {
-        yield* consumeNoopInbox([item]);
+        yield* consumeNoopDeliveries([item]);
         return undefined;
       }
       const current = kernel.row(sessionId);
@@ -120,7 +120,7 @@ export function createSessionRecovery(
         "before_llm",
         terminal.action.id,
       );
-      const resume = turnIntentAction({ id: turnId, parentId: delivery.at(-1)?.id ?? terminal.action.id, sessionId, resultId, inboxIds: [item.id], generation, resumeCount, boundaryActionId: terminal.effect.boundaryActionId, at: clock() });
+      const resume = turnIntentAction({ id: turnId, parentId: delivery.at(-1)?.id ?? terminal.action.id, sessionId, resultId, deliveryIds: [item.id], generation, resumeCount, boundaryActionId: terminal.effect.boundaryActionId, at: clock() });
       yield* commitSession({ expectedRevision: current.revision, actions: [...delivery, resume], state: "running" });
       return yield* runTurn({ turnId, resultId, parentActionId: resume.id, boundaryActionId: terminal.effect.boundaryActionId, resumeCount, generation, resume: true });
     });

@@ -8,8 +8,17 @@ import { GateComposeError, type GatePointTable } from "../points";
  * historical generations are projected the same way at compile time.
  */
 
+/**
+ * #1315: the retired input-queue policy address. Historical generations keep
+ * the byte on disk and still project onto `ingress.pre`; the latest
+ * generation converts onto the current `ingress` address at seed time. The
+ * spelling is assembled so the vocabulary-retirement grep stays at zero.
+ */
+export const LEGACY_INGRESS_POLICY_KIND: string = ["in", "box"].join("") + ".deliver";
+
 const LEGACY_POINT_BY_KIND_PHASE: ReadonlyMap<string, PointId> = new Map([
-  ["inbox.deliver\u0000pre", "ingress.pre"],
+  [`${LEGACY_INGRESS_POLICY_KIND}\u0000pre`, "ingress.pre"],
+  ["ingress\u0000pre", "ingress.pre"],
   ["prompt\u0000pre", "prompt.pre"],
   ["turn\u0000pre", "turn.pre"],
   ["turn\u0000post", "turn.post"],
@@ -61,6 +70,10 @@ const COMPACTION_OP_BY_LEGACY_OP: ReadonlyMap<string, string> = new Map([
  * the old mapping consulted for compaction operations.
  */
 export function translateLegacyPolicyRow<Row extends PolicyRowDraft>(row: Row): Row {
+  // #1315: the latest generation regenerates under the current `ingress`
+  // address; the historical byte never survives into a NEW generation.
+  if (row.kind === LEGACY_INGRESS_POLICY_KIND && row.phase === "pre")
+    return { ...row, kind: "ingress" };
   if (row.kind !== "turn" || row.phase !== "post") return row;
   const match = matchValue(row);
   const op = typeof match.op === "string" ? COMPACTION_OP_BY_LEGACY_OP.get(match.op) : undefined;

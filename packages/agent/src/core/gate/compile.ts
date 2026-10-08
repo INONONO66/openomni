@@ -54,7 +54,9 @@ export function compilePolicySnapshot(
       });
     }
   }
-  const kinds = new Set(options.kinds ?? DEFAULT_COMPILE_KINDS);
+  // #1315: `ingress` is the ingress.pre point's own policy address, not a
+  // journal kind, so it is always compilable regardless of the caller's set.
+  const kinds = new Set([...(options.kinds ?? DEFAULT_COMPILE_KINDS), "ingress"]);
   const registry = createHandlerTable(options.registry);
   const table = options.table ?? kernelPointTable();
   // Historical compaction rows convert onto the compaction point before

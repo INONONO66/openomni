@@ -285,7 +285,7 @@ function lifecycle() {
     const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({
         id: "child",
         parentId: "parent",
-        role: "worker",
+        role: "child",
         runner: () =>
           Effect.sync(() => {
             return { kind: "result", text: "child answer" };
@@ -401,9 +401,9 @@ describe("action-based history and diagnostic projections", () => {
           const known = new Set(
             tree.map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
           );
-          // W5.2: the inbox table is gone; received-message chain actions
-          // (kind "prompt") are the inbox rows.
-          const inbox = new Set(
+          // W5.2: the input-queue table is gone; received-message chain
+          // actions (kind "prompt") are the delivered rows.
+          const delivered = new Set(
             tree
               .filter((action: import("@openomni/protocol").LedgerAction.Node) => action.kind === "prompt")
               .map((action: import("@openomni/protocol").LedgerAction.Node) => action.id),
@@ -413,8 +413,8 @@ describe("action-based history and diagnostic projections", () => {
               case "action":
                 expect(known.has(transition.cause.actionId)).toBe(true);
                 break;
-              case "inbox":
-                for (const id of transition.cause.inboxIds) expect(inbox.has(id)).toBe(true);
+              case "delivery":
+                for (const id of transition.cause.deliveryIds) expect(delivered.has(id)).toBe(true);
                 break;
               case "root":
                 expect(transition.parentId).toBeNull();
@@ -538,8 +538,8 @@ describe("action-based history and diagnostic projections", () => {
           const obligation = isolatedLedger().kernel.outboundRows("child")[0];
           expect(fromChild?.actionId).toBe(obligation?.message.messageId ?? "");
           expect(fromChild?.cause).toEqual({
-            kind: "inbox",
-            inboxIds: [fromChild?.actionId ?? ""],
+            kind: "delivery",
+            deliveryIds: [fromChild?.actionId ?? ""],
           });
           expect(inspection.children[0]?.children).toEqual([]);
           expect(parent.inspect({ depth: 0 }).children).toEqual([]);

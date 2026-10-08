@@ -51,7 +51,7 @@ function promptAction(
     sessionId,
     kind: "prompt",
     intent: { encodingVersion: 1, value: { source: "test" } },
-    effect: { encodingVersion: 1, value: { inboxKind: "prompt", content } },
+    effect: { encodingVersion: 1, value: { deliveryKind: "prompt", content } },
     irreversible: true,
     ts,
   };
@@ -150,7 +150,7 @@ describe("fenced session write discipline", () => {
         parentId: index === 0 ? null : `${prompts[index - 1]?.id}:delivery`,
         sessionId,
         kind: "prompt",
-        intent: { encodingVersion: 1, value: { inboxId: row.id } },
+        intent: { encodingVersion: 1, value: { deliveryId: row.id } },
         effect: { encodingVersion: 1, value: { content: row.id } },
         irreversible: true,
         ts: 12,

@@ -63,7 +63,7 @@ export function prepareTurnCommit(
           value: SessionTurn.HistoricalIntent.parse({
             phase: "intent",
             resultId,
-            inboxIds: [],
+            deliveryIds: [],
             resumeCount: 0,
             boundaryActionId: null,
             toolsGeneration: generation.generation,

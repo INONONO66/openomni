@@ -13,7 +13,7 @@ import {
   type LedgerAction,
   type LedgerSession,
   SessionGeneration,
-  type Inbox,
+  type Delivery,
   type PlainValue,
 } from "@openomni/protocol";
 import { foldHistoryState, foldSessionHistory, readHistoryCheckpoint } from "../inspect/history";
@@ -214,7 +214,7 @@ export function toolSnapshot(tool: SessionTool): SessionGeneration.Tool {
   return SessionGeneration.Tool.parse(tool);
 }
 
-export function internalOrigin(sessionId: string): Inbox.Origin {
+export function internalOrigin(sessionId: string): Delivery.Origin {
   return { encodingVersion: 1, value: { kind: "session", id: sessionId } };
 }
 
@@ -235,7 +235,7 @@ interface TurnPinnedInput {
 
 function pinnedTurn(
   input: TurnPinnedInput,
-): Omit<SessionTurn.Intent, "phase" | "inboxIds" | "context"> {
+): Omit<SessionTurn.Intent, "phase" | "deliveryIds" | "context"> {
   return {
     resultId: input.resultId,
     toolsGeneration: input.generation.generation,
@@ -268,7 +268,7 @@ export function turnIntentAction(input: {
   readonly parentId: string | null;
   readonly sessionId: string;
   readonly resultId: string;
-  readonly inboxIds: readonly string[];
+  readonly deliveryIds: readonly string[];
   /** #1256 H-3: stale `action` inputs this turn closes WITHOUT execution (`turn.consumed.stale`). */
   readonly consumedStale?: readonly string[];
   readonly generation: SessionGeneration.Snapshot;
@@ -280,7 +280,7 @@ export function turnIntentAction(input: {
     input,
     SessionTurn.DecodeIntent.parse({
       phase: "intent",
-      inboxIds: [...input.inboxIds],
+      deliveryIds: [...input.deliveryIds],
       ...(input.consumedStale === undefined || input.consumedStale.length === 0
         ? {}
         : { consumedStale: [...input.consumedStale] }),
@@ -320,7 +320,7 @@ export function turnCheckpointAction(input: {
   readonly boundaryActionId: string;
   readonly boundary: SessionTurn.Boundary;
   /** Consumed input seqs at this boundary (#1253): the turn's `turn.consumed` record. */
-  readonly inboxIds: readonly string[];
+  readonly deliveryIds: readonly string[];
   /** #1256 H-1 (r3): stale `action` inputs this boundary closes WITHOUT execution (`turn.consumed.stale`). */
   readonly consumedStale?: readonly string[];
   readonly at: number;
@@ -335,7 +335,7 @@ export function turnCheckpointAction(input: {
       value: {
         phase: "checkpoint",
         turnId: input.turnId,
-        inboxIds: [...input.inboxIds],
+        deliveryIds: [...input.deliveryIds],
         ...(input.consumedStale === undefined || input.consumedStale.length === 0
           ? {}
           : { consumedStale: [...input.consumedStale] }),
@@ -363,13 +363,13 @@ export function turnCheckpointAction(input: {
  * `signal` row. The single mapping both the admission constructor and the
  * delivery constructor share.
  */
-export function inputRowKind(kind: Inbox.Kind): "prompt" | "signal" | "action" {
+export function inputRowKind(kind: Delivery.Kind): "prompt" | "signal" | "action" {
   return kind === "prompt" || kind === "action" ? kind : "signal";
 }
 
 export function deliveryActions(
-  items: readonly Inbox.Row[],
-  target: { readonly kind: "turn"; readonly turnId: string } | { readonly kind: "inbox" },
+  items: readonly Delivery.Row[],
+  target: { readonly kind: "turn"; readonly turnId: string } | { readonly kind: "pending" },
   boundary: SessionTurn.Boundary,
   parentId: string | null,
 ): LedgerAction.Append[] {
@@ -381,21 +381,21 @@ export function deliveryActions(
       sessionId: item.sessionId,
       // #1252: a delivered input is a journal row of its own kind — `prompt`
       // for turn inputs, `signal` for interrupt/resume control. The retired
-      // `inbox.deliver` kind had one writer here; this constructor keeps it.
+      // input-queue delivery kind had one writer here; this constructor keeps it.
       kind: inputRowKind(item.kind),
       intent: {
         encodingVersion: 1,
         value:
           item.kind === "interrupt" || item.kind === "resume" || item.kind === "cancel"
-            ? { inboxId: item.id, control: item.kind }
-            : { inboxId: item.id, delivery: item.delivery ?? JournalKind.DEFAULT_DELIVERY },
+            ? { deliveryId: item.id, control: item.kind }
+            : { deliveryId: item.id, delivery: item.delivery ?? JournalKind.DEFAULT_DELIVERY },
       },
       effect: {
         encodingVersion: 1,
         value: {
           phase: "delivery",
           turnId: target.kind === "turn" ? target.turnId : item.id,
-          inboxId: item.id,
+          deliveryId: item.id,
           kind: item.kind,
           content: item.content,
           origin: item.origin,
@@ -566,13 +566,13 @@ export function generationForOpen(
   return Effect.succeed(snapshot);
 }
 
-/** The durable chain action for one received message (the inbox table is gone; the chain is the inbox). */
+/** The durable chain action for one received message: the chain itself is the input queue. */
 export function receivedMessageAction(input: {
   readonly id: string;
   readonly sessionId: string;
-  readonly kind: Inbox.Kind;
+  readonly kind: Delivery.Kind;
   readonly content: string;
-  readonly origin: Inbox.Origin;
+  readonly origin: Delivery.Origin;
   readonly parentActionId: string | null;
   readonly at: number;
   /** Loop-consumption delivery the input row carries (#1253); absent folds to the `followUp` default. */
@@ -588,7 +588,7 @@ export function receivedMessageAction(input: {
     effect: {
       encodingVersion: 1,
       value: {
-        inboxKind: input.kind,
+        deliveryKind: input.kind,
         content: input.content,
         ...(input.delivery === undefined ? {} : { delivery: input.delivery }),
       },
@@ -606,11 +606,11 @@ export function receivedMessageAction(input: {
  * the turn closes it via `turn.consumed.stale`. Everything else is live.
  */
 export function staleActionBacklog(
-  backlog: readonly Inbox.Row[],
+  backlog: readonly Delivery.Row[],
   compactionHead: number,
-): { readonly live: Inbox.Row[]; readonly stale: Inbox.Row[] } {
-  const live: Inbox.Row[] = [];
-  const stale: Inbox.Row[] = [];
+): { readonly live: Delivery.Row[]; readonly stale: Delivery.Row[] } {
+  const live: Delivery.Row[] = [];
+  const stale: Delivery.Row[] = [];
   for (const row of backlog) {
     const isStale = row.kind === "action" && row.after !== undefined && row.after < compactionHead;
     (isStale ? stale : live).push(row);
@@ -652,14 +652,14 @@ export function consumptionSettings(kernel: SessionKernel, sessionId: string): C
  * backlog order.
  */
 export function boundaryConsumption(
-  backlog: readonly Inbox.Row[],
+  backlog: readonly Delivery.Row[],
   boundary: SessionTurn.Boundary | "turn_end",
   settings: ConsumptionSettings,
   /** #1256 H-1 (r3): the latest executed compaction's ordinal; EVERY boundary closes stale actions, not just turn start. */
   compactionHead: number,
-): { readonly consumed: Inbox.Row[]; readonly stale: Inbox.Row[] } {
+): { readonly consumed: Delivery.Row[]; readonly stale: Delivery.Row[] } {
   const { live, stale } = staleActionBacklog(backlog, compactionHead);
-  const width = (rows: readonly Inbox.Row[], mode: ConsumptionWidth) =>
+  const width = (rows: readonly Delivery.Row[], mode: ConsumptionWidth) =>
     mode === "one" ? rows.slice(0, 1) : rows;
   const inputs = live.filter((item) => item.kind === "prompt" || item.kind === "action");
   const steer = inputs.filter(

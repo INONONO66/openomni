@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { Inbox, type SessionTransition } from "@openomni/protocol";
+import { Delivery, type SessionTransition } from "@openomni/protocol";
 import { isolated, isolatedLedger } from "./helpers/isolated";
 import { allowConfigure, isolatedRuntime } from "./helpers/session-services";
 import { pendingRequest } from "./helpers/open-request";
@@ -38,7 +38,7 @@ function openWithAdmission(
     `${request.requestId}:open`,
     100,
     runtime(),
-    Inbox.Commit.parse({
+    Delivery.Commit.parse({
       id: admission.id,
       sessionId: admission.sessionId,
       kind: "prompt",

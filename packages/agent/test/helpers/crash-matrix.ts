@@ -46,7 +46,7 @@ export const crashPoint = z.enum([
   "retry_backoff_wait",
   "compaction_summary_before_result_commit",
   "compaction_summary_before_boundary_commit",
-  "inbox_admitted_before_turn_open",
+  "delivery_admitted_before_turn_open",
   "outbound_reply_before_delivery_settle",
   "recovery_dispatch_identity_committed_before_rpc",
   "compaction_boundary_committed_before_publication",
@@ -358,7 +358,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
         bodies.push("reply");
         return { kind: "result" as const, text: "durable reply" };
       });
-    if (point === "inbox_admitted_before_turn_open") {
+    if (point === "delivery_admitted_before_turn_open") {
       yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, role: "resident", runner }, fixture), fixture); });
       yield* commitReceivedMessage(isolatedLedger().kernel, {
         id: "admitted",
@@ -381,7 +381,7 @@ function admissionPoint(point: CrashPoint, bodies: string[], dbPath: string) {
       origin: { encodingVersion: 1, value: {} },
       parentActionId: null,
     });
-    const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, parentId: "parent", role: "worker", runner }, fixture), fixture); });
+    const child = yield* Effect.gen(function* () { const fixture: SessionFixture = runtime; return yield* withSessionServices(session({ id: sessionId, parentId: "parent", role: "child", runner }, fixture), fixture); });
     return yield* child
       .prompt("work", {
         encodingVersion: 1,
@@ -422,7 +422,7 @@ export async function crashMatrixMain(args: string[], emit: (witness: Witness) =
           stop(point, bodies);
           return { kind: "result" as const, text: "" };
         }), fixture), fixture);
-      } else if (point === "inbox_admitted_before_turn_open" || outboundPoints.has(point)) {
+      } else if (point === "delivery_admitted_before_turn_open" || outboundPoints.has(point)) {
         yield* admissionPoint(point, bodies, dbPath);
       } else yield* executePoint(point, bodies);
     }).pipe(Effect.provide(runnerTestLayer))));

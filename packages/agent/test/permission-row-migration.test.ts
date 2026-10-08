@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   assertPointGenerationRows,
+  LEGACY_INGRESS_POLICY_KIND,
   legacyPointOf,
   POINT_GENERATION_ROW,
   translateLegacyPolicyRow,
@@ -19,7 +20,7 @@ const table = fullPointTable();
 const LEGACY_ROWS = [
   draft("compaction-arm", "compaction", "pre", { type: "allow", reasonCodes: [] }),
   draft("compaction-close", "compaction", "post", { type: "allow", reasonCodes: [] }),
-  draft("ingress-screen", "inbox.deliver", "pre", { type: "deny", reasonCodes: ["screen"] }),
+  draft("ingress-screen", LEGACY_INGRESS_POLICY_KIND, "pre", { type: "deny", reasonCodes: ["screen"] }),
   draft("alarm-route", "alarm.fired", "post", { type: "allow", reasonCodes: [] }),
   draft("tool-budget", "tool", "pre", { type: "require_approval", reasonCodes: ["budget"] }),
 ];
@@ -44,7 +45,7 @@ describe("permission-row migration (#1251)", () => {
   it("maps every historical kind/phase pair the kernel ever wrote to a registered point", () => {
     expect(() => assertPointGenerationRows(LEGACY_ROWS, table)).not.toThrow();
     expect(legacyPointOf("compaction", "post")).toBe("compaction.post");
-    expect(legacyPointOf("inbox.deliver", "pre")).toBe("ingress.pre");
+    expect(legacyPointOf(LEGACY_INGRESS_POLICY_KIND, "pre")).toBe("ingress.pre");
     expect(legacyPointOf("alarm.fired", "post")).toBe("alarm.fired");
   });
 

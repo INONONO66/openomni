@@ -3,17 +3,17 @@ import { expect, test } from "bun:test";
 import { compilePolicySnapshot } from "../../../src/core/gate/compile";
 import { atGeneration, compaction, draft } from "./row-fixtures";
 
-const workerRule = {
-  id: "worker-actor-deny",
+const childRule = {
+  id: "child-actor-deny",
   table: "B",
   sender: "session",
-  senderRole: "worker",
+  senderRole: "child",
   targetKind: "actor",
   check: { kind: "actor_send" },
   effect: "deny",
 } as const;
 
-test("message policy selects worker actor denial without matching external senders", () => {
+test("message policy selects child actor denial without matching external senders", () => {
   const policy = compilePolicySnapshot({
     registry: KERNEL_POLICY_REGISTRY,
     generation: 1,
@@ -21,25 +21,25 @@ test("message policy selects worker actor denial without matching external sende
       atGeneration(compaction, 1),
       atGeneration(
         draft(
-          workerRule.id,
+          childRule.id,
           "message",
           "pre",
           { type: "deny", reason: "actor_send" },
           {
-            match: { message: workerRule },
+            match: { message: childRule },
           },
         ),
         1,
       ),
     ],
   });
-  const worker = policy.evaluate({
+  const child = policy.evaluate({
     kind: "message",
     phase: "pre",
     value: {},
     message: {
       sender: "session",
-      senderRole: "worker",
+      senderRole: "child",
       targetKind: "actor",
       type: "message",
       parentChild: false,
@@ -62,8 +62,8 @@ test("message policy selects worker actor denial without matching external sende
       replyCorrelation: true,
     },
   });
-  expect(worker.verdict).toBe("deny");
-  expect(worker.matchedRuleIds).toEqual(["worker-actor-deny"]);
+  expect(child.verdict).toBe("deny");
+  expect(child.matchedRuleIds).toEqual(["child-actor-deny"]);
   expect(external.matchedRuleIds).toEqual([]);
 });
 

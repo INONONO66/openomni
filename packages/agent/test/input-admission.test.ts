@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Inbox, Journal, type LedgerSession } from "@openomni/protocol";
+import { Delivery, Journal, type LedgerSession } from "@openomni/protocol";
 import { deliveryActions, inputRowKind, receivedMessageAction } from "../src/core/commit";
 import { decideSessionAdmission } from "../src/core/admission";
 
@@ -10,8 +10,8 @@ import { decideSessionAdmission } from "../src/core/admission";
  * its kind's declared schema.
  */
 
-function row(kind: Inbox.Kind, id: string): Inbox.Row {
-  return Inbox.Row.parse({
+function row(kind: Delivery.Kind, id: string): Delivery.Row {
+  return Delivery.Row.parse({
     id,
     sessionId: "s1",
     kind,
@@ -29,22 +29,22 @@ test("a delivered prompt is a prompt row with delivery defaulting to followUp", 
   const [action] = deliveryActions([row("prompt", "in-1")], { kind: "turn", turnId: "t1" }, "before_llm", null);
   if (action === undefined) throw new Error("missing delivery action");
   expect(action.kind).toBe("prompt");
-  expect(action.intent.value).toEqual({ inboxId: "in-1", delivery: "followUp" });
+  expect(action.intent.value).toEqual({ deliveryId: "in-1", delivery: "followUp" });
   expect(Journal.declarationFor("prompt")?.schema.safeParse({ intent: action.intent, effect: action.effect }).success).toBe(true);
 });
 
 test("control inputs deliver as signal rows, never as turn inputs of the prompt kind", () => {
   for (const control of ["interrupt", "resume"] as const) {
-    const [action] = deliveryActions([row(control, `in-${control}`)], { kind: "inbox" }, "before_llm", null);
+    const [action] = deliveryActions([row(control, `in-${control}`)], { kind: "pending" }, "before_llm", null);
     if (action === undefined) throw new Error("missing delivery action");
     expect(action.kind).toBe("signal");
-    expect(action.intent.value).toEqual({ inboxId: `in-${control}`, control });
+    expect(action.intent.value).toEqual({ deliveryId: `in-${control}`, control });
     expect(Journal.declarationFor("signal")?.schema.safeParse({ intent: action.intent, effect: action.effect }).success).toBe(true);
   }
 });
 
 test("admission rows split the same way: prompt stays prompt, control admits as signal", () => {
-  const admit = (kind: Inbox.Kind) =>
+  const admit = (kind: Delivery.Kind) =>
     receivedMessageAction({
       id: `adm-${kind}`,
       sessionId: "s1",
@@ -105,9 +105,9 @@ test("an input of a capability kind whose capability is off is rejected with unk
   expect(inputRowKind("prompt")).toBe("prompt");
   expect(inputRowKind("interrupt")).toBe("signal");
   expect(inputRowKind("resume")).toBe("signal");
-  const [delivery] = deliveryActions(pending, { kind: "inbox" }, "before_llm", null);
+  const [delivery] = deliveryActions(pending, { kind: "pending" }, "before_llm", null);
   if (delivery === undefined) throw new Error("missing delivery action");
   expect(delivery.kind).toBe("action");
-  expect(delivery.intent.value).toEqual({ inboxId: "in-action", delivery: "followUp" });
+  expect(delivery.intent.value).toEqual({ deliveryId: "in-action", delivery: "followUp" });
   expect(Journal.declarationFor("action")?.schema.safeParse({ intent: delivery.intent, effect: delivery.effect }).success).toBe(true);
 });

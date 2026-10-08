@@ -1,4 +1,4 @@
-import { Alarm, canonicalDigest, PlainValueSchema, SessionTransition, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, type SessionGeneration, type PlainObject } from "@openomni/protocol";
+import { Alarm, canonicalDigest, PlainValueSchema, SessionTransition, type Delivery, type LedgerAction, type LedgerSession, type PlainValue, type SessionGeneration, type PlainObject } from "@openomni/protocol";
 import { armAction } from "./alarm";
 import { Clock, Effect } from "effect";
 import { AgentFailure, CommitFailed, type ExecutionError } from "./failure";
@@ -16,7 +16,7 @@ export interface RequestDecision {
   readonly resolution: SessionTransition.Resolution;
   readonly request?: SessionTransition.Request;
   readonly actions: readonly LedgerAction.Append[];
-  readonly receive?: Inbox.Commit;
+  readonly receive?: Delivery.Commit;
   readonly requestCount?: LedgerSession.Commit["requestCount"];
 }
 
@@ -286,7 +286,7 @@ function replyIntake(
   at: number,
   request: SessionTransition.Request,
   answer: SessionTransition.Answer,
-): Inbox.Commit {
+): Delivery.Commit {
   return {
     id: answer.inputId,
     sessionId: request.sessionId,
@@ -312,7 +312,7 @@ function receivingIntake(
   command: SessionTransition.Command,
   request: SessionTransition.Request,
   resolution: SessionTransition.Resolution,
-): Inbox.Commit | undefined {
+): Delivery.Commit | undefined {
   const { payload } = command;
   if (payload.kind !== "request.answer" || !receivesReply(request, resolution)) return undefined;
   return replyIntake(command.at, request, payload.answer);
@@ -652,7 +652,7 @@ export interface SessionRequestPort {
     threshold: number;
     deadline: number;
     at: number;
-    admission?: Inbox.Commit;
+    admission?: Delivery.Commit;
   }): Effect.Effect<SessionTransition.Request, ExecutionError>;
   answer(input: SessionTransition.Answer): Effect.Effect<SessionTransition.Resolution, ExecutionError>;
   receipt(input: SessionTransition.DeliveryReceipt): Effect.Effect<SessionTransition.Request, ExecutionError>;
@@ -737,7 +737,7 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
     payload: SessionTransition.Payload,
     inputId: string,
     at: number,
-    admission?: Inbox.Commit,
+    admission?: Delivery.Commit,
   ) {
     return Effect.gen(function* () {
     const live = getSessionHandle(sessionId, runtime);
@@ -830,7 +830,7 @@ export function createSessionRequests(runtime: SessionRuntime): Effect.Effect<Se
         answer.inputId,
         clock(),
       );
-      if (result.receive !== undefined) runtime.onInboxCommitted?.([result.receive.sessionId]);
+      if (result.receive !== undefined) runtime.onDeliveryCommitted?.([result.receive.sessionId]);
       if (
         result.actions.length > 0 &&
         result.request?.mode === "approval" &&
@@ -876,7 +876,7 @@ export function commitSessionRequest(
   inputId: string,
   at: number,
   runtime: SessionRuntime,
-  admission?: Inbox.Commit,
+  admission?: Delivery.Commit,
 ): Effect.Effect<RequestDecision, ExecutionError> {
   return Effect.gen(function* () {
     const row = kernel.row(sessionId);
@@ -892,10 +892,10 @@ export function commitSessionRequest(
     }, runtime.approvalPolicy.recentOpen);
     if (decision.actions.length > 0) {
       // Reply intakes and gateway admissions are received-message chain
-      // actions in the same fenced batch (the inbox table is gone). A
+      // actions in the same fenced batch (the input-queue table is gone). A
       // foreign-session admission (a `new_session` child's message) never
       // rides this single-session fenced batch: the child's own entity
-      // commits it through `ports.inbox.commit`.
+      // commits it through the admission commit port.
       const intake = [
         ...(decision.receive === undefined ? [] : [decision.receive]),
         ...(admission === undefined || admission.sessionId !== sessionId ? [] : [admission]),

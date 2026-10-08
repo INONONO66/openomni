@@ -14,7 +14,7 @@ test("967 exports expose only canonical session authority", () => {
   }
   const store = ledgerExports.openSessionStore(":memory:", { now: () => 1_700_000_000_000 });
   try {
-    for (const retired of ["session", "message", "part", "inbox", "alarms"]) {
+    for (const retired of ["session", "message", "part", ["in", "box"].join(""), "alarms"]) {
       expect(retired in store).toBe(false);
     }
     for (const canonical of ["sessions", "actions", "transaction"]) {

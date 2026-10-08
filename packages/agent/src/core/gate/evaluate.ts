@@ -27,7 +27,7 @@ export interface PolicyEvaluationInput {
   readonly kind: string;
   readonly phase: PolicyRow.Phase;
   readonly op?: string;
-  readonly role?: "resident" | "worker";
+  readonly role?: "resident" | "child";
   readonly sessionId?: string;
   readonly message?: MessagePolicyContext;
   readonly value: PlainValue;

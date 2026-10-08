@@ -43,7 +43,7 @@ function turn(id: string) {
   return append(id, "turn", {
     phase: "intent",
     resultId: `${id}:result`,
-    inboxIds: [],
+    deliveryIds: [],
     resumeCount: 0,
     boundaryActionId: null,
     toolsGeneration: generation.generation,
@@ -180,7 +180,7 @@ test("snapshot pages retain all deliveries for the selected turn without loading
       {
         phase: "delivery",
         turnId: "current",
-        inboxId: `prompt-${index}`,
+        deliveryId: `prompt-${index}`,
         kind: "prompt",
         content: `${index}`,
         origin: { encodingVersion: 1, value: {} },
@@ -231,7 +231,7 @@ test("snapshot tails fold deliveries committed before their turn intent and stay
       {
         phase: "delivery",
         turnId,
-        inboxId: id,
+        deliveryId: id,
         kind: "prompt",
         content,
         origin: { encodingVersion: 1, value: {} },
@@ -251,7 +251,7 @@ test("snapshot tails fold deliveries committed before their turn intent and stay
     {
       phase: "delivery",
       turnId: "second",
-      inboxId: "d-interrupt",
+      deliveryId: "d-interrupt",
       kind: "interrupt",
       content: "",
       origin: { encodingVersion: 1, value: {} },

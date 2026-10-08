@@ -1,5 +1,5 @@
 import type { LedgerError } from "../../src/core/store/errors";
-import type { Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
+import type { Delivery, LedgerAction, LedgerSession } from "@openomni/protocol";
 import { Effect } from "effect";
 import type { SessionKernel } from "../../src/core/entity";
 import { receivedMessageAction } from "../../src/core/commit";
@@ -7,9 +7,9 @@ import { receivedMessageAction } from "../../src/core/commit";
 export interface ReceivedMessageInput {
   readonly id: string;
   readonly sessionId: string;
-  readonly kind: Inbox.Kind;
+  readonly kind: Delivery.Kind;
   readonly content: string;
-  readonly origin: Inbox.Origin;
+  readonly origin: Delivery.Origin;
   readonly createdAt: number;
   readonly parentActionId: string | null;
   /** Loop-consumption mode (#1253); absent folds to `followUp`. */
@@ -17,8 +17,8 @@ export interface ReceivedMessageInput {
 }
 
 /**
- * Out-of-band ingress as one fenced received-message chain commit (the inbox
- * table is gone; the chain is the inbox). A session with a live writer keeps
+ * Out-of-band ingress as one fenced received-message chain commit (the
+ * input-queue table is gone; the chain is the queue). A session with a live writer keeps
  * that writer's authority — ingress rides the current owner+fence exactly like
  * the entity's requestCommand; an unowned session adopts the ingress fence.
  */

@@ -18,7 +18,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import {
   type BusEvent,
-  type Inbox,
+  type Delivery,
   L0Observation,
   type ObservationSink,
 } from "@openomni/protocol";
@@ -40,11 +40,11 @@ const PARENT_ID = "fork-replay-parent";
 const CHILD_ID = "fork-replay-child";
 const KEY = "msg-1";
 
-const DeliveryEffect = z.looseObject({ phase: z.literal("delivery"), inboxId: z.string() });
+const DeliveryEffect = z.looseObject({ phase: z.literal("delivery"), deliveryId: z.string() });
 const TerminalEffect = z.looseObject({ phase: z.literal("terminal") });
-const InputEffect = z.looseObject({ inboxKind: z.string() });
+const InputEffect = z.looseObject({ deliveryKind: z.string() });
 
-function parentInboxRow(content: string, createdAt: number): Inbox.Row {
+function parentDeliveryRow(content: string, createdAt: number): Delivery.Row {
   return {
     id: KEY,
     sessionId: PARENT_ID,
@@ -91,7 +91,7 @@ test("a pre-fork key re-admits AND completes a real child turn; msg-1:delivery b
         at: 2,
       });
       const [delivery] = deliveryActions(
-        [parentInboxRow("first", 2)],
+        [parentDeliveryRow("first", 2)],
         { kind: "turn", turnId: "turn-1" },
         "before_llm",
         input.id,
@@ -200,10 +200,10 @@ test("a pre-fork key re-admits AND completes a real child turn; msg-1:delivery b
   expect(TerminalEffect.safeParse(after.terminal?.effect.value).success).toBeTrue();
   expect(after.state).toBe("idle");
   // `msg-1:delivery` belongs to the child's new input...
-  expect(DeliveryEffect.parse(after.newDelivery?.effect.value).inboxId).toBe(KEY);
-  expect(InputEffect.parse(after.newInput?.effect.value).inboxKind).toBe("prompt");
+  expect(DeliveryEffect.parse(after.newDelivery?.effect.value).deliveryId).toBe(KEY);
+  expect(InputEffect.parse(after.newInput?.effect.value).deliveryKind).toBe("prompt");
   // ...with the copied one at its remapped id, its input link remapped too.
-  expect(DeliveryEffect.parse(after.copiedDelivery?.effect.value).inboxId).toBe(
+  expect(DeliveryEffect.parse(after.copiedDelivery?.effect.value).deliveryId).toBe(
     `fork:${PARENT_ID}:${KEY}`,
   );
   expect(after.copiedInput?.sessionId).toBe(CHILD_ID);

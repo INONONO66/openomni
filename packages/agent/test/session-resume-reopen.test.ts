@@ -158,7 +158,7 @@ for (const mode of ["interrupted", "crash-open"] as const) {
                       SessionTurn.DecodeIntent.parse({
                         phase: "intent",
                         resultId: originalResult,
-                        inboxIds: [],
+                        deliveryIds: [],
                         resumeCount: 0,
                         boundaryActionId: "initial",
                         toolsGeneration: 1,

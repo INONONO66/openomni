@@ -9,7 +9,7 @@ import { approvalAnswer, invocationNode } from "./helpers/request-fixtures";
 import {
   canonicalDigest,
   PlainObjectSchema,
-  type Inbox,
+  type Delivery,
   type LedgerAction,
   type LedgerSession,
   type SessionTransition,
@@ -116,7 +116,7 @@ it("records one canonical resolution and deduplicates equivalent input after res
   );
   expect(decide(payload, result.request, [original, ...corrupted]).resolution).toBe("rejected");
 });
-it("expires late answers before binding checks without reopening or inbox effects", () => {
+it("expires late answers before binding checks without reopening or delivery effects", () => {
   const pending = request();
   const result = decide(
     {
@@ -421,7 +421,7 @@ it("gives timeout and cancellation only one terminal winner", () => {
   ).toBe("duplicate");
 });
 
-// W5.2: the inbox table and the atomic cross-session child unit are deleted
+// W5.2: the input-queue table and the atomic cross-session child unit are deleted
 // (production stores are per-session files, so a parent+child transaction
 // cannot exist); commissioning moved to the entity plane. What remains live is
 // the gateway admission intake: a received-message chain action committed in
@@ -434,7 +434,7 @@ it.each([false, true])("gateway admission intake commits atomically with the req
   if (fault) raw.run(`CREATE TRIGGER refuse_admission BEFORE INSERT ON action
     WHEN NEW.id = 'commission:prompt'
     BEGIN SELECT RAISE(ABORT, 'test admission fault'); END`);
-  const admission: Inbox.Commit = {
+  const admission: Delivery.Commit = {
     id: "commission:prompt", sessionId: "parent", kind: "prompt", content: "commission",
     origin: { encodingVersion: 1, value: {
       kind: "message", messageId: "commission", senderSessionId: "parent", sourceActionId: "invocation",

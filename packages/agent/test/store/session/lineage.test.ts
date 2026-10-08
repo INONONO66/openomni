@@ -14,11 +14,11 @@ describe("canonical session lineage", () => {
     expect(kernel.row(root.id).parentId).toBeNull();
     expect(kernel.getSnapshot(child.id)).toMatchObject({
       parentId: root.id,
-      role: "worker",
+      role: "child",
     });
     expect(kernel.getSnapshot(grandchild.id)).toMatchObject({
       parentId: child.id,
-      role: "worker",
+      role: "child",
     });
     expect(
       kernel
@@ -34,7 +34,7 @@ describe("canonical session lineage", () => {
       ["a", "root"],
       ["else", "other"],
     ] as const) {
-      stores.catalog.indexSession({ id, parentId, role: "worker", createdAt: 1 });
+      stores.catalog.indexSession({ id, parentId, role: "child", createdAt: 1 });
     }
     expect(stores.kernel.childSessionsPage("root", "", 256).map((row) => row.id)).toEqual([
       "a",

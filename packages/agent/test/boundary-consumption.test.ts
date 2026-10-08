@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import type { Inbox, LedgerAction } from "@openomni/protocol";
+import type { Delivery, LedgerAction } from "@openomni/protocol";
 import {
   DEFAULT_CONSUMPTION,
   boundaryConsumption,
@@ -26,11 +26,11 @@ import {
   type SessionFixture,
 } from "./helpers/session-services";
 
-function inboxRow(input: {
+function deliveryRow(input: {
   readonly ordinal: number;
-  readonly kind: Inbox.Kind;
+  readonly kind: Delivery.Kind;
   readonly delivery?: "steer" | "followUp";
-}): Inbox.Row {
+}): Delivery.Row {
   return {
     id: `I${input.ordinal}`,
     sessionId: "S",
@@ -47,14 +47,14 @@ function inboxRow(input: {
 }
 
 describe("boundaryConsumption rule", () => {
-  const backlog: Inbox.Row[] = [
-    inboxRow({ ordinal: 1, kind: "interrupt" }),
-    inboxRow({ ordinal: 2, kind: "prompt", delivery: "steer" }),
-    inboxRow({ ordinal: 3, kind: "prompt", delivery: "steer" }),
-    inboxRow({ ordinal: 4, kind: "prompt" }),
-    inboxRow({ ordinal: 5, kind: "prompt", delivery: "followUp" }),
+  const backlog: Delivery.Row[] = [
+    deliveryRow({ ordinal: 1, kind: "interrupt" }),
+    deliveryRow({ ordinal: 2, kind: "prompt", delivery: "steer" }),
+    deliveryRow({ ordinal: 3, kind: "prompt", delivery: "steer" }),
+    deliveryRow({ ordinal: 4, kind: "prompt" }),
+    deliveryRow({ ordinal: 5, kind: "prompt", delivery: "followUp" }),
   ];
-  const ids = (rows: readonly Inbox.Row[]) => rows.map((row) => row.id);
+  const ids = (rows: readonly Delivery.Row[]) => rows.map((row) => row.id);
 
   test("controls drain at every boundary; steer and followUp wait for their consumption points", () => {
     expect(ids(boundaryConsumption(backlog, "before_llm", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I1"]);
@@ -86,8 +86,8 @@ describe("boundaryConsumption rule", () => {
   });
 
   test("a row without a delivery mark folds to followUp", () => {
-    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "after_tools", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([]);
-    expect(ids(boundaryConsumption([inboxRow({ ordinal: 9, kind: "prompt" })], "turn_end", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I9"]);
+    expect(ids(boundaryConsumption([deliveryRow({ ordinal: 9, kind: "prompt" })], "after_tools", DEFAULT_CONSUMPTION, 0).consumed)).toEqual([]);
+    expect(ids(boundaryConsumption([deliveryRow({ ordinal: 9, kind: "prompt" })], "turn_end", DEFAULT_CONSUMPTION, 0).consumed)).toEqual(["I9"]);
   });
 });
 
@@ -223,7 +223,7 @@ describe("integrated boundary consumption", () => {
               action.kind === "turn" &&
               (action.intent.value as { phase?: string }).phase === "checkpoint",
           )
-          .map((action) => (action.intent.value as { inboxIds?: string[] }).inboxIds);
+          .map((action) => (action.intent.value as { deliveryIds?: string[] }).deliveryIds);
         // Every checkpoint records its consumed seqs: the first turn's
         // tool.post boundary consumed queued-0.
         expect(checkpointConsumed[0]).toEqual(["queued-0"]);
@@ -232,9 +232,9 @@ describe("integrated boundary consumption", () => {
           (action: LedgerAction.Node) =>
             action.kind === "prompt" &&
             (action.effect.value as { phase?: string } | null)?.phase === "delivery" &&
-            String((action.intent.value as { inboxId?: string }).inboxId).startsWith("queued-"),
+            String((action.intent.value as { deliveryId?: string }).deliveryId).startsWith("queued-"),
         );
-        expect(deliveries.map((action) => (action.intent.value as { inboxId: string }).inboxId)).toEqual([
+        expect(deliveries.map((action) => (action.intent.value as { deliveryId: string }).deliveryId)).toEqual([
           "queued-0",
           "queued-1",
           "queued-2",

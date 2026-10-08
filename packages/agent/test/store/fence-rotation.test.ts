@@ -33,7 +33,7 @@ function promptAction(id: string, sessionId: string, content: string): LedgerAct
     sessionId,
     kind: "prompt",
     intent: { encodingVersion: 1, value: { source: "fence-rotation-test" } },
-    effect: { encodingVersion: 1, value: { inboxKind: "prompt", content } },
+    effect: { encodingVersion: 1, value: { deliveryKind: "prompt", content } },
     irreversible: true,
     ts: 1,
   };
@@ -237,7 +237,7 @@ test("concurrent activations from two processes: one winner, stale loser refused
           actions: [{
             id: String(process.env.FENCE_ACTION_ID), parentId: null, sessionId, kind: "prompt",
             intent: { encodingVersion: 1, value: { source: owner } },
-            effect: { encodingVersion: 1, value: { inboxKind: "prompt", content: owner } },
+            effect: { encodingVersion: 1, value: { deliveryKind: "prompt", content: owner } },
             irreversible: true, ts: 1_700_000_000_000,
           }],
           state: row.state,
@@ -350,7 +350,7 @@ test("R8: kill inside the commit transaction leaves no partial action row", asyn
         actions: [{
           id: "r8-a1", parentId: null, sessionId: "s3", kind: "prompt",
           intent: { encodingVersion: 1, value: { source: "r8" } },
-          effect: { encodingVersion: 1, value: { inboxKind: "prompt", content: "r8" } },
+          effect: { encodingVersion: 1, value: { deliveryKind: "prompt", content: "r8" } },
           irreversible: true, ts: 1_700_000_000_000,
         }],
         state: "idle",

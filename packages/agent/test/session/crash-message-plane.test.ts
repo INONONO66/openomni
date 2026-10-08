@@ -33,14 +33,14 @@ import { checkpointEvidence, committedCompactionPoints, crashPoint, crashWitness
 const matrix = matrixSchema.parse(
   await Bun.file(new URL("../../../../script/conformance/crash-matrix.json", import.meta.url)).json(),
 );
-const worker = new URL("../helpers/crash-matrix-g1.ts", import.meta.url).pathname;
-const planeWorker = new URL("../helpers/crash-message-plane.ts", import.meta.url).pathname;
+const crashScript = new URL("../helpers/crash-matrix-g1.ts", import.meta.url).pathname;
+const planeScript = new URL("../helpers/crash-message-plane.ts", import.meta.url).pathname;
 type Witness = z.infer<typeof crashWitness>;
 
 function actions() {
   return sessionTree(isolatedLedger().kernel, sessionId);
 }
-function pendingInbox(id = sessionId) {
+function pendingDeliveries(id = sessionId) {
   return isolatedLedger().kernel.pendingMessages(id);
 }
 function results(kind: LedgerAction.Kind) {
@@ -77,7 +77,7 @@ function terminalClass(action: LedgerAction.Node) {
 const SPAWNED_CHILD_MS = 30_000;
 
 async function crash(point: CrashPoint, dbPath: string, stage = "initial"): Promise<Witness> {
-  const stdout = await killAtCrashBarrier(worker, [point, dbPath, stage]);
+  const stdout = await killAtCrashBarrier(crashScript, [point, dbPath, stage]);
   const witness = crashWitness.parse(JSON.parse(stdout));
   expect(witness.crashPoint).toBe(point);
   return witness;
@@ -180,7 +180,7 @@ function recoverAdmission(witness: Witness) {
   return Effect.gen(function* () {
   const before = actions();
   const originalTurns = SessionHandleStore.openTurns(before);
-  const originalInbox = pendingInbox();
+  const originalDeliveries = pendingDeliveries();
   const originalOutbound = isolatedLedger().kernel.outboundRows(sessionId);
   const calls = { model: 0 };
   let deliveries = 0;
@@ -225,8 +225,8 @@ function recoverAdmission(witness: Witness) {
       return "resumed_without_reexecution";
     }
     expect(originalTurns).toEqual([]);
-    expect(originalInbox).toMatchObject([{ id: "admitted", content: "original prompt" }]);
-    expect(pendingInbox()).toEqual([]);
+    expect(originalDeliveries).toMatchObject([{ id: "admitted", content: "original prompt" }]);
+    expect(pendingDeliveries()).toEqual([]);
     expect(isolatedLedger().kernel.inputMessages(sessionId)).toHaveLength(1);
     return "rearmed";
   } finally {
@@ -238,7 +238,7 @@ function recoverAdmission(witness: Witness) {
 function recoverCommittedCompaction(witness: Witness) {
   return Effect.gen(function* () {
   const before = actions();
-  const inbox = pendingInbox();
+  const deliveries = pendingDeliveries();
   expect(witness.bodies).toEqual(["summary"]);
   expect(results("compaction")).toHaveLength(1);
   const result = nth(results("compaction"), 0);
@@ -251,9 +251,9 @@ function recoverCommittedCompaction(witness: Witness) {
   expect(history).toEqual(committed.projection);
   expectCompactedProjection(history, originalAnswer);
   if (witness.crashPoint === "compaction_concurrent_tail_committed_before_owner_crash") {
-    expect(inbox.map((item) => item.id)).toEqual(["tail"]);
+    expect(deliveries.map((item) => item.id)).toEqual(["tail"]);
     expect(isolatedLedger().kernel.inputMessages(sessionId).map((item) => item.id)).toContain("tail");
-  } else expect(inbox).toEqual([]);
+  } else expect(deliveries).toEqual([]);
   const recording = yield* requestLedger({ id: sessionId, clock: () => 100_000 });
   const executor = testExecutor({ ...recording, observations, policy: compiledPolicy() });
   yield* executor.recover();
@@ -261,10 +261,10 @@ function recoverCommittedCompaction(witness: Witness) {
   const recovered = foldSessionHistory(sessionId, actions());
   expect(recovered).toEqual(history);
   expectCompactedProjection(recovered, originalAnswer);
-  expect(pendingInbox()).toEqual(inbox);
+  expect(pendingDeliveries()).toEqual(deliveries);
   yield* executor.recover();
   expect(actions()).toEqual(before);
-  expect(pendingInbox()).toEqual(inbox);
+  expect(pendingDeliveries()).toEqual(deliveries);
   return terminalClass(result);
   });
 }
@@ -393,7 +393,7 @@ function recoverRetryAlarm(witness: Witness) {
   const occurrenceId = z.object({ occurrenceId: z.string() }).parse(
     effectOf(LedgerAction.Node.parse(armed)),
   ).occurrenceId;
-  expect(pendingInbox()).toEqual([]);
+  expect(pendingDeliveries()).toEqual([]);
   // Redelivered RetryScheduled: the settled attempt makes the delivery a chain-
   // guarded no-op; a second delivery no-ops identically (never a cancel CAS).
   // #1254: the legacy-shape retry arm carries no occurrence chain, so the one
@@ -435,7 +435,7 @@ function recoverRetryAlarm(witness: Witness) {
   expect(alarmDisposition(reads, { alarmId, occurrenceId })).toEqual({ op: "run" });
   expect(yield* recoverTurn(witness, 1)).toBe("resumed_without_reexecution");
   // The wake injected no prompt and the completed attempt armed nothing new.
-  expect(pendingInbox()).toEqual([]);
+  expect(pendingDeliveries()).toEqual([]);
   expect(
     actions().filter((action) => action.kind === "alarm" && action.id.includes(":retry:")),
   ).toHaveLength(1);
@@ -510,8 +510,8 @@ function assertOutboundCut(witness: Witness) {
   return { item, acked, destination };
 }
 
-async function recoverChild<S extends z.ZodType>(worker: string, args: string[], label: string, schema: S) {
-  const child = Bun.spawn([process.execPath, worker, "recover", ...args], {
+async function recoverChild<S extends z.ZodType>(helperScript: string, args: string[], label: string, schema: S) {
+  const child = Bun.spawn([process.execPath, helperScript, "recover", ...args], {
     stdin: "pipe", stdout: "pipe", stderr: "pipe",
   });
   const receipt = Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
@@ -527,7 +527,7 @@ async function recoverChild<S extends z.ZodType>(worker: string, args: string[],
 }
 
 async function recoverMessagePlane(point: z.infer<typeof messagePlanePoint>, dbPath: string) {
-  return recoverChild(planeWorker, [point, dbPath], "fresh message-plane recovery", messagePlaneProof);
+  return recoverChild(planeScript, [point, dbPath], "fresh message-plane recovery", messagePlaneProof);
 }
 
 function recoverOutbound(witness: Witness, dbPath: string) {
@@ -545,7 +545,7 @@ function recoverOutbound(witness: Witness, dbPath: string) {
     expect(proof.destinationRuns).toBe(1);
     expect(proof.dispatches).toBe(acked || sent ? 0 : 1);
     expect(proof.outboundAfter).toMatchObject([{ state: "delivered", message: item.message }]);
-    const received = proof.inboxAfter.filter((row) => row.id === item.message.messageId);
+    const received = proof.deliveriesAfter.filter((row) => row.id === item.message.messageId);
     expect(received).toHaveLength(1);
     expect(received[0]?.status).toBe("consumed");
     if (destination.length === 1) expect(received[0]?.content).toBe(destination[0]?.content);
@@ -567,15 +567,15 @@ function recoverOutbound(witness: Witness, dbPath: string) {
  */
 async function watchWakeCell(dbPath: string) {
   const point = "watch_fired_committed_before_entity_wake";
-  const witness = crashWitness.parse(JSON.parse(await killAtCrashBarrier(planeWorker, ["crash", point, dbPath])));
+  const witness = crashWitness.parse(JSON.parse(await killAtCrashBarrier(planeScript, ["crash", point, dbPath])));
   expect(witness).toMatchObject({ crashPoint: point, bodies: [], openTurns: [] });
   expect(typeof witness.lease.owner).toBe("string");
   const proof = await recoverMessagePlane(point, dbPath);
   expect(proof.watch).toEqual({ occurrenceId: "doorbell:fired:1", redelivery: "duplicate_occurrence", fired: 1 });
   expect(proof.before.filter(({ kind }) => kind === "alarm")).toHaveLength(1);
-  const pending = proof.inboxBefore.filter(({ status }) => status === "pending");
+  const pending = proof.deliveriesBefore.filter(({ status }) => status === "pending");
   expect(pending).toHaveLength(1);
-  expect(proof.inboxAfter.filter(({ id, status }) => id === pending[0]?.id && status === "consumed")).toHaveLength(1);
+  expect(proof.deliveriesAfter.filter(({ id, status }) => id === pending[0]?.id && status === "consumed")).toHaveLength(1);
   expect(proof.after.slice(0, proof.before.length)).toEqual(proof.before);
   expect(proof.repeated).toEqual(proof.after);
   expect(proof.sourceRuns).toBe(1);
@@ -598,7 +598,7 @@ function recoverCell(witness: Witness, dbPath: string) {
     case "owner_reclaimed_before_stale_transcript_flush":
       return yield* recoverStaleOwner(witness);
     case "turn_intent_before_llm_entry":
-    case "inbox_admitted_before_turn_open":
+    case "delivery_admitted_before_turn_open":
       return yield* recoverAdmission(witness);
     default:
       return yield* recoverExecutor(witness);
@@ -698,13 +698,13 @@ async function recoverReconstructionCell(point: z.infer<typeof reconstructionPoi
 }
 
 async function configureCrashCell(dbPath: string) {
-  const worker = new URL("../helpers/crash-configure.ts", import.meta.url).pathname;
-  const cut = configureCutProof.parse(JSON.parse(await killAtCrashBarrier(worker, ["crash", dbPath])));
+  const configureScript = new URL("../helpers/crash-configure.ts", import.meta.url).pathname;
+  const cut = configureCutProof.parse(JSON.parse(await killAtCrashBarrier(configureScript, ["crash", dbPath])));
   expect(cut.crashPoint).toBe(configureCrashPoint);
   expect(cut.hibernations).toBe(0);
   expect(cut.snapshot).toMatchObject({ generation: 2, revertTo: 1 });
   {
-    const proof = await recoverChild(worker, [dbPath], "fresh configure recovery", configureRecoveryProof);
+    const proof = await recoverChild(configureScript, [dbPath], "fresh configure recovery", configureRecoveryProof);
     expect(proof.before).toEqual(cut.actions);
     expect(proof.idle).toEqual(proof.before);
     expect(proof.snapshot).toEqual(cut.snapshot);

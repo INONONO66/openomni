@@ -10,7 +10,7 @@ export { GenerationRawSlots } from "./gate/decide";
 import * as SessionHandleStore from "./store/fence";
 import type { SessionKernel } from "./entity";
 import type { InspectRequest, InspectionPage } from "../inspect";
-import { Inbox, isReservedAlarmPurpose, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type ConfigureDisabled, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
+import { Delivery, isReservedAlarmPurpose, type LedgerAction, type LedgerSession, type Model, type ObservationSink, type SessionGeneration, type ConfigureDisabled, type SessionHistory, type SessionTurn, SessionTransition, canonicalDigest, PlainValueSchema, BusEvent, type PlainValue, type TraceContext } from "@openomni/protocol";
 import type { ChatAgentConfig, AgentResult } from "./types";
 import type { decideSessionAdmission } from "./admission";
 import type { Generation } from "./compose";
@@ -54,7 +54,7 @@ interface SessionGetOptions {
 }
 
 export interface SessionRunnerInput {
-  /** Authenticated inbox treatment, independent of model-visible message text. */
+  /** Authenticated delivery treatment, independent of model-visible message text. */
   readonly authority?: "act" | "evidence_only";
   readonly sessionId: string;
   readonly kernel: SessionKernel;
@@ -133,7 +133,7 @@ export interface SessionRuntime {
     readonly authority: { readonly owner: string; readonly fence: number };
   }) => Effect.Effect<LedgerAction.Receipt, ExecutionError, RunnerServices>;
   /** Direct post-commit doorbells, independent of the lossy observation bus. */
-  readonly onInboxCommitted?: (sessionIds: readonly string[]) => void;
+  readonly onDeliveryCommitted?: (sessionIds: readonly string[]) => void;
   /**
    * Composition-owned child settlement (#1311): the app injects
    * `settleChild` (apps/openomni/src/bundles/delegation-policy). Called at turn
@@ -258,14 +258,14 @@ export interface SessionHandle {
       payload: SessionTransition.Payload,
       inputId: string,
       at: number,
-      admission?: Inbox.Commit,
+      admission?: Delivery.Commit,
     ): Effect.Effect<import("./request").RequestDecision, ExecutionError>;
   };
   readonly tools: SessionToolsHandle;
   readonly system: { readonly blocks: SessionSystemBlocksHandle };
-  prompt(content: string, origin?: Inbox.Origin): Effect.Effect<SessionRunnerResult | undefined, SessionError>;
-  interrupt(origin?: Inbox.Origin): Effect.Effect<void, SessionError>;
-  resume(origin?: Inbox.Origin): Effect.Effect<void, SessionError>;
+  prompt(content: string, origin?: Delivery.Origin): Effect.Effect<SessionRunnerResult | undefined, SessionError>;
+  interrupt(origin?: Delivery.Origin): Effect.Effect<void, SessionError>;
+  resume(origin?: Delivery.Origin): Effect.Effect<void, SessionError>;
   /** Record the typed compensation of one compaction (`restore_context_projection`); history is never erased. */
   restoreContext(compactionId: string): Effect.Effect<ExecutionResult, SessionError>;
   get(options?: SessionGetOptions): SessionTurn.Snapshot;
@@ -907,7 +907,7 @@ const FullAccessOrigin = ExternalOrigin.extend({ inboundTreatment: z.literal("fu
 const EvidenceOnlyOrigin = ExternalOrigin.extend({ inboundTreatment: z.literal("evidence_only") });
 const SessionOrigin = z.object({ kind: z.literal("session"), id: z.string() });
 /** Provenance this kernel minted itself: session handles, inter-session mail, reply terminals. */
-const TrustedOrigin = z.union([SessionOrigin, Inbox.MessageOrigin, Inbox.ReplyOrigin]);
+const TrustedOrigin = z.union([SessionOrigin, Delivery.MessageOrigin, Delivery.ReplyOrigin]);
 
 /** The violation fact published when mail of unknown provenance reaches a turn. */
 export const InboundAuthorityViolated = BusEvent.define(
@@ -925,7 +925,7 @@ export interface InboundAuthorityDecision {
 }
 
 /**
- * Turn authority from the prompt's inbox origin. A kernel-minted origin acts;
+ * Turn authority from the prompt's delivered origin. A kernel-minted origin acts;
  * an external origin acts only when the perimeter recorded `full_access`
  * verbatim, and is evidence when it recorded `evidence_only`. Everything else
  * is mail of unknown provenance: evidence authority plus a recorded violation
@@ -985,8 +985,8 @@ export function createSessionTurn(
   scope: Scope.Scope,
   ports: {
     readonly createExecutionLedger: (turnId?: string) => ExecutionLedger;
-    readonly evaluatePromptPolicies: (items: readonly Inbox.Row[]) => Effect.Effect<{ readonly refusal: SessionPolicyRefusal | undefined; readonly contents: ReadonlyMap<string, string> }, ExecutionError, RunnerServices>;
-    readonly consumePolicyBlockedInbox: (items: readonly Inbox.Row[]) => Effect.Effect<void, ExecutionError>;
+    readonly evaluatePromptPolicies: (items: readonly Delivery.Row[]) => Effect.Effect<{ readonly refusal: SessionPolicyRefusal | undefined; readonly contents: ReadonlyMap<string, string> }, ExecutionError, RunnerServices>;
+    readonly consumePolicyBlockedDeliveries: (items: readonly Delivery.Row[]) => Effect.Effect<void, ExecutionError>;
     readonly hibernate: (current: LedgerSession.Row) => Effect.Effect<void, SessionError>;
   },
 ) {
@@ -1115,7 +1115,7 @@ export function createSessionTurn(
       );
       const evaluated = yield* ports.evaluatePromptPolicies(pending);
       if (evaluated.refusal !== undefined) {
-        yield* ports.consumePolicyBlockedInbox(pending);
+        yield* ports.consumePolicyBlockedDeliveries(pending);
         return yield* new AgentFailure({ operation: "session.prompt", cause: evaluated.refusal.reason });
       }
       // #1256 r3 H-3: deliver the rewritten body, not the original.
@@ -1133,7 +1133,7 @@ export function createSessionTurn(
       const checkpoint = turnCheckpointAction({
         id: checkpointId, parentId: parentActionId, sessionId, turnId: input.turnId, resultId: input.resultId,
         resumeCount: input.resumeCount, boundaryActionId: checkpointId, boundary,
-        inboxIds: pending.map((item) => item.id), consumedStale: stale.map((item) => item.id), at: clock(),
+        deliveryIds: pending.map((item) => item.id), consumedStale: stale.map((item) => item.id), at: clock(),
       });
       const current = kernel.row(sessionId);
       yield* commitFoldBatch(kernel, {

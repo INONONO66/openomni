@@ -1,7 +1,7 @@
 import { testBus } from "./helpers/bus";
 import { sessionTree } from "./helpers/session-tree";
 import { allowConfigure, isolatedRuntime, type SessionFixture, withSessionServices } from "./helpers/session-services";
-import type { Inbox, PolicyRow } from "@openomni/protocol";
+import type { Delivery, PolicyRow } from "@openomni/protocol";
 import { Effect, Fiber, type Scope } from "effect";
 import { isolated, isolatedLedger, type IsolatedLedgerHandle } from "./helpers/isolated";
 import { awaitSignal, failure, boundedSignal as bounded } from "./helpers/g0-signals";
@@ -27,8 +27,8 @@ import { Bus } from "./helpers/bus";
 // ---------------------------------------------------------------------------
 // Ported to the entity plane (W5.2 #1197): handle-scoped kernels via
 // `isolated()`, eager fence adoption at controller creation instead of TTL
-// leases, the SQL inbox projection (`commitReceivedMessage`/`inputMessages`)
-// instead of inbox rows, and per-session `reactivateSession` instead of the
+// leases, the SQL delivery projection (`commitReceivedMessage`/`inputMessages`)
+// instead of queue rows, and per-session `reactivateSession` instead of the
 // boot sweep.
 //
 // Deleted with their planes, not ported:
@@ -248,22 +248,22 @@ function tree(sessionId: string): LedgerAction.Node[] {
   return sessionTree(kernel(), sessionId);
 }
 
-/** The SQL inbox projection (#1257): the old inbox table is the chain now. */
-function inboxRows(sessionId: string): Inbox.Row[] {
+/** The SQL delivery projection (#1257): the old input-queue table is the chain now. */
+function deliveryRows(sessionId: string): Delivery.Row[] {
   return kernel().inputMessages(sessionId);
 }
 
-function pendingInbox(sessionId: string): Inbox.Row[] {
+function pendingDeliveries(sessionId: string): Delivery.Row[] {
   return kernel().pendingMessages(sessionId);
 }
 
 /** Out-of-band ingress onto the received-message chain, error-mapped like the handle plane. */
-function commitInbox(input: {
+function commitDelivery(input: {
   readonly id: string;
   readonly sessionId: string;
-  readonly kind: Inbox.Kind;
+  readonly kind: Delivery.Kind;
   readonly content: string;
-  readonly origin: Inbox.Origin;
+  readonly origin: Delivery.Origin;
   readonly createdAt: number;
   readonly parentActionId: string | null;
   readonly delivery?: "steer" | "followUp";
@@ -419,7 +419,7 @@ function commitOpenTurn(input: {
             value: {
               phase: "intent",
               resultId: input.resultId,
-              inboxIds: [],
+              deliveryIds: [],
               toolsGeneration: generation.generation,
               toolsHash: input.toolsHash ?? generation.toolsHash,
               systemHash: generation.systemHash,
@@ -540,7 +540,7 @@ describe("durable session handle", () => {
     reason: string,
     assertOutcome: (outcome: {
       readonly hooks: (string | undefined)[];
-      readonly inbox: Inbox.Row["status"][];
+      readonly deliveries: Delivery.Row["status"][];
     }) => void,
   ) {
     return testProgram(
@@ -565,7 +565,7 @@ describe("durable session handle", () => {
           hooks: tree(handle.id)
             .filter((action) => action.kind === "policy.decision")
             .map(policyHook),
-          inbox: inboxRows(handle.id).map((row) => row.status),
+          deliveries: deliveryRows(handle.id).map((row) => row.status),
         });
       }),
       {
@@ -574,7 +574,7 @@ describe("durable session handle", () => {
             name: `deny-prompt-${phase}`,
             kind: "prompt",
             phase,
-            match: { encodingVersion: 1, value: { op: "inbox" } },
+            match: { encodingVersion: 1, value: { op: "delivery" } },
             verdict: { encodingVersion: 1, value: { type: "deny", reason } },
             priority: 2_000,
           },
@@ -583,10 +583,10 @@ describe("durable session handle", () => {
     );
   }
 
-  test("a prompt pre denial consumes the inbox row without constructing or running a turn", () =>
-    promptDeniedAt("pre", "prompt refused", ({ hooks, inbox }) => {
+  test("a prompt pre denial consumes the pending row without constructing or running a turn", () =>
+    promptDeniedAt("pre", "prompt refused", ({ hooks, deliveries }) => {
       expect(hooks).toEqual(["prompt.pre"]);
-      expect(inbox).toEqual(["consumed"]);
+      expect(deliveries).toEqual(["consumed"]);
     }));
 
   // Prompt has no post point (#1251): a generation carrying a prompt post row
@@ -618,7 +618,7 @@ describe("durable session handle", () => {
             name: "deny-prompt-post",
             kind: "prompt",
             phase: "post",
-            match: { encodingVersion: 1, value: { op: "inbox" } },
+            match: { encodingVersion: 1, value: { op: "delivery" } },
             verdict: { encodingVersion: 1, value: { type: "deny", reason: "prompt post refused" } },
             priority: 2_000,
           },
@@ -874,7 +874,7 @@ describe("durable session handle", () => {
         const secondCommitted = signal<void>();
         const thirdCommitted = signal<void>();
         sink.onCommit = () => {
-          const rows = inboxRows(handle.id);
+          const rows = deliveryRows(handle.id);
           if (rows.some((row) => row.content === "second prompt")) secondCommitted.resolve();
           if (rows.some((row) => row.content === "third prompt")) thirdCommitted.resolve();
         };
@@ -898,16 +898,16 @@ describe("durable session handle", () => {
         expect(runs).toBe(2);
         expect(maximumActive).toBe(1);
         expect(firstInput.messages).toEqual([
-          { id: inboxRows(handle.id)[0]?.id, role: "user", text: "first prompt" },
+          { id: deliveryRows(handle.id)[0]?.id, role: "user", text: "first prompt" },
         ]);
         expect(drained).toEqual([[], []]);
-        expect(inboxRows(handle.id).map((row) => [row.content, row.status])).toEqual([
+        expect(deliveryRows(handle.id).map((row) => [row.content, row.status])).toEqual([
           ["first prompt", "consumed"],
           ["second prompt", "consumed"],
           ["third prompt", "consumed"],
         ]);
-        expect(deliveries(handle.id).map((delivery) => delivery.inboxId)).toEqual(
-          inboxRows(handle.id).map((row) => row.id),
+        expect(deliveries(handle.id).map((delivery) => delivery.deliveryId)).toEqual(
+          deliveryRows(handle.id).map((row) => row.id),
         );
       }),
     ));
@@ -1039,7 +1039,7 @@ describe("durable session handle", () => {
       Effect.gen(function* () {
         const { runner, inputs } = recordingRunner("ran once");
         const handle = yield* declare(residentOptions("idle-interrupt", runner));
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "idle-interrupt:interrupt",
           sessionId: handle.id,
           kind: "interrupt",
@@ -1080,7 +1080,7 @@ describe("durable session handle", () => {
           actionId: "queued-interrupt:configure",
           at: now,
         });
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "queued-interrupt:prompt",
           sessionId: "queued-interrupt",
           kind: "prompt",
@@ -1089,7 +1089,7 @@ describe("durable session handle", () => {
           createdAt: now,
           parentActionId: tree("queued-interrupt").at(-1)?.id ?? null,
         });
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "queued-interrupt:interrupt",
           sessionId: "queued-interrupt",
           kind: "interrupt",
@@ -1124,7 +1124,7 @@ describe("durable session handle", () => {
           actionId: "leading-idle-interrupt:configure",
           at: now,
         });
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "leading-idle-interrupt:interrupt",
           sessionId: "leading-idle-interrupt",
           kind: "interrupt",
@@ -1133,7 +1133,7 @@ describe("durable session handle", () => {
           createdAt: now,
           parentActionId: tree("leading-idle-interrupt").at(-1)?.id ?? null,
         });
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "leading-idle-interrupt:prompt",
           sessionId: "leading-idle-interrupt",
           kind: "prompt",
@@ -1149,7 +1149,7 @@ describe("durable session handle", () => {
         expect(inputs[0]?.resumeCount).toBe(0);
         expect(inputs[0]?.messages).toEqual([
           {
-            id: inboxRows("leading-idle-interrupt").find((row) => row.kind === "prompt")?.id,
+            id: deliveryRows("leading-idle-interrupt").find((row) => row.kind === "prompt")?.id,
             role: "user",
             text: "run afterward",
           },
@@ -1193,7 +1193,7 @@ describe("durable session handle", () => {
         );
 
         expect(runnerSignal.aborted).toBe(true);
-        expect(inboxRows(handle.id).map((row) => row.status)).toEqual(["consumed", "consumed"]);
+        expect(deliveryRows(handle.id).map((row) => row.status)).toEqual(["consumed", "consumed"]);
         expect(terminals(handle.id)).toHaveLength(1);
         expect(terminals(handle.id)[0]?.kind).toBe("interrupted");
         expect(handle.get().state).toBe("interrupted");
@@ -1235,7 +1235,7 @@ describe("durable session handle", () => {
         yield* awaitSignal(bounded(firstAborted.promise, "first runner abort signal"));
         const resumeCommitted = signal<void>();
         sink.onCommit = () => {
-          if (pendingInbox(handle.id).some((row) => row.kind === "resume"))
+          if (pendingDeliveries(handle.id).some((row) => row.kind === "resume"))
             resumeCommitted.resolve();
         };
         const resumed = yield* Effect.forkChild(handle.resume());
@@ -1506,7 +1506,7 @@ describe("durable session handle", () => {
           throw new Error("missing immediate configure boundary");
         expect(terminal.ordinal).toBeLessThan(selected.ordinal);
         expect(selected.ordinal).toBeLessThan(resumed.ordinal);
-        expect(inboxRows(handle.id).map((item) => item.kind)).toEqual([
+        expect(deliveryRows(handle.id).map((item) => item.kind)).toEqual([
           "prompt",
           "interrupt",
           "resume",
@@ -1772,7 +1772,7 @@ describe("durable session handle", () => {
             ],
           });
           let commits = 0;
-          const workerRuntime = track({
+          const childRuntime = track({
             ...runtime,
             dispatchOutbound: ({
               message,
@@ -1785,14 +1785,14 @@ describe("durable session handle", () => {
                   ),
                 ).toBe(true);
                 expect(kernel().outboundRows(message.sourceSessionId)[0]?.state).toBe("pending");
-                expect(inboxRows(parent.id)).toEqual([]);
+                expect(deliveryRows(parent.id)).toEqual([]);
                 expect(message).toMatchObject({
                   requestId: "original-send",
                   replyTo: "original-binding",
                   sourceSessionId: "reply-child",
                   terminal: kind === "result" ? "completed" : kind,
                 });
-                return (yield* commitInbox({
+                return (yield* commitDelivery({
                   id: message.messageId,
                   sessionId: message.destinationSessionId,
                   kind: "prompt",
@@ -1803,11 +1803,11 @@ describe("durable session handle", () => {
                 })).receipt;
               }),
           });
-          const worker = yield* declare(
+          const child = yield* declare(
             {
               id: "reply-child",
               parentId: parent.id,
-              role: "worker",
+              role: "child",
               tools: [],
               system,
               runner: () =>
@@ -1815,10 +1815,10 @@ describe("durable session handle", () => {
                   return { kind, text: "terminal-text" };
                 }),
             },
-            workerRuntime,
+            childRuntime,
           );
           yield* awaitSignal(
-            worker.prompt("work", {
+            child.prompt("work", {
               encodingVersion: 1,
               value: {
                 kind: "message",
@@ -1831,13 +1831,13 @@ describe("durable session handle", () => {
             }),
           );
           expect(commits).toBe(1);
-          expect(inboxRows(parent.id).map((row) => row.content)).toEqual(["terminal-text"]);
-          expect(terminals(worker.id).map((terminal) => terminal.kind)).toEqual([kind]);
+          expect(deliveryRows(parent.id).map((row) => row.content)).toEqual(["terminal-text"]);
+          expect(terminals(child.id).map((terminal) => terminal.kind)).toEqual([kind]);
         }),
       ),
   );
 
-  test("materializes a worker as a parent-linked session with an independent fence", () =>
+  test("materializes a child as a parent-linked session with an independent fence", () =>
     testProgram(
       Effect.gen(function* () {
         const runner: SessionRunner = () =>
@@ -1845,22 +1845,22 @@ describe("durable session handle", () => {
             return { kind: "result", text: "done" };
           });
         const parent = yield* declare(residentOptions("resident-parent", runner));
-        const worker = yield* declare({
-          id: "worker-child",
+        const child = yield* declare({
+          id: "child-session",
           parentId: parent.id,
-          role: "worker",
+          role: "child",
           runner,
           tools: [tool("read")],
           system,
         });
 
-        yield* awaitSignal(worker.prompt("do the work"));
+        yield* awaitSignal(child.prompt("do the work"));
 
-        expect(worker.id.startsWith("delegation-")).toBe(false);
-        expect(worker.get()).toMatchObject({ parentId: parent.id, role: "worker" });
+        expect(child.id.startsWith("delegation-")).toBe(false);
+        expect(child.get()).toMatchObject({ parentId: parent.id, role: "child" });
         // Each activation adopted its own first fence; neither borrowed the other's.
         expect(kernel().row(parent.id).fence).toBe(1);
-        expect(kernel().row(worker.id).fence).toBe(1);
+        expect(kernel().row(child.id).fence).toBe(1);
       }),
     ));
 });
@@ -1934,7 +1934,7 @@ describe("session crash recovery and observation", () => {
         const runner: SessionRunner = (input: SessionRunnerInput) =>
           Effect.gen(function* () {
             // #1253: a steer row is the mid-turn consumable; followUp waits for turn end.
-            yield* commitInbox({
+            yield* commitDelivery({
               id: "boundary-deny:late",
               sessionId: input.sessionId,
               kind: "prompt",
@@ -1966,12 +1966,12 @@ describe("session crash recovery and observation", () => {
         expect(
           actions.filter((action) => action.kind === "policy.decision").map(policyHook),
         ).toEqual(["turn.pre", "prompt.pre"]);
-        // The chain is the inbox: consuming the blocked prompt IS a delivery
-        // action, bound to its durable inbox identity instead of the open turn.
+        // The chain is the queue: consuming the blocked prompt IS a delivery
+        // action, bound to its durable delivery identity instead of the open turn.
         expect(deliveries("boundary-deny")).toMatchObject([
-          { turnId: "boundary-deny:late", inboxId: "boundary-deny:late", kind: "prompt" },
+          { turnId: "boundary-deny:late", deliveryId: "boundary-deny:late", kind: "prompt" },
         ]);
-        expect(inboxRows("boundary-deny").map((row) => row.status)).toEqual(["consumed"]);
+        expect(deliveryRows("boundary-deny").map((row) => row.status)).toEqual(["consumed"]);
       }),
       {
         policies: [
@@ -1979,7 +1979,7 @@ describe("session crash recovery and observation", () => {
             name: "deny-boundary-prompt",
             kind: "prompt",
             phase: "pre",
-            match: { encodingVersion: 1, value: { op: "inbox", sessionId: "boundary-deny" } },
+            match: { encodingVersion: 1, value: { op: "delivery", sessionId: "boundary-deny" } },
             verdict: {
               encodingVersion: 1,
               value: { type: "deny", reason: "late prompt refused" },
@@ -1998,7 +1998,7 @@ describe("session crash recovery and observation", () => {
           resultId: "cancelled-result",
           resumeCount: 0,
         });
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "cancel-request",
           sessionId: "cancelled-turn",
           kind: "interrupt",
@@ -2028,7 +2028,7 @@ describe("session crash recovery and observation", () => {
             actions.find((action) => action.id === "cancelled-result"),
           ),
         ).toMatchObject({ kind: "interrupted", turnId: "cancelled-turn:turn", resumeCount: 0 });
-        expect(pendingInbox("cancelled-turn")).toEqual([]);
+        expect(pendingDeliveries("cancelled-turn")).toEqual([]);
       }),
     ));
 
@@ -2091,16 +2091,16 @@ describe("session crash recovery and observation", () => {
         ).toBeUndefined();
         expect(runs).toEqual([]);
         expect(handle.get().state).toBe("interrupted");
-        expect(pendingInbox(handle.id)).toEqual([]);
-        // Exactly one delivery: the consumed resume, bound to its own inbox
+        expect(pendingDeliveries(handle.id)).toEqual([]);
+        // Exactly one delivery: the consumed resume, bound to its own delivery
         // identity rather than to any turn.
         const [delivery, ...rest] = deliveries(handle.id);
         expect(rest).toEqual([]);
         if (delivery === undefined) throw new Error("resume produced no delivery");
         expect(delivery).toMatchObject({ kind: "resume", boundary: "before_llm" });
-        expect(delivery.turnId).toBe(delivery.inboxId);
-        expect(inboxRows(handle.id).map((row) => ({ id: row.id, status: row.status }))).toEqual([
-          { id: delivery.inboxId, status: "consumed" },
+        expect(delivery.turnId).toBe(delivery.deliveryId);
+        expect(deliveryRows(handle.id).map((row) => ({ id: row.id, status: row.status }))).toEqual([
+          { id: delivery.deliveryId, status: "consumed" },
         ]);
       }),
     ));
@@ -2122,7 +2122,7 @@ describe("session crash recovery and observation", () => {
         const stop = watch.subscribe(observed.resolve);
         sink.dropNextCommit = true;
 
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "watched-session:prompt-1",
           sessionId: "watched-session",
           kind: "prompt",
@@ -2131,7 +2131,7 @@ describe("session crash recovery and observation", () => {
           createdAt: now + 1,
           parentActionId: configureId,
         });
-        yield* commitInbox({
+        yield* commitDelivery({
           id: "watched-session:prompt-2",
           sessionId: "watched-session",
           kind: "prompt",

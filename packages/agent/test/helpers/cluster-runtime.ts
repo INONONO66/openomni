@@ -38,7 +38,7 @@ import { Database } from "bun:sqlite";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
 import { L0Write } from "../../src/core/store/session-file";
 import * as SessionHandleStore from "../../src/core/store/fence";
-import type { Inbox, ObservationSink } from "@openomni/protocol";
+import type { Delivery, ObservationSink } from "@openomni/protocol";
 import { Context, Crypto, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { openCatalogStore } from "../../src/core/store/catalog";
@@ -144,7 +144,7 @@ export interface TestClusterOptions {
 export interface TestTurnInput {
   readonly turnId: string;
   readonly resumeCount: number;
-  readonly items: readonly Inbox.Row[];
+  readonly items: readonly Delivery.Row[];
 }
 
 interface TestTurnResult {
@@ -310,7 +310,7 @@ export function makeTurnPort(
             parentId: kernel.latestAction(sessionId)?.id ?? null,
             sessionId,
             resultId,
-            inboxIds: [item.id],
+            deliveryIds: [item.id],
             generation: kernel.latestGenerationFor(sessionId),
             resumeCount: 0,
             boundaryActionId: null,
@@ -525,9 +525,9 @@ function provisionSession(options: TestClusterOptions, sessionId: string): Effec
   });
 }
 
-/** Canonical JSON of a protocol `Inbox.MessageOrigin` value (messages.ts C1). */
+/** Canonical JSON of a protocol `Delivery.MessageOrigin` value (messages.ts C1). */
 function testOrigin(sessionId: string, messageId: string): string {
-  const origin: Inbox.MessageOrigin = {
+  const origin: Delivery.MessageOrigin = {
     kind: "message",
     messageId,
     senderSessionId: sessionId,

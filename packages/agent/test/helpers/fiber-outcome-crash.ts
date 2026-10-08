@@ -5,7 +5,7 @@ import { z } from "zod";
 import { bounded } from "./bounded";
 import { effectValue } from "./native-executor";
 
-const worker = new URL("./fiber-outcome-process.ts", import.meta.url).pathname;
+const helperScript = new URL("./fiber-outcome-process.ts", import.meta.url).pathname;
 const reopened = z.object({
   before: z.array(LedgerAction.Node), after: z.array(LedgerAction.Node),
   repeated: z.array(LedgerAction.Node), results: z.array(LedgerAction.Node),
@@ -25,7 +25,7 @@ async function barrier(reader: {
 }
 
 export async function fiberCrashCell(dbPath: string, receipt: "absent" | "present" = "absent") {
-  const child = Bun.spawn([process.execPath, worker, "execute", dbPath, receipt], {
+  const child = Bun.spawn([process.execPath, helperScript, "execute", dbPath, receipt], {
     stdin: "ignore", stdout: "pipe", stderr: "pipe",
   });
   const stderr = new Response(child.stderr).text();
@@ -43,7 +43,7 @@ export async function fiberCrashCell(dbPath: string, receipt: "absent" | "presen
     reader.releaseLock();
     child.kill("SIGKILL");
   }
-  const recovery = Bun.spawn([process.execPath, worker, "recover", dbPath, receipt], {
+  const recovery = Bun.spawn([process.execPath, helperScript, "recover", dbPath, receipt], {
     stdin: "ignore", stdout: "pipe", stderr: "pipe",
   });
   const [code, stdout, errors] = await bounded(Promise.all([

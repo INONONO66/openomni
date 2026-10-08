@@ -89,7 +89,7 @@ test("child session pages preserve id order and enforce a bounded page size", ()
   const store = openCatalogStore(":memory:", { now: testNow });
   try {
     for (const [id, parentId] of [["b", "root"], ["a", "root"], ["c", "root"], ["else", "other"]] as const) {
-      store.indexSession({ id, parentId, role: "worker", createdAt: 1 });
+      store.indexSession({ id, parentId, role: "child", createdAt: 1 });
     }
     expect(store.childSessionsPage("root", "", 2).map((row) => row.id)).toEqual(["a", "b"]);
     expect(store.childSessionsPage("root", "b", 2).map((row) => row.id)).toEqual(["c"]);

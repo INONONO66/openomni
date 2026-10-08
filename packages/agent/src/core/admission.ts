@@ -3,7 +3,7 @@ import { CommitRefused, type LedgerError } from "./store/errors";
 import * as SessionHandleStore from "./store/fence";
 import type { CommitReceipt } from "./store/services";
 import { ObservationSink, type RunnerServices } from "./ports";
-import { canonicalDigest, Journal, type SessionGeneration, type Inbox, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
+import { canonicalDigest, Journal, type SessionGeneration, type Delivery, type LedgerAction, type LedgerSession, type PlainValue, } from "@openomni/protocol";
 import { createExecutor } from "./gate/decide";
 import { DEFAULT_TOOL_OUTPUT_BUDGET_BYTES } from "./tool-output";
 import { AgentFailure, CommitFailed, type ExecutionError, type SessionError } from "./failure";
@@ -22,7 +22,7 @@ type AdmissionError = SessionError;
 
 interface AdmissionSnapshot {
   readonly row: LedgerSession.Row;
-  readonly pending: readonly Inbox.Row[];
+  readonly pending: readonly Delivery.Row[];
   readonly open?: SessionHandleStore.OpenTurn;
   readonly terminal?: ReturnType<SessionKernel["latestTurnTerminal"]>;
   /**
@@ -37,8 +37,8 @@ type AdmissionDecision =
   | { readonly kind: "stop" | "start" }
   | { readonly kind: "refused"; readonly reason?: "unknown_kind" | "missing_capability_kinds" }
   | { readonly kind: "recover"; readonly open: SessionHandleStore.OpenTurn }
-  | { readonly kind: "resume"; readonly item: Inbox.Row }
-  | { readonly kind: "consume"; readonly items: readonly Inbox.Row[] };
+  | { readonly kind: "resume"; readonly item: Delivery.Row }
+  | { readonly kind: "consume"; readonly items: readonly Delivery.Row[] };
 
 /** Pure routing of the durable S/T/I views; dispatch remains behind the ledger CAS. */
 export function decideSessionAdmission(snapshot: AdmissionSnapshot): AdmissionDecision {
@@ -66,11 +66,11 @@ export function decideSessionAdmission(snapshot: AdmissionSnapshot): AdmissionDe
         : { kind: "consume", items: [item] };
     }
     case "idle":
-      return open === undefined ? decideIdleInbox(pending) : { kind: "refused" };
+      return open === undefined ? decideIdleDeliveries(pending) : { kind: "refused" };
   }
 }
 
-function decideIdleInbox(pending: readonly Inbox.Row[]): AdmissionDecision {
+function decideIdleDeliveries(pending: readonly Delivery.Row[]): AdmissionDecision {
   if (pending.length === 0) return { kind: "stop" };
   // #1256 r5 H-3: an `action` input heads a turn like a prompt — the turn's
   // boundary consumption is the ONE owner of its fate (a live one delivers,
@@ -193,7 +193,7 @@ export function createSessionAdmission(
       );
       const evaluatedPrompts = yield* captured.provide(evaluatePromptPolicies(pending)).pipe(Effect.provide(runtime.services));
       if (evaluatedPrompts.refusal !== undefined) {
-        yield* consumePolicyBlockedInbox(pending);
+        yield* consumePolicyBlockedDeliveries(pending);
         return policyRefusalResult(evaluatedPrompts.refusal.reason);
       }
       // #1256 r3 H-3: a prompt.pre rewrite's output is what the turn delivers —
@@ -216,7 +216,7 @@ export function createSessionAdmission(
         parentId: deliveries.at(-1)?.id ?? parentActionId,
         sessionId,
         resultId,
-        inboxIds: pending.map((item) => item.id),
+        deliveryIds: pending.map((item) => item.id),
         consumedStale: stale.map((item) => item.id),
         generation,
         resumeCount: 0,
@@ -258,7 +258,7 @@ export function createSessionAdmission(
   }
 
   function evaluatePromptPolicies(
-    items: readonly Inbox.Row[],
+    items: readonly Delivery.Row[],
   ): Effect.Effect<
     { readonly refusal: SessionPolicyRefusal | undefined; readonly contents: ReadonlyMap<string, string> },
     ExecutionError,
@@ -272,7 +272,7 @@ export function createSessionAdmission(
       const contents = new Map<string, string>();
       for (const item of items) {
         if (item.kind !== "prompt") continue;
-        const recorded: PlainValue = { inboxId: item.id, status: "recorded" };
+        const recorded: PlainValue = { deliveryId: item.id, status: "recorded" };
         const executor = yield* createExecutor({
           ledger,
           approvalPolicy: runtime.approvalPolicy,
@@ -280,8 +280,8 @@ export function createSessionAdmission(
         });
         const outcome = yield* executor.runExisting({
           kind: "prompt",
-          op: "inbox",
-          intent: { inboxId: item.id, body: item.content, origin: item.origin.value, createdAt: item.createdAt, ordinal: item.ordinal },
+          op: "delivery",
+          intent: { deliveryId: item.id, body: item.content, origin: item.origin.value, createdAt: item.createdAt, ordinal: item.ordinal },
           effect: { status: "recorded" },
         }, (pre) =>
           Effect.sync(() => {
@@ -299,14 +299,14 @@ export function createSessionAdmission(
   }
 
   /** Blocked items leave the pending fold through committed no-op deliveries. */
-  function consumePolicyBlockedInbox(items: readonly Inbox.Row[]): Effect.Effect<void, ExecutionError> {
+  function consumePolicyBlockedDeliveries(items: readonly Delivery.Row[]): Effect.Effect<void, ExecutionError> {
     return Effect.suspend(() => {
       const current = kernel.row(sessionId);
       return commitSession({
         expectedRevision: current.revision,
         actions: deliveryActions(
           items,
-          { kind: "inbox" },
+          { kind: "pending" },
           "before_llm",
           kernel.latestAction(sessionId)?.id ?? null,
         ),
@@ -362,12 +362,12 @@ export function createSessionAdmission(
     };
   }
 
-  function consumeNoopInbox(items: readonly Inbox.Row[]): Effect.Effect<void, AdmissionError> {
+  function consumeNoopDeliveries(items: readonly Delivery.Row[]): Effect.Effect<void, AdmissionError> {
     return Effect.gen(function* () {
       const current = kernel.row(sessionId);
       const noops = deliveryActions(
         items,
-        { kind: "inbox" },
+        { kind: "pending" },
         "before_llm",
         kernel.latestAction(sessionId)?.id ?? null,
       );
@@ -375,5 +375,5 @@ export function createSessionAdmission(
     });
   }
 
-  return { startTurn, evaluatePromptPolicies, consumePolicyBlockedInbox, commitSession, createExecutionLedger, consumeNoopInbox };
+  return { startTurn, evaluatePromptPolicies, consumePolicyBlockedDeliveries, commitSession, createExecutionLedger, consumeNoopDeliveries };
 }

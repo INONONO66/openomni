@@ -3,9 +3,11 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ObservationSink, Storage as ProtocolStorage } from "@openomni/protocol";
 import { z } from "zod";
+import { LedgerSession } from "@openomni/protocol";
 import { CatalogVersionRefused, SessionNotFound } from "./errors";
 import { bootstrapStoreDatabase, SILENT_OBSERVATION_SINK, StoreHandle } from "./session-file/index.js";
 import { createPolicies } from "./storage/sqlite-l0-policies.js";
+import { LEGACY_INGRESS_POLICY_KIND } from "../gate/migrate.js";
 
 /**
  * Fresh catalog DDL (W5.2 #1197) — the only catalog schema owner. One small
@@ -20,10 +22,13 @@ import { createPolicies } from "./storage/sqlite-l0-policies.js";
  * by effect/cluster's SqlMessageStorage/SqlRunnerStorage, not by this DDL.
  */
 export const CATALOG_SCHEMA: readonly string[] = [
+  // #1315: the role CHECK admits the current vocabulary plus the retired
+  // pre-rename byte — v2 files rebuilt by the v3 migration keep their rows
+  // byte-for-byte and readers fold the legacy byte to `child`.
   `CREATE TABLE IF NOT EXISTS session_index (
     id TEXT PRIMARY KEY,
     parent_id TEXT,
-    role TEXT NOT NULL CHECK (role IN ('resident', 'worker')),
+    role TEXT NOT NULL CHECK (role IN ('resident', 'child', '${LedgerSession.LEGACY_CHILD_ROLE}')),
     fence INTEGER NOT NULL DEFAULT 0 CHECK (fence >= 0),
     created_at INTEGER NOT NULL,
     has_armed INTEGER NOT NULL DEFAULT 0 CHECK (has_armed IN (0, 1))
@@ -38,7 +43,7 @@ export const CATALOG_SCHEMA: readonly string[] = [
     kind TEXT NOT NULL CHECK (kind IN (
       'prompt', 'signal', 'turn', 'llm', 'message', 'request', 'alarm',
       'session.configure', 'policy.decision', 'tool', 'compaction', 'action',
-      'fold.checkpoint', 'inbox.deliver', 'alarm.fired'
+      'fold.checkpoint', 'ingress', '${LEGACY_INGRESS_POLICY_KIND}', 'alarm.fired'
     )),
     phase TEXT NOT NULL CHECK (phase IN ('pre', 'post')),
     match TEXT NOT NULL CHECK (json_valid(match)),
@@ -56,7 +61,7 @@ export const CATALOG_SCHEMA: readonly string[] = [
  * catalog is created or opened by code at least this new. A file whose marker
  * is greater than this constant was written by newer code and opens read-only.
  */
-const CATALOG_SCHEMA_VERSION = 2;
+const CATALOG_SCHEMA_VERSION = 3;
 
 const UserVersion = z.object({ user_version: z.number().int().nonnegative() });
 
@@ -64,7 +69,7 @@ const UserVersion = z.object({ user_version: z.number().int().nonnegative() });
 export interface SessionIndexRow {
   readonly id: string;
   readonly parentId: string | null;
-  readonly role: "resident" | "worker";
+  readonly role: LedgerSession.Role;
   readonly fence: number;
   readonly createdAt: number;
   /** #1254 S3: the session MAY hold armed alarms; the boot sweep rescans it. */
@@ -77,7 +82,8 @@ const SessionIndexSqlRow = z
   .object({
     id: z.string(),
     parent_id: z.string().nullable(),
-    role: z.enum(["resident", "worker"]),
+    // #1315 versioned read: pre-rename files persist the retired role byte.
+    role: z.string().transform((role) => LedgerSession.foldLegacyRole(role)).pipe(LedgerSession.Role),
     fence: z.number().int().nonnegative(),
     created_at: z.number(),
     // Optional: a newer-code file opened read-only may shape this differently.
@@ -220,6 +226,31 @@ interface OpenCatalogStoreOptions {
   readonly observationSink?: ObservationSink;
 }
 
+/**
+ * v2 -> v3 (#1315): SQLite cannot alter a CHECK constraint, so the two
+ * constrained tables rebuild against the current CATALOG_SCHEMA DDL (already
+ * created by `bootstrapStoreDatabase` under their final names only on fresh
+ * files; on a v2 file the old tables exist, so the rebuild renames them
+ * aside, recreates from CATALOG_SCHEMA and copies every row unchanged).
+ */
+function migrateCatalogChecks(db: Database): void {
+  for (const table of ["session_index", "policy"] as const) {
+    db.run(`ALTER TABLE ${table} RENAME TO ${table}_v2`);
+  }
+  // The raw DDL list, not `bootstrapStoreDatabase`: pragmas cannot change
+  // inside the migration transaction.
+  for (const statement of CATALOG_SCHEMA) db.run(statement);
+  db.run(`INSERT INTO session_index (id, parent_id, role, fence, created_at, has_armed)
+    SELECT id, parent_id, role, fence, created_at, has_armed FROM session_index_v2`);
+  db.run(`INSERT INTO policy (name, kind, phase, match, verdict, encoding_version, priority, generation)
+    SELECT name, kind, phase, match, verdict, encoding_version, priority, generation FROM policy_v2`);
+  db.run("DROP TABLE session_index_v2");
+  db.run("DROP TABLE policy_v2");
+  // RENAME carried the old tables' indexes with them and DROP removed them;
+  // a second DDL pass recreates the indexes on the rebuilt tables.
+  for (const statement of CATALOG_SCHEMA) db.run(statement);
+}
+
 export function openCatalogStore(path: string, options: OpenCatalogStoreOptions): CatalogStore {
   const sink = options.observationSink ?? SILENT_OBSERVATION_SINK;
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -236,11 +267,18 @@ export function openCatalogStore(path: string, options: OpenCatalogStoreOptions)
       return handle;
     }
     bootstrapStoreDatabase(db, CATALOG_SCHEMA);
-    if (fileVersion === 1) {
-      // v1 -> v2 (#1254 S3): the one guarded column add plus the marker, in
-      // one transaction. Fresh files get the column from CATALOG_SCHEMA.
+    if (fileVersion > 0 && fileVersion < CATALOG_SCHEMA_VERSION) {
       db.transaction(() => {
-        db.run("ALTER TABLE session_index ADD COLUMN has_armed INTEGER NOT NULL DEFAULT 0");
+        if (fileVersion === 1) {
+          // v1 -> v2 (#1254 S3): the one guarded column add. Fresh files get
+          // the column from CATALOG_SCHEMA.
+          db.run("ALTER TABLE session_index ADD COLUMN has_armed INTEGER NOT NULL DEFAULT 0");
+        }
+        // v2 -> v3 (#1315): rebuild the two CHECK constraints so `child`
+        // role rows and `ingress` policy rows insert into pre-rename files.
+        // Existing rows are copied byte-for-byte: the retired role byte
+        // stays on disk and readers fold it.
+        migrateCatalogChecks(db);
         db.run(`PRAGMA user_version = ${CATALOG_SCHEMA_VERSION}`);
       }).immediate();
     } else if (fileVersion < CATALOG_SCHEMA_VERSION) {

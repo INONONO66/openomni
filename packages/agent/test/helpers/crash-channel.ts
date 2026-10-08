@@ -5,7 +5,7 @@ import { bounded } from "./bounded";
 export function awaitCrashStart(): void {
   const command = Buffer.alloc(1);
   if (readSync(0, command, 0, 1, null) !== 1 || command.toString() !== "S")
-    throw new Error("crash worker start channel closed");
+    throw new Error("crash helper start channel closed");
 }
 
 /** The open stdin channel holds the exact synchronous commit seam until SIGKILL. */
@@ -29,8 +29,8 @@ async function line(reader: {
   return output.slice(0, output.indexOf("\n"));
 }
 
-export async function killAtCrashBarrier(worker: string, args: string[]): Promise<string> {
-  const child = Bun.spawn([process.execPath, worker, ...args], {
+export async function killAtCrashBarrier(helperScript: string, args: string[]): Promise<string> {
+  const child = Bun.spawn([process.execPath, helperScript, ...args], {
     stdin: "pipe", stdout: "pipe", stderr: "pipe",
   });
   const exit = child.exited;

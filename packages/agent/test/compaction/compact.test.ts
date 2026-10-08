@@ -301,7 +301,7 @@ describe("Compaction", () => {
     it("refuses as a value when no valid user boundary exists — never a throw", async () => {
       // No user message at or before the cutoff: there is no boundary that can
       // anchor the kept window without a summary. The wiring review proved
-      // assistant-first histories reachable from resumed worker hydration, and
+      // assistant-first histories reachable from resumed child hydration, and
       // run.completion.pre is fail-closed — a throw here kills a live run over
       // housekeeping. The refusal is a value the policy records.
       const messages = Array.from({ length: 8 }, (_: undefined, i: number) =>

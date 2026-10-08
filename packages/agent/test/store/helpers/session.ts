@@ -18,7 +18,7 @@ export function materializeSession<E = never>(
           .materialize({
             id,
             parentId,
-            role: parentId === null ? "resident" : "worker",
+            role: parentId === null ? "resident" : "child",
             tools: [],
             system: { preset: "", blocks: [] },
             policyGeneration: 0,

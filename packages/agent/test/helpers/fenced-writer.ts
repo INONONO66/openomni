@@ -84,7 +84,7 @@ export function fencedTurnFixture(
               value: {
                 phase: "intent",
                 resultId: input.resultId ?? `${id}:result`,
-                inboxIds: [],
+                deliveryIds: [],
                 resumeCount: 0,
                 boundaryActionId: null,
                 toolsGeneration: generation.generation,

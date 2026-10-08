@@ -46,7 +46,7 @@ export function nativeExecutorOptions(now = 100, id = fiberSessionId, handle?: S
       yield* ledger.commit({
         id: turnId, parentId: `${id}:configure`, sessionId: id, kind: "turn",
         intent: { encodingVersion: 1, value: {
-          phase: "intent", resultId: `${id}:result`, inboxIds: [], resumeCount: 0,
+          phase: "intent", resultId: `${id}:result`, deliveryIds: [], resumeCount: 0,
           boundaryActionId: null, toolsGeneration: generation.generation,
           toolsHash: generation.toolsHash, systemHash: generation.systemHash, policyGeneration: 1,
         } },

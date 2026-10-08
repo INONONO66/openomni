@@ -5,7 +5,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
-import type { Inbox, LedgerSession, SessionTransition } from "@openomni/protocol";
+import type { Delivery, LedgerSession, SessionTransition } from "@openomni/protocol";
 import { Deferred, Effect } from "effect";
 import { decideRequestTransition } from "../../src/core/request";
 import { decideSessionAdmission } from "../../src/core/admission";
@@ -59,7 +59,7 @@ const open: OpenTurn = fixtureOpenTurn;
 const terminal: (kind: "result" | "interrupted") => TurnTerminal = fixtureTerminal;
 
 let itemSequence = 0;
-function item(kind: Inbox.Kind, sessionId = "S"): Inbox.Row {
+function item(kind: Delivery.Kind, sessionId = "S"): Delivery.Row {
   itemSequence += 1;
   return {
     id: `M${itemSequence}`,
@@ -96,7 +96,7 @@ function normalize(decision: AdmissionDecision): { kind: string; ids: readonly s
 interface AdmissionCase {
   readonly name: string;
   readonly state: LedgerSession.State;
-  readonly items: readonly Inbox.Row[];
+  readonly items: readonly Delivery.Row[];
   readonly open?: OpenTurn;
   readonly terminal?: TurnTerminal;
   readonly expected: { readonly kind: string; readonly at?: readonly number[] };
@@ -234,14 +234,14 @@ describe("Table A: admission decisions over the chain-derived pending set", () =
   }
 
   test("A16 FIFO invariance (idle): items after the first prompt never change the decision", () => {
-    const prefixes: readonly (readonly Inbox.Kind[])[] = [
+    const prefixes: readonly (readonly Delivery.Kind[])[] = [
       ["prompt"],
       ["interrupt", "prompt"],
       ["resume", "prompt"],
       ["interrupt", "resume", "prompt"],
       ["resume", "resume", "prompt"],
     ];
-    const suffixes: readonly (readonly Inbox.Kind[])[] = [
+    const suffixes: readonly (readonly Delivery.Kind[])[] = [
       [],
       ["prompt"],
       ["interrupt"],
