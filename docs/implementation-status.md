@@ -2,7 +2,7 @@
 
 ## #1305 bounded tool output projection (epic #1303, rung 15)
 
-On `stab/15-bounded-tool-output-projection` (2026-10-08, base `0373ed38c`).
+On `stab/15-bounded-tool-output-projection` (2026-10-08, base `2dc31be78`).
 
 - Protocol: `ToolOutputRef`/`toolOutputRefSchema()` + `TOOL_OUTPUT_PREVIEW_MAX_BYTES`
   in `packages/protocol/src/tool/result.ts` (Effect-free: `rg -c 'from "effect"'
