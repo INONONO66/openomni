@@ -52,7 +52,7 @@ export function generationServices(options: {
     );
     const layer = GenerationLayersLive.pipe(Layer.provideMerge(process), Layer.merge(options.llm === undefined ? LlmLive : Layer.succeed(Llm, options.llm)));
     const context = yield* Layer.buildWithScope(layer, scope);
-    yield* Effect.flatMap(GenerationLayers, (generations) => generations.initialize(options.definitions ?? { resident: [], worker: [] })).pipe(Effect.provide(context));
+    yield* Effect.flatMap(GenerationLayers, (generations) => generations.initialize(options.definitions ?? { resident: [], child: [] })).pipe(Effect.provide(context));
     return context;
   });
 }

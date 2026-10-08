@@ -14,7 +14,7 @@ export function turnIntentAction(
     parentId: `${sessionId}:configure`,
     sessionId,
     resultId: `${id}:result`,
-    inboxIds: [],
+    deliveryIds: [],
     generation: kernel.latestGenerationFor(sessionId),
     resumeCount: 0,
     boundaryActionId: null,

@@ -8,8 +8,8 @@ const AgentFailure = Core.AgentFailure;
 import type { Model } from "@openomni/protocol";
 import { createResidentGateway } from "../src/gateway";
 import { runSyncEffect } from "./helpers/effect";
-import { decodeChannelFailure as decodeInboxFailure } from "@openomni/channels";
-import { localInbox } from "./helpers/ledger";
+import { decodeChannelFailure as decodeDeliveryFailure } from "@openomni/channels";
+import { localDelivery } from "./helpers/ledger";
 import { prepareMessage } from "../src/composition/message-session";
 import { residentRunner as createResident } from "./helpers/resident-runner";
 import { providerError, transientProvider, FIXTURE_AUTH_FILE } from "./helpers/sdk-provider";
@@ -166,7 +166,7 @@ describe("Resident terminal LLM failure surfacing", () => {
       return yield* createResidentGateway({
         now: Date.now,
         id: testIds("resilience-gateway"),
-        inbox: { commit: (input) => localInbox(resident.plane, "resilience-gateway", Date.now)(input).pipe(Effect.mapError(decodeInboxFailure("inbox.commit"))) },
+        delivery: { commit: (input) => localDelivery(resident.plane, "resilience-gateway", Date.now)(input).pipe(Effect.mapError(decodeDeliveryFailure("delivery.commit"))) },
         prepare: prepareMessage(resident.plane, resident.materialize),
         ...(yield* residentGatewayPorts(resident.plane, Date.now)),
       }, undefined);

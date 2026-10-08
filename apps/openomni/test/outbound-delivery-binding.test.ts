@@ -7,7 +7,7 @@ import type { SessionTransition } from "@openomni/protocol";
 import { runnerTestLayer } from "../../../packages/agent/test/helpers/isolated";
 import { dispatchOutboundMessage } from "../src/composition/terminal-message";
 import { seedKernelPolicyRows } from "../src/policy-seed";
-import { localInbox, testPlane } from "./helpers/ledger";
+import { localDelivery, testPlane } from "./helpers/ledger";
 
 const plane = testPlane();
 seedKernelPolicyRows(plane.catalog.policies);
@@ -47,7 +47,7 @@ test("the receiving consumer may only commit the exact outbound letter", async (
   const dispatch = dispatchOutboundMessage(
     () =>
       Effect.gen(function* () {
-        yield* localInbox(plane, "binding-test", () => 100)({
+        yield* localDelivery(plane, "binding-test", () => 100)({
           id: "different-letter",
           sessionId: message.destinationSessionId,
           kind: "prompt",
@@ -61,7 +61,7 @@ test("the receiving consumer may only commit the exact outbound letter", async (
           handle: { messageId: "different-letter", target: "parent" },
           delivery: { kind: "session" as const },
         };
-      }).pipe(Effect.mapError(decodeChannelFailure("test.inbox"))),
+      }).pipe(Effect.mapError(decodeChannelFailure("test.delivery"))),
     () => 100,
     plane.openKernel,
   );
@@ -77,8 +77,8 @@ test("the receiving consumer may only commit the exact outbound letter", async (
       ),
     ),
   ).rejects.toThrow("outbound receiving consumer did not commit a receipt");
-  // W5.2: the commit-side binding refusal lives in createMessageInboxCommit
-  // (entity delivery); this harness commits through a raw test inbox, so the
+  // W5.2: the commit-side binding refusal lives in createMessageDeliveryCommit
+  // (entity delivery); this harness commits through a raw test delivery, so the
   // dispatch-side receipt check is the invariant under test: no receipt for
   // the real letter means the outbound send fails as a whole.
   expect(

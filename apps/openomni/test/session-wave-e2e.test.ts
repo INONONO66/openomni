@@ -853,11 +853,11 @@ test("approval-time prompts retain durable identities and enter the next model s
   // boundary - committed under the live activation's borrowed authority.
   await commitPrompt(plane(), handle.id, "held-prompt-first", "first continuation");
   await commitPrompt(plane(), handle.id, "held-prompt-second", "second continuation");
-  // W5.2: the inbox is the prompt-action chain; pending = not yet delivered.
+  // W5.2: the delivery is the prompt-action chain; pending = not yet delivered.
   const prompts = tree(handle.id).filter(
     (action) =>
       action.kind === "prompt" &&
-      z.object({ inboxKind: z.literal("prompt") }).safeParse(action.effect.value).success,
+      z.object({ deliveryKind: z.literal("prompt") }).safeParse(action.effect.value).success,
   );
   const pendingIds = plane()
     .openKernel(handle.id)
@@ -915,7 +915,7 @@ test("approval-time prompts retain durable identities and enter the next model s
     return delivery?.kind === "prompt" ? [delivery] : [];
   });
   const initialTurn = delivered[0]?.turnId;
-  expect(delivered.slice(1).map((delivery) => [delivery.inboxId, delivery.boundary])).toEqual([
+  expect(delivered.slice(1).map((delivery) => [delivery.deliveryId, delivery.boundary])).toEqual([
     [firstId, "before_llm"],
     [secondId, "before_llm"],
   ]);
@@ -945,7 +945,7 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
   try {
     expect(request.expiresAt).toBe(101);
     expect(started).toEqual([]);
-    // W5.2: the alarm worker is gone and the durable DeliverAt Deadline
+    // W5.2: the alarm child is gone and the durable DeliverAt Deadline
     // serializes behind the live turn's own entity RPC; a mid-turn expiry
     // rides the facade's borrowed-authority request timeout, which notifies
     // the turn's live approval gate.
@@ -975,7 +975,7 @@ test("an exact approval deadline refuses only B and cannot grant late authority"
   }
 });
 
-test("a durable after-model inbox interrupt drains before tools without an eager local signal", async () => {
+test("a durable after-model delivery interrupt drains before tools without an eager local signal", async () => {
   let bodies = 0;
   const { socket, received } = await waveApp(
     [
@@ -991,7 +991,7 @@ test("a durable after-model inbox interrupt drains before tools without an eager
     Bus.subscribe(LlmCall.Events.Completed, (event) => {
       if (queued) return;
       queued = true;
-      // Cross-process control arrives through the public durable inbox, not the local AbortController.
+      // Cross-process control arrives through the public durable delivery, not the local AbortController.
       void commitInterrupt(plane(), event.sessionId, "after-model-interrupt");
     }),
   );
@@ -1001,7 +1001,7 @@ test("a durable after-model inbox interrupt drains before tools without an eager
   expect(bodies).toBe(0);
   expect(received).toHaveLength(1);
   expect(interruptDeliveries(plane(), activeRow().id)).toMatchObject([
-    { inboxId: "after-model-interrupt", boundary: "after_llm" },
+    { deliveryId: "after-model-interrupt", boundary: "after_llm" },
   ]);
 });
 
@@ -1021,6 +1021,6 @@ test("an interrupt after wave results drains before another provider step", asyn
   // check (#1249 removed the manual bus's microtask hop), so the interrupt is
   // durable by then and drains there — still before another provider step.
   expect(interruptDeliveries(plane(), activeRow().id)).toMatchObject([
-    { inboxId: "after-wave-interrupt", boundary: "after_tools" },
+    { deliveryId: "after-wave-interrupt", boundary: "after_tools" },
   ]);
 });

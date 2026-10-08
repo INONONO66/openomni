@@ -187,7 +187,7 @@ test("a child settlement opens the parent's next turn as its followUp input afte
       run: (input, sink) => Effect.sync(() => {
         const runPlane = planeRef.current;
         if (runPlane === undefined) throw new Error("plane not resolved before model run");
-        if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
+        if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "child") {
           sink.onMessage(assistantMessage(input, { text: "CHILD_SENTINEL" }));
           return { type: "stop" };
         }
@@ -219,7 +219,7 @@ test("a child settlement opens the parent's next turn as its followUp input afte
   // delivered as a followUp row after that seal, and only then does the next
   // turn open and seal over the settlement input.
   expect(trace).toEqual(["terminal:PARENT_SENTINEL", "delivered:followUp", "terminal:SETTLED_SENTINEL"]);
-  const child = plane.listSessions().find((row) => row.role === "worker");
+  const child = plane.listSessions().find((row) => row.role === "child");
   if (child?.parentId === null || child?.parentId === undefined)
     throw new Error("child parent missing");
   const parentTree = sessionTree(child.parentId, plane.sessionStore(child.parentId).actions);
@@ -241,7 +241,7 @@ test("a child settlement opens the parent's next turn as its followUp input afte
   // was open when the child sealed.
   const delivery = parentTree.flatMap((action) => {
     const parsed = SessionTurn.Delivery.safeParse(action.effect.value);
-    return parsed.success && parsed.data.inboxId === rows[0]?.id
+    return parsed.success && parsed.data.deliveryId === rows[0]?.id
       ? [{ record: parsed.data, intent: action.intent.value }]
       : [];
   });
@@ -264,7 +264,7 @@ test("a child settlement opens the parent's next turn as its followUp input afte
     kind: "request",
     effect: { value: { answer: { inputId: rows[0]?.id, outbound: rows[0]?.origin.value } } },
   });
-  // W5.2 consumed = no longer pending in the parent's kernel inbox.
+  // W5.2 consumed = no longer pending in the parent's kernel delivery.
   expect(
     plane
       .openKernel(child.parentId)
@@ -288,7 +288,7 @@ test("an interrupt-then-resume child settles exactly once and a later seal write
   const unsubscribe = Bus.subscribe(L0Observation.ActionCommittedEvent, (event) => {
     const eventPlane = planeRef.current;
     if (eventPlane === undefined) return;
-    if (eventPlane.openKernel(event.sessionId).row(event.sessionId).role !== "worker") return;
+    if (eventPlane.openKernel(event.sessionId).row(event.sessionId).role !== "child") return;
     const action = sessionTree(event.sessionId, eventPlane.sessionStore(event.sessionId).actions).find(
       (candidate) => candidate.id === event.id,
     );
@@ -321,7 +321,7 @@ test("an interrupt-then-resume child settles exactly once and a later seal write
       run: (input, sink) => Effect.gen(function* () {
         const runPlane = planeRef.current;
         if (runPlane === undefined) throw new Error("plane not resolved before model run");
-        if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "worker") {
+        if (runPlane.openKernel(input.trace.sessionId).row(input.trace.sessionId).role === "child") {
           childRuns += 1;
           if (childRuns === 1) {
             entered.resolve(input.trace.sessionId);
@@ -453,5 +453,5 @@ test("a cap-denied spawn surfaces the typed DelegationRefusal on the model-facin
   const refusal = DelegationRefusal.parse(JSON.parse(text.slice("send_message refused: ".length)));
   expect(refusal).toEqual({ code: "delegation_refused", cap: "spawn_children", limit: 0, observed: 0 });
   // The refused send created no child row.
-  expect(plane.listSessions().filter((row) => row.role === "worker")).toEqual([]);
+  expect(plane.listSessions().filter((row) => row.role === "child")).toEqual([]);
 });

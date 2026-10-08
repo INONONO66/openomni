@@ -95,13 +95,13 @@ describe("operator transport reaches every model caller", () => {
     expect(seen?.transport).toEqual(OPERATOR_TRANSPORT);
   });
 
-  it("the process worker wire carries it across the process boundary", () => {
+  it("the process child wire carries it across the process boundary", () => {
     const request = ProcessSessionRequest.parse({
-      sessionId: "worker-session",
+      sessionId: "child-session",
       catalogPath: "test-catalog.sqlite",
       sessionsDir: "test-sessions",
       entityIdleMs: 60_000,
-      model: { provider: "fake", id: "worker-test" },
+      model: { provider: "fake", id: "child-test" },
       apiKey: "test-key",
       transport: OPERATOR_TRANSPORT,
     });
@@ -109,13 +109,13 @@ describe("operator transport reaches every model caller", () => {
     expect(request.transport).toEqual(OPERATOR_TRANSPORT);
   });
 
-  it("the process worker wire rejects an unknown transport field", () => {
+  it("the process child wire rejects an unknown transport field", () => {
     const parsed = ProcessSessionRequest.safeParse({
-      sessionId: "worker-session",
+      sessionId: "child-session",
       catalogPath: "test-catalog.sqlite",
       sessionsDir: "test-sessions",
       entityIdleMs: 60_000,
-      model: { provider: "fake", id: "worker-test" },
+      model: { provider: "fake", id: "child-test" },
       apiKey: "test-key",
       transport: { baseUrl: "https://gw/v1", insecure: true },
     });

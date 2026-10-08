@@ -41,7 +41,7 @@ function snapshot(plane: AppLedgerPlane, catalogPath: string, modelCalls: number
         row,
         actions: sessionTree(row.id, plane.sessionStore(row.id).actions),
         generation: plane.openKernel(row.id).latestGenerationFor(row.id),
-        inbox: plane.openKernel(row.id).pendingMessages(row.id),
+        delivery: plane.openKernel(row.id).pendingMessages(row.id),
       })),
       tables: z
         .array(z.object({ name: z.string() }))

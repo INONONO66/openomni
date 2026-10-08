@@ -19,7 +19,7 @@ import {
   type SessionKernel,
 } from "../../src/composition/cluster-runtime";
 import { ComposedGeneration } from "../../src/composition/composed";
-import { localInboxCommit } from "../../src/process-entry";
+import { localDeliveryCommit } from "../../src/process-entry";
 import type { AppRuntime } from "../../src/runtime";
 import { runRuntimeEffect } from "./effect";
 import { testClock } from "./test-entropy";
@@ -46,15 +46,15 @@ export function adoptTestFence(
 }
 
 /**
- * A cluster-free inbox commit for fixtures: the process child's own local
+ * A cluster-free delivery commit for fixtures: the process child's own local
  * delivery (src/process-entry.ts), bound to a fixture plane and owner.
  */
-export function localInbox(
+export function localDelivery(
   plane: AppLedgerPlane,
-  owner = "test-inbox",
+  owner = "test-delivery",
   clock: () => number = () => Date.now(),
 ) {
-  return localInboxCommit(plane, owner, clock);
+  return localDeliveryCommit(plane, owner, clock);
 }
 
 export type ResolvedTestRuntime = Parameters<typeof createSessionEntityRunTurn>[1];

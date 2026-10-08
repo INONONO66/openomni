@@ -168,7 +168,7 @@ for (const refuse of [false, true]) {
   });
 }
 
-test("child admission observations see the deadline before the child's inbox commit", async () => {
+test("child admission observations see the deadline before the child's delivery commit", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
   const visible: Array<{ deadline: number | null | undefined }> = [];
@@ -187,7 +187,7 @@ test("child admission observations see the deadline before the child's inbox com
     expect(
       (
         await fixture.send({
-          to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
+          to: { kind: "new_session", role: "child", runner: "native", parent: "me" },
           type: "message",
           content: "work",
           deadline: 200,

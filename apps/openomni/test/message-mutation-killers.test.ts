@@ -64,22 +64,22 @@ function awaitedActorSend(fixture: ReturnType<typeof awaitedActorFixture>) {
   });
 }
 
-test("worker actor send is blocked by a compiled B row before transport", async () => {
-  const { fixture, calls } = ungrantedActor("worker");
+test("child actor send is blocked by a compiled B row before transport", async () => {
+  const { fixture, calls } = ungrantedActor("child");
   directories.push(fixture.directory);
   const result = await fixture.send(actorMessage("outside"));
   expect(result.isError).toBe(true);
-  expect(result.content).toContain("message.worker.actor");
+  expect(result.content).toContain("message.child.actor");
   expect(calls()).toBe(0);
 });
 
-// W5.2 L3.3b: "new child configuration and first inbox roll back together on
-// an inbox insertion fault" is deleted with the single-DB inbox table. Child
+// W5.2 L3.3b: "new child configuration and first delivery roll back together on
+// an delivery insertion fault" is deleted with the single-DB delivery table. Child
 // materialization is now an idempotent catalog/session-file fact applied
 // before entity delivery; a failed delivery leaves the (reusable) session row
 // in place by design, so the joint-rollback invariant no longer exists.
 
-test("duplicate external event does not commit a second inbox message", async () => {
+test("duplicate external event does not commit a second delivery message", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
   const sender = { kind: "external", surface: "ws", externalId: "owner" } as const;
@@ -103,7 +103,7 @@ test("duplicate external event does not commit a second inbox message", async ()
   expect(promptActions(fixture.plane, first.handle.target)).toHaveLength(1);
 });
 
-test("external ingress retry after inbox fault commits once despite a recorded route", async () => {
+test("external ingress retry after delivery fault commits once despite a recorded route", async () => {
   const fixture = messageFixture();
   directories.push(fixture.directory);
   const sender = { kind: "external", surface: "ws", externalId: "owner" } as const;
@@ -123,7 +123,7 @@ test("external ingress retry after inbox fault commits once despite a recorded r
   const db = new Database(sessionDb(fixture, probe.handle.target));
   try {
     db.exec(
-      "CREATE TRIGGER fail_external BEFORE INSERT ON action WHEN NEW.kind = 'prompt' BEGIN SELECT RAISE(ABORT, 'inbox fault'); END",
+      "CREATE TRIGGER fail_external BEFORE INSERT ON action WHEN NEW.kind = 'prompt' BEGIN SELECT RAISE(ABORT, 'delivery fault'); END",
     );
     await expect(runEffect(fixture.gateway.ingest(sender, facts))).rejects.toMatchObject({
       _tag: "ChannelsFailure",
@@ -183,7 +183,7 @@ test.each([
     `CREATE TRIGGER corrupt_decision AFTER INSERT ON action WHEN NEW.kind = 'policy.decision' BEGIN INSERT INTO corrupt_keep VALUES (NEW.id, NEW.intent); UPDATE action SET intent = ${mutation} WHERE id = NEW.id; END`,
   );
   const result = await fixture.send({
-    to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
+    to: { kind: "new_session", role: "child", runner: "native", parent: "me" },
     type: "message",
     content: "corrupt-evidence",
   });
@@ -208,7 +208,7 @@ test.each([
 });
 
 test("message observations carry the committed compiled policy rule identity", async () => {
-  const fixture = messageFixture("worker");
+  const fixture = messageFixture("child");
   directories.push(fixture.directory);
   const observed = Promise.withResolvers<Gateway.MessageObservation>();
   const unsubscribe = Bus.subscribe(Gateway.MessageObserved, (event) => {
@@ -222,7 +222,7 @@ test("message observations carry the committed compiled policy rule identity", a
     });
     expect(await observed.promise).toMatchObject({
       kind: "message.rejected",
-      matchedRuleIds: ["message.worker.actor"],
+      matchedRuleIds: ["message.child.actor"],
     });
     expect(
       tree(fixture.plane, fixture.sessionId).some(
@@ -276,7 +276,7 @@ function materialize(
   plane: AppLedgerPlane,
   id: string,
   parentId: string | null = null,
-  role: "resident" | "worker" = "resident",
+  role: "resident" | "child" = "resident",
 ) {
   const kernel = plane.openKernel(id);
   runSyncEffect(
@@ -304,9 +304,9 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
       materialize(f.plane, "unrelated");
       send = { to: { kind: "session", id: "unrelated" }, type: "message", content: "NO" };
     } else if (check === "fanout") {
-      for (let i = 0; i < 8; i++) materialize(f.plane, `child-${i}`, f.sessionId, "worker");
+      for (let i = 0; i < 8; i++) materialize(f.plane, `child-${i}`, f.sessionId, "child");
       send = {
-        to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
+        to: { kind: "new_session", role: "child", runner: "native", parent: "me" },
         type: "message",
         content: "NO",
       };
@@ -315,7 +315,7 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
         materialize(f.plane, `ancestor-${i}`, i === 0 ? null : `ancestor-${i - 1}`);
       db.query("UPDATE session SET parent_id = ? WHERE id = ?").run("ancestor-3", f.sessionId);
       send = {
-        to: { kind: "new_session", role: "worker", runner: "native", parent: "me" },
+        to: { kind: "new_session", role: "child", runner: "native", parent: "me" },
         type: "message",
         content: "NO",
       };
@@ -394,8 +394,8 @@ for (const check of ["parent", "fanout", "depth", "deadline"] as const) {
   });
 }
 
-test("real compiled B worker cannot interrupt its parent", async () => {
-  const f = messageFixture("worker");
+test("real compiled B child cannot interrupt its parent", async () => {
+  const f = messageFixture("child");
   directories.push(f.directory);
   materialize(f.plane, "parent");
   using db = new Database(sessionDb(f, f.sessionId));
@@ -406,7 +406,7 @@ test("real compiled B worker cannot interrupt its parent", async () => {
     content: "NO",
   });
   expect(result.isError).toBe(true);
-  expect(result.content).toContain("message.worker.interrupt_parent");
+  expect(result.content).toContain("message.child.interrupt_parent");
   expect(promptActions(f.plane, "parent")).toEqual([]);
 });
 

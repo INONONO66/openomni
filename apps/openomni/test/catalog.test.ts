@@ -150,8 +150,8 @@ describe("tool catalog", () => {
       expect(toolSpec(tool)).not.toHaveProperty("placement");
       if (FILE_TOOLS.includes(tool.name)) {
         expect(tool.visibility).toEqual({
-          model: ["resident", "worker"],
-          cell: ["resident", "worker"],
+          model: ["resident", "child"],
+          cell: ["resident", "child"],
         });
         expect(tool.sequential).toBe(
           ["write", "edit", "bash"].includes(tool.name) ? true : undefined,
@@ -162,7 +162,7 @@ describe("tool catalog", () => {
   it("keeps completion cell-only with exactly prompt, model, system and schema", () => {
     const completion = definitions.find((tool: AnyToolDefinition) => tool.name === "completion");
     if (completion === undefined) throw new Error("missing completion");
-    expect(completion.visibility).toEqual({ model: [], cell: ["resident", "worker"] });
+    expect(completion.visibility).toEqual({ model: [], cell: ["resident", "child"] });
     const schema = toolInputSchema(completion);
     expect(Object.keys(record(schema.properties)).sort()).toEqual([
       "model",

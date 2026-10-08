@@ -121,7 +121,7 @@ function commitReceived(
       sessionId,
       kind: "prompt",
       intent: { encodingVersion: 1, value: { kind: "sdk" } },
-      effect: { encodingVersion: 1, value: { inboxKind: kind, content } },
+      effect: { encodingVersion: 1, value: { deliveryKind: kind, content } },
       irreversible: true,
       ts: Date.now(),
     };
@@ -137,7 +137,7 @@ function commitReceived(
       })
       .pipe(
         Effect.asVoid,
-        Effect.mapError((error) => new Error(`inbox commit refused: ${error._tag}`)),
+        Effect.mapError((error) => new Error(`delivery commit refused: ${error._tag}`)),
       );
   });
 }

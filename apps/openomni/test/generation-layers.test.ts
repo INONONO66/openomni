@@ -25,7 +25,7 @@ test("AppLive retains distinct same-number session generations", async () => {
       const generations = yield* GenerationLayers;
       const plane = yield* AppLedger;
       const policyGeneration = seedKernelPolicyRows(plane.catalog.policies);
-      yield* generations.initialize({ resident: [], worker: [] });
+      yield* generations.initialize({ resident: [], child: [] });
       for (const id of ["first", "second"]) yield* plane.openKernel(id).materialize({
         id, parentId: null, role: "resident", tools: [], system: { preset: id, blocks: [] },
         policyGeneration, actionId: `${id}-create`, at: 1,
@@ -54,8 +54,8 @@ test("generation composition rejects use before initialization and duplicate ini
       yield* plane.openKernel("init").materialize({ id: "init", parentId: null, role: "resident", tools: [],
         system: { preset: "", blocks: [] }, policyGeneration, actionId: "init-create", at: 1 });
       expect(yield* Effect.flip(generations.capture({ sessionId: "init", generation: 1 }))).toMatchObject({ operation: "generation.initialize", cause: "not_initialized" });
-      yield* generations.initialize({ resident: [], worker: [] });
-      expect(yield* Effect.flip(generations.initialize({ resident: [], worker: [] }))).toMatchObject({ operation: "generation.initialize", cause: "already_initialized" });
+      yield* generations.initialize({ resident: [], child: [] });
+      expect(yield* Effect.flip(generations.initialize({ resident: [], child: [] }))).toMatchObject({ operation: "generation.initialize", cause: "already_initialized" });
       expect(yield* Effect.flip(generations.capture({ sessionId: "init", generation: 99 }))).toMatchObject({ _tag: "GenerationUnavailable", generation: 99 });
     })));
   } finally { await runtime.dispose(); }
@@ -82,7 +82,7 @@ test("concurrent captures and hibernation reuse one owner; failed candidate acqu
   const runtime = gatewayRuntime({ observations: Bus, composed: composedHolder({ bundles: [definition] }) });
   try {
     const handle = await acquireAppResource(runtime, Effect.gen(function* () {
-      yield* (yield* GenerationLayers).initialize({ resident: [], worker: [] });
+      yield* (yield* GenerationLayers).initialize({ resident: [], child: [] });
       const plane = yield* AppLedger;
       seedKernelPolicyRows(plane.catalog.policies);
       return yield* session({ id: "owners", role: "resident", bundles: ["probe"], runner: () => Effect.succeed({ kind: "result", text: "done" }) }, { approvalPolicy: APPROVAL_POLICY, authorizeConfigure: allowConfigure, openKernel: plane.openKernel, listSessions: plane.listSessions });
@@ -152,7 +152,7 @@ test("a capability omitted from the composition removes its points: tool rows fa
         .toMatchObject({ code: "unknown_point", point: "tool.pre" });
       // A generation written elsewhere still fails closed at capture.
       const generation = plane.catalog.policies.appendGeneration(() => governed);
-      yield* generations.initialize({ resident: [], worker: [] });
+      yield* generations.initialize({ resident: [], child: [] });
       yield* plane.openKernel("no-tools").materialize({
         id: "no-tools", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
         policyGeneration: generation, actionId: "no-tools-create", at: 1,
@@ -177,7 +177,7 @@ test("a capability omitted from the composition removes its points: tool rows fa
         ...current.map(({ generation: _generation, ...rest }) => rest),
         denyWrites,
       ]);
-      yield* generations.initialize({ resident: [], worker: [] });
+      yield* generations.initialize({ resident: [], child: [] });
       yield* plane.openKernel("tooled").materialize({
         id: "tooled", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
         policyGeneration: generation, actionId: "tooled-create", at: 1,
@@ -208,7 +208,7 @@ test("a generation carrying a row outside the composition's point table fails cl
           verdict: { encodingVersion: 1, value: { type: "allow" } },
         },
       ]);
-      yield* generations.initialize({ resident: [], worker: [] });
+      yield* generations.initialize({ resident: [], child: [] });
       yield* plane.openKernel("orphaned").materialize({
         id: "orphaned", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
         policyGeneration: orphaned, actionId: "orphaned-create", at: 1,
@@ -237,7 +237,7 @@ for (const verdict of ["require_approval", "deny"] as const) {
           match: { encodingVersion: 1, value: { sessionId: "guarded" } },
           verdict: { encodingVersion: 1, value: verdict === "deny" ? { type: "deny", reason: "pinned" } : { type: "require_approval", reason: "pinned" } },
         }]);
-        yield* generations.initialize({ resident: [], worker: [] });
+        yield* generations.initialize({ resident: [], child: [] });
         for (const id of ["guarded", "open"]) yield* plane.openKernel(id).materialize({
           id, parentId: null, role: "resident", tools: [], system: { preset: id, blocks: [] },
           policyGeneration, actionId: `${id}-create`, at: 1,
@@ -281,7 +281,7 @@ test("a composed bundle handler exposing apply registers as a transformer and on
           verdict: { encodingVersion: 1, value: { type: "consult", ref: "shaper/gate" } },
         },
       ]);
-      yield* generations.initialize({ resident: [], worker: [] });
+      yield* generations.initialize({ resident: [], child: [] });
       yield* plane.openKernel("shaped").materialize({
         id: "shaped", parentId: null, role: "resident", tools: [], system: { preset: "", blocks: [] },
         policyGeneration, actionId: "shaped-create", at: 1,

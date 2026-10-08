@@ -58,7 +58,7 @@ test.each(["revision", "fence"] as const)(
         const effect = input.actions[0]?.effect.value;
         if (
           effect === null || typeof effect !== "object" ||
-          Array.isArray(effect) || effect.inboxKind !== "interrupt"
+          Array.isArray(effect) || effect.deliveryKind !== "interrupt"
         ) return kernel.commit(input);
         commits += 1;
         if (commits > 1) return kernel.commit(input);

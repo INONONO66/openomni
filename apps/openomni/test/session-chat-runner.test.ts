@@ -66,7 +66,7 @@ function input(
             value: {
               phase: "delivery",
               turnId: "turn-1",
-              inboxId: message.id ?? `fixture-message-${index}`,
+              deliveryId: message.id ?? `fixture-message-${index}`,
               kind: "prompt",
               content: message.text,
               origin: { encodingVersion: 1, value: {} },
@@ -198,19 +198,19 @@ function runDurably(
 
     try {
       yield* promptTurns(handle, prompts);
-      // W5.2: the inbox table is gone; the turn intent's durable `inboxIds`
+      // W5.2: the delivery table is gone; the turn intent's durable `deliveryIds`
       // name the consumed received-message chain actions.
       const actions = sessionTree(isolatedLedger().kernel, handle.id);
       return {
         actions,
-        inboxIds: actions
+        deliveryIds: actions
           .filter(
             (action: LedgerAction.Node) =>
               action.kind === "turn" && actionPhase(action) === "intent",
           )
           .flatMap(
             (action: LedgerAction.Node) =>
-              SessionTurn.DecodeIntent.parse(action.intent.value).inboxIds,
+              SessionTurn.DecodeIntent.parse(action.intent.value).deliveryIds,
           ),
       };
     } finally {
@@ -343,7 +343,7 @@ describe("session chat runner", () => {
         Effect.gen(function* () {
           let calls = 0;
 
-          const { actions, inboxIds } = yield* runDurably(
+          const { actions, deliveryIds } = yield* runDurably(
             async (input: import("../../../packages/agent/src/model").RunInput, sink: import("../../../packages/agent/src/model").Sink) => {
               calls += 1;
               return calls === 1 ? { type: "continue" } : completeModel(input, sink);
@@ -395,7 +395,7 @@ describe("session chat runner", () => {
               (action.effect.value as { phase?: string } | null)?.phase !== "delivery",
           );
           expect(prompts).toHaveLength(1);
-          expect(prompts[0]?.id).toBe(inboxIds[0]);
+          expect(prompts[0]?.id).toBe(deliveryIds[0]);
         }),
       ),
     ));

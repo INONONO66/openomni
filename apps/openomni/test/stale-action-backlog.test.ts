@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { Inbox, type LedgerAction, type PlainValue, SessionGeneration } from "@openomni/protocol";
+import { Delivery, type LedgerAction, type PlainValue, SessionGeneration } from "@openomni/protocol";
 import { staleActionBacklog, turnIntentAction } from "../../../packages/agent/src/core/commit";
 import type * as SessionHandleStore from "../../../packages/agent/src/core/store/fence";
 import { materializeSession } from "../../../packages/agent/test/store/helpers/session";
@@ -14,8 +14,8 @@ import { TEST_APPROVAL_POLICY } from "../../../packages/agent/test/helpers/appro
  * the pending fold drops it from every later backlog.
  */
 
-function row(id: string, kind: Inbox.Kind, after?: number): Inbox.Row {
-  return Inbox.Row.parse({
+function row(id: string, kind: Delivery.Kind, after?: number): Delivery.Row {
+  return Delivery.Row.parse({
     id,
     sessionId: "s",
     kind,
@@ -60,7 +60,7 @@ test("turnIntentAction journals consumedStale on the turn intent; an empty list 
     parentId: null,
     sessionId: "s",
     resultId: "r1",
-    inboxIds: ["p1"],
+    deliveryIds: ["p1"],
     generation,
     resumeCount: 0,
     boundaryActionId: null,
@@ -98,8 +98,8 @@ function append(id: string, kind: LedgerAction.Kind, intent: PlainValue, effect:
 }
 
 test("the chain fold: after rides the pending row, compactionHead is the executed compaction, turn.consumedStale closes", () => {
-  append("p1", "prompt", { kind: "message" }, { inboxKind: "prompt", content: "hi" });
-  append("a1", "action", { kind: "hook.late", after: 1 }, { inboxKind: "action", content: "{}" });
+  append("p1", "prompt", { kind: "message" }, { deliveryKind: "prompt", content: "hi" });
+  append("a1", "action", { kind: "hook.late", after: 1 }, { deliveryKind: "action", content: "{}" });
   // No executed compaction yet: head is 0, nothing can be stale.
   expect(kernel.compactionHead("stale")).toBe(0);
   const compaction = append(
@@ -109,7 +109,7 @@ test("the chain fold: after rides the pending row, compactionHead is the execute
     { phase: "result", terminal: "executed", result: { projection: [] } },
   );
   expect(kernel.compactionHead("stale")).toBe(compaction.ordinal);
-  append("a2", "action", { kind: "hook.late", after: compaction.ordinal }, { inboxKind: "action", content: "{}" });
+  append("a2", "action", { kind: "hook.late", after: compaction.ordinal }, { deliveryKind: "action", content: "{}" });
 
   const pending = kernel.pendingMessages("stale");
   expect(pending.map((item) => [item.id, item.after ?? null])).toEqual([
@@ -126,7 +126,7 @@ test("the chain fold: after rides the pending row, compactionHead is the execute
   append(
     "t1",
     "turn",
-    { phase: "intent", inboxIds: [], consumedStale: ["a1"] },
+    { phase: "intent", deliveryIds: [], consumedStale: ["a1"] },
     { phase: "pending" },
   );
   expect(kernel.pendingMessages("stale").map((item) => item.id)).toEqual(["p1", "a2"]);
@@ -253,7 +253,7 @@ test("a stale action delivered DURING a turn closes via turn.consumed.stale at t
       const actions = sessionTree(kernel, "S");
       const deliveries = actions.filter(
         (action) =>
-          (action.intent.value as { inboxId?: string } | null)?.inboxId === "stale-action",
+          (action.intent.value as { deliveryId?: string } | null)?.deliveryId === "stale-action",
       );
       expect(deliveries).toEqual([]);
       // ...it closed it durably via the checkpoint's turn.consumed.stale...
@@ -478,7 +478,7 @@ test("H-3(a): a stale late-hook action through the REAL entity deliver door clos
       )
       .all();
     const deliveries = actions.filter(
-      (action) => (JSON.parse(action.intent) as { inboxId?: string }).inboxId === "stale-action",
+      (action) => (JSON.parse(action.intent) as { deliveryId?: string }).deliveryId === "stale-action",
     );
     expect(deliveries).toEqual([]);
     // ...it closed durably via the turn chain's consumedStale list...

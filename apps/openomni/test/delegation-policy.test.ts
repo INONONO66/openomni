@@ -10,7 +10,7 @@ import { expect, test } from "bun:test";
 import type { Bundle } from "@openomni/agent";
 import { Effect } from "effect";
 import type { Core } from "@openomni/agent";
-import { Gateway, Inbox, type LedgerAction, LedgerSession } from "@openomni/protocol";
+import { Gateway, Delivery, type LedgerAction, LedgerSession } from "@openomni/protocol";
 import {
   catalogDelegationReads,
   DEFAULT_DELEGATION_CAPS,
@@ -27,7 +27,7 @@ import {
 } from "../src/bundles/delegation-policy";
 import { runEffect } from "./helpers/effect";
 
-const NEW_SESSION = { to: { kind: "new_session", role: "worker" }, message: "go" };
+const NEW_SESSION = { to: { kind: "new_session", role: "child" }, message: "go" };
 const service = () => {
   throw new Error("guards consult no services");
 };
@@ -307,7 +307,7 @@ function childRow(parentId: string | null): LedgerSession.Row {
   return LedgerSession.Row.parse({
     id: "child-1",
     parentId,
-    role: "worker",
+    role: "child",
     fenceOwner: "runtime",
     fence: 1,
     revision: 3,
@@ -327,7 +327,7 @@ const TERMINAL: LedgerAction.Append = {
 };
 
 function settlementKernel(origin: Readonly<Record<string, string>>): Core.SessionKernel {
-  const row = Inbox.Row.parse({
+  const row = Delivery.Row.parse({
     id: "commission",
     sessionId: "child-1",
     kind: "prompt",

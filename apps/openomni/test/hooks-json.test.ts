@@ -1059,7 +1059,7 @@ test("H-3 e2e: a hook reply that lands after its call timed out re-enters throug
         .query<{ kind: string; intent: string }, []>("SELECT kind, intent FROM action ORDER BY ordinal ASC")
         .all();
       const deliveries = actions.filter(
-        (action) => (JSON.parse(action.intent) as { inboxId?: string }).inboxId === row.id,
+        (action) => (JSON.parse(action.intent) as { deliveryId?: string }).deliveryId === row.id,
       );
       expect(deliveries).toEqual([]);
       const closures = actions
@@ -1119,7 +1119,7 @@ test("H-1 e2e: a steering prompt denied mid-turn is refused at the RUN boundary 
           residentSessionId = input.trace.sessionId;
           if (calls === 1) {
             // Mid-turn: push a steer-delivery prompt through the entity's one
-            // deliver door and AWAIT its receipt — the inbox row is journaled
+            // deliver door and AWAIT its receipt — the delivery row is journaled
             // before this model step returns, so the after_tools boundary of
             // THIS turn must drain it through the run's own policy port.
             await steer(input.trace.sessionId);

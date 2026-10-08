@@ -15,7 +15,7 @@ import {
   registerTrustedChannelGrant,
 } from "../src/gateway";
 import { residentRunner } from "./helpers/resident-runner";
-import { localInbox } from "./helpers/ledger";
+import { localDelivery } from "./helpers/ledger";
 import { planeFixture } from "./helpers/plane-fixture";
 import { prepareMessage } from "../src/composition/message-session";
 import { requestToolStep, assistantMessage } from "./helpers/assistant-message";
@@ -39,7 +39,7 @@ function testResident(run: ResidentRun) {
     return yield* createResidentGateway({
       now: Date.now,
       id: testIds("gateway-contract"),
-      inbox: { commit: (input) => localInbox(resident.plane, "gateway-contract", Date.now)(input).pipe(Effect.mapError(decodeChannelFailure("inbox.commit"))) },
+      delivery: { commit: (input) => localDelivery(resident.plane, "gateway-contract", Date.now)(input).pipe(Effect.mapError(decodeChannelFailure("delivery.commit"))) },
       prepare: prepareMessage(resident.plane, resident.materialize),
       ...(yield* residentGatewayPorts(resident.plane, Date.now)),
     }, undefined);
@@ -208,7 +208,7 @@ describe("authenticated gateway ingress", () => {
       stop();
     }
   });
-  test("rejects invalid message types at the boundary without committing inbox state", async () => {
+  test("rejects invalid message types at the boundary without committing delivery state", async () => {
     const resident = testResident(() => Effect.sync(() => {
       throw new Error("model must not run");
     }));

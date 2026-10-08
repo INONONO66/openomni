@@ -22,7 +22,7 @@ export function actorPolicy(targetActorId: string, maxPerWindow: number) {
   };
 }
 
-export function ungrantedActor(role: "resident" | "worker") {
+export function ungrantedActor(role: "resident" | "child") {
   let calls = 0;
   const fixture = messageFixture(role, {
     deliveryRoutes: new Map([

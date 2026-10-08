@@ -43,7 +43,7 @@ test("G1 prerequisite: SIGKILL at committed configure rearms current and recorde
       const plane = yield* AppLedger;
       const kernel = plane.openKernel("crash-session");
       const generations = yield* GenerationLayers;
-      yield* generations.initialize({ resident: [], worker: [] });
+      yield* generations.initialize({ resident: [], child: [] });
       const current = kernel.latestGenerationFor("crash-session");
       const open = kernel.openTurnsPage("crash-session");
       expect(open).toHaveLength(1);
