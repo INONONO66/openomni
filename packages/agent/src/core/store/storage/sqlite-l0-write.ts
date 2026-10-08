@@ -133,6 +133,11 @@ export function appendAction(
   expectedRevision: number,
   refuse?: RefuseWrite,
 ): LedgerAction.Receipt | undefined {
+  // #1252 fail-closed order (review r1 H2): the schema refusal runs BEFORE
+  // the existence/parent checks, exactly as pre-#1314 — a duplicate-id (or
+  // foreign-parent) action that is ALSO schema-mismatched throws the typed
+  // `SchemaRefused`, never a silent `undefined`.
+  refuseSchemaMismatch(action, refuse);
   if (!validActionBatch(db, [action], action.sessionId)) return undefined;
   return appendValidatedAction(db, action, expectedRevision, refuse);
 }

@@ -780,4 +780,22 @@ describe("session kernel commit query budget (#1314)", () => {
     expect(counts.exists).toBe(3);
     expect(counts.parent).toBe(1);
   });
+
+  test("duplicate-id + schema-mismatch single append throws SchemaRefused (review r1 H2)", () => {
+    const sessionId = "double-fault";
+    materialize(sessionId);
+    const authority = adoptWriter(stores.kernel, sessionId, "owner");
+    commitOne(authority, prompt(`${sessionId}-1`, sessionId, "one", `${sessionId}:configure`));
+    // Both faults at once: the id is already on the chain AND the body fails
+    // the `prompt` declaration (`delivery` outside steer|followUp). The #1252
+    // fail-closed order says the schema refusal wins — the typed throw, never
+    // a silent `undefined` from the duplicate-id existence check.
+    const doubleFault: LedgerAction.Append = {
+      ...prompt(`${sessionId}-1`, sessionId, "dup", `${sessionId}:configure`),
+      intent: { encodingVersion: 1, value: { source: "test", delivery: "bogus" } },
+    };
+    expect(() =>
+      stores.session.actions.append(doubleFault, stores.kernel.row(sessionId).revision),
+    ).toThrow(expect.objectContaining({ _tag: "SchemaRefused" }));
+  });
 });
