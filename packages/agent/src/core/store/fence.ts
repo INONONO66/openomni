@@ -24,6 +24,7 @@ import type { CatalogStore } from "./catalog.js";
 import type { ArmedAlarmRow, SessionStore, ToolOutputRow, ToolOutputWrite, ToolOutputsAdapter } from "./session-file/index.js";
 import { armedAlarmDelta } from "./storage/sqlite-l0-write.js";
 import { writeEffect } from "./storage/write-effect";
+import { GATE_ROW_WRITER_VERSION } from "../gate/rows";
 
 export const RESUME_BUDGET = 10;
 
@@ -486,6 +487,9 @@ export function generationSnapshot(input: {
       .join("\n\n"),
     systemHash: canonicalDigest(blocks),
     policyGeneration: input.policyGeneration,
+    // #1319: every snapshot this writer materializes records the gate-row
+    // writer version; snapshots persisted before the cutover stay versionless.
+    rowsVersion: GATE_ROW_WRITER_VERSION,
     ...(input.manifestHash === undefined ? {} : { manifestHash: input.manifestHash }),
   });
 }

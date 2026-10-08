@@ -5,6 +5,7 @@ import { compileGateRows, type CompiledGate } from "./compose";
 import { legacyPointOf } from "./migrate";
 import type { CompiledRow, Match } from "./legacy-rows";
 import type { HandlerTable } from "./registry";
+import { gateRowId } from "./rows";
 
 // ─── projection: historical rows onto the fourteen-point gate (#1251) ───
 
@@ -138,7 +139,7 @@ export function projectGeneration(
   const matchers = new Map<string, (context: MessagePolicyContext | undefined) => boolean>();
   ordered.forEach((row, index) => {
     for (const point of projectedPoints(row, table)) {
-      const id = `legacy/${point}#${index}`;
+      const id = gateRowId(row, point, index);
       gateRows.push({
         id,
         on: point,
