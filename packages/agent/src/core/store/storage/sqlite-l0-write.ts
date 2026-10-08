@@ -122,15 +122,33 @@ function applyArmedAlarmDelta(db: Database, delta: ArmedAlarmDelta): void {
   }
 }
 
+/**
+ * Single append outside a batch: validates the one-action batch (existence +
+ * parent ownership live in `validActionBatch`, the single query site per
+ * check — #1314) and then appends.
+ */
 export function appendAction(
   db: Database,
   action: LedgerAction.Append,
   expectedRevision: number,
   refuse?: RefuseWrite,
 ): LedgerAction.Receipt | undefined {
+  if (!validActionBatch(db, [action], action.sessionId)) return undefined;
+  return appendValidatedAction(db, action, expectedRevision, refuse);
+}
+
+/**
+ * #1314: the write after validation. Callers guarantee `validActionBatch`
+ * already covered this action inside the same transaction; no existence or
+ * parent re-query happens here.
+ */
+function appendValidatedAction(
+  db: Database,
+  action: LedgerAction.Append,
+  expectedRevision: number,
+  refuse?: RefuseWrite,
+): LedgerAction.Receipt | undefined {
   refuseSchemaMismatch(action, refuse);
-  if (actionExists(db, action.id)) return undefined;
-  if (!parentBelongsToSession(db, action.parentId, action.sessionId)) return undefined;
   const revision = expectedRevision + 1;
   const updated = db
     .query(
@@ -200,7 +218,8 @@ export function commitSession(
   const receipts: LedgerAction.Receipt[] = [];
   let revision = current.revision;
   for (const action of request.actions) {
-    const receipt = appendAction(db, action, revision, refuse);
+    // `validActionBatch` above already ran the existence and parent checks.
+    const receipt = appendValidatedAction(db, action, revision, refuse);
     if (receipt === undefined) return refusedSessionCommit("revision", current);
     receipts.push(receipt);
     revision = receipt.revision;
