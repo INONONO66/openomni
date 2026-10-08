@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791484205544,
+  "lastUpdate": 1791491012274,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -81109,6 +81109,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 152837,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d57158f9ffb08e32fac012565c6781491d73ef7e",
+          "message": "Retire the inbox and worker vocabulary across every package and the app (#1315) (#1334)\n\n* feat(protocol): rename the input plane to Delivery/deliveryId, role enum to child, drop the retired ingress target (#1315)\n\n* test(protocol): version-1 delivery fold regression and retired ingress-target refusal (#1315)\n\n* feat(agent): rename Inbox to Delivery and worker to child across core, plugins, and tests (#1315)\n\n* docs: stamp the protocol+agent vocabulary retirement for rung 11 (#1315)\n\n* feat(channels): rename Inbox to Delivery and worker to child across router and tests (#1315)\n\n* chore(codemode,machines): clear the retired worker token from the kernel prelude and IPC comments (#1315)\n\n* feat(desktop): retire the empty inbox route; the route union is sessions|automations (#1315)\n\n* feat(openomni): rename Inbox to Delivery and worker to child across policy, tools, prompts, and composition (#1315)\n\n* test(openomni): retire the inbox and worker vocabulary in the app test suite (#1315)\n\n* chore(protocol,agent): clear the last retired worker tokens from policy resource kinds, tests, and comments (#1315)\n\n* chore(openomni): reword the process-entry comment off the retired worker token (#1315)\n\n* fix: address review-r1 findings — file rename, crash-matrix, conformance snapshots, grep-dodging, doc stamps (#1315)\n\n* fix: resolve lint errors — plain legacy literal in census test, remove inferrable type annotation (#1315)\n\n* fix(review r2): one implementation-status section at head state, truthful legacy-literal comments, last two join sites plain, codemode max_concurrency kwarg test (#1315)\n\n* fix(protocol): V1 delivery field names as one as-const object so the root barrel stays object-only (check-types) (#1315)\n\n* test(protocol): cover LedgerSession.foldLegacyRole directly (patch coverage) (#1315)",
+          "timestamp": "2026-10-08T20:20:51Z",
+          "tree_id": "59c9eabd3c7d71b6a40a0a69b91a94f79f21fb1f",
+          "url": "https://github.com/INONONO66/openomni/commit/d57158f9ffb08e32fac012565c6781491d73ef7e"
+        },
+        "date": 1791491011717,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1418,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1056,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1229436,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 351409,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 5739009,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 127,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 891,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 552,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 125195,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 668714,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 372141,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 2573,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 9516996,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1256161,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 15250,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 139966,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 727581,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 228139,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 14700811,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 80,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 145426,
             "unit": "ns/op"
           }
         ]
