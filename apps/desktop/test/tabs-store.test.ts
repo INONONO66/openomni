@@ -53,7 +53,7 @@ describe("opening and activating", () => {
     openTab({ kind: "route", route: "sessions" });
     const first = currentTab();
     expect(first.history).toEqual({ entries: [first.place], cursor: 0 });
-    openTab({ kind: "route", route: "inbox" });
+    openTab({ kind: "route", route: "automations" });
     const second = currentTab();
     expect(second.id).not.toBe(first.id);
     expect(consoleStore.state.tabs).toEqual([first, second]);
@@ -142,7 +142,7 @@ describe("opening and activating", () => {
   });
 
   test("explicit route navigation changes the target rather than reusing another route tab", () => {
-    openTab({ kind: "route", route: "inbox" });
+    openTab({ kind: "route", route: "automations" });
     const first = currentTab();
     const second = openSession("s1");
     navigate(first.place, second.id);
@@ -273,7 +273,7 @@ describe("closing and reopening", () => {
 
   test("route snapshots restore even when another tab already shows the route", () => {
     const a = openSession("s1");
-    navigate({ kind: "route", route: "inbox" });
+    navigate({ kind: "route", route: "automations" });
     const snapshot = currentTab();
     closeTab(a.id);
     openTab(snapshot.place);
