@@ -4,7 +4,7 @@ import type { PolicyEvaluationInput } from "@openomni/agent";
 import type {
   BusEvent,
   Gateway,
-  Inbox,
+  Delivery,
   LedgerAction,
   PlainValue,
   SessionTransition,
@@ -36,12 +36,12 @@ interface PreparedMessage {
   readonly target: string;
   readonly messageId?: string;
   readonly limits?: { readonly fanout: number; readonly depth: number };
-  readonly origin?: Inbox.ReplyOrigin | SessionTransition.OutboundMessage;
+  readonly origin?: Delivery.ReplyOrigin | SessionTransition.OutboundMessage;
   readonly message:
     | Extract<NonNullable<PolicyEvaluationInput["message"]>, { sender: "session" }>
     | { readonly sender: "external"; readonly eventIdUnique: boolean };
-  readonly sender?: Inbox.Commit["sender"];
-  readonly createSession?: Inbox.Commit["createSession"];
+  readonly sender?: Delivery.Commit["sender"];
+  readonly createSession?: Delivery.Commit["createSession"];
 }
 
 type RequestOpenInput = Pick<
@@ -51,7 +51,7 @@ type RequestOpenInput = Pick<
   expectedResponders: Readonly<SessionTransition.Request["expectedResponders"]>;
   allowedActions: Readonly<SessionTransition.Request["allowedActions"]>;
   at: number;
-  admission?: Inbox.Commit;
+  admission?: Delivery.Commit;
 };
 
 interface MessagingGrantSources {
@@ -85,7 +85,7 @@ export interface GatewayRouterPorts {
     sender: Gateway.IngestSender,
     observation: Gateway.MessageObservation,
   ) => void;
-  readonly inbox: { readonly commit: (input: Inbox.Commit) => Effect.Effect<Inbox.Row, ChannelError> };
+  readonly delivery: { readonly commit: (input: Delivery.Commit) => Effect.Effect<Delivery.Row, ChannelError> };
   /** L1 supplies authenticated facts; the gateway never reads session state. */
   readonly prepare: (
     sender: Gateway.IngestSender,
@@ -98,7 +98,7 @@ export interface GatewayRouterPorts {
     request: MessageExecution,
     body: (intent: LedgerAction.Receipt) => Effect.Effect<PlainValue, ChannelError>,
   ) => Effect.Effect<MessageExecutionResult, ChannelError>;
-  readonly committed?: (row: Inbox.Row) => void;
+  readonly committed?: (row: Delivery.Row) => void;
   /** Injected wall clock; the router never reads ambient time. */
   readonly now: () => number;
   /** Injected id minter; the router never reads ambient entropy. */

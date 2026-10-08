@@ -36,7 +36,7 @@ test("committed scoped reply authority survives closing storage and constructing
         surface: "telegram",
         traceId: "trace-1",
         at,
-        sourceId: "inbox-1",
+        sourceId: "delivery-1",
       });
       resetLedger({ catalog: join(directory, "catalog.sqlite"), sessions: path });
 
@@ -50,7 +50,7 @@ test("committed scoped reply authority survives closing storage and constructing
           surfaceKey: "telegram:chat-1",
           at,
         })?.id,
-      ).toBe("reply-grant:rule-1:inbox-1");
+      ).toBe("reply-grant:rule-1:delivery-1");
       expect(
         resolveScopedSenderTargetGrant(grants, {
           senderId: "persona",

@@ -5,13 +5,13 @@ import { channelTransaction } from "../helpers/channel-transaction";
 import { effectFailure } from "../helpers/effect-failure";
 import { runEffect } from "../helpers/effect";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { Gateway, type Inbox } from "@openomni/protocol";
+import { Gateway, type Delivery } from "@openomni/protocol";
 import { z } from "zod";
 import { createGatewayRouter, type GatewayRouterPorts } from "../../src/router";
 import { resetStores } from "./_router-fixture";
 import { requestPort } from "../helpers/requests";
 import { messageExecutionReceipt } from "../helpers/message-execution";
-import { recordingInbox } from "./_recording-inbox";
+import { recordingDelivery } from "./_recording-delivery";
 
 beforeEach(resetStores);
 afterEach(() => {
@@ -23,8 +23,8 @@ function testId(prefix: string): () => string {
   return () => { state.value += 1; return `${prefix}-${state.value}`; };
 }
 
-function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["sender"]) {
-  const commits: Inbox.Commit[] = [];
+function recordingRouter(run: GatewayRouterPorts["run"], sender?: Delivery.Commit["sender"]) {
+  const commits: Delivery.Commit[] = [];
   const router = createGatewayRouter({
     requests: channelRequests(requestPort()),
     stores: ledger().stores,
@@ -32,7 +32,7 @@ function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["
     now: () => 1,
     id: testId("ingest"),
     sink: () => undefined,
-    inbox: recordingInbox(commits),
+    delivery: recordingDelivery(commits),
     prepare: () => Effect.succeed({
       target: "child",
       ...(sender === undefined ? {} : { sender }),
@@ -40,7 +40,7 @@ function recordingRouter(run: GatewayRouterPorts["run"], sender?: Inbox.Commit["
         sender: "session",
         senderRole: "resident",
         targetKind: "session",
-        ...(sender === undefined ? {} : { targetRole: "worker" as const }),
+        ...(sender === undefined ? {} : { targetRole: "child" as const }),
         type: "message",
         parentChild: true,
         fanout: 0,
@@ -64,7 +64,7 @@ function sendToChild(router: ReturnType<typeof createGatewayRouter>, content: st
   );
 }
 
-test("session ingest commits once through the injected inbox without a channel driver", async () => {
+test("session ingest commits once through the injected delivery without a channel driver", async () => {
   const { router, commits } = recordingRouter(
     (_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
       return {
@@ -90,7 +90,7 @@ test("session ingest commits once through the injected inbox without a channel d
 test.each([
   "content",
   "target",
-] as const)("pre transform of %s is applied or refused before inbox commit", async (field: "content" | "target") => {
+] as const)("pre transform of %s is applied or refused before delivery commit", async (field: "content" | "target") => {
   const { router, commits } = recordingRouter((_sender: Gateway.IngestSender, request: Parameters<GatewayRouterPorts["run"]>[1], body: Parameters<GatewayRouterPorts["run"]>[2]) => Effect.gen(function* () {
     const value = Gateway.SendMessage.extend({
       messageId: z.string(),
@@ -216,7 +216,7 @@ test("an actor send without configured messaging dies with the channels invarian
 });
 
 test("a session send prepared without a session projection dies with the channels invariant", async () => {
-  const commits: Inbox.Commit[] = [];
+  const commits: Delivery.Commit[] = [];
   const router = createGatewayRouter({
     requests: channelRequests(requestPort()),
     stores: ledger().stores,
@@ -224,7 +224,7 @@ test("a session send prepared without a session projection dies with the channel
     now: () => 1,
     id: testId("projection"),
     sink: () => undefined,
-    inbox: recordingInbox(commits),
+    delivery: recordingDelivery(commits),
     prepare: () => Effect.succeed({
       target: "child",
       message: { sender: "external" as const, eventIdUnique: true },
@@ -242,7 +242,7 @@ test("a session send prepared without a session projection dies with the channel
   expect(commits).toEqual([]);
 });
 
-test.each(["interrupted", "outcome_unknown"] as const)("%s preserves the handle without committing an inbox", async (terminal: "interrupted" | "outcome_unknown") => {
+test.each(["interrupted", "outcome_unknown"] as const)("%s preserves the handle without committing an delivery", async (terminal: "interrupted" | "outcome_unknown") => {
   const { router, commits } = recordingRouter(() => Effect.succeed({
     terminal, reason: "execution_stopped", matchedRuleIds: [],
   }));

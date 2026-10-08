@@ -3,7 +3,7 @@ const openCatalogStore = Core.openCatalogStore;
 const openSessionStore = Core.openSessionStore;
 type LedgerError = Core.LedgerError;
 import { Effect } from "effect";
-import type { Inbox, LedgerAction, Storage as ProtocolStorage } from "@openomni/protocol";
+import type { Delivery, LedgerAction, Storage as ProtocolStorage } from "@openomni/protocol";
 import { createChannelStores, type ChannelStores } from "../../src/router/stores";
 import { openChannelStore, type ChannelStore } from "../../src/store/sqlite/index.js";
 import { runEffect } from "./effect";
@@ -108,16 +108,16 @@ export function adoptLedgerFence(sessionId: string, owner: string): number {
 }
 
 /**
- * The historical inbox commit, replayed onto the chain (W5.2 F1): one
+ * The historical delivery commit, replayed onto the chain (W5.2 F1): one
  * `prompt` action whose intent is the origin and whose effect carries the
- * inbox kind + content; idempotent on the action id.
+ * delivery kind + content; idempotent on the action id.
  */
 export function commitReceivedMessage(
-  input: Inbox.Commit,
-): Effect.Effect<{ row: Inbox.Row }, LedgerError> {
+  input: Delivery.Commit,
+): Effect.Effect<{ row: Delivery.Row }, LedgerError> {
   return Effect.suspend(() => {
     const kernel = current.plane.kernel;
-    const asRow = (ordinal: number): Inbox.Row => ({
+    const asRow = (ordinal: number): Delivery.Row => ({
       id: input.id,
       sessionId: input.sessionId,
       kind: input.kind,
@@ -131,7 +131,7 @@ export function commitReceivedMessage(
     });
     const existing = kernel.actionById(input.id);
     if (existing !== undefined) return Effect.succeed({ row: asRow(existing.ordinal) });
-    const fence = adoptLedgerFence(input.sessionId, "fixture-inbox");
+    const fence = adoptLedgerFence(input.sessionId, "fixture-delivery");
     const row = kernel.row(input.sessionId);
     const action: LedgerAction.Append = {
       id: input.id,
@@ -139,14 +139,14 @@ export function commitReceivedMessage(
       sessionId: input.sessionId,
       kind: "prompt",
       intent: input.origin,
-      effect: { encodingVersion: 1, value: { inboxKind: input.kind, content: input.content } },
+      effect: { encodingVersion: 1, value: { deliveryKind: input.kind, content: input.content } },
       irreversible: true,
       ts: input.createdAt,
     };
     return kernel
       .commit({
         sessionId: input.sessionId,
-        owner: "fixture-inbox",
+        owner: "fixture-delivery",
         fence,
         now: input.createdAt,
         expectedRevision: row.revision,

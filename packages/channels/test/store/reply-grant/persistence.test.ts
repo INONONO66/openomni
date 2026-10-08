@@ -51,7 +51,7 @@ describe("durable reply-grant current projection", () => {
       // initialized database open and await each contender's exact ready signal.
       for (const id of ["guest-1", "guest-2"]) {
         const contender = fork(
-          new URL("./race-worker.ts", import.meta.url),
+          new URL("./race-child.ts", import.meta.url),
           [path, id],
           { execPath: process.execPath, stdio: ["ignore", "inherit", "inherit", "ipc"] },
         );

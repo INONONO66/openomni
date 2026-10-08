@@ -50,7 +50,7 @@ describe("existing-agent-message-driver", () => {
     expect(receipt.deliveries).toHaveLength(2);
   });
 
-  test("duplicate-ambiguous observes both typed denials with unchanged quorum and no Worker", async () => {
+  test("duplicate-ambiguous observes both typed denials with unchanged quorum and no Child", async () => {
     const result = await runExistingAgentMessageDriver([
       "--scenario",
       "duplicate-ambiguous",

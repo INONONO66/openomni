@@ -36,8 +36,8 @@ const testEntropy = {
 /** Real kernel authority and SQLite action history; no test lifecycle implementation. */
 export function requestPort(
   clock: () => number = () => 1,
-  onInboxCommitted?: (sessionIds: readonly string[]) => void,
-  runtime: Partial<Omit<SessionRuntime, "processId" | "onInboxCommitted" | "authorizeConfigure">> = {},
+  onDeliveryCommitted?: (sessionIds: readonly string[]) => void,
+  runtime: Partial<Omit<SessionRuntime, "processId" | "onDeliveryCommitted" | "authorizeConfigure">> = {},
 ) {
   return runEffect(
     createSessionRequests({
@@ -47,7 +47,7 @@ export function requestPort(
       approvalPolicy: TEST_APPROVAL_POLICY,
       authorizeConfigure: allowConfigure,
       processId: "channels-test",
-      onInboxCommitted,
+      onDeliveryCommitted,
     }).pipe(
       Effect.provide(Entropy.layer(testEntropy)),
       Effect.provideService(Clock.Clock, fixedClock(clock)),
@@ -108,7 +108,7 @@ export async function openRequest(requestId: string, overrides: Partial<Gateway.
   const spec: Gateway.RequestSpec = {
     requestId,
     sessionId: "request-owner",
-    expectedResponders: ["actor-external-worker"],
+    expectedResponders: ["actor-external-child"],
     correlation: { channelId: "telegram:dm", tokenHash: "token-hash-1" },
     allowedActions: ["report_result"],
     resolution: "first",

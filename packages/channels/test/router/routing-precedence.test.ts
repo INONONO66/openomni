@@ -201,7 +201,7 @@ describe("resolveRoute precedence", () => {
     expect(decisions.every((decision) => decision.sessionId === undefined)).toBe(true);
   });
 
-  it("refuses blacklist, block and ambiguity before the inbox body", async () => {
+  it("refuses blacklist, block and ambiguity before the delivery body", async () => {
     const decisions = [
       resolveRoute(inbound, {
         blacklist: { id: "blacklist-actor", kind: "actor", reason: "revoked" },

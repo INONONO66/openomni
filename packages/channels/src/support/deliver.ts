@@ -19,7 +19,7 @@ const NotConnected = z.object({
 /** Proven sends are safe to forget once the platform has the message; uncertain keys never expire. */
 const SENT_RETENTION = 4096;
 
-/** Physical-send custody, not an inbox dedupe window: uncertain keys must not expire. */
+/** Physical-send custody, not an delivery dedupe window: uncertain keys must not expire. */
 export class DeliveryReconciliation {
   private readonly attempts = new Map<string, Promise<DeliveryReceipt>>();
   private readonly sent = new Set<string>();

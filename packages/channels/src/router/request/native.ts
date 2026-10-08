@@ -5,7 +5,7 @@ import {
   SessionTransition,
   type Gateway,
   type LedgerAction,
-  type Inbox,
+  type Delivery,
   type PlainValue,
 } from "@openomni/protocol";
 import type { GatewayRouterPorts } from "../message-ports";
@@ -65,7 +65,7 @@ export function openNativeRequest(
   send: Gateway.SendMessage,
   target: string,
   at: number,
-  admission?: Inbox.Commit,
+  admission?: Delivery.Commit,
 ): Effect.Effect<void, ChannelError> {
   return Effect.gen(function* () {
   if (

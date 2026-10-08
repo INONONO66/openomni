@@ -28,7 +28,7 @@ test.each([
 test.each([
   {},
   { role: "user" },
-  { role: "worker" },
+  { role: "child" },
   { role: "sub_persona" },
   { role: "manager", trusted: false },
   { role: "manager", trusted: true },
@@ -41,12 +41,12 @@ test.each([
 test.each([
   "collaborator",
   "observer",
-] as const)("%s evidence may reach a resident, never a worker", (trustTier) => {
+] as const)("%s evidence may reach a resident only; a retired target shape is a typed parse failure", (trustTier) => {
   const event = makeInboundEvent({
     meta: { actor: { trustTier }, inboundTreatment: "evidence_only" },
   });
   expect(isAuthorizedTopLevelActor(event)).toBe(true);
-  expect(isAuthorizedTopLevelActor({ ...event, target: { kind: "worker" } })).toBe(false);
+  expect(() => isAuthorizedTopLevelActor({ ...event, target: { kind: "child" } as never })).toThrow();
 });
 
 test("missing actor fails closed", () => {

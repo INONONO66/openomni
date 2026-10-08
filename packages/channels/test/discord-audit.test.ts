@@ -43,7 +43,7 @@ describe("Discord audit regressions", () => {
     );
     adapter.onMessage(async () => {
       handlerAttempts += 1;
-      if (handlerAttempts === 1) throw new Error("inbox refused");
+      if (handlerAttempts === 1) throw new Error("delivery refused");
       retried.resolve();
     });
     const harness = adapter as object as DiscordAdapterHarness;
