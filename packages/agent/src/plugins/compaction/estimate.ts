@@ -82,8 +82,25 @@ export function prepareSummarizerInput(
     });
     return changed ? { ...message, parts } : message;
   });
+  // #1314: linear prefix drop. Per-message weighted chars are computed once;
+  // the running suffix total is summed in chars and rounded once per probe —
+  // exactly what `estimateMessagesTokens` does on the same suffix — so the
+  // result is byte-identical to the former quadratic `slice(first)` re-scan.
+  const weights = elided.map((message) => {
+    let weightedChars = 0;
+    for (const part of message.parts) {
+      if (part.type === "text") weightedChars += weightedTextChars(part.text);
+      else if (part.type === "tool" && part.state.status === "completed") {
+        weightedChars += weightedTextChars(part.state.output);
+      }
+    }
+    return weightedChars;
+  });
+  let suffixChars = 0;
+  for (const weight of weights) suffixChars += weight;
   let first = 0;
-  while (first < elided.length && estimateMessagesTokens(elided.slice(first)) > messageBudget) {
+  while (first < elided.length && Math.ceil(suffixChars / ESTIMATED_CHARS_PER_TOKEN) > messageBudget) {
+    suffixChars -= weights[first] ?? 0;
     first += 1;
   }
   return { messages: elided.slice(first), budget };

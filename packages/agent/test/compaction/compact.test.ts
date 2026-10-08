@@ -263,6 +263,51 @@ describe("Compaction", () => {
     });
   });
 
+  describe("summarizer input trimming (#1314)", () => {
+    // The quadratic reference this replaced: re-estimate the shrinking
+    // suffix with the public estimator until it fits the half-window budget.
+    function quadraticReference(
+      messages: readonly Message.WithParts[],
+      contextWindowTokens: number,
+    ): readonly Message.WithParts[] {
+      const budget = Math.max(0, Math.floor(contextWindowTokens * 0.5));
+      let first = 0;
+      while (first < messages.length && estimateMessagesTokens(messages.slice(first)) > budget) {
+        first += 1;
+      }
+      return messages.slice(first);
+    }
+
+    it("matches the quadratic reference on 500 individually over-budget messages", () => {
+      const messages = Array.from({ length: 500 }, (_: undefined, i: number) =>
+        i % 2 === 0
+          ? makeUserMessage(`user ${i} ${"content ".repeat(600)}`)
+          : makeAssistantMessage(`assistant ${i} ${"content ".repeat(600)}`),
+      );
+      const result = prepareSummarizerInput(messages, 2000);
+      expect(result.messages).toEqual([...quadraticReference(messages, 2000)]);
+    });
+
+    it("matches the quadratic reference when the drop stops mid-list", () => {
+      const messages = Array.from({ length: 64 }, (_: undefined, i: number) =>
+        i % 2 === 0
+          ? makeUserMessage(`user ${i} ${"content ".repeat(20)}`)
+          : makeAssistantMessage(`assistant ${i} ${"content ".repeat(20)}`),
+      );
+      const result = prepareSummarizerInput(messages, 8000);
+      const expected = quadraticReference(messages, 8000);
+      expect(expected.length).toBeGreaterThan(0);
+      expect(expected.length).toBeLessThan(messages.length);
+      expect(result.messages).toEqual([...expected]);
+    });
+
+    it("returns no messages and an intact budget for zero inputs", () => {
+      const result = prepareSummarizerInput([], 2000);
+      expect(result.messages).toEqual([]);
+      expect(result.budget.maxInputTokens).toBe(1000);
+    });
+  });
+
   describe("commit boundary invariant", () => {
     it("snaps the cutoff back to a user boundary when no summary anchors the kept window", async () => {
       // onSummarize unset (it is optional everywhere): the natural cutoff lands
