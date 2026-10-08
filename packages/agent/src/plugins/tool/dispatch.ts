@@ -24,11 +24,11 @@ import {
   type ExecutionRequest, type Executor, type ExecutorOptions,
   type InvocationFrame, type ProcessServices, type RawToolSlots,
   type ToolDispatchDefinition, type ToolDispatchResult, type ToolErrorKind,
+  DEFAULT_TOOL_OUTPUT_BUDGET_BYTES, projectToolOutput, type ToolOutputPorts,
 } from "../../core/api";
 
 const NEVER_ABORTED = new AbortController().signal;
 
-const MODEL_OUTPUT_MAX_CHARS = 32_000;
 /** D5 bound: typed data rides structuredContent only when it fits the protocol JSON bound. */
 const BoundedResultJson = toolResultJsonSchema();
 
@@ -49,6 +49,7 @@ function finishResult(
   inputData: PlainValue,
   door: "model" | "cell",
   execution: ExecutionBatchResult,
+  toolOutput: ToolOutputPorts | undefined,
 ): ToolDispatchResult | CellToolDispatchResult {
   if (execution.terminal === "interrupted" || execution.terminal === "outcome_unknown")
     return failed(call, execution.reason, "execution_failed");
@@ -95,12 +96,17 @@ function finishResult(
   // Typed data rides structuredContent only when it fits the protocol bound;
   // content stays the authoritative model text either way.
   const structured = BoundedResultJson.safeParse(output.data);
+  // #1305: over-budget renders are stored once and projected — the model
+  // reads a bounded preview plus the identifier, never a destructive cut.
+  const rendered = definition.render(inputData, output.data);
+  const projected = toolOutput === undefined ? { content: rendered } : projectToolOutput(rendered, toolOutput);
   return {
     toolCallId: call.id,
     id: call.id,
     toolName: call.tool,
-    content: truncate(definition.render(inputData, output.data)),
+    content: projected.content,
     ...(structured.success ? { structuredContent: structured.data } : {}),
+    ...(projected.outputRef === undefined ? {} : { details: { outputRef: { ...projected.outputRef } } }),
   } satisfies ToolDispatchResult;
 }
 
@@ -221,7 +227,7 @@ function buildDispatcher(definitions: readonly ToolDispatchDefinition[], options
     const finish = (
       execution: ExecutionBatchResult,
     ): ToolDispatchResult | CellToolDispatchResult =>
-      finishResult(call, definition, admittedValue, door, execution);
+      finishResult(call, definition, admittedValue, door, execution, options?.toolOutput);
     let modelResult: ToolDispatchResult | undefined;
     return {
       kind: "ready",
@@ -465,10 +471,18 @@ export function createTurnDispatcher(
     pinnedNames === undefined
       ? definitions
       : definitions.filter((definition) => pinnedNames.has(definition.name));
+  // #1305: the per-turn dispatcher projects over-budget renders through the
+  // ledger-backed output store under the generation's resolved budget.
+  const putToolOutput = input.ledger.putToolOutput;
+  const toolOutput: ToolOutputPorts | undefined = putToolOutput === undefined ? undefined : {
+    budgetBytes: input.ledger.toolOutputBudgetBytes?.() ?? DEFAULT_TOOL_OUTPUT_BUDGET_BYTES,
+    put: putToolOutput,
+  };
   const dispatcher = buildDispatcher(pinnedDefinitions, {
     executor,
     retainEffect: input.retainEffect,
     trackWave: input.trackWave,
+    ...(toolOutput === undefined ? {} : { toolOutput }),
   }, () => frame);
   const frame: InvocationFrame = { executor, cell: dispatcher, policy, generation };
   return {
@@ -519,18 +533,3 @@ function failed(call: Tool.Call, content: string, errorKind: ToolErrorKind): Too
   };
 }
 
-function truncate(output: string): string {
-  if (output.length <= MODEL_OUTPUT_MAX_CHARS) return output;
-  const originalBytes = Buffer.byteLength(output, "utf8");
-  // Reserve the marker's final width and never split a supplementary code point.
-  let kept = MODEL_OUTPUT_MAX_CHARS;
-  for (;;) {
-    if ((output.codePointAt(kept - 1) ?? 0) > 0xffff) kept -= 1;
-    const prefix = output.slice(0, kept);
-    const droppedBytes = originalBytes - Buffer.byteLength(prefix, "utf8");
-    const marker = `\n[truncated: ${droppedBytes} bytes dropped; ${originalBytes} bytes original]`;
-    const available = MODEL_OUTPUT_MAX_CHARS - marker.length;
-    if (kept <= available) return `${prefix}${marker}`;
-    kept = available;
-  }
-}

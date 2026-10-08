@@ -13,6 +13,40 @@ function dispatcher(definitions: readonly import("@openomni/protocol").AnyToolDe
   return runAgentSync(createDispatcher({ executor: recordingExecutor().executor }).pipe(Effect.provide(catalogLayer(definitions))));
 }
 
+/** #1305: a dispatcher wired with in-memory tool output projection ports. */
+function projectingDispatcher(
+  definitions: readonly import("@openomni/protocol").AnyToolDefinition[],
+  budgetBytes = 32_768,
+) {
+  const stored = new Map<string, { bytes: Uint8Array; mediaType?: string }>();
+  const dispatch = runAgentSync(
+    createDispatcher({
+      executor: recordingExecutor().executor,
+      toolOutput: {
+        budgetBytes,
+        put: (write) => {
+          if (!stored.has(write.outputId))
+            stored.set(write.outputId, { bytes: write.bytes, ...(write.mediaType === undefined ? {} : { mediaType: write.mediaType }) });
+        },
+      },
+    }).pipe(Effect.provide(catalogLayer(definitions))),
+  );
+  return { dispatch, stored };
+}
+
+const OUTPUT_MARKER = /\n\[output (sha256:[0-9a-f]{64}): (\d+) bytes; read with tool_output\("(sha256:[0-9a-f]{64})"\)\]$/;
+
+const OutputRef = z.object({
+  outputId: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  bytes: z.number().int().positive(),
+  mediaType: z.string(),
+  preview: z.string(),
+});
+
+function parsedRef(details: unknown) {
+  return OutputRef.parse(z.object({ outputRef: OutputRef }).parse(details).outputRef);
+}
+
 function definition(options: {
   readonly name?: string;
   readonly category?: "query" | "execution";
@@ -187,23 +221,71 @@ describe("tool dispatcher public contract", () => {
       ),
     ));
 
-  it("returns typed cell output and truncates oversized model output", () =>
+  it("returns typed cell output and projects oversized model output to a stored ref (#1305)", () =>
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
           const output = "x".repeat(40_000);
-          const dispatch = dispatcher([
+          const { dispatch, stored } = projectingDispatcher([
             definition({ execute: async () => output, render: (value: string) => value }),
           ]);
 
           const cell = yield* dispatch.executeCell(call, context);
           const model = yield* dispatch.execute(call, context);
 
+          // The cell door keeps typed data untouched — projection is model-facing.
           expect(cell.structuredContent).toBe(output);
-          expect(typeof model.content).toBe("string");
-          expect(model.content).toHaveLength(32_000);
-          const marker = "\n[truncated: 8054 bytes dropped; 40000 bytes original]";
-          expect(model.content).toBe(`${output.slice(0, 32_000 - marker.length)}${marker}`);
+          const marker = OUTPUT_MARKER.exec(model.content);
+          if (marker === null) throw new Error(`missing output marker: ${model.content.slice(-120)}`);
+          expect(marker[1]).toBe(marker[3]);
+          expect(Number(marker[2])).toBe(40_000);
+          expect(Buffer.byteLength(model.content, "utf8")).toBeLessThanOrEqual(32_768);
+          const preview = model.content.slice(0, marker.index);
+          expect(output.startsWith(preview)).toBe(true);
+          // Full bytes are stored once under the identifier, readable back whole.
+          const ref = parsedRef(model.details);
+          expect(ref.outputId).toBe(marker[1] ?? "");
+          expect(ref.bytes).toBe(40_000);
+          expect(ref.mediaType).toBe("text/plain");
+          expect(ref.preview).toBe(preview);
+          const full = stored.get(ref.outputId);
+          if (full === undefined) throw new Error("output bytes not stored");
+          expect(new TextDecoder().decode(full.bytes)).toBe(output);
+          // A repeated identical output dedupes on the digest key.
+          yield* dispatch.execute(call, context);
+          expect(stored.size).toBe(1);
+        }),
+      ),
+    ));
+
+  it("a render within the budget passes through untouched — no ref, no store write (#1305)", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const output = "y".repeat(40_000);
+          const { dispatch, stored } = projectingDispatcher(
+            [definition({ execute: async () => output, render: (value: string) => value })],
+            100_000,
+          );
+          const model = yield* dispatch.execute(call, context);
+          expect(model.content).toBe(output);
+          expect(model.details).toBeUndefined();
+          expect(stored.size).toBe(0);
+        }),
+      ),
+    ));
+
+  it("a dispatcher composed without projection ports renders verbatim (cell/catalog door)", () =>
+    isolated(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const output = "z".repeat(40_000);
+          const dispatch = dispatcher([
+            definition({ execute: async () => output, render: (value: string) => value }),
+          ]);
+          const model = yield* dispatch.execute(call, context);
+          expect(model.content).toBe(output);
+          expect(model.details).toBeUndefined();
         }),
       ),
     ));
@@ -213,45 +295,47 @@ describe("tool dispatcher public contract", () => {
     `a${"\u{1F600}".repeat(25_000)}`,
     "\u00e9".repeat(40_000),
     "\u4e2d".repeat(40_000),
-  ])("R3 multibyte truncation reports exactly the omitted UTF-8 bytes without splitting text", (output: string) =>
+  ])("R3 multibyte projection never splits a code point and reports exact bytes (#1305)", (output: string) =>
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
-          const dispatch = dispatcher([definition({ execute: async () => output })]);
+          const { dispatch, stored } = projectingDispatcher([definition({ execute: async () => output })]);
           const cell = yield* dispatch.executeCell(call, context);
           const model = yield* dispatch.execute(call, context);
           expect(cell.structuredContent).toBe(output);
           expect(model.isError).toBeUndefined();
-          expect(model.content.length).toBeLessThanOrEqual(32_000);
+          expect(Buffer.byteLength(model.content, "utf8")).toBeLessThanOrEqual(32_768);
+          // A lossy encode round-trip would mangle a split code point.
           expect(Buffer.from(model.content, "utf8").toString("utf8")).toBe(model.content);
-          const receipt = /\n\[truncated: (\d+) bytes dropped; (\d+) bytes original\]$/.exec(
-            model.content,
-          );
-          expect(receipt).not.toBeNull();
-          if (receipt === null) throw new Error("missing byte receipt");
-          const prefix = model.content.slice(0, receipt.index);
-          expect(output.startsWith(prefix)).toBe(true);
-          const dropped = output.slice(prefix.length);
-          expect(Number(receipt[1])).toBe(Buffer.byteLength(dropped, "utf8"));
-          expect(Number(receipt[2])).toBe(Buffer.byteLength(output, "utf8"));
-          expect(Buffer.byteLength(prefix) + Number(receipt[1])).toBe(Number(receipt[2]));
-          const nextCodePoint = [...dropped][0];
-          expect(nextCodePoint).toBeDefined();
-          expect(model.content.length + (nextCodePoint?.length ?? 0)).toBeGreaterThan(32_000);
+          const marker = OUTPUT_MARKER.exec(model.content);
+          if (marker === null) throw new Error("missing output marker");
+          expect(Number(marker[2])).toBe(Buffer.byteLength(output, "utf8"));
+          const preview = model.content.slice(0, marker.index);
+          expect(output.startsWith(preview)).toBe(true);
+          const ref = parsedRef(model.details);
+          expect(ref.preview).toBe(preview);
+          const full = stored.get(ref.outputId);
+          if (full === undefined) throw new Error("output bytes not stored");
+          expect(new TextDecoder().decode(full.bytes)).toBe(output);
         }),
       ),
     ));
 
-  it("R3 Unicode boundary keeps the exact prefix and byte marker through the dispatcher", () =>
+  it("R3 Unicode boundary keeps a code-point-safe preview and the ref marker through the dispatcher", () =>
     isolated(
       Effect.scoped(
         Effect.gen(function* () {
           const output = `a${"\u{1F600}".repeat(25_000)}`;
-          const dispatch = dispatcher([definition({ execute: async () => output })]);
+          const { dispatch, stored } = projectingDispatcher([definition({ execute: async () => output })]);
           const model = yield* dispatch.execute(call, context);
-          expect(model.content).toBe(
-            `a${"\u{1F600}".repeat(15_971)}\n[truncated: 36116 bytes dropped; 100001 bytes original]`,
-          );
+          const marker = OUTPUT_MARKER.exec(model.content);
+          if (marker === null) throw new Error("missing output marker");
+          const preview = model.content.slice(0, marker.index);
+          // The preview ends on a whole emoji, never inside its surrogate pair.
+          expect(Buffer.from(preview, "utf8").toString("utf8")).toBe(preview);
+          expect(output.startsWith(preview)).toBe(true);
+          expect(Number(marker[2])).toBe(Buffer.byteLength(output, "utf8"));
+          expect(stored.has(marker[1] ?? "")).toBe(true);
           expect((yield* dispatch.executeCell(call, context)).structuredContent).toBe(output);
         }),
       ),
@@ -291,7 +375,7 @@ describe("D5 tool result split producers", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const blob = "x".repeat(300_000);
-          const dispatch = dispatcher([eraseTool(defineTool({
+          const { dispatch } = projectingDispatcher([eraseTool(defineTool({
             name: "echo",
             description: "Returns oversize structured data",
             category: "query",
@@ -304,8 +388,8 @@ describe("D5 tool result split producers", () => {
           const model = yield* dispatch.execute(call, context);
           expect(model.structuredContent).toBeUndefined();
           expect(model.isError).toBeUndefined();
-          expect(model.content.length).toBeLessThanOrEqual(32_000);
-          expect(model.content).toContain("[truncated:");
+          expect(Buffer.byteLength(model.content, "utf8")).toBeLessThanOrEqual(32_768);
+          expect(model.content).toContain("[output sha256:");
         }),
       ),
     ));
