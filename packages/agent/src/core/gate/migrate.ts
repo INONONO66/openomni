@@ -14,7 +14,7 @@ import { GateComposeError, type GatePointTable } from "../points";
  * generation converts onto the current `ingress` address at seed time. The
  * spelling is assembled so the vocabulary-retirement grep stays at zero.
  */
-export const LEGACY_INGRESS_POLICY_KIND: string = ["in", "box"].join("") + ".deliver";
+export const LEGACY_INGRESS_POLICY_KIND = "inbox.deliver" as const;
 
 const LEGACY_POINT_BY_KIND_PHASE: ReadonlyMap<string, PointId> = new Map([
   [`${LEGACY_INGRESS_POLICY_KIND}\u0000pre`, "ingress.pre"],

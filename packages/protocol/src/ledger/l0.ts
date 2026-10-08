@@ -139,7 +139,7 @@ export namespace LedgerSession {
    * and no alias is exported. The legacy spelling is assembled so the
    * vocabulary-retirement grep stays at zero.
    */
-  export const LEGACY_CHILD_ROLE: string = ["wor", "ker"].join("");
+  export const LEGACY_CHILD_ROLE = "worker" as const;
   export function foldLegacyRole(role: string): string {
     return role === LEGACY_CHILD_ROLE ? "child" : role;
   }

@@ -97,6 +97,50 @@
   "DecisionFact.Outcome#recorded": ["fact", "kind"],
   "DecisionFact.Record": ["data", "key", "timeCreated", "type"],
   "DecisionFact.Recorded": ["data", "key", "rowHash", "timeCreated", "type"],
+  "Delivery.Commit": [
+    "after",
+    "content",
+    "createdAt",
+    "createSession",
+    "delivery",
+    "id",
+    "kind",
+    "limits",
+    "origin",
+    "parentActionId",
+    "sender",
+    "sessionId"
+  ],
+  "Delivery.MessageOrigin": [
+    "deadline",
+    "kind",
+    "messageId",
+    "replyTo",
+    "senderSessionId",
+    "sourceActionId"
+  ],
+  "Delivery.ReplyOrigin": [
+    "childSessionId",
+    "kind",
+    "messageId",
+    "replyTo",
+    "sourceActionId",
+    "terminalKind"
+  ],
+  "Delivery.Row": [
+    "after",
+    "consumedAt",
+    "consumedBy",
+    "content",
+    "createdAt",
+    "delivery",
+    "id",
+    "kind",
+    "ordinal",
+    "origin",
+    "sessionId",
+    "status"
+  ],
   "FoldCheckpoint.Effect": ["phase", "result", "terminal"],
   "FoldCheckpoint.Intent": ["foldVersion", "phase", "reason", "revision"],
   "FoldCheckpoint.Result": ["foldVersion", "revision", "state", "stateHash"],
@@ -114,6 +158,7 @@
     "origin",
     "trustTier"
   ],
+  "Gateway.DelegationResult": ["pointer", "preview", "status"],
   "Gateway.Deliver": [
     "actorContext",
     "decision",
@@ -409,50 +454,6 @@
     "targetActorId",
     "windowMs"
   ],
-  "Inbox.Commit": [
-    "after",
-    "content",
-    "createdAt",
-    "createSession",
-    "delivery",
-    "id",
-    "kind",
-    "limits",
-    "origin",
-    "parentActionId",
-    "sender",
-    "sessionId"
-  ],
-  "Inbox.MessageOrigin": [
-    "deadline",
-    "kind",
-    "messageId",
-    "replyTo",
-    "senderSessionId",
-    "sourceActionId"
-  ],
-  "Inbox.ReplyOrigin": [
-    "childSessionId",
-    "kind",
-    "messageId",
-    "replyTo",
-    "sourceActionId",
-    "terminalKind"
-  ],
-  "Inbox.Row": [
-    "after",
-    "consumedAt",
-    "consumedBy",
-    "content",
-    "createdAt",
-    "delivery",
-    "id",
-    "kind",
-    "ordinal",
-    "origin",
-    "sessionId",
-    "status"
-  ],
   "Ingress.ActorSchema": [
     "actorId",
     "agentName",
@@ -467,8 +468,7 @@
     "sessionId",
     "standing",
     "trustTier",
-    "type",
-    "workerId"
+    "type"
   ],
   "Ingress.DirectEventSchema": [
     "channel",
@@ -509,7 +509,7 @@
     "target",
     "threadId"
   ],
-  "Ingress.TargetSchema": ["kind", "parentSessionId", "sessionId", "workerId"],
+  "Ingress.TargetSchema": ["kind", "parentSessionId", "sessionId"],
   "Ipc.Notification": ["id", "method", "params", "type", "v"],
   "Ipc.Request": ["id", "method", "params", "type", "v"],
   "Ipc.Response": ["error", "id", "result", "type", "v"],
@@ -995,6 +995,7 @@
     "manifestHash",
     "policyGeneration",
     "revertTo",
+    "rowsVersion",
     "systemBlocks",
     "systemHash",
     "systemPreset",
@@ -1011,7 +1012,7 @@
     "sequential"
   ],
   "SessionHistory.Cause#action": ["actionId", "kind"],
-  "SessionHistory.Cause#inbox": ["inboxIds", "kind"],
+  "SessionHistory.Cause#delivery": ["deliveryIds", "kind"],
   "SessionHistory.Cause#root": ["kind"],
   "SessionHistory.Compaction": [
     "compactionId",
@@ -1186,6 +1187,7 @@
   "SessionTransition.Outbound": ["destinationReceipt", "message", "state"],
   "SessionTransition.OutboundMessage": [
     "content",
+    "delivery",
     "destinationSessionId",
     "digest",
     "messageId",
@@ -1259,7 +1261,7 @@
     "boundaryActionId",
     "consumedStale",
     "context",
-    "inboxIds",
+    "deliveryIds",
     "phase",
     "policyGeneration",
     "resultId",
@@ -1271,7 +1273,7 @@
   "SessionTurn.DecodeIntent#1": [
     "boundaryActionId",
     "consumedStale",
-    "inboxIds",
+    "deliveryIds",
     "phase",
     "policyGeneration",
     "resultId",
@@ -1307,7 +1309,7 @@
     "boundary",
     "content",
     "delivery",
-    "inboxId",
+    "deliveryId",
     "kind",
     "origin",
     "phase",
@@ -1316,7 +1318,7 @@
   "SessionTurn.HistoricalIntent": [
     "boundaryActionId",
     "consumedStale",
-    "inboxIds",
+    "deliveryIds",
     "phase",
     "policyGeneration",
     "resultId",
@@ -1340,7 +1342,7 @@
     "boundaryActionId",
     "consumedStale",
     "context",
-    "inboxIds",
+    "deliveryIds",
     "phase",
     "policyGeneration",
     "resultId",

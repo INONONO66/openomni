@@ -197,7 +197,7 @@ async function duplicateAmbiguous(context: ScenarioContext) {
       unchanged,
       after: quorumState(after),
     },
-    workerAllocated: false,
+    childAllocated: false,
     allocationDelta,
   };
 }

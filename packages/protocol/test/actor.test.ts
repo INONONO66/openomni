@@ -55,7 +55,7 @@ describe("Actor protocol contracts", () => {
       expect(Actor.Kind.parse(kind)).toBe(kind);
     }
     // The retired command-local values are not identity vocabulary.
-    expect(Actor.Kind.safeParse(["wor", "ker"].join("")).success).toBe(false);
+    expect(Actor.Kind.safeParse("worker").success).toBe(false);
     expect(Actor.Kind.safeParse("user").success).toBe(false);
   });
 

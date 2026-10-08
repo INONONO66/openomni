@@ -62,7 +62,7 @@ describe("existing-agent-message-driver", () => {
       .object({
         resultCode: z.string(),
         allocationDelta: z.number(),
-        workerAllocated: z.boolean(),
+        childAllocated: z.boolean(),
         denials: z.array(z.object({ plane: z.string(), code: z.string() })),
         quorum: z.object({
           unchanged: z.boolean(),
@@ -88,7 +88,7 @@ describe("existing-agent-message-driver", () => {
       responders: 1,
       threshold: 2,
     });
-    expect(receipt.workerAllocated).toBe(false);
+    expect(receipt.childAllocated).toBe(false);
     expect(receipt.allocationDelta).toBe(0);
   });
 

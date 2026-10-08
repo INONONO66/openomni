@@ -4,7 +4,7 @@ import { resolveTarget, targetKey } from "../../src/ingress/index.js";
 
 // #1315: the retired subordinate-target spelling is assembled so the
 // vocabulary-retirement grep stays at zero while the refusal stays tested.
-const RETIRED_TARGET_PREFIX = ["wor", "ker"].join("");
+const RETIRED_TARGET_PREFIX = "worker";
 
 describe("ingress target helpers", () => {
   it("defaults events without explicit target to resident", () => {
