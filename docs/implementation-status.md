@@ -6,8 +6,9 @@ On `stab/9-core-policy-to-bundles` (2026-10-08, base `c11ae7148`).
 
 - Seam: `packages/agent/src/core/approval-policy.ts` declares `ApprovalPolicy`
   (plain data: `responders`, `recentOpen{limit, windowMs}`, `defaultExpiryMs`,
-  `defaultBudget`) plus `ApprovalPolicySeam`, exported through the root `Core` namespace (`core/index.ts`; no plugin consumes it, so it never reaches the `core/api.ts` plugin surface)
-  and `Core`. No callbacks, no defaults in core.
+  `defaultBudget`) plus `ApprovalPolicySeam`, exported through the root `Core`
+  namespace (`core/index.ts`; no plugin consumes it, so it never reaches the
+  `core/api.ts` plugin surface). No callbacks, no defaults in core.
 - Core purge (measured): `rg -n '\["owner"\]|count >= 8|3_600_000|86_400_000|BUDGET_DEFAULTS'
   packages/agent/src/core` → no output; `rg -c 'BUDGET_DEFAULTS' -g '*.ts'
   packages apps` (7 before) → no output; `rg -n '86_400_000'
