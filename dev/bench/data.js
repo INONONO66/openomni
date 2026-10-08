@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791382110782,
+  "lastUpdate": 1791426731620,
   "repoUrl": "https://github.com/INONONO66/openomni",
   "entries": {
     "OpenOmni Benchmarks": [
@@ -80171,6 +80171,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "turn/tool-dispatch",
             "value": 82726,
+            "unit": "ns/op"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "inonono66@gmail.com",
+            "name": "INONONO",
+            "username": "INONONO66"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3587fca8dc604ea3c5cfbfdd8ae2b39e72fdb664",
+          "message": "Split mailbox admission; typed admission/origin refusals; required stop evidence (#1310) (#1327)\n\n* wip(agent): lane 8 banked mid-split — mailbox.ts deleted, admission.ts/recovery.ts/request.ts split in progress (#1310)\n\nLane st_01a11577 died at 43 min with a truncated reply ('Now the callers. entity.ts first:'). Coherence unknown: callers (entity.ts, run.ts, testing/controller.ts, tests) partially rewritten; tsc not run. Banked by the lead so the next lane resumes from this tree.\n\n* refactor(agent): refuse admission snapshots with no declared capability kinds (#1310)\n\nThe `?? BUILTIN_CAPABILITY_KINDS` default in admission is gone: a snapshot\nthat declares no kinds is a typed `missing_capability_kinds` refusal, and\nevery real caller (entity ports doc, process child drain, testing controller,\ntest cluster helper) now states its kinds explicitly. New\nadmission-kinds-refusal.test.ts covers the pure reason and the zero-new-facts\ndeliver refusal through the real entity.\n\n* feat(agent): fail a turn typed on a prompt with no recorded origin (#1310)\n\n`inboundAuthority` now requires a recorded origin; the new\n`promptInboundAuthority` names the missing-row case `missing_origin`,\npublishes the existing InboundAuthorityViolated observation and fails the\nturn before the runner — the silent `act` grant for an undefined origin is\ngone. Reason unions (failure class + observation zod enum) gain the literal.\n\n* wip(agent): lane 8b banked — stopEvidence required (commit C in progress; src tsc 0, stop-evidence-required.test.ts unfinished) (#1310)\n\n* test(agent): stopEvidence is a required compile-time port consulted every turn (#1310)\n\n* chore(agent): wire fixture stop evidence into the turns bench (#1310)\n\n* test(agent): express the fixture-only stopEvidence override without an optional token (#1310)\n\n* docs: stamp #1310 mailbox admission split (AGENTS.md, implementation-status, SLOP §M)\n\n* test(agent): drop the unused ChatFixture import left by the stopEvidence rewire (#1310)\n\n* chore(script): follow the mailbox.ts split in the agent band ratchet (#1310)\n\n* test(agent,openomni): cover the missing_origin turn failure end to end; app fixtures state composed capabilityKinds (#1310)\n\n* test(agent): publish fixture parses PlainValueSchema instead of a written unknown record (#1310)\n\n* test(agent): assert core/admission.ts has no plugins/ import; drop filler assertion in stop-evidence-required (#1310 review r1 L1/L2)",
+          "timestamp": "2026-10-08T11:29:08+09:00",
+          "tree_id": "0b99e861087f7bc75c770a0798dcb16187fe853a",
+          "url": "https://github.com/INONONO66/openomni/commit/3587fca8dc604ea3c5cfbfdd8ae2b39e72fdb664"
+        },
+        "date": 1791426731289,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bus-fanout/10-subscribers",
+            "value": 1094,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/100-subscribers",
+            "value": 1885,
+            "unit": "ns/op"
+          },
+          {
+            "name": "bus-fanout/50-subscribers",
+            "value": 1445,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/100-messages",
+            "value": 1636345,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/20-messages",
+            "value": 426745,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/500-messages",
+            "value": 7027848,
+            "unit": "ns/op"
+          },
+          {
+            "name": "compaction/should-compact",
+            "value": 157,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/parse-message",
+            "value": 1152,
+            "unit": "ns/op"
+          },
+          {
+            "name": "message-serialization/stringify-message",
+            "value": 725,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-commit/action",
+            "value": 211451,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-history/page",
+            "value": 858611,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-messages",
+            "value": 524656,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-hydration/get-session",
+            "value": 3508,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/10k-actions",
+            "value": 13443131,
+            "unit": "ns/op"
+          },
+          {
+            "name": "session-tree/1k-actions",
+            "value": 1518550,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/10-sessions",
+            "value": 20144,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/100-sessions",
+            "value": 186602,
+            "unit": "ns/op"
+          },
+          {
+            "name": "storage-session-list/500-sessions",
+            "value": 1000998,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/first-delta",
+            "value": 290304,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/round-trip",
+            "value": 18463679,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/token-accounting",
+            "value": 93,
+            "unit": "ns/op"
+          },
+          {
+            "name": "turn/tool-dispatch",
+            "value": 219444,
             "unit": "ns/op"
           }
         ]
