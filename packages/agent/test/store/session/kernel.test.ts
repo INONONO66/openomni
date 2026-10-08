@@ -2,6 +2,7 @@ import { sessionTree } from "../helpers/session-tree";
 import { runLedgerSync } from "../helpers/effect";
 import { Effect, Result } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { type BusEvent, type LedgerAction, type LedgerSession, L0Observation, type SessionGeneration, SessionTurn, } from "@openomni/protocol";
 import { Bus } from "../helpers/observation";
 import * as SessionHandleStore from "../../../src/core/store/fence";
@@ -729,5 +730,74 @@ describe("session kernel folds", () => {
     expect(() => kernel.watchSnapshot("missing", 1, { publish: () => undefined })).toThrow(
       "requires a subscribable observation sink",
     );
+  });
+});
+
+describe("session kernel commit query budget (#1314)", () => {
+  test("one existence and one parent query per accepted action; in-batch parents query nothing", () => {
+    const sessionId = "query-spy";
+    materialize(sessionId);
+    const authority = adoptWriter(stores.kernel, sessionId, "owner");
+    const actions = [
+      prompt(`${sessionId}-1`, sessionId, "one", `${sessionId}:configure`),
+      prompt(`${sessionId}-2`, sessionId, "two", `${sessionId}-1`),
+      prompt(`${sessionId}-3`, sessionId, "three", `${sessionId}-2`),
+    ];
+    const counts = { exists: 0, parent: 0 };
+    const original = Database.prototype.query;
+    // Query spy (#1314 lead ruling): count the two validation statements;
+    // `validActionBatch` is their single call site per action. Matched by
+    // pattern, not string equality (review r1 L1), so a rephrased second
+    // check cannot evade the count.
+    const spy = function (this: Database, ...args: Parameters<typeof original>) {
+      const sql = args[0];
+      if (/SELECT 1 FROM action/.test(sql)) counts.exists += 1;
+      else if (/SELECT session_id FROM action/.test(sql)) counts.parent += 1;
+      return original.apply(this, args);
+    };
+    Database.prototype.query = spy as typeof original;
+    try {
+      const result = Result.getOrThrowWith(
+        runLedgerSync(
+          Effect.result(
+            stores.kernel.commit({
+              sessionId,
+              owner: authority.owner,
+              fence: authority.fence,
+              now: 12,
+              expectedRevision: stores.kernel.row(sessionId).revision,
+              actions,
+              state: "idle",
+            }),
+          ),
+        ),
+        (error) => error,
+      );
+      expect(result.receipts).toHaveLength(3);
+    } finally {
+      Database.prototype.query = original;
+    }
+    // Exactly one existence check per action; one parent lookup for the lone
+    // external parent (`:configure`) — in-batch parents resolve from the set.
+    expect(counts.exists).toBe(3);
+    expect(counts.parent).toBe(1);
+  });
+
+  test("duplicate-id + schema-mismatch single append throws SchemaRefused (review r1 H2)", () => {
+    const sessionId = "double-fault";
+    materialize(sessionId);
+    const authority = adoptWriter(stores.kernel, sessionId, "owner");
+    commitOne(authority, prompt(`${sessionId}-1`, sessionId, "one", `${sessionId}:configure`));
+    // Both faults at once: the id is already on the chain AND the body fails
+    // the `prompt` declaration (`delivery` outside steer|followUp). The #1252
+    // fail-closed order says the schema refusal wins — the typed throw, never
+    // a silent `undefined` from the duplicate-id existence check.
+    const doubleFault: LedgerAction.Append = {
+      ...prompt(`${sessionId}-1`, sessionId, "dup", `${sessionId}:configure`),
+      intent: { encodingVersion: 1, value: { source: "test", delivery: "bogus" } },
+    };
+    expect(() =>
+      stores.session.actions.append(doubleFault, stores.kernel.row(sessionId).revision),
+    ).toThrow(expect.objectContaining({ _tag: "SchemaRefused" }));
   });
 });

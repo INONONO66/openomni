@@ -1,5 +1,41 @@
 # Implementation Status
 
+## #1314 benchmarks measure the consolidated bus and store paths (epic #1303, rung 16)
+
+On `stab/16-measure-bus-consolidations` (2026-10-08, base `4b36d0f73`, PR #1335).
+
+- Production bus measured: `bench/bus-fanout` and the memory guard
+  (`test/store/bench/memory-regression.bench.ts`) run on `makeObservationBus`
+  (the real Effect PubSub inside a Scope), not the retired
+  `helpers/observation` stand-in (`rg 'helpers/observation'
+  packages/agent/bench packages/agent/test/store/bench` -> 0). Fanout acquires
+  N subscriptions via `yield* bus.stream` before any publish, asserts the new
+  read-only `bus.subscriberCount()` equals N before measuring, and settles
+  each iteration on the exact N-th delivery; a short fanout throws the typed
+  `FanoutShortfall` (watchdog outside the measured body), never hangs.
+- One existence + one parent query per committed action: both checks live
+  solely in `validActionBatch`; the commit loop and the single-append path
+  write through module-private `appendValidatedAction` (query-spy test: a
+  3-action batch runs exactly 3 existence queries and 1 parent query —
+  in-batch parents resolve from the batch id set with zero queries). The
+  single-append path keeps the #1252 fail-closed order: `refuseSchemaMismatch`
+  runs BEFORE the existence/parent checks, so a duplicate-id +
+  schema-mismatched action throws the typed `SchemaRefused`, never a silent
+  `undefined` (regression test in `test/store/session/kernel.test.ts`).
+- Linear summarizer trimming: the quadratic
+  `estimateMessagesTokens(elided.slice...)` probe became a running
+  weighted-char suffix total with one ceiling per probe — byte-identical
+  rounding proven by equivalence tests against an inline quadratic oracle
+  (500 over-budget messages, mid-list stop, exact-budget boundary, zero
+  inputs) in `test/compaction/compact.test.ts`.
+- Measured ns/op (`bench-16-before.json` -> `bench-16-after.json`, host runs
+  on Darwin arm64 Apple M5 Pro, Bun 1.4.2, load recorded; not CI):
+  bus-fanout/10-subscribers 619 -> 7641, bus-fanout/50-subscribers
+  819 -> 42145, bus-fanout/100-subscribers 1093 -> 89022 (the measured
+  surface changed from a stub to the real PubSub — the honest baseline the
+  issue asked for); session-commit/action 123463 -> 70138;
+  compaction/500-messages 3007810 -> 3086723 (+2.6%, host noise).
+
 ## #1319 legacy gate rows cut over to a versioned writer (epic #1303, rung 12)
 
 On `stab/12-legacy-rows-cutover` (2026-10-08, base `2dc31be78`).

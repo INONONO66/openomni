@@ -1,11 +1,11 @@
 // Run with: bun run bench/index.ts
-import { Effect, Result } from "effect";
+import { Effect, Result, Stream } from "effect";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Bench } from "tinybench";
 import { L0Observation, type LedgerSession, type Message } from "@openomni/protocol";
-import { Bus } from "../test/store/helpers/observation";
 import { materializeSession } from "../test/store/helpers/session";
+import { makeObservationBus } from "../src/core/bus";
 import { openCatalogStore } from "../src/core/store/catalog";
 import { openSessionStore } from "../src/core/store/session-file";
 import * as SessionHandleStore from "../src/core/store/fence";
@@ -85,33 +85,100 @@ async function runSessionHydration(): Promise<void> {
   }
 }
 
+// #1314: the fanout benchmark measures the production observation bus — an
+// Effect PubSub built by `makeObservationBus` inside a Scope — not a test
+// substitute. Each subscription is acquired deterministically (`yield*`
+// registers interest before any publish), and each iteration awaits a
+// deferred settled by the N-th delivery: an exact signal, never a timer.
+
+/** Typed fanout failure (review r1 M1): a short fanout throws, never hangs. */
+class FanoutShortfall extends Error {
+  constructor(expected: number, live: number, delivered: number, target: number) {
+    super(
+      `benchmark fanout shortfall: ${live}/${expected} live subscriptions, ` +
+        `${delivered}/${target} deliveries`,
+    );
+    this.name = "FanoutShortfall";
+  }
+}
+
 async function runBusFanout(): Promise<void> {
   for (const count of [10, 50, 100]) {
-    const bench = new Bench(measurement);
-    let handled = 0;
-    try {
-      for (let index = 0; index < count; index += 1) {
-        Bus.subscribe(L0Observation.ActionCommittedEvent, () => {
-          handled += 1;
-        });
-      }
-      bench.add(`${count}-subscribers`, async () => {
-        const before = handled;
-        Bus.publish(L0Observation.ActionCommittedEvent, {
-          id: "fanout-configure",
-          sessionId: "fanout",
-          kind: "session.configure",
-          revision: 1,
-        });
-        // Bus dispatches the complete subscriber batch in its queued microtask.
-        await Promise.resolve();
-        if (handled - before !== count) throw new Error("incomplete benchmark fanout");
-      });
-      await bench.run();
-      recordResults("bus-fanout", bench);
-    } finally {
-      Bus.reset();
-    }
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let stamp = 0;
+          const bus = yield* makeObservationBus({
+            id: () => `bench-fanout-${++stamp}`,
+            now: () => 1_700_000_000_000,
+          });
+          let handled = 0;
+          let target = 0;
+          let settle: (() => void) | undefined;
+          let abort: ((error: Error) => void) | undefined;
+          for (let index = 0; index < count; index += 1) {
+            const deliveries = yield* bus.stream(L0Observation.ActionCommittedEvent);
+            yield* Effect.forkScoped(
+              Stream.runForEach(deliveries, () =>
+                Effect.sync(() => {
+                  handled += 1;
+                  if (handled === target) settle?.();
+                }),
+              ),
+            );
+          }
+          // Review r1 M1: the subscription count is ASSERTED, not assumed —
+          // `yield*` acquired each subscription above, so the live count must
+          // equal N before a single publish is measured.
+          if (bus.subscriberCount() !== count) {
+            throw new FanoutShortfall(count, bus.subscriberCount(), handled, target);
+          }
+          const bench = new Bench(measurement);
+          bench.add(`${count}-subscribers`, async () => {
+            const deferred = Promise.withResolvers<void>();
+            target = handled + count;
+            settle = () => {
+              abort = undefined;
+              deferred.resolve();
+            };
+            abort = (error) => {
+              abort = undefined;
+              deferred.reject(error);
+            };
+            bus.sink.publish(L0Observation.ActionCommittedEvent, {
+              id: "fanout-configure",
+              sessionId: "fanout",
+              kind: "session.configure",
+              revision: 1,
+            });
+            await deferred.promise;
+          });
+          // Review r1 M1: bound the N-th-delivery wait OUTSIDE the measured
+          // body — a wait that makes no delivery progress between two watchdog
+          // ticks rejects with the typed error (recordResults then fails the
+          // run). The happy path still settles on the exact N-th delivery and
+          // never touches a timer.
+          let lastHandled = -1;
+          const watchdog = setInterval(() => {
+            if (abort === undefined) {
+              lastHandled = -1;
+              return;
+            }
+            if (handled === lastHandled) {
+              abort(new FanoutShortfall(count, bus.subscriberCount(), handled, target));
+              return;
+            }
+            lastHandled = handled;
+          }, 2_000);
+          try {
+            yield* Effect.promise(() => bench.run());
+          } finally {
+            clearInterval(watchdog);
+          }
+          recordResults("bus-fanout", bench);
+        }),
+      ),
+    );
   }
 }
 
@@ -227,15 +294,11 @@ async function runSessionCommit(): Promise<void> {
   }
 }
 
-try {
-  await runSessionHydration();
-  await runBusFanout();
-  await runMessageSerialization();
-  await runStorageSessionList();
-  await runSessionTree();
-  await runSessionCommit();
-  mkdirSync("bench-results", { recursive: true });
-  await Bun.write(join("bench-results", "session.json"), `${JSON.stringify(results, null, 2)}\n`);
-} finally {
-  Bus.reset();
-}
+await runSessionHydration();
+await runBusFanout();
+await runMessageSerialization();
+await runStorageSessionList();
+await runSessionTree();
+await runSessionCommit();
+mkdirSync("bench-results", { recursive: true });
+await Bun.write(join("bench-results", "session.json"), `${JSON.stringify(results, null, 2)}\n`);

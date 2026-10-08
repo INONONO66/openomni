@@ -141,3 +141,52 @@ describe("observation bus interest (#1305)", () => {
       ),
     ));
 });
+
+describe("observation bus subscriberCount (#1314)", () => {
+  it("rises per live subscription and falls to zero at Scope close", () =>
+    runTestPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const bus = yield* makeObservationBus(sources([]));
+          expect(bus.subscriberCount()).toBe(0);
+          const scope = yield* Scope.make();
+          yield* bus.stream(TestEvent).pipe(Scope.provide(scope));
+          expect(bus.subscriberCount()).toBe(1);
+          yield* bus.observations.pipe(Scope.provide(scope));
+          expect(bus.subscriberCount()).toBe(2);
+          yield* Scope.close(scope, Exit.void);
+          expect(bus.subscriberCount()).toBe(0);
+        }),
+      ),
+    ));
+
+  it("counts a callback drain for its lifetime and never alters publication", () =>
+    runTestPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const published: Array<{ name: string; delivered: boolean }> = [];
+          const bus = yield* makeObservationBus(sources(published));
+          const got = Promise.withResolvers<number>();
+          const unsubscribe = bus.sink.subscribe(TestEvent, (data) => got.resolve(data.value));
+          // Await actual interest, not timing (same seam as the #1305 tests).
+          yield* Effect.gen(function* () {
+            for (;;) {
+              bus.sink.publish(TestEvent, { sessionId: "session-1", value: 3 });
+              if (published.at(-1)?.delivered === true) return;
+              yield* Effect.yieldNow;
+            }
+          });
+          expect(bus.subscriberCount()).toBe(1);
+          expect(yield* Effect.promise(() => got.promise)).toBe(3);
+          unsubscribe();
+          yield* Effect.gen(function* () {
+            for (;;) {
+              if (bus.subscriberCount() === 0) return;
+              yield* Effect.yieldNow;
+            }
+          });
+          expect(bus.subscriberCount()).toBe(0);
+        }),
+      ),
+    ));
+});
