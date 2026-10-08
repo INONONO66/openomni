@@ -73,6 +73,7 @@ import {
   resolveAlarmSweep,
   resolveClusterStorage,
   resolveSessionFork,
+  resolveToolOutput,
   validateMachinePlane,
   type OpenOmniConfig,
   type RegisteredActor,
@@ -699,6 +700,11 @@ export async function startOpenOmni(options: StartOptions = {}) {
       // #1257: the app's resolved cap is the input the composition writes
       // into every new session's genesis generation settings.
       forkCopyByteCap: resolveSessionFork(config).copyByteCap,
+      // #1305: an env-resolved budget rides genesis settings; unset leaves
+      // the core default so sessions fold it without a settings row.
+      ...(resolveToolOutput(config).budgetBytes === undefined
+        ? {}
+        : { toolOutputBudgetBytes: resolveToolOutput(config).budgetBytes }),
       ...residentModelOptions(config.model, transport),
       compaction: configuredCompaction(config, { now: services.now, id: services.entropy.id }),
       composed: { current: services.composed.current },
