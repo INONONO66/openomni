@@ -36,8 +36,10 @@ On `stab/15-bounded-tool-output-projection` (2026-10-08, base `2dc31be78`).
   (`apps/openomni/test/tool-output-budget.test.ts` through the shipped
   composition).
 - Measured (1 MiB fixture, `packages/agent/test/core/execution/tool-output-projection.test.ts`):
-  row bytes before projection 1048770, after 16617; event bytes before
-  1049184, after 17030; the stored bytes read back whole through
+  row bytes before projection 1048770, after 16617; read-plane / row-event
+  proxy (the serialized history-page action node - size-faithful to the
+  committed-row `ActionCommittedEvent` payload, not a captured bus event)
+  before 1049184, after 17030; the stored bytes read back whole through
   `Inspect.toolOutput` and the codemode `tool_output` (1048576 bytes).
 - Kept reader: `rg -c 'toolResultText' -g '*.ts' packages apps` sums to 23.
 
