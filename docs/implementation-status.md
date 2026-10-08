@@ -6,11 +6,13 @@ On `stab/12-legacy-rows-cutover` (2026-10-08, base `2dc31be78`).
 
 - Writer: `packages/agent/src/core/gate/rows.ts` owns gate-row identity
   minting — `GATE_ROW_WRITER_VERSION = 1` and `gateRowId(row, point, ordinal)`
-  returning `<row name>/<point>#<ordinal>` (the shape the product bundles
-  already use, e.g. `hooks-json/tool.pre#3`). `project.ts` mints every
-  projected row id through it; the ordinal is the row's index in the
-  priority-sorted projection order, so same-name rows on one point stay
-  distinct.
+  returning `<name token>/<point>#<ordinal>`, where the name token is the
+  row's free-form name projected onto the protocol `GateRowId` grammar
+  (runs outside `[a-z0-9]` collapse to `-`, non-letter starts gain `row-`),
+  so bundle-seeded names (`hooks-json/tool.pre#3`) and dotted message names
+  mint schema-valid ids. `project.ts` mints every projected row id through
+  it; the ordinal is the row's index in the priority-sorted projection
+  order, so same-name (and same-token) rows on one point stay distinct.
 - Snapshot version: protocol `SessionGeneration.Snapshot` gains the optional
   `rowsVersion`; `fence.ts` `generationSnapshot` (the one snapshot
   constructor) records `rowsVersion: 1` on every new materialization.
@@ -23,14 +25,21 @@ On `stab/12-legacy-rows-cutover` (2026-10-08, base `2dc31be78`).
   A pre-existing session file read after the cutover is byte-identical
   (sha256-verified); a freshly materialized generation records
   `rowsVersion: 1`.
+  A pre-cutover record that applied a CONTEXT-MATCHER row does not replay
+  (the live entry's current id is absent from the recorded legacy rowIds):
+  the gate decides fresh; in `recoverAdmission` an approval pending across
+  the upgrade refuses fail-closed (`stale_approval`) — accepted, recorded
+  deviation (#1319 review M1).
 - Rename: `legacy-rows.ts` → `row-parse.ts` (`git mv`; the parser was never
   legacy), imports rewritten in `compile.ts`, `evaluate.ts`, `project.ts`;
   no re-export alias. Measured greps: `rg -c 'legacy/' -g '*.ts' packages
   apps` 1 → no output; `rg -c 'legacy-rows' -g '*.ts' packages apps` 5 → no
   output.
-- Tests: `packages/agent/test/core/gate-row-writer.test.ts` (3 pass:
-  identity shape + same-name ordinals, pre-cutover decode/replay, snapshot
-  version); `generation-policy.test.ts`, `permission-row-migration.test.ts`,
+- Tests: `packages/agent/test/core/gate-row-writer.test.ts` (4 pass:
+  schema-valid identities + same-name ordinals, production-shaped names
+  (bundle id, dotted) parse and re-admit, pre-cutover decode/replay with a
+  matcher-row fixture, snapshot version); `generation-policy.test.ts`,
+  `permission-row-migration.test.ts`,
   `apps/openomni/test/policy-seed-rows.test.ts` pass unchanged.
 
 ## #1311 delegation lifecycle contract — typed cap refusals + once-only child settlement (epic #1303, rung 14)
