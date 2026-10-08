@@ -2,7 +2,7 @@
 
 ## #1308 one composition root: sealed boot options, single monitor declaration, entity-drained process child (epic #1303, rung 10)
 
-On `stab/10-composition-root-dedupe` (2026-10-07, base `03cd0c274`). Boot
+On `stab/10-composition-root-dedupe` (2026-10-08, base `0373ed38c`). Boot
 options carry no tool list: `StartOptions`/`ResidentOptions` lost
 `toolDefinitions` (`rg -c 'toolDefinitions' -g '*.ts' apps/openomni` prints
 nothing) and app tests that need an extra tool declare it through a test
