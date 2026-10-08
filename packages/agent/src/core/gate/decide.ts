@@ -1145,15 +1145,6 @@ function createExecutionRecovery(options: ExecutorOptions, record: RecoveryRecor
   function recover(): Effect.Effect<void, CommitFailed> {
     return Effect.gen(function* () {
       const turnId = options.identity.turnId ?? options.identity.parentActionId;
-  /** #1305: tool rows commit a bounded projection; every other kind commits verbatim. */
-  const projectValue = (kind: LedgerAction.Kind, value: PlainValue): PlainValue => {
-    const put = options.ledger.putToolOutput;
-    if (kind !== "tool" || put === undefined) return value;
-    return projectResultValue(value, {
-      budgetBytes: options.ledger.toolOutputBudgetBytes?.() ?? DEFAULT_TOOL_OUTPUT_BUDGET_BYTES,
-      put,
-    });
-  };
       if (turnId === null) return;
       for (const action of operationRecords(options.ledger.openOperationsPage, turnId)) {
         if (action.kind !== "llm") {

@@ -203,6 +203,16 @@ export function createCodemode(options: CodemodeOptions) {
         return undefined;
       });
     }
+    /** #1305: the prelude's `tool_output` host op — full stored bytes, typed unknown. */
+    function readStoredOutput(call: Machine.ToolCall, tenant: string, read: NonNullable<CodemodeOptions["toolOutput"]>): Effect.Effect<Machine.ToolCallResult, Failure> {
+      return Effect.gen(function* () {
+        const input = yield* Effect.try({ try: () => ToolOutputInput.parse(call.arguments), catch: decodeCodeFailure("toolOutput.arguments") });
+        const stored = yield* read(tenant, input.outputId);
+        if (stored === undefined)
+          return yield* new CodemodeError({ reason: "unknown_output", message: `no stored output ${input.outputId}` });
+        return { status: "completed", value: { text: stored.text, bytes: stored.bytes, ...(stored.mediaType === undefined ? {} : { mediaType: stored.mediaType }) } };
+      });
+    }
     function dispatchHostOp(call: Machine.ToolCall, binding: NonNullable<ReturnType<typeof live.get>>): Effect.Effect<Machine.ToolCallResult | undefined, Failure> {
       return Effect.gen(function* () {
         if (call.name === "codemode.eval") {
@@ -214,13 +224,8 @@ export function createCodemode(options: CodemodeOptions) {
           const input = yield* Effect.try({ try: () => Machine.CompletionRequest.parse(call.arguments), catch: decodeCodeFailure("completion.arguments") });
           return { status: "completed", value: yield* options.completion(input) };
         }
-        if (call.name === "tool_output" && options.toolOutput) {
-          const input = yield* Effect.try({ try: () => ToolOutputInput.parse(call.arguments), catch: decodeCodeFailure("toolOutput.arguments") });
-          const stored = yield* options.toolOutput(binding.tenant, input.outputId);
-          if (stored === undefined)
-            return yield* new CodemodeError({ reason: "unknown_output", message: `no stored output ${input.outputId}` });
-          return { status: "completed", value: { text: stored.text, bytes: stored.bytes, ...(stored.mediaType === undefined ? {} : { mediaType: stored.mediaType }) } };
-        }
+        if (call.name === "tool_output" && options.toolOutput)
+          return yield* readStoredOutput(call, binding.tenant, options.toolOutput);
         return undefined;
       });
     }
