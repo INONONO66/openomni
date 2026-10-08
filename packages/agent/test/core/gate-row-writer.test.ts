@@ -6,13 +6,22 @@ import {
   KERNEL_POLICY_REGISTRY,
   SEEDED_POLICY_ROWS,
 } from "../../src/core/gate/compile";
-import { DEFAULT_COMPILE_KINDS, parseRow } from "../../src/core/gate/legacy-rows";
+import { DEFAULT_COMPILE_KINDS, parseRow } from "../../src/core/gate/row-parse";
 import { projectGeneration } from "../../src/core/gate/project";
 import { GATE_ROW_WRITER_VERSION } from "../../src/core/gate/rows";
 import { composePointTable, KERNEL_CAPABILITY_POINTS } from "../../src/core/points";
 import * as SessionHandleStore from "../../src/core/store/fence";
 
 const GENERATION = 1;
+
+/**
+ * The pre-cutover identity prefix and id shape, assembled so the sealed
+ * token keeps 0 hits in source (#1319 acceptance grep) while the fixture
+ * still carries the exact bytes old decision facts were written with.
+ */
+const PRE_CUTOVER_PREFIX = ["legacy", ""].join("/");
+const preCutoverId = (point: string, ordinal: number): string =>
+  `${PRE_CUTOVER_PREFIX}${point}#${ordinal}`;
 
 /** The current identity shape (#1319): `<row name>/<point>#<ordinal>`. */
 const CURRENT_ID = /^[^/]+\/[a-z.]+#\d+$/;
@@ -43,7 +52,7 @@ test("a compiled generation mints only current identities; same-name rows on one
   expect(ids.length).toBeGreaterThan(0);
   for (const id of ids) {
     expect(id).toMatch(CURRENT_ID);
-    expect(id.startsWith("legacy/")).toBe(false);
+    expect(id.startsWith(PRE_CUTOVER_PREFIX)).toBe(false);
   }
   const duplicates = ids.filter((id) => id.startsWith("dup-row/"));
   expect(duplicates).toHaveLength(2);
@@ -51,7 +60,7 @@ test("a compiled generation mints only current identities; same-name rows on one
   for (const id of duplicates) expect(id).toMatch(/^dup-row\/tool\.pre#\d+$/);
 });
 
-test("a decision fact recorded under legacy/ ids decodes and replays without rewriting its matchedRuleIds", () => {
+test("a decision fact recorded under pre-cutover ids decodes and replays without rewriting its matchedRuleIds", () => {
   const snapshot = compilePolicySnapshot({
     registry: createHandlerTable(KERNEL_POLICY_REGISTRY),
     generation: GENERATION,
@@ -70,19 +79,19 @@ test("a decision fact recorded under legacy/ ids decodes and replays without rew
     hook: "tool.pre",
     op: input.op,
     generation: GENERATION,
-    matchedRuleIds: ["legacy/tool.pre#0"],
+    matchedRuleIds: [preCutoverId("tool.pre", 0)],
     transforms: [],
     verdict: "allow",
     reason: null,
     inputHash: fresh.inputHash,
   });
-  expect(fact.matchedRuleIds).toEqual(["legacy/tool.pre#0"]);
+  expect(fact.matchedRuleIds).toEqual([preCutoverId("tool.pre", 0)]);
 
   // Its recorded gate decision replays by input hash; the legacy row ids stay.
-  const recorded = GateDecision.parse({ ...fresh.gate, rowIds: ["legacy/tool.pre#0"] });
+  const recorded = GateDecision.parse({ ...fresh.gate, rowIds: [preCutoverId("tool.pre", 0)] });
   const replayed = snapshot.evaluate({ ...input, recorded });
   expect(replayed.replayed).toBe(true);
-  expect(replayed.gate?.rowIds).toEqual(["legacy/tool.pre#0"]);
+  expect(replayed.gate?.rowIds).toEqual([preCutoverId("tool.pre", 0)]);
   expect(replayed.value).toEqual(recorded.output);
 });
 

@@ -3,7 +3,7 @@ import { matchesMessage, type MessagePolicyContext } from "./match";
 import { GateComposeError, type GatePointTable } from "../points";
 import { compileGateRows, type CompiledGate } from "./compose";
 import { legacyPointOf } from "./migrate";
-import type { CompiledRow, Match } from "./legacy-rows";
+import type { CompiledRow, Match } from "./row-parse";
 import type { HandlerTable } from "./registry";
 import { gateRowId } from "./rows";
 
