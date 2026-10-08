@@ -10,7 +10,7 @@ import { expect, test } from "bun:test";
 import type { Bundle } from "@openomni/agent";
 import { Effect } from "effect";
 import type { Core } from "@openomni/agent";
-import { Gateway, Inbox, LedgerAction, LedgerSession } from "@openomni/protocol";
+import { Gateway, Inbox, type LedgerAction, LedgerSession } from "@openomni/protocol";
 import {
   catalogDelegationReads,
   DEFAULT_DELEGATION_CAPS,
