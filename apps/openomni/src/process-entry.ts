@@ -224,25 +224,26 @@ export function serveProcessSession(
   // wake. A failure that left the journal unmoved is a wiring defect and dies
   // — the drain would otherwise re-admit the same decision forever.
   let refused: SessionError | undefined;
+  const runTurn: Core.SessionEntityPorts["runTurn"] = (input) =>
+    Effect.suspend(() => {
+      const before = input.kernel.row(input.authority.sessionId).revision;
+      return createSessionEntityRunTurn(
+        resident.runnerFor(input.kernel.row(input.authority.sessionId)),
+        resolved,
+        scope,
+      )({ ...input, detach: (body) => body }).pipe(
+        Effect.catch((error) =>
+          input.kernel.row(input.authority.sessionId).revision === before
+            ? Effect.die(error)
+            : Effect.sync(() => {
+                refused ??= error;
+              }),
+        ),
+      );
+    });
   const binding = yield* SessionEntityBinding;
   binding.bind({
-    runTurn: (input) =>
-      Effect.suspend(() => {
-        const before = input.kernel.row(input.authority.sessionId).revision;
-        return createSessionEntityRunTurn(
-          resident.runnerFor(input.kernel.row(input.authority.sessionId)),
-          resolved,
-          scope,
-        )({ ...input, detach: (body) => body }).pipe(
-          Effect.catch((error) =>
-            input.kernel.row(input.authority.sessionId).revision === before
-              ? Effect.die(error)
-              : Effect.sync(() => {
-                  refused ??= error;
-                }),
-          ),
-        );
-      }),
+    runTurn,
     get inputRegistrations(): readonly string[] {
       return ["prompt", "signal", ...composed.current().generation.inputs];
     },
