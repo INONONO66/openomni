@@ -35,7 +35,7 @@ export const ProcessReplyReceipt = z.discriminatedUnion("ok", [
 /** A process is only a transport for the same durable session runner. */
 export function createProcessSessionTransport(options: {
   readonly command: readonly string[];
-  readonly worker: Omit<ProcessSessionRequest, "sessionId">;
+  readonly child: Omit<ProcessSessionRequest, "sessionId">;
   readonly committed: (sessionIds: readonly string[]) => void;
   readonly answer: (answer: SessionTransition.Answer) => Promise<SessionTransition.Resolution>;
 }) {
@@ -68,7 +68,7 @@ export function createProcessSessionTransport(options: {
         stdout: "pipe",
         stderr: "inherit",
       });
-      child.stdin.write(`${JSON.stringify({ ...options.worker, sessionId })}\n`);
+      child.stdin.write(`${JSON.stringify({ ...options.child, sessionId })}\n`);
       const done = (async () => {
         const reader = child.stdout.getReader();
         const decoder = new TextDecoder();

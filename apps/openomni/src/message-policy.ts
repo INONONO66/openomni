@@ -9,7 +9,7 @@ const external = Gateway.RuleTableA.shape.check.options.map((check) =>
     effect: "deny",
   }),
 );
-const internal = (["resident", "worker"] as const).flatMap((senderRole) => [
+const internal = (["resident", "child"] as const).flatMap((senderRole) => [
   Gateway.RuleTableB.parse({
     id: `message.${senderRole}.parent`,
     table: "B",
@@ -57,35 +57,35 @@ const denials = [
     effect: "deny",
   }),
   Gateway.RuleTableB.parse({
-    id: "message.worker.actor",
+    id: "message.child.actor",
     table: "B",
     sender: "session",
-    senderRole: "worker",
+    senderRole: "child",
     targetKind: "actor",
     check: { kind: "type" },
     effect: "deny",
   }),
   Gateway.RuleTableB.parse({
-    id: "message.worker.allocate",
+    id: "message.child.allocate",
     table: "B",
     sender: "session",
-    senderRole: "worker",
+    senderRole: "child",
     targetKind: "new_session",
     check: { kind: "type" },
     effect: "deny",
   }),
   Gateway.RuleTableB.parse({
-    id: "message.worker.interrupt_parent",
+    id: "message.child.interrupt_parent",
     table: "B",
     sender: "session",
-    senderRole: "worker",
+    senderRole: "child",
     targetKind: "session",
     targetRole: "resident",
     type: "interrupt",
     check: { kind: "type" },
     effect: "deny",
   }),
-  ...(["resident", "worker"] as const).map((senderRole) =>
+  ...(["resident", "child"] as const).map((senderRole) =>
     Gateway.RuleTableB.parse({
       id: `message.${senderRole}.actor_interrupt`,
       table: "B",

@@ -87,7 +87,7 @@ export function createMonitorTool(alarms: () => MonitorPorts | undefined) {
       "Watch command output in a PTY, a machine terminal session, an absolute path, or a cron schedule outside the session. Create a persistent or timed watch or a recurring cron chain, rearm a retired one, or cancel it.",
     input,
     output: WatchState,
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     sequential: true,
     async execute(request, context) {
       const args = request.operation;

@@ -34,7 +34,7 @@ export function createEditTool(ports: FilePorts) {
     sequential: true,
     input: z.object({ path: z.string().min(1), edits: z.array(Edit).min(1) }).strict(),
     output: z.object({ bytesWritten: z.number().int().nonnegative() }),
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     execute: (args, ctx) =>
       fileOperation("edit", async () => {
         ctx.signal.throwIfAborted();

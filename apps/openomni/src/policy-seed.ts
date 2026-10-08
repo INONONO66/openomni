@@ -9,7 +9,7 @@ import { PROVISION_POLICY_ROWS } from "./tools/provision";
 
 /** The live policy plane's legacy `kind`/`phase` address of each #1251 point. */
 const LEGACY_ADDRESS_BY_POINT: Readonly<Record<string, { kind: string; phase: PolicyRow.Phase }>> = {
-  "ingress.pre": { kind: "inbox.deliver", phase: "pre" },
+  "ingress.pre": { kind: "ingress", phase: "pre" },
   "session.open": { kind: "session.configure", phase: "pre" },
   "prompt.pre": { kind: "prompt", phase: "pre" },
   "turn.pre": { kind: "turn", phase: "pre" },

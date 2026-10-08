@@ -65,7 +65,7 @@ export function createCompletionTool(llm: LlmPort | undefined) {
       "Ask a sub-model one one-shot, stateless question and return its text. Options: model (an id on the configured provider), system, schema (a JSON Schema the answer must satisfy; the validated JSON text is returned).",
     input: Input,
     output: z.string(),
-    visibility: { model: [], cell: ["resident", "worker"] },
+    visibility: { model: [], cell: ["resident", "child"] },
     execute: executeCompletion(llm),
     render: (_args, value) => value,
   });

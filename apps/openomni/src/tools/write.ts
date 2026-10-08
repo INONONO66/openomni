@@ -19,7 +19,7 @@ export function createWriteTool(ports: FilePorts) {
       })
       .strict(),
     output: z.object({ bytesWritten: z.number().int().nonnegative() }),
-    visibility: { model: ["resident", "worker"], cell: ["resident", "worker"] },
+    visibility: { model: ["resident", "child"], cell: ["resident", "child"] },
     execute: (args, ctx) =>
       fileOperation("write", async () => {
         ctx.signal.throwIfAborted();

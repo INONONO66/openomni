@@ -17,7 +17,7 @@ interface OutboundContext {
 
 export const outboundMessage = Context.Reference<OutboundContext | undefined>("@openomni/openomni/OutboundMessage", { defaultValue: () => undefined });
 
-/** The gateway admits recorded bytes; the receiver, not this source, owns its inbox. */
+/** The gateway admits recorded bytes; the receiver, not this source, owns its delivery queue. */
 export function dispatchOutboundMessage(
   ingest: GatewayRouter["ingest"],
   clock: () => number,

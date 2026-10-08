@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
  *   the bundle (W5.2: no migration plane, fresh per-session files), so the
  *   package root carries only `bin/`, `dist/` and the README. The pack smoke
  *   test boots the bundle against a real database to keep this honest.
- * - `dist/app/process-entry.js` — the process-transport worker, resolved by
+ * - `dist/app/process-entry.js` — the process-transport child, resolved by
  *   the app as a sibling of the running bundle.
  * - `bin/openomni.js` — node-runnable stub that re-executes under bun.
  * - the generated package.json carries NO dependencies: workspace packages
