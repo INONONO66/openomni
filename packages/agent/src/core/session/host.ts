@@ -1,7 +1,7 @@
 import { SqliteClient } from "@effect/sql-sqlite-bun";
 import type { Database } from "bun:sqlite";
 import type { LedgerSession, ObservationSink } from "@openomni/protocol";
-import { Context, type Crypto, Data, Duration, Effect, Layer, type Scope } from "effect";
+import { type Crypto, Data, Duration, Effect, Layer, type Scope } from "effect";
 import { SingleRunner } from "effect/cluster";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import {
   SessionEntityContext,
 } from "./entity";
 import { thrownAsError } from "../ports/failure";
+import { Ledger } from "../ports/ports";
 import type { ResolvedSessionRuntime, SessionEntityPorts, SessionRunner } from "./run";
 import { type CatalogStore, openCatalogStore } from "../store/catalog";
 import * as SessionHandleStore from "../store/fence";
@@ -45,6 +46,7 @@ export interface LedgerPlane {
   readonly catalogDatabase: Database;
   readonly handles: LedgerHandles;
   openKernel(sessionId: string): SessionKernel;
+  scanSessions<A>(read: (kernel: SessionKernel, row: LedgerSession.Row) => A[]): A[];
   sessionStore(sessionId: string): SessionStore;
   listSessions(): LedgerSession.Row[];
   turnPort(
@@ -55,7 +57,7 @@ export interface LedgerPlane {
   close(): void;
 }
 
-export class Ledger extends Context.Service<Ledger, LedgerPlane>()("@openomni/agent/core/Ledger") {}
+export { Ledger };
 
 export class OpenRefused extends Data.TaggedError("OpenRefused")<{
   readonly code: "catalog" | "sessions";
@@ -146,6 +148,23 @@ function planeOver(
     }
     return [...ids];
   }
+  function scanSessions<A>(read: (kernel: SessionKernel, row: LedgerSession.Row) => A[]): A[] {
+    return sessionIds().flatMap((id) => {
+      const entry = memo.get(id);
+      if (entry !== undefined || sessionsDir === undefined) return readRow((entry ?? opened(id)).kernel, id, read);
+      let store: SessionStore;
+      try {
+        store = openSessionStore(sessionFilePath(sessionsDir, id), sessionOptions);
+      } catch {
+        return [];
+      }
+      try {
+        return readRow(SessionHandleStore.createSessionKernel(store, catalog), id, read);
+      } finally {
+        store.close();
+      }
+    });
+  }
   return {
     catalog,
     catalogDatabase: catalog.database,
@@ -159,15 +178,9 @@ function planeOver(
           : openSessionStore(sessionFilePath(sessionsDir, sessionId), sessionOptions),
     },
     openKernel: (sessionId) => opened(sessionId).kernel,
+    scanSessions,
     sessionStore: (sessionId) => opened(sessionId).store,
-    listSessions: () =>
-      sessionIds().flatMap((id) => {
-        try {
-          return [opened(id).kernel.row(id)];
-        } catch {
-          return [];
-        }
-      }),
+    listSessions: () => scanSessions((_, row) => [row]),
     turnPort: createSessionEntityRunTurn,
     close: () => {
       for (const entry of memo.values()) entry.store.close();
@@ -175,6 +188,16 @@ function planeOver(
       catalog.close();
     },
   };
+}
+
+function readRow<A>(kernel: SessionKernel, id: string, read: (kernel: SessionKernel, row: LedgerSession.Row) => A[]): A[] {
+  let row: LedgerSession.Row;
+  try {
+    row = kernel.row(id);
+  } catch {
+    return [];
+  }
+  return read(kernel, row);
 }
 
 /** `close` is a no-op: the plane closes the store, never the entity. */
