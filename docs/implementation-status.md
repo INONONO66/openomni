@@ -1,5 +1,23 @@
 # Implementation Status
 
+## #1509 transcript references and child lifecycle evidence (epic #1508)
+
+On `feat/1509-transcript-ref` (2026-10-17, base `0600442cd`, PR #1548).
+`packages/protocol/src/transcript/reference.ts` holds two strict schemas and
+nothing else: `TranscriptRef` addresses bytes that live on an attached
+machine (`machine`, `export`, `path`, a `size-and-prefix-hash` or `inode`
+generation, a byte `range` and a `parser` dialect/version) and is distinct
+from `ToolOutputRef.outputId`, the digest of bytes the ledger owns;
+`ChildLifecycleEvidence` is one normalized reconciler fact (`child`, `turn`,
+optional `toolUseId`, one of six phases, a `TranscriptRef` or a `hook`
+reference whose `seq` is a non-negative integer — the monotonic spool
+position #1527 assigns — and a required `diagnostics` array, empty rather
+than absent, so one fact has one encoding). No fold reads through a
+`TranscriptRef`; no consumer is wired yet. Receipt:
+`packages/protocol/test/transcript-reference.test.ts` (round trips for both
+generations, all phases and the hook arm; each refusal names the exact zod
+issue path after its valid base is shown to parse).
+
 ## #1569 Messaging on the agent-messenger SDK — epic closure (lane 10)
 
 On `feat/1569-cleanup` (2026-10-17, PR #1598, lane 10). The twelve lanes below are all on
