@@ -741,6 +741,7 @@ export async function startOpenOmni(options: StartOptions = {}) {
       {
         deliver: ({ sessionId, ...occurrence }) =>
           runAppEffect(runtime, sendAlarm(sessionId, occurrence)),
+        admit: (sessionId: string, rows: readonly ChildRow[]) => runAppEffect(runtime, admit(entityClient, sessionId, rows)),
       },
       {
         clock: services.now,
@@ -752,7 +753,6 @@ export async function startOpenOmni(options: StartOptions = {}) {
           children: {
             machines: tools.machines,
             rows: childRows,
-            admit: (sessionId: string, rows: readonly ChildRow[]) => runAppEffect(runtime, admit(entityClient, sessionId, rows)),
           },
         }),
       },
