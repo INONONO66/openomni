@@ -46,7 +46,11 @@ export interface LedgerPlane {
   readonly catalogDatabase: Database;
   readonly handles: LedgerHandles;
   openKernel(sessionId: string): SessionKernel;
-  scanSessions<A>(read: (kernel: SessionKernel, row: LedgerSession.Row) => A[]): A[];
+  /** `skip` names files the catalog proves hold nothing for `read`; an unindexed file is still opened. */
+  scanSessions<A>(
+    read: (kernel: SessionKernel, row: LedgerSession.Row) => A[],
+    skip?: ReadonlySet<string>,
+  ): A[];
   sessionStore(sessionId: string): SessionStore;
   listSessions(): LedgerSession.Row[];
   turnPort(
@@ -148,8 +152,12 @@ function planeOver(
     }
     return [...ids];
   }
-  function scanSessions<A>(read: (kernel: SessionKernel, row: LedgerSession.Row) => A[]): A[] {
+  function scanSessions<A>(
+    read: (kernel: SessionKernel, row: LedgerSession.Row) => A[],
+    skip?: ReadonlySet<string>,
+  ): A[] {
     return sessionIds().flatMap((id) => {
+      if (skip?.has(id)) return [];
       const entry = memo.get(id);
       if (entry !== undefined || sessionsDir === undefined) return readRow((entry ?? opened(id)).kernel, id, read);
       let store: SessionStore;
